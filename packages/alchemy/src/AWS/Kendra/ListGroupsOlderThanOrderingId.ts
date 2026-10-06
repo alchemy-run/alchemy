@@ -45,7 +45,6 @@ export interface ListGroupsOlderThanOrderingId extends Binding.Service<
     >
   >
 > {}
-export const ListGroupsOlderThanOrderingId =
-  Binding.Service<ListGroupsOlderThanOrderingId>(
-    "AWS.Kendra.ListGroupsOlderThanOrderingId",
-  );
+export const ListGroupsOlderThanOrderingId = Binding.Service<ListGroupsOlderThanOrderingId>(
+  "AWS.Kendra.ListGroupsOlderThanOrderingId",
+);

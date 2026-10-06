@@ -19,9 +19,7 @@ export interface DurableObjectMigrations {
   readonly migrationsTable?: string | undefined;
 }
 
-export interface DurableObjectConfig<
-  TRelations extends AnyRelations = EmptyRelations,
-> extends Omit<
+export interface DurableObjectConfig<TRelations extends AnyRelations = EmptyRelations> extends Omit<
   SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
   "storage"
 > {
@@ -128,10 +126,7 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
   // microtasks while retaining the adapter's client, SQL permit, and context.
   yield* Effect.sync(() => Object.assign(client, { withTransaction }));
   const db = yield* SQLiteDoDrizzle.makeWithDefaults({
-    ...(drizzleConfig as Omit<
-      SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
-      "storage"
-    >),
+    ...(drizzleConfig as Omit<SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>, "storage">),
     storage,
   }).pipe(Effect.provideContext(services));
   if (migrations !== undefined && "_tag" in migrations) {

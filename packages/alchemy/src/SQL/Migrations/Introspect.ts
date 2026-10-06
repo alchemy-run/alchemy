@@ -19,19 +19,17 @@ export const tableColumns = (
 ): Effect.Effect<TableColumn[], never, never> => {
   switch (executor.dialect) {
     case "sqlite":
-      return executor
-        .query(`PRAGMA table_info(${quoteIdentifier(table, "sqlite")});`)
-        .pipe(
-          Effect.map((rows) =>
-            rows.map((row) => ({
-              name: String(row.name),
-              type: String(row.type ?? "").toUpperCase(),
-            })),
-          ),
-          // A missing table yields an empty PRAGMA result, not an error, but
-          // some tunnels surface it as one — treat both as "absent".
-          Effect.catch(() => Effect.succeed([])),
-        );
+      return executor.query(`PRAGMA table_info(${quoteIdentifier(table, "sqlite")});`).pipe(
+        Effect.map((rows) =>
+          rows.map((row) => ({
+            name: String(row.name),
+            type: String(row.type ?? "").toUpperCase(),
+          })),
+        ),
+        // A missing table yields an empty PRAGMA result, not an error, but
+        // some tunnels surface it as one — treat both as "absent".
+        Effect.catch(() => Effect.succeed([])),
+      );
     case "postgres":
       return executor
         .query(

@@ -29,10 +29,7 @@ export interface UpdateIncidentRecord extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.UpdateIncidentRecordInput,
-    ) => Effect.Effect<
-      incidents.UpdateIncidentRecordOutput,
-      incidents.UpdateIncidentRecordError
-    >
+    ) => Effect.Effect<incidents.UpdateIncidentRecordOutput, incidents.UpdateIncidentRecordError>
   >
 > {}
 export const UpdateIncidentRecord = Binding.Service<UpdateIncidentRecord>(

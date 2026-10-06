@@ -168,8 +168,7 @@ export const ContractProvider = () =>
       const resolveConfig = (p: ContractProps | undefined) =>
         path.resolve(process.cwd(), p?.config ?? "./prisma.config.ts");
 
-      const configDir = (p: ContractProps | undefined) =>
-        path.dirname(resolveConfig(p));
+      const configDir = (p: ContractProps | undefined) => path.dirname(resolveConfig(p));
 
       const resolveMigrationsDir = (p: ContractProps | undefined) =>
         path.resolve(configDir(p), p?.migrationsDir ?? "./migrations");
@@ -203,13 +202,9 @@ export const ContractProvider = () =>
             prefix: "alchemy-prisma-contract-",
           });
           const emitted = yield* emit(p, tmp).pipe(
-            Effect.ensuring(
-              fs.remove(tmp, { recursive: true }).pipe(Effect.ignore),
-            ),
+            Effect.ensuring(fs.remove(tmp, { recursive: true }).pipe(Effect.ignore)),
           );
-          const packages = yield* readMigrationPackages(
-            resolveMigrationsDir(p),
-          );
+          const packages = yield* readMigrationPackages(resolveMigrationsDir(p));
           const head = resolveGraphHead(packages);
           return {
             storageHash: emitted.storageHash,
@@ -218,10 +213,7 @@ export const ContractProvider = () =>
             // Drift when the graph doesn't cover the emitted contract, or the
             // head package was planned but never self-emitted (empty ops.json
             // means unfilled placeholders — reconcile re-raises the guidance).
-            changed:
-              head === undefined ||
-              head.to !== emitted.storageHash ||
-              head.opsEmpty,
+            changed: head === undefined || head.to !== emitted.storageHash || head.opsEmpty,
           };
         }).pipe(Artifacts.cached("Prisma.Contract.detectDrift"));
 
@@ -251,9 +243,7 @@ export const ContractProvider = () =>
           // fresh checkout without them needs a re-emit even with no drift.
           const emittedExists =
             output.contractJson !== undefined &&
-            (yield* fs.exists(
-              path.resolve(process.cwd(), output.contractJson),
-            ));
+            (yield* fs.exists(path.resolve(process.cwd(), output.contractJson)));
           // Only flag an update when something would actually change —
           // otherwise downstream resources (e.g. Prisma.Migrate) would see
           // `contract.contractHash` as an unresolved Output during plan and
@@ -282,9 +272,7 @@ export const ContractProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          yield* session.note(
-            `${output ? "Re-emitting" : "Emitting"} Prisma contract`,
-          );
+          yield* session.note(`${output ? "Re-emitting" : "Emitting"} Prisma contract`);
           const emitted = yield* emit(news);
           // Emits leak unpublished @internal/* specifiers (through rc.8);
           // rewrite them to the public @prisma/orm-* packages.
@@ -317,9 +305,7 @@ export const ContractProvider = () =>
               const dir = plan.dir
                 ? relative(path.resolve(configDir(news), plan.dir))
                 : "the planned migration directory";
-              return yield* Effect.fail(
-                new CliError({ message: placeholderGuidance(dir) }),
-              );
+              return yield* Effect.fail(new CliError({ message: placeholderGuidance(dir) }));
             }
             if (!plan.noOp && plan.dir !== undefined) {
               // Guard against a config/props mismatch: if the CLI wrote the
@@ -345,12 +331,8 @@ export const ContractProvider = () =>
           // self-emitted still blocks the deploy — Migrate would fail on it.
           const finalHead = resolveGraphHead(packages);
           if (finalHead?.opsEmpty) {
-            const dir = relative(
-              path.join(migrationsDir, "app", finalHead.dirName),
-            );
-            return yield* Effect.fail(
-              new CliError({ message: placeholderGuidance(dir) }),
-            );
+            const dir = relative(path.join(migrationsDir, "app", finalHead.dirName));
+            return yield* Effect.fail(new CliError({ message: placeholderGuidance(dir) }));
           }
 
           return attributes(news, emitted, packages);

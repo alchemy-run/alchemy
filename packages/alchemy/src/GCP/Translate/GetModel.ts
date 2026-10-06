@@ -33,11 +33,7 @@ export interface GetModel extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetModelRequest,
-    ) => Effect.Effect<
-      translate.Model,
-      translate.GetProjectsLocationsModelsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<translate.Model, translate.GetProjectsLocationsModelsError, RuntimeContext>
   >
 > {}
 

@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  organizationFromName,
-  toResourceId,
-} from "./names.ts";
+import { lastSegment, orgParent, organizationFromName, toResourceId } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 import { listOwnedInstances } from "./org.ts";
 
@@ -97,9 +92,7 @@ export type InstancesNatAddress = Resource<
  * @resource
  * @category Apigee
  */
-export const InstancesNatAddress = Resource<InstancesNatAddress>(
-  "GCP.Apigee.InstancesNatAddress",
-);
+export const InstancesNatAddress = Resource<InstancesNatAddress>("GCP.Apigee.InstancesNatAddress");
 
 export class InstancesNatAddressNotResolved extends Data.TaggedError(
   "GCP.Apigee.InstancesNatAddressNotResolved",
@@ -117,15 +110,10 @@ export class InstancesNatAddressNotReady extends Data.TaggedError(
 const instanceIdOf = (instance: string) => lastSegment(instance);
 
 const instanceName = (organization: string, instance: string) =>
-  instance.includes("/")
-    ? instance
-    : `${orgParent(organization)}/instances/${instance}`;
+  instance.includes("/") ? instance : `${orgParent(organization)}/instances/${instance}`;
 
-const resourceName = (
-  organization: string,
-  instance: string,
-  natAddressId: string,
-) => `${instanceName(organization, instance)}/natAddresses/${natAddressId}`;
+const resourceName = (organization: string, instance: string, natAddressId: string) =>
+  `${instanceName(organization, instance)}/natAddresses/${natAddressId}`;
 
 const toAttrs = (
   address: apigee.GoogleCloudApigeeV1NatAddress,
@@ -133,9 +121,7 @@ const toAttrs = (
   instanceId: string,
 ) => {
   const raw = address.name ?? "";
-  const name = raw.includes("/")
-    ? raw
-    : resourceName(organization, instanceId, raw);
+  const name = raw.includes("/") ? raw : resourceName(organization, instanceId, raw);
   return {
     name,
     natAddressId: lastSegment(name),
@@ -149,11 +135,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstancesNatAddresses({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const listByInstance = (parent: string) =>
   apigee.listOrganizationsInstancesNatAddresses
@@ -173,8 +155,7 @@ const listByInstance = (parent: string) =>
 const waitUntilState = (name: string, allowed: ReadonlySet<string>) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (address): address is apigee.GoogleCloudApigeeV1NatAddress =>
-        address !== undefined,
+      (address): address is apigee.GoogleCloudApigeeV1NatAddress => address !== undefined,
       () => new InstancesNatAddressNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -220,11 +201,8 @@ export const InstancesNatAddressProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
-      const instanceId = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const instanceId = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       if (instanceId.length === 0) return undefined;
       const natAddressId = yield* toResourceId(
         id,
@@ -232,8 +210,7 @@ export const InstancesNatAddressProvider = () =>
         output?.natAddressId,
         MAX_NAME_LENGTH,
       );
-      const name =
-        output?.name ?? resourceName(organization, instanceId, natAddressId);
+      const name = output?.name ?? resourceName(organization, instanceId, natAddressId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, organization, instanceId);
@@ -252,9 +229,7 @@ export const InstancesNatAddressProvider = () =>
             const instanceId = lastSegment(parent);
             return listByInstance(parent).pipe(
               Effect.map((addresses) =>
-                addresses.map((address) =>
-                  toAttrs(address, env.project, instanceId),
-                ),
+                addresses.map((address) => toAttrs(address, env.project, instanceId)),
               ),
             );
           },
@@ -265,8 +240,7 @@ export const InstancesNatAddressProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
+      const organization = news.organization ?? output?.organization ?? env.project;
       const instanceId = instanceIdOf(news.instance);
       const natAddressId = yield* toResourceId(
         id,
@@ -299,18 +273,15 @@ export const InstancesNatAddressProvider = () =>
       if ((current.state ?? "") === "CREATING") {
         current =
           (yield* waitUntilState(name, new Set(["RESERVED", "ACTIVE"])).pipe(
-            Effect.catchTag("GCP.Apigee.InstancesNatAddressNotReady", () =>
-              getByName(name),
-            ),
+            Effect.catchTag("GCP.Apigee.InstancesNatAddressNotReady", () => getByName(name)),
           )) ?? current;
       }
 
       if (news.activate === true && (current.state ?? "") === "RESERVED") {
-        const activated =
-          yield* apigee.activateOrganizationsInstancesNatAddresses({
-            name: current.name?.includes("/") ? current.name : name,
-            body: {},
-          });
+        const activated = yield* apigee.activateOrganizationsInstancesNatAddresses({
+          name: current.name?.includes("/") ? current.name : name,
+          body: {},
+        });
         yield* waitForOperation(activated);
         current = (yield* getByName(name)) ?? current;
       }
@@ -322,9 +293,7 @@ export const InstancesNatAddressProvider = () =>
       const deleted = yield* apigee
         .deleteOrganizationsInstancesNatAddresses({ name: output.name })
         .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
         );
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });

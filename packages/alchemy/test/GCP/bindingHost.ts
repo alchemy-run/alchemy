@@ -1,10 +1,10 @@
+import { spawnSync } from "node:child_process";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { spawnSync } from "node:child_process";
+import * as Schedule from "effect/Schedule";
 
 /**
  * Harness for GCP binding tests, the counterpart of the AWS Lambda binding
@@ -21,10 +21,7 @@ import { spawnSync } from "node:child_process";
 /** Whether Docker is available to build the fixture image. */
 export const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -99,17 +96,12 @@ export const callProbe = <A = unknown>(baseUrl: string, name: string) =>
     ),
     Effect.flatMap((outcome) =>
       !outcome.ok &&
-      (outcome.error._tag === "Forbidden" ||
-        outcome.error._tag === "PermissionDenied")
-        ? Effect.fail(
-            new ProbeNotReady({ reason: `IAM: ${outcome.error._tag}` }),
-          )
+      (outcome.error._tag === "Forbidden" || outcome.error._tag === "PermissionDenied")
+        ? Effect.fail(new ProbeNotReady({ reason: `IAM: ${outcome.error._tag}` }))
         : Effect.succeed(outcome),
     ),
     Effect.mapError((error) =>
-      error._tag === "ProbeNotReady"
-        ? error
-        : new ProbeNotReady({ reason: String(error) }),
+      error._tag === "ProbeNotReady" ? error : new ProbeNotReady({ reason: String(error) }),
     ),
     Effect.retry({
       while: (error) => error._tag === "ProbeNotReady",
@@ -125,9 +117,7 @@ export const expectProbe = <A = unknown>(baseUrl: string, name: string) =>
       outcome.ok
         ? Effect.succeed(outcome.value)
         : Effect.die(
-            new Error(
-              `probe ${name} failed: ${outcome.error._tag} ${outcome.error.message ?? ""}`,
-            ),
+            new Error(`probe ${name} failed: ${outcome.error._tag} ${outcome.error.message ?? ""}`),
           ),
     ),
   );

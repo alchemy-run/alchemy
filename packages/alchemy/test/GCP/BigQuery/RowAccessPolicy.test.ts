@@ -1,24 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const waitUntilGone = (
-  projectId: string,
-  datasetId: string,
-  tableId: string,
-  policyId: string,
-) =>
+const waitUntilGone = (projectId: string, datasetId: string, tableId: string, policyId: string) =>
   bigquery
     .getRowAccessPolicies({
       projectId,
@@ -73,9 +65,7 @@ test.provider(
         tableId: created.tableId,
         policyId: created.policyId,
       });
-      expect(fetched.rowAccessPolicyReference?.policyId).toEqual(
-        created.policyId,
-      );
+      expect(fetched.rowAccessPolicyReference?.policyId).toEqual(created.policyId);
       // The predicate is sent verbatim — no ownership tautology.
       expect(fetched.filterPredicate).toEqual("nullable_field IS NOT NULL");
 

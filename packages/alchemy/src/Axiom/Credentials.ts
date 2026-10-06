@@ -31,10 +31,9 @@ export const fromAuthProvider = () =>
     Effect.gen(function* () {
       // Defer profile lookup and credential resolution until first use, so
       // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<
-        AxiomAuthConfig,
-        AxiomResolvedCredentials
-      >(AXIOM_AUTH_PROVIDER_NAME).pipe(
+      const resolve = yield* resolveProviderConfig<AxiomAuthConfig, AxiomResolvedCredentials>(
+        AXIOM_AUTH_PROVIDER_NAME,
+      ).pipe(
         Effect.flatMap(({ profileName, resolve }) =>
           resolve.pipe(
             Effect.map((creds) =>

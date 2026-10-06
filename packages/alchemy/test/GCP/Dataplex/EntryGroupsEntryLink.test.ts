@@ -1,21 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const RELATED_ENTRY_LINK_TYPE =
-  "projects/dataplex-types/locations/global/entryLinkTypes/related";
+const RELATED_ENTRY_LINK_TYPE = "projects/dataplex-types/locations/global/entryLinkTypes/related";
 
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsEntryGroupsEntryLinks({ name }).pipe(
@@ -72,11 +68,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.link.entryLinkType).toContain("/entryLinkTypes/related");
       expect(created.link.entryReferences).toHaveLength(2);
 
-      const fetched = yield* dataplex.getProjectsLocationsEntryGroupsEntryLinks(
-        {
-          name: created.link.name,
-        },
-      );
+      const fetched = yield* dataplex.getProjectsLocationsEntryGroupsEntryLinks({
+        name: created.link.name,
+      });
       expect(fetched.name).toEqual(created.link.name);
       expect(fetched.entryLinkType).toContain("/entryLinkTypes/related");
       expect(fetched.entryReferences ?? []).toHaveLength(2);

@@ -33,12 +33,10 @@ export interface DescribeReplicationTasks extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dms.DescribeReplicationTasksMessage,
-    ) => Effect.Effect<
-      dms.DescribeReplicationTasksResponse,
-      dms.DescribeReplicationTasksError
-    >
+    ) => Effect.Effect<dms.DescribeReplicationTasksResponse, dms.DescribeReplicationTasksError>
   >
 > {}
 
-export const DescribeReplicationTasks =
-  Binding.Service<DescribeReplicationTasks>("AWS.DMS.DescribeReplicationTasks");
+export const DescribeReplicationTasks = Binding.Service<DescribeReplicationTasks>(
+  "AWS.DMS.DescribeReplicationTasks",
+);

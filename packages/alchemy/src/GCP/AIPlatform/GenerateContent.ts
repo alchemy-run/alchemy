@@ -110,6 +110,4 @@ export interface GenerateContent extends Binding.Service<
   (model: string | PublisherModel) => Effect.Effect<GenerateContentClient>
 > {}
 
-export const GenerateContent = Binding.Service<GenerateContent>(
-  "GCP.AIPlatform.GenerateContent",
-);
+export const GenerateContent = Binding.Service<GenerateContent>("GCP.AIPlatform.GenerateContent");

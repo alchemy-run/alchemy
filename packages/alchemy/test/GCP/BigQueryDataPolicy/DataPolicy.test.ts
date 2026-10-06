@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bqdp from "@distilled.cloud/gcp/bigquerydatapolicy_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -96,16 +93,12 @@ test.provider.skipIf(!!process.env.FAST)(
 
       expect(updated.name).toEqual(created.name);
       expect(updated.dataPolicyId).toEqual(created.dataPolicyId);
-      expect(updated.dataMaskingPolicy?.predefinedExpression).toEqual(
-        "ALWAYS_NULL",
-      );
+      expect(updated.dataMaskingPolicy?.predefinedExpression).toEqual("ALWAYS_NULL");
 
       const refetched = yield* bqdp.getProjectsLocationsDataPolicies({
         name: created.name,
       });
-      expect(refetched.dataMaskingPolicy?.predefinedExpression).toEqual(
-        "ALWAYS_NULL",
-      );
+      expect(refetched.dataMaskingPolicy?.predefinedExpression).toEqual("ALWAYS_NULL");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);

@@ -125,8 +125,7 @@ const resourceName = (project: string, configId: string) =>
 
 const streamingOf = (
   config: scc.StreamingConfig | StreamingConfig | undefined,
-): StreamingConfig | undefined =>
-  config === undefined ? undefined : { filter: config.filter };
+): StreamingConfig | undefined => (config === undefined ? undefined : { filter: config.filter });
 
 const toAttrs = (config: scc.NotificationConfig, project: string) => {
   const name = config.name ?? "";
@@ -160,19 +159,12 @@ export const NotificationConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const configId = yield* toResourceId(
-        id,
-        olds?.configId,
-        output?.configId,
-        "n",
-      );
+      const configId = yield* toResourceId(id, olds?.configId, output?.configId, "n");
       const name = output?.name ?? resourceName(env.project, configId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -184,11 +176,7 @@ export const NotificationConfigProvider = () =>
             pageSize: 100,
           }),
           (page) => page.notificationConfigs,
-        ).pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed([] as scc.NotificationConfig[]),
-          ),
-        );
+        ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as scc.NotificationConfig[])));
         return items
           .filter((config) => hasOwnershipMarker(config.description))
           .map((config) => toAttrs(config, env.project));
@@ -196,12 +184,7 @@ export const NotificationConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const configId = yield* toResourceId(
-        id,
-        news.configId,
-        output?.configId,
-        "n",
-      );
+      const configId = yield* toResourceId(id, news.configId, output?.configId, "n");
       const name = resourceName(env.project, configId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

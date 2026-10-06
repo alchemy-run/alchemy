@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as appengine from "@distilled.cloud/gcp/appengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs an App Engine application in the project, which is permanent once
 // created (it can never be deleted). The testing project has none and the
@@ -22,8 +19,7 @@ const logLevel = Effect.provideService(
 const runLifecycle = !!process.env.GCP_TEST_APPENGINE_APP;
 
 const location = "us-central";
-const domain =
-  process.env.GCP_TEST_APPENGINE_DOMAIN ?? "alchemy-appengine.test";
+const domain = process.env.GCP_TEST_APPENGINE_DOMAIN ?? "alchemy-appengine.test";
 
 const waitUntilGone = (
   projectsId: string,
@@ -114,13 +110,12 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.domain).toEqual(domain);
       expect(created.applicationsId).toEqual(project);
 
-      const fetched =
-        yield* appengine.getProjectsLocationsApplicationsDomainMappings({
-          projectsId: created.project,
-          locationsId: created.location,
-          applicationsId: created.applicationsId,
-          domainMappingsId: created.domain,
-        });
+      const fetched = yield* appengine.getProjectsLocationsApplicationsDomainMappings({
+        projectsId: created.project,
+        locationsId: created.location,
+        applicationsId: created.applicationsId,
+        domainMappingsId: created.domain,
+      });
       expect(fetched.id).toEqual(created.domain);
 
       const updated = yield* stack.deploy(

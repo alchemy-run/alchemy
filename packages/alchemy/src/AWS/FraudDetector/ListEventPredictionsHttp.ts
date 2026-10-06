@@ -23,22 +23,18 @@ export const ListEventPredictionsHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.FraudDetector.ListEventPredictions(${detector}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["frauddetector:ListEventPredictions"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.FraudDetector.ListEventPredictions(${detector}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["frauddetector:ListEventPredictions"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.FraudDetector.ListEventPredictions(${detector.LogicalId})`,
-      )(function* (
+      return Effect.fn(`AWS.FraudDetector.ListEventPredictions(${detector.LogicalId})`)(function* (
         request: Omit<frauddetector.ListEventPredictionsRequest, "detectorId">,
       ) {
         const detectorId = yield* DetectorId;

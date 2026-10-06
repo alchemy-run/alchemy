@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs a provisioned Apigee organization on the testing project (paid, or
 // ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
@@ -30,9 +27,7 @@ const waitUntilGone = (parent: string, fileType: string, fileId: string) =>
     .pipe(
       Effect.as("found" as const),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.catchTag("ApigeeResourceNotFound", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ApigeeResourceNotFound", () => Effect.succeed("gone" as const)),
       Effect.repeat({
         schedule: Schedule.spaced("2 seconds"),
         until: (status) => status === "gone",
@@ -85,18 +80,14 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.file.fileId).toEqual(expect.any(String));
       expect(created.file.fileType).toEqual("js");
-      expect(created.file.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.file.environmentId).toEqual(created.environment.environmentId);
 
       const fetched = yield* apigee.getOrganizationsEnvironmentsResourcefiles({
         parent: created.file.parent,
         type: created.file.fileType,
         name: created.file.fileId,
       });
-      expect(
-        fetched.data !== undefined || fetched.contentType !== undefined,
-      ).toEqual(true);
+      expect(fetched.data !== undefined || fetched.contentType !== undefined).toEqual(true);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

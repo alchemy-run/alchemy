@@ -4,17 +4,9 @@ import type { AddressInfo } from "node:net";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
 import * as vite from "vite";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
-import type { PreviewWorkerBuild } from "../preview-server.ts";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import cloudflareVitePlugin from "../plugin.ts";
+import type { PreviewWorkerBuild } from "../preview-server.ts";
 
 // Stand-in for the workerd preview runtime: a plain HTTP server; every
 // proxied request responds with "worker".
@@ -55,9 +47,7 @@ describe("preview plugin", () => {
     runtimeAddress = await listen(runtimeServer);
     // A fake built project: the entry environment's outDir with the entry
     // chunk, and a client outDir with a static asset.
-    root = await NodeFs.mkdtemp(
-      NodePath.join(NodeOs.tmpdir(), "distilled-preview-"),
-    );
+    root = await NodeFs.mkdtemp(NodePath.join(NodeOs.tmpdir(), "distilled-preview-"));
     await NodeFs.mkdir(NodePath.join(root, "dist", "ssr"), { recursive: true });
     await NodeFs.mkdir(NodePath.join(root, "dist", "client"), {
       recursive: true,
@@ -66,10 +56,7 @@ describe("preview plugin", () => {
       NodePath.join(root, "dist", "ssr", "worker-entry.js"),
       "export default { fetch: () => new Response('built worker') };",
     );
-    await NodeFs.writeFile(
-      NodePath.join(root, "dist", "client", "index.html"),
-      "<html></html>",
-    );
+    await NodeFs.writeFile(NodePath.join(root, "dist", "client", "index.html"), "<html></html>");
   });
 
   afterAll(async () => {
@@ -98,9 +85,7 @@ describe("preview plugin", () => {
   };
 
   it("serves the built worker through the runtime proxy", async () => {
-    const server = await createPreviewServer(
-      cloudflareVitePlugin({ main: "./worker-entry.ts" }),
-    );
+    const server = await createPreviewServer(cloudflareVitePlugin({ main: "./worker-entry.ts" }));
     try {
       const response = await fetch(`${serverOrigin(server)}/anything`);
       expect(response.status).toBe(200);
@@ -111,15 +96,11 @@ describe("preview plugin", () => {
   });
 
   it("resolves the built worker output from the entry environment", async () => {
-    const server = await createPreviewServer(
-      cloudflareVitePlugin({ main: "./worker-entry.ts" }),
-    );
+    const server = await createPreviewServer(cloudflareVitePlugin({ main: "./worker-entry.ts" }));
     try {
       expect(startedBuilds).toHaveLength(1);
       const build = startedBuilds[0]!;
-      expect(build.directory).toBe(
-        await NodeFs.realpath(NodePath.join(root, "dist", "ssr")),
-      );
+      expect(build.directory).toBe(await NodeFs.realpath(NodePath.join(root, "dist", "ssr")));
       expect(build.entryModule).toBe("worker-entry.js");
       expect(build.assetsDirectory).toBe(
         await NodeFs.realpath(NodePath.join(root, "dist", "client")),
@@ -130,9 +111,7 @@ describe("preview plugin", () => {
   });
 
   it("closes the runtime when the preview server closes", async () => {
-    const server = await createPreviewServer(
-      cloudflareVitePlugin({ main: "./worker-entry.ts" }),
-    );
+    const server = await createPreviewServer(cloudflareVitePlugin({ main: "./worker-entry.ts" }));
     await server.close();
     expect(closed).toBe(1);
   });

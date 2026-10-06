@@ -1,6 +1,6 @@
 import * as clouddeploy from "@distilled.cloud/gcp/clouddeploy_v1";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -11,15 +11,11 @@ import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts
 
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.CloudDeploy.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.CloudDeploy.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.CloudDeploy.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.CloudDeploy.ResourceStillExists")<{
   name: string;
 }> {}
 
@@ -42,8 +38,7 @@ export const rfc1035 = (name: string, fallback = "clouddeploy"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+export const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${normalizeLocation(location)}`;
@@ -73,14 +68,9 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -98,29 +88,17 @@ export const expandParent = (
   return `projects/${project}/locations/${location}/${collection}/${value}`;
 };
 
-export const gkeClusterName = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const gkeClusterName = (value: string, project: string, location: string) => {
   if (value.includes("/")) return value.replace(/\/+$/, "");
   return `projects/${project}/locations/${location}/clusters/${value}`;
 };
 
-export const runLocationName = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const runLocationName = (value: string, project: string, location: string) => {
   if (value.startsWith("projects/")) return value.replace(/\/+$/, "");
   return `projects/${project}/locations/${lastSegment(value) || location}`;
 };
 
-export const membershipName = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const membershipName = (value: string, project: string, location: string) => {
   if (value.includes("/")) return value.replace(/\/+$/, "");
   return `projects/${project}/locations/${location}/memberships/${value}`;
 };
@@ -138,9 +116,8 @@ export const stringMap = (
     ),
   );
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -163,21 +140,16 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBool = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left ?? false) === (right ?? false);
+export const sameBool = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? false) === (right ?? false);
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -248,9 +220,8 @@ export const stripAutomationRule = (
     : undefined,
 });
 
-export const stripAutomationRules = (
-  rules: readonly clouddeploy.AutomationRule[] | undefined,
-) => (rules ?? []).map(stripAutomationRule);
+export const stripAutomationRules = (rules: readonly clouddeploy.AutomationRule[] | undefined) =>
+  (rules ?? []).map(stripAutomationRule);
 
 /**
  * Wait on a Cloud Deploy long-running operation (control-plane, usually under a minute).

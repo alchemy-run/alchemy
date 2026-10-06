@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   parseResourceName,
@@ -28,16 +23,11 @@ import {
 } from "./operations.ts";
 
 const DEFAULT_ACTION = "ALLOW" satisfies networksecurity.AuthzPolicyActionEnum;
-const DEFAULT_PROFILE =
-  "REQUEST_AUTHZ" satisfies networksecurity.AuthzPolicyPolicyProfileEnum;
+const DEFAULT_PROFILE = "REQUEST_AUTHZ" satisfies networksecurity.AuthzPolicyPolicyProfileEnum;
 
-export type AuthzPolicyAction =
-  | networksecurity.AuthzPolicyActionEnum
-  | (string & {});
+export type AuthzPolicyAction = networksecurity.AuthzPolicyActionEnum | (string & {});
 
-export type AuthzPolicyProfile =
-  | networksecurity.AuthzPolicyPolicyProfileEnum
-  | (string & {});
+export type AuthzPolicyProfile = networksecurity.AuthzPolicyPolicyProfileEnum | (string & {});
 
 export type AuthzPolicyLoadBalancingScheme =
   | networksecurity.AuthzPolicyTargetLoadBalancingSchemeEnum
@@ -243,21 +233,14 @@ export type AuthzPolicy = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const AuthzPolicy = Resource<AuthzPolicy>(
-  "GCP.NetworkSecurity.AuthzPolicy",
-);
+export const AuthzPolicy = Resource<AuthzPolicy>("GCP.NetworkSecurity.AuthzPolicy");
 
-const resourceName = (
-  project: string,
-  location: string,
-  authzPolicyId: string,
-) => `projects/${project}/locations/${location}/authzPolicies/${authzPolicyId}`;
+const resourceName = (project: string, location: string, authzPolicyId: string) =>
+  `projects/${project}/locations/${location}/authzPolicies/${authzPolicyId}`;
 
-const actionOf = (value: string | undefined) =>
-  (value ?? DEFAULT_ACTION).toUpperCase();
+const actionOf = (value: string | undefined) => (value ?? DEFAULT_ACTION).toUpperCase();
 
-const profileOf = (value: string | undefined) =>
-  (value ?? DEFAULT_PROFILE).toUpperCase();
+const profileOf = (value: string | undefined) => (value ?? DEFAULT_PROFILE).toUpperCase();
 
 const locationOf = (value: string | undefined, fallback: string) =>
   (value ?? fallback).toLowerCase();
@@ -307,9 +290,7 @@ const listOwned = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.authzPolicies ?? [])),
       Stream.filter((policy) =>
-        Object.keys(policy.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(policy.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((policy) => toAttrs(policy, project)),
       Stream.runCollect,
@@ -329,47 +310,31 @@ const toCustomProviderBody = (
 
 export const AuthzPolicyProvider = () =>
   Provider.succeed(AuthzPolicy, {
-    stables: [
-      "name",
-      "authzPolicyId",
-      "project",
-      "location",
-      "policyProfile",
-      "createTime",
-    ],
+    stables: ["name", "authzPolicyId", "project", "location", "policyProfile", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.authzPolicyId ?? output?.authzPolicyId;
       const nextId = news.authzPolicyId ?? previousId;
-      const previousLocation = locationOf(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = locationOf(olds?.location ?? output?.location, env.region);
       const nextLocation = locationOf(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousProfile = profileOf(
-        olds?.policyProfile ?? output?.policyProfile,
-      );
+      const previousProfile = profileOf(olds?.policyProfile ?? output?.policyProfile);
       const nextProfile = profileOf(
         news.policyProfile ?? olds?.policyProfile ?? output?.policyProfile,
       );
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousProfile !== nextProfile;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -381,18 +346,12 @@ export const AuthzPolicyProvider = () =>
         output?.authzPolicyId,
         "authzpolicy",
       );
-      const location = locationOf(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, authzPolicyId);
+      const location = locationOf(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, authzPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -409,10 +368,7 @@ export const AuthzPolicyProvider = () =>
         output?.authzPolicyId,
         "authzpolicy",
       );
-      const location = locationOf(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = locationOf(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, authzPolicyId);
       const action = actionOf(news.action);
       const policyProfile = profileOf(news.policyProfile);
@@ -461,18 +417,11 @@ export const AuthzPolicyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const actionChanged = actionOf(current.action) !== action;
       const targetChanged = !sameJson(current.target, news.target);
-      const httpChanged = !sameJson(
-        current.httpRules ?? [],
-        news.httpRules ?? [],
-      );
-      const networkChanged = !sameJson(
-        current.networkRules ?? [],
-        news.networkRules ?? [],
-      );
+      const httpChanged = !sameJson(current.httpRules ?? [], news.httpRules ?? []);
+      const networkChanged = !sameJson(current.networkRules ?? [], news.networkRules ?? []);
       const providerChanged = !sameJson(
         toCustomProvider(current.customProvider),
         news.customProvider,
@@ -497,26 +446,22 @@ export const AuthzPolicyProvider = () =>
           providerChanged ? "customProvider" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networksecurity.patchProjectsLocationsAuthzPolicies({
+        const operation = yield* networksecurity.patchProjectsLocationsAuthzPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              action,
-              target: news.target,
-              httpRules: news.httpRules,
-              networkRules: news.networkRules,
-              customProvider,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            action,
+            target: news.target,
+            httpRules: news.httpRules,
+            networkRules: news.networkRules,
+            customProvider,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

@@ -11,10 +11,7 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
 } from "../Labels.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 export const DEFAULT_GLOBAL = "global";
 export const MAX_NAME_LENGTH = 63;
@@ -24,28 +21,20 @@ export const DEFAULT_GATEWAY_TYPE = "TCP_PROXY";
 export const DEFAULT_HOST_TYPE = "GCP_REGIONAL_MIG";
 export const DEFAULT_GATEWAY_KIND = "GCP_REGIONAL_MIG";
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.BeyondCorp.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.BeyondCorp.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.BeyondCorp.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.BeyondCorp.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.BeyondCorp.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.BeyondCorp.ResourceFailed")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.BeyondCorp.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.BeyondCorp.ResourceNotReady")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -65,42 +54,29 @@ export const rfc1035 = (name: string, fallback = "beyondcorp"): string => {
   if (!/^[a-z]/.test(next)) next = `${fallback[0] ?? "b"}${next}`;
   next = next.slice(0, MAX_NAME_LENGTH).replace(/-+$/g, "");
   if (next.length === 0) next = fallback;
-  if (next.length < 4)
-    next = `${next}${fallback}xxxx`.slice(0, MAX_NAME_LENGTH);
+  if (next.length < 4) next = `${next}${fallback}xxxx`.slice(0, MAX_NAME_LENGTH);
   if (!/[a-z0-9]$/.test(next)) {
     next = `${next.slice(0, MAX_NAME_LENGTH - 1)}0`;
   }
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -142,9 +118,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 const markerOf = (stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
@@ -161,10 +136,7 @@ const shrinkMarker = (
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = build(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -225,14 +197,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -242,18 +210,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -278,14 +237,12 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sameStringList = (
   left: readonly string[] | undefined,
@@ -295,9 +252,7 @@ export const sameStringList = (
   JSON.stringify([...(right ?? [])].map(lastSegment).sort());
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -311,8 +266,7 @@ export const replaceOnIdentity = (input: {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
     (input.nextParent ?? "") !== "" &&
-    lastSegment(input.previousParent ?? "") !==
-      lastSegment(input.nextParent ?? "");
+    lastSegment(input.previousParent ?? "") !== lastSegment(input.nextParent ?? "");
   const replace =
     (input.extra ?? false) ||
     parentChanged ||
@@ -439,13 +393,9 @@ const OPERATION_BUDGET = "15 minutes";
  * concurrent create won the race; reconcile observes the resource next.
  */
 export const waitForOperation = (operation: LongRunningOperation) =>
-  waitForLongRunning(
-    operation,
-    (name) => beyondcorp.getProjectsLocationsOperations({ name }),
-    {
-      budget: OPERATION_BUDGET,
-    },
-  ).pipe(
+  waitForLongRunning(operation, (name) => beyondcorp.getProjectsLocationsOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
     Effect.catchIf(
       (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
       () => Effect.succeed(operation),
@@ -460,8 +410,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

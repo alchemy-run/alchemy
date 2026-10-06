@@ -1,6 +1,6 @@
 import * as Layer from "effect/Layer";
-import { WriteTable } from "./WriteTable.ts";
 import { makeBigQueryTableBinding, writeTableIam } from "./TableHttp.ts";
+import { WriteTable } from "./WriteTable.ts";
 
 /**
  * HTTP implementation of {@link WriteTable} over the BigQuery REST API.

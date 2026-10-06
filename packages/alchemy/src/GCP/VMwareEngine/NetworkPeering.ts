@@ -170,9 +170,7 @@ export type NetworkPeering = Resource<
  * @resource
  * @category VMwareEngine
  */
-export const NetworkPeering = Resource<NetworkPeering>(
-  "GCP.VMwareEngine.NetworkPeering",
-);
+export const NetworkPeering = Resource<NetworkPeering>("GCP.VMwareEngine.NetworkPeering");
 
 const resourceName = (project: string, networkPeeringId: string) =>
   `${parentOf(project, DEFAULT_GLOBAL)}/${COLLECTION}/${networkPeeringId}`;
@@ -180,8 +178,7 @@ const resourceName = (project: string, networkPeeringId: string) =>
 const expandVen = (project: string, value: string) =>
   expandName(value, project, DEFAULT_GLOBAL, VEN_COLLECTION);
 
-const boolOrDefault = (value: boolean | undefined, fallback: boolean) =>
-  value ?? fallback;
+const boolOrDefault = (value: boolean | undefined, fallback: boolean) => value ?? fallback;
 
 const toAttrs = (item: vmwareengine.NetworkPeering, project: string) => {
   const name = item.name ?? "";
@@ -197,10 +194,8 @@ const toAttrs = (item: vmwareengine.NetworkPeering, project: string) => {
     vmwareEngineNetwork: item.vmwareEngineNetwork,
     exportCustomRoutes: item.exportCustomRoutes !== false,
     importCustomRoutes: item.importCustomRoutes !== false,
-    exportCustomRoutesWithPublicIp:
-      item.exportCustomRoutesWithPublicIp !== false,
-    importCustomRoutesWithPublicIp:
-      item.importCustomRoutesWithPublicIp !== false,
+    exportCustomRoutesWithPublicIp: item.exportCustomRoutesWithPublicIp !== false,
+    importCustomRoutesWithPublicIp: item.importCustomRoutesWithPublicIp !== false,
     exchangeSubnetRoutes: item.exchangeSubnetRoutes !== false,
     peerMtu: item.peerMtu,
     description: ownership.text,
@@ -219,27 +214,17 @@ const getByName = (name: string) =>
 
 export const NetworkPeeringProvider = () =>
   Provider.succeed(NetworkPeering, {
-    stables: [
-      "name",
-      "networkPeeringId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "networkPeeringId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousPeer = canonicalizeLink(
-        olds?.peerNetwork ?? output?.peerNetwork,
-      );
+      const previousPeer = canonicalizeLink(olds?.peerNetwork ?? output?.peerNetwork);
       const nextPeer = canonicalizeLink(news.peerNetwork);
       const previousVen = canonicalizeLink(
         olds?.vmwareEngineNetwork ?? output?.vmwareEngineNetwork,
       );
       const nextVen = canonicalizeLink(news.vmwareEngineNetwork);
-      const previousType =
-        olds?.peerNetworkType ?? output?.peerNetworkType ?? "";
+      const previousType = olds?.peerNetworkType ?? output?.peerNetworkType ?? "";
       return replaceOnIdentity({
         previousId: olds?.networkPeeringId ?? output?.networkPeeringId,
         nextId: news.networkPeeringId
@@ -296,10 +281,7 @@ export const NetworkPeeringProvider = () =>
       const name = resourceName(env.project, networkPeeringId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
-      const vmwareEngineNetwork = expandVen(
-        env.project,
-        news.vmwareEngineNetwork,
-      );
+      const vmwareEngineNetwork = expandVen(env.project, news.vmwareEngineNetwork);
       const exportCustomRoutes = boolOrDefault(news.exportCustomRoutes, true);
       const importCustomRoutes = boolOrDefault(news.importCustomRoutes, true);
       const exportCustomRoutesWithPublicIp = boolOrDefault(
@@ -310,10 +292,7 @@ export const NetworkPeeringProvider = () =>
         news.importCustomRoutesWithPublicIp,
         true,
       );
-      const exchangeSubnetRoutes = boolOrDefault(
-        news.exchangeSubnetRoutes,
-        true,
-      );
+      const exchangeSubnetRoutes = boolOrDefault(news.exchangeSubnetRoutes, true);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -359,20 +338,18 @@ export const NetworkPeeringProvider = () =>
         (item) => item.state,
       );
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const updateMask = changedFields([["description", descriptionChanged]]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsNetworkPeerings({
+        const operation = yield* vmwareengine.patchProjectsLocationsNetworkPeerings({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-            },
-          });
+            description: desiredDescription,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

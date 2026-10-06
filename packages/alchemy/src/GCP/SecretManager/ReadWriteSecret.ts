@@ -4,8 +4,7 @@ import type { SecretBindingTarget } from "./BindingHttp.ts";
 import type { ReadSecretClient } from "./ReadSecret.ts";
 import type { WriteSecretClient } from "./WriteSecret.ts";
 
-export interface ReadWriteSecretClient
-  extends ReadSecretClient, WriteSecretClient {}
+export interface ReadWriteSecretClient extends ReadSecretClient, WriteSecretClient {}
 
 /**
  * Read and version-management access to a Secret Manager {@link Secret}.

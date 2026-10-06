@@ -95,10 +95,7 @@ const skipString = (code: string, i: number): number => {
 
 const NAME_START = /[A-Za-z]/;
 
-const parseOpenTag = (
-  code: string,
-  start: number,
-): Token & { kind: "open" } => {
+const parseOpenTag = (code: string, start: number): Token & { kind: "open" } => {
   let i = start + 1;
   const nameMatch = /^[A-Za-z][\w:.-]*/.exec(code.slice(i, i + 200));
   const name = nameMatch ? nameMatch[0] : "";
@@ -262,14 +259,10 @@ const elementOf = (code: string, n: number) => {
   const tags = copyTags(tokens);
   const target = tags[n];
   if (!target) {
-    throw new CopyEditError(
-      `No data-copy element #${n} in this file. Reload the page.`,
-      409,
-    );
+    throw new CopyEditError(`No data-copy element #${n} in this file. Reload the page.`, 409);
   }
   const { token: open, index } = target;
-  if (open.selfClosing)
-    throw new CopyEditError("data-copy is on an empty element.");
+  if (open.selfClosing) throw new CopyEditError("data-copy is on an empty element.");
   let depth = 1;
   let closeIndex = -1;
   for (let k = index + 1; k < tokens.length; k++) {
@@ -280,8 +273,7 @@ const elementOf = (code: string, n: number) => {
       break;
     }
   }
-  if (closeIndex === -1)
-    throw new CopyEditError(`No closing </${open.name}> found.`);
+  if (closeIndex === -1) throw new CopyEditError(`No closing </${open.name}> found.`);
   return {
     open,
     inner: tokens.slice(index + 1, closeIndex),
@@ -295,17 +287,12 @@ const segmentsOf = (code: string, n: number): Run[] => {
   const segments: Run[] = [];
   let cursor = open.end;
   for (const t of [...inner, close]) {
-    if (t.kind === "comment")
-      throw new CopyEditError("Editable copy can't contain HTML comments.");
+    if (t.kind === "comment") throw new CopyEditError("Editable copy can't contain HTML comments.");
     if ((t.kind === "open" || t.kind === "close") && /^[A-Z]/.test(t.name)) {
-      throw new CopyEditError(
-        `Editable copy can't contain components (<${t.name}>).`,
-      );
+      throw new CopyEditError(`Editable copy can't contain components (<${t.name}>).`);
     }
     if (t.kind === "open" && /^(script|style)$/i.test(t.name)) {
-      throw new CopyEditError(
-        "Editable copy can't contain <script> or <style>.",
-      );
+      throw new CopyEditError("Editable copy can't contain <script> or <style>.");
     }
     segments.push({ start: cursor, end: t.start });
     cursor = t.end;
@@ -319,10 +306,7 @@ export interface EditRequest extends TextEdit {
 }
 
 /** Applies an edit to an HTML-like template and returns the new source. */
-export const applyEdit = (
-  code: string,
-  { index, before, after }: EditRequest,
-): string =>
+export const applyEdit = (code: string, { index, before, after }: EditRequest): string =>
   applyRuns(code, segmentsOf(code, index), htmlDialect, { before, after });
 
 // ── inline markdown ───────────────────────────────────────────────────────
@@ -353,11 +337,8 @@ const escapeMarkdown = (text: string) =>
 const hrefOf = (code: string, attrs: Attr[]) => {
   const attr = attrs.find((a) => a.name === "href");
   if (!attr) return undefined;
-  const m = /^href\s*=\s*(["'])([^"'{}]*)\1$/.exec(
-    code.slice(attr.start, attr.end),
-  );
-  if (!m)
-    throw new CopyEditError("Links need a literal href to edit as markdown.");
+  const m = /^href\s*=\s*(["'])([^"'{}]*)\1$/.exec(code.slice(attr.start, attr.end));
+  if (!m) throw new CopyEditError("Links need a literal href to edit as markdown.");
   return decodeEntities(m[2]!);
 };
 
@@ -387,8 +368,7 @@ export const inlineSource = (code: string, n: number) => {
   for (const t of inner) {
     text(code.slice(cursor, t.start));
     cursor = t.end;
-    if (t.kind === "comment")
-      throw new CopyEditError("HTML comments can't be edited as markdown.");
+    if (t.kind === "comment") throw new CopyEditError("HTML comments can't be edited as markdown.");
     const name = t.name.toLowerCase();
     if (name === "br" && t.kind === "open" && !inCode) {
       // A line break: the whitespace around it isn't content.
@@ -401,8 +381,7 @@ export const inlineSource = (code: string, n: number) => {
       throw new CopyEditError(`<${t.name}> can't be edited as markdown.`);
     }
     if (t.kind === "open") {
-      if (t.selfClosing)
-        throw new CopyEditError(`<${t.name}/> can't be edited as markdown.`);
+      if (t.selfClosing) throw new CopyEditError(`<${t.name}/> can't be edited as markdown.`);
       const tag = MARKDOWN_TAG[name] ?? name;
       if (!(tag in templates)) {
         const attrs = t.attrs
@@ -432,10 +411,7 @@ export const inlineSource = (code: string, n: number) => {
 };
 
 /** Inline markdown as template HTML, reusing each tag's source attributes. */
-export const inlineHtml = (
-  markdown: string,
-  templates: Record<string, string>,
-) => {
+export const inlineHtml = (markdown: string, templates: Record<string, string>) => {
   // Each line break in the markdown becomes a <br>.
   const html = marked.parseInline(markdown.replace(/[ \t]*\n\s*/g, "\n"), {
     async: false,
@@ -482,10 +458,6 @@ export const writeInline = (
   if (markdown.trim() === current.markdown) return code;
   const html = inlineHtml(markdown.trim(), current.templates);
   return (
-    code.slice(0, current.start) +
-    current.lead +
-    html +
-    current.trail +
-    code.slice(current.end)
+    code.slice(0, current.start) + current.lead + html + current.trail + code.slice(current.end)
   );
 };

@@ -31,11 +31,9 @@ export interface GetSuppressedDestination extends Binding.Service<
   () => Effect.Effect<
     (
       request: sesv2.GetSuppressedDestinationRequest,
-    ) => Effect.Effect<
-      sesv2.GetSuppressedDestinationResponse,
-      sesv2.GetSuppressedDestinationError
-    >
+    ) => Effect.Effect<sesv2.GetSuppressedDestinationResponse, sesv2.GetSuppressedDestinationError>
   >
 > {}
-export const GetSuppressedDestination =
-  Binding.Service<GetSuppressedDestination>("AWS.SES.GetSuppressedDestination");
+export const GetSuppressedDestination = Binding.Service<GetSuppressedDestination>(
+  "AWS.SES.GetSuppressedDestination",
+);

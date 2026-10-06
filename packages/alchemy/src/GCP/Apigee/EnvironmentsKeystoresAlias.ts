@@ -175,8 +175,7 @@ export class EnvironmentsKeystoresAliasNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const keystoreIdOf = (value: string) =>
-  segmentAfter(value, "keystores") ?? lastSegment(value);
+const keystoreIdOf = (value: string) => segmentAfter(value, "keystores") ?? lastSegment(value);
 
 const resourceName = (
   organizationId: string,
@@ -186,11 +185,7 @@ const resourceName = (
 ) =>
   `${environmentNameOf(organizationId, environmentId)}/keystores/${keystoreId}/aliases/${aliasId}`;
 
-const keystoreName = (
-  organizationId: string,
-  environmentId: string,
-  keystoreId: string,
-) =>
+const keystoreName = (organizationId: string, environmentId: string, keystoreId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/keystores/${keystoreId}`;
 
 const toAttrs = (
@@ -201,12 +196,7 @@ const toAttrs = (
 ) => {
   const aliasId = alias.alias ?? lastSegment(alias.alias ?? "");
   const cert = alias.certsInfo?.certInfo?.[0];
-  const name = resourceName(
-    organizationId,
-    environmentId,
-    keystoreId,
-    aliasId || "alias",
-  );
+  const name = resourceName(organizationId, environmentId, keystoreId, aliasId || "alias");
   return {
     name,
     aliasId: aliasId || lastSegment(name),
@@ -220,9 +210,7 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  missingToUndefined(
-    apigee.getOrganizationsEnvironmentsKeystoresAliases({ name }),
-  );
+  missingToUndefined(apigee.getOrganizationsEnvironmentsKeystoresAliases({ name }));
 
 const selfSignedBody = (
   aliasId: string,
@@ -234,10 +222,7 @@ const selfSignedBody = (
     sigAlg: news.sigAlg ?? "SHA256withRSA",
     certValidityInDays: news.certValidityInDays ?? 365,
     subject: {
-      commonName:
-        news.subject?.commonName ??
-        news.subjectAlternativeNames?.[0] ??
-        aliasId,
+      commonName: news.subject?.commonName ?? news.subjectAlternativeNames?.[0] ?? aliasId,
       countryCode: news.subject?.countryCode,
       email: news.subject?.email,
       locality: news.subject?.locality,
@@ -248,9 +233,7 @@ const selfSignedBody = (
     subjectAlternativeNames: news.subjectAlternativeNames,
   }) as apigee.GoogleApiHttpBody;
 
-const keyCertBody = (
-  news: EnvironmentsKeystoresAliasProps,
-): apigee.GoogleApiHttpBody => ({
+const keyCertBody = (news: EnvironmentsKeystoresAliasProps): apigee.GoogleApiHttpBody => ({
   contentType: "application/x-pem-file",
   data: news.certPem,
 });
@@ -267,13 +250,7 @@ const createBody = (
 
 export const EnvironmentsKeystoresAliasProvider = () =>
   Provider.succeed(EnvironmentsKeystoresAlias, {
-    stables: [
-      "name",
-      "aliasId",
-      "keystoreId",
-      "organizationId",
-      "environmentId",
-    ],
+    stables: ["name", "aliasId", "keystoreId", "organizationId", "environmentId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -282,17 +259,14 @@ export const EnvironmentsKeystoresAliasProvider = () =>
       const previousOrg = olds?.organization ?? output?.organizationId;
       const previousEnv = olds?.environment ?? output?.environmentId;
       const idChanged =
-        previousId !== undefined &&
-        news.aliasId !== undefined &&
-        news.aliasId !== previousId;
+        previousId !== undefined && news.aliasId !== undefined && news.aliasId !== previousId;
       const keystoreChanged =
         previousKeystore !== undefined &&
         keystoreIdOf(news.keystore) !== keystoreIdOf(previousKeystore);
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -308,18 +282,12 @@ export const EnvironmentsKeystoresAliasProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
-      const keystoreId = keystoreIdOf(
-        olds?.keystore ?? output?.keystoreId ?? "",
-      );
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
+      const keystoreId = keystoreIdOf(olds?.keystore ?? output?.keystoreId ?? "");
       const aliasId = yield* toResourceId(id, olds?.aliasId, output?.aliasId, {
         maxLength: MAX_NAME_LENGTH,
       });
-      const name =
-        output?.name ??
-        resourceName(organizationId, environmentId, keystoreId, aliasId);
+      const name = output?.name ?? resourceName(organizationId, environmentId, keystoreId, aliasId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, organizationId, environmentId, keystoreId);
@@ -334,9 +302,7 @@ export const EnvironmentsKeystoresAliasProvider = () =>
           for (const keystore of config?.keystores ?? []) {
             const keystoreId = keystoreIdOf(keystore.name ?? "");
             for (const aliasConfig of keystore.aliases ?? []) {
-              const aliasId = lastSegment(
-                stripRevision(aliasConfig.name ?? ""),
-              );
+              const aliasId = lastSegment(stripRevision(aliasConfig.name ?? ""));
               if (aliasId.length === 0) continue;
               const name = resourceName(
                 item.organizationId,
@@ -368,12 +334,7 @@ export const EnvironmentsKeystoresAliasProvider = () =>
         maxLength: MAX_NAME_LENGTH,
       });
       const parent = keystoreName(organizationId, environmentId, keystoreId);
-      const name = resourceName(
-        organizationId,
-        environmentId,
-        keystoreId,
-        aliasId,
-      );
+      const name = resourceName(organizationId, environmentId, keystoreId, aliasId);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -391,14 +352,12 @@ export const EnvironmentsKeystoresAliasProvider = () =>
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       } else if (news.certPem !== undefined) {
-        current = yield* apigee.updateOrganizationsEnvironmentsKeystoresAliases(
-          {
-            name,
-            ignoreNewlineValidation: news.ignoreNewlineValidation,
-            ignoreExpiryValidation: news.ignoreExpiryValidation ?? true,
-            body: keyCertBody(news),
-          },
-        );
+        current = yield* apigee.updateOrganizationsEnvironmentsKeystoresAliases({
+          name,
+          ignoreNewlineValidation: news.ignoreNewlineValidation,
+          ignoreExpiryValidation: news.ignoreExpiryValidation ?? true,
+          body: keyCertBody(news),
+        });
       }
 
       if (current === undefined) {
@@ -413,11 +372,6 @@ export const EnvironmentsKeystoresAliasProvider = () =>
         .deleteOrganizationsEnvironmentsKeystoresAliases({
           name: output.name,
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

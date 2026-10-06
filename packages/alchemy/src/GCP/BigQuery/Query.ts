@@ -31,11 +31,7 @@ export interface Query extends Binding.Service<
   ) => Effect.Effect<
     (
       request: QueryRequest,
-    ) => Effect.Effect<
-      bigquery.QueryResponse,
-      bigquery.QueryJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<bigquery.QueryResponse, bigquery.QueryJobsError, RuntimeContext>
   >
 > {}
 

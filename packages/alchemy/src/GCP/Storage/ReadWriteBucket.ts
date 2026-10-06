@@ -4,8 +4,7 @@ import type { Bucket } from "./Bucket.ts";
 import type { ReadBucketClient } from "./ReadBucket.ts";
 import type { WriteBucketClient } from "./WriteBucket.ts";
 
-export interface ReadWriteBucketClient
-  extends ReadBucketClient, WriteBucketClient {}
+export interface ReadWriteBucketClient extends ReadBucketClient, WriteBucketClient {}
 
 /**
  * Read and write access to a Cloud Storage {@link Bucket}. Grants
@@ -29,6 +28,4 @@ export interface ReadWriteBucket extends Binding.Service<
   (bucket: Bucket) => Effect.Effect<ReadWriteBucketClient>
 > {}
 
-export const ReadWriteBucket = Binding.Service<ReadWriteBucket>(
-  "GCP.Storage.ReadWriteBucket",
-);
+export const ReadWriteBucket = Binding.Service<ReadWriteBucket>("GCP.Storage.ReadWriteBucket");

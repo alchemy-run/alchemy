@@ -1,18 +1,18 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { adopt } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
 
@@ -20,10 +20,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -47,9 +44,7 @@ const readinessRetries = 15;
 // connection, letting it land on an edge that has the new version (this is
 // why a brand-new `curl` sees the update immediately while a kept-alive
 // client does not). See do-rpc DurableObject test investigation.
-const freshConn = HttpClient.mapRequest(
-  HttpClientRequest.setHeader("connection", "close"),
-);
+const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
 
 test(
   "durable object methods can use binding clients",
@@ -71,19 +66,67 @@ test(
     expect(body.value).toBe("ok");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:kv",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
     timeout: 60_000,
   },
 );
 
-class DurableObjectLocationNotReady extends Data.TaggedError(
-  "DurableObjectLocationNotReady",
-)<{ readonly message: string }> {}
+test(
+  "jurisdiction() addresses objects inside that jurisdiction",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+    const name = "jurisdiction-probe";
+
+    const res = yield* client.get(`${url}/jurisdiction?name=${name}`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as { global: string; eu: string; euAgain: string };
+
+    // A jurisdiction-restricted id is a different object from the global one
+    // with the same name, and is stable across lookups.
+    expect(body.eu).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.eu).not.toBe(body.global);
+    expect(body.euAgain).toBe(body.eu);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
+test(
+  "calling an undefined durable object RPC method fails",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${url}/unknown-rpc`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as { missing: string };
+
+    expect(body.missing).toContain('Method "missing" not found on Durable Object');
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
+class DurableObjectLocationNotReady extends Data.TaggedError("DurableObjectLocationNotReady")<{
+  readonly message: string;
+}> {}
 
 const locationFor = Effect.fn(function* (
   url: string,
@@ -100,11 +143,7 @@ const locationFor = Effect.fn(function* (
             message: `Worker not ready: ${res.status}`,
           });
         }
-        const body = (yield* res.json) as {
-          id: string;
-          colo: string;
-          locationHintRead: boolean;
-        };
+        const body = (yield* res.json) as { id: string; colo: string; locationHintRead: boolean };
         if (!body.id || !body.colo || body.colo === "unknown") {
           return yield* new DurableObjectLocationNotReady({
             message: `Instance not ready: ${JSON.stringify(body)}`,
@@ -137,12 +176,7 @@ test(
     }
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:kv",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
     timeout: 60_000,
   },
 );
@@ -162,12 +196,7 @@ test(
     expect(wnam.id).not.toBe(apac.id);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:kv",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
     timeout: 60_000,
   },
 );
@@ -211,12 +240,7 @@ test(
     expect(lines).toEqual(["0", "1", "2", "3", "4"]);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:kv",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
     timeout: 60_000,
   },
 );
@@ -239,9 +263,7 @@ const fetchReady = (url: string, expected: string) =>
           ? Effect.flatMap(r.text, (body) =>
               body === expected
                 ? Effect.succeed(body)
-                : Effect.fail(
-                    new Error(`stale: got ${body}, want ${expected}`),
-                  ),
+                : Effect.fail(new Error(`stale: got ${body}, want ${expected}`)),
             )
           : Effect.fail(new Error(`Worker not ready: ${r.status}`)),
       ),
@@ -260,9 +282,7 @@ const fetchJsonReady = <T>(url: string) =>
         r.status !== 200
           ? Effect.flatMap(r.text, (body) =>
               Effect.fail(
-                new Error(
-                  `Worker not ready at ${url}: ${r.status} ${body.slice(0, 500)}`,
-                ),
+                new Error(`Worker not ready at ${url}: ${r.status} ${body.slice(0, 500)}`),
               ),
             )
           : Effect.flatMap(r.text, (body) =>
@@ -339,14 +359,7 @@ const consumerWorkerScript = `export default {
 // to roughly the slowest single test.
 describe.concurrent(
   "scratch",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:kv",
-      "provider:cloudflare:worker",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"] },
   () => {
     test.provider(
       "async worker durable object binding accepts scriptName",
@@ -357,9 +370,7 @@ describe.concurrent(
               return {
                 host: yield* Cloudflare.Worker("host-worker", {
                   script: hostWorkerScript,
-                  env: {
-                    Counter: Cloudflare.DurableObject("Counter"),
-                  },
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
                 }),
               };
             }),
@@ -369,16 +380,12 @@ describe.concurrent(
             Effect.gen(function* () {
               const host = yield* Cloudflare.Worker("host-worker", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter"),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter") },
               });
               const consumer = yield* Cloudflare.Worker("consumer-worker", {
                 script: consumerWorkerScript,
                 env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    scriptName: host.workerName,
-                  }),
+                  Counter: Cloudflare.DurableObject("Counter", { scriptName: host.workerName }),
                 },
               });
 
@@ -386,9 +393,7 @@ describe.concurrent(
             }),
           );
 
-          const reset = yield* fetchJsonReady<{ ok: boolean }>(
-            `${deployed.host.url}/reset`,
-          );
+          const reset = yield* fetchJsonReady<{ ok: boolean }>(`${deployed.host.url}/reset`);
           expect(reset.ok).toBe(true);
 
           const first = yield* fetchJsonReady<{ value: number }>(
@@ -396,9 +401,7 @@ describe.concurrent(
           );
           expect(first.value).toBe(1);
 
-          const second = yield* fetchJsonReady<{ value: number }>(
-            `${deployed.host.url}/get`,
-          );
+          const second = yield* fetchJsonReady<{ value: number }>(`${deployed.host.url}/get`);
           expect(second.value).toBe(1);
 
           yield* scratch.destroy();
@@ -425,9 +428,7 @@ describe.concurrent(
 export class DO_A extends DurableObject {}
 export default { async fetch() { return new Response("v1"); } };
 `,
-                  env: {
-                    DO_A: Cloudflare.DurableObject("DO_A"),
-                  },
+                  env: { DO_A: Cloudflare.DurableObject("DO_A") },
                 }),
               };
             }),
@@ -442,11 +443,7 @@ export default { async fetch() { return new Response("v1"); } };
 export class DO_A_v2 extends DurableObject {}
 export default { async fetch() { return new Response("v2"); } };
 `,
-                  env: {
-                    DO_A: Cloudflare.DurableObject("DO_A", {
-                      className: "DO_A_v2",
-                    }),
-                  },
+                  env: { DO_A: Cloudflare.DurableObject("DO_A", { className: "DO_A_v2" }) },
                 }),
               };
             }),
@@ -463,9 +460,7 @@ export class DO_B extends DurableObject {}
 export default { async fetch() { return new Response("v3"); } };
 `,
                   env: {
-                    DO_A: Cloudflare.DurableObject("DO_A", {
-                      className: "DO_A_v2",
-                    }),
+                    DO_A: Cloudflare.DurableObject("DO_A", { className: "DO_A_v2" }),
                     DO_B: Cloudflare.DurableObject("DO_B"),
                   },
                 }),
@@ -482,9 +477,7 @@ export default { async fetch() { return new Response("v3"); } };
 export class DO_B extends DurableObject {}
 export default { async fetch() { return new Response("v4"); } };
 `,
-                  env: {
-                    DO_B: Cloudflare.DurableObject("DO_B"),
-                  },
+                  env: { DO_B: Cloudflare.DurableObject("DO_B") },
                 }),
               };
             }),
@@ -522,9 +515,7 @@ export default { async fetch() { return new Response("v4"); } };
               // never an Effect-native export.
               const host = yield* Cloudflare.Worker("host-worker", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter"),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter") },
               });
 
               const consumer = yield* Cloudflare.Worker("consumer-worker", {
@@ -564,11 +555,7 @@ export default { async fetch() { return new Response("v4"); } };
               // members and rendezvous on each other's precreate stubs.
               yield* host.bind("consumer-name", {
                 bindings: [
-                  {
-                    type: "plain_text",
-                    name: "CONSUMER_NAME",
-                    text: consumer.workerName,
-                  },
+                  { type: "plain_text", name: "CONSUMER_NAME", text: consumer.workerName },
                 ],
               });
 
@@ -578,15 +565,12 @@ export default { async fetch() { return new Response("v4"); } };
 
           // The namespace id created for the precreate stub must survive into the
           // final reconcile output...
-          const finalNamespaceId =
-            deployed.host.durableObjectNamespaces.Counter;
+          const finalNamespaceId = deployed.host.durableObjectNamespaces.Counter;
           expect(finalNamespaceId).toBeDefined();
 
           // ...and be the same id the consumer resolved from the stub and
           // deployed into its live environment.
-          const body = yield* fetchJsonReady<{ namespaceId: string }>(
-            deployed.consumer.url!,
-          );
+          const body = yield* fetchJsonReady<{ namespaceId: string }>(deployed.consumer.url!);
 
           expect(body.namespaceId).toBe(finalNamespaceId);
 
@@ -628,15 +612,9 @@ export default { async fetch() { return new Response("v4"); } };
             metadata: {
               mainModule: "main.js",
               bindings: [
-                {
-                  type: "durable_object_namespace",
-                  name: "Counter",
-                  className: "Counter",
-                },
+                { type: "durable_object_namespace", name: "Counter", className: "Counter" },
               ],
-              migrations: {
-                newSqliteClasses: ["Counter"],
-              },
+              migrations: { newSqliteClasses: ["Counter"] },
               // Match Alchemy's default compatibility date so adoption is a
               // pure class-reuse with no compat-date churn. Old dates predate
               // `DurableObjectNamespace.getByName`, which `hostWorkerScript`
@@ -644,9 +622,7 @@ export default { async fetch() { return new Response("v4"); } };
               compatibilityDate: "2026-03-17",
             },
             files: [
-              new File([hostWorkerScript], "main.js", {
-                type: "application/javascript+module",
-              }),
+              new File([hostWorkerScript], "main.js", { type: "application/javascript+module" }),
             ],
           });
 
@@ -659,9 +635,7 @@ export default { async fetch() { return new Response("v4"); } };
                 return yield* Cloudflare.Worker("AdoptDO", {
                   name: physicalName,
                   script: hostWorkerScript,
-                  env: {
-                    Counter: Cloudflare.DurableObject("Counter"),
-                  },
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
                 });
               }),
             )
@@ -675,9 +649,7 @@ export default { async fetch() { return new Response("v4"); } };
           // The adopted DO is functional end-to-end: increment round-trips
           // through the reused `Counter` class.
           yield* fetchJsonReady<{ ok: boolean }>(`${adopted.url}/reset`);
-          const first = yield* fetchJsonReady<{ value: number }>(
-            `${adopted.url}/increment`,
-          );
+          const first = yield* fetchJsonReady<{ value: number }>(`${adopted.url}/increment`);
           expect(first.value).toBe(1);
 
           yield* scratch.destroy();
@@ -710,9 +682,7 @@ export default { async fetch() { return new Response("v4"); } };
               return {
                 b: yield* Cloudflare.Worker("worker-b", {
                   script: hostWorkerScript,
-                  env: {
-                    Counter: Cloudflare.DurableObject("Counter"),
-                  },
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
                 }),
               };
             }),
@@ -723,9 +693,7 @@ export default { async fetch() { return new Response("v4"); } };
 
           // Write data while worker-b hosts the namespace.
           yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
-          const written = yield* fetchJsonReady<{ value: number }>(
-            `${v1.b.url}/increment`,
-          );
+          const written = yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/increment`);
           expect(written.value).toBe(1);
 
           const moved = Effect.gen(function* () {
@@ -741,43 +709,29 @@ export default { async fetch() { return new Response("v4"); } };
             });
             const b = yield* Cloudflare.Worker("worker-b", {
               script: consumerWorkerScript,
-              env: {
-                Counter: Cloudflare.DurableObject("Counter", {
-                  scriptName: a.workerName,
-                }),
-              },
+              env: { Counter: Cloudflare.DurableObject("Counter", { scriptName: a.workerName }) },
             });
             return { a, b };
           });
 
           const v2 = yield* scratch.deploy(moved);
-          expect(v2.a.durableObjectNamespaces.Counter).toBe(
-            originalNamespaceId,
-          );
-          expect(v2.b.durableObjectNamespaces.Counter).toBe(
-            originalNamespaceId,
-          );
+          expect(v2.a.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
+          expect(v2.b.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
 
           // The namespace moved to worker-a with its data intact...
-          const viaA = yield* fetchJsonReady<{ value: number }>(
-            `${v2.a.url}/get`,
-          );
+          const viaA = yield* fetchJsonReady<{ value: number }>(`${v2.a.url}/get`);
           expect(viaA.value).toBe(1);
 
           // ...and worker-b reaches the same objects through the cross-script
           // binding.
-          const viaB = yield* fetchJsonReady<{ value: number }>(
-            `${v2.b.url}/increment`,
-          );
+          const viaB = yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/increment`);
           expect(viaB.value).toBe(2);
 
           // Redeploying the same shape is inert: the class now lives on
           // worker-a (tracked by its alchemy:do tag), so the standing
           // declaration must not re-emit a transfer migration. Data intact.
           const v3 = yield* scratch.deploy(moved);
-          const afterRedeploy = yield* fetchJsonReady<{ value: number }>(
-            `${v3.a.url}/get`,
-          );
+          const afterRedeploy = yield* fetchJsonReady<{ value: number }>(`${v3.a.url}/get`);
           expect(afterRedeploy.value).toBe(2);
 
           // ...and once the move has landed everywhere, the declaration can be
@@ -787,24 +741,16 @@ export default { async fetch() { return new Response("v4"); } };
             Effect.gen(function* () {
               const a = yield* Cloudflare.Worker("worker-a", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter"),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter") },
               });
               const b = yield* Cloudflare.Worker("worker-b", {
                 script: consumerWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    scriptName: a.workerName,
-                  }),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter", { scriptName: a.workerName }) },
               });
               return { a, b };
             }),
           );
-          const afterRemoval = yield* fetchJsonReady<{ value: number }>(
-            `${v4.a.url}/get`,
-          );
+          const afterRemoval = yield* fetchJsonReady<{ value: number }>(`${v4.a.url}/get`);
           expect(afterRemoval.value).toBe(2);
 
           yield* scratch.destroy();
@@ -833,18 +779,14 @@ export default { async fetch() { return new Response("v4"); } };
                 }),
                 b: yield* Cloudflare.Worker("worker-b", {
                   script: hostWorkerScript,
-                  env: {
-                    Counter: Cloudflare.DurableObject("Counter"),
-                  },
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
                 }),
               };
             }),
           );
 
           yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
-          const written = yield* fetchJsonReady<{ value: number }>(
-            `${v1.b.url}/increment`,
-          );
+          const written = yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/increment`);
           expect(written.value).toBe(1);
 
           const aScriptName = v1.a.workerName;
@@ -868,18 +810,14 @@ export default { async fetch() { return new Response("v4"); } };
                   // Service binding orders worker-b after worker-a (the raw
                   // string scriptName below carries no dependency edge).
                   A: a,
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    scriptName: aScriptName,
-                  }),
+                  Counter: Cloudflare.DurableObject("Counter", { scriptName: aScriptName }),
                 },
               });
               return { a, b };
             }),
           );
 
-          const viaA = yield* fetchJsonReady<{ value: number }>(
-            `${v2.a.url}/get`,
-          );
+          const viaA = yield* fetchJsonReady<{ value: number }>(`${v2.a.url}/get`);
           expect(viaA.value).toBe(1);
 
           yield* scratch.destroy();
@@ -906,9 +844,7 @@ export default { async fetch() { return new Response("v4"); } };
                 }),
                 b: yield* Cloudflare.Worker("worker-b", {
                   script: hostWorkerScript,
-                  env: {
-                    Counter: Cloudflare.DurableObject("Counter"),
-                  },
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
                 }),
               };
             }),
@@ -935,9 +871,7 @@ export default { async fetch() { return new Response("v4"); } };
                 const b = yield* Cloudflare.Worker("worker-b", {
                   script: consumerWorkerScript,
                   env: {
-                    Counter: Cloudflare.DurableObject("Counter", {
-                      scriptName: aScriptName,
-                    }),
+                    Counter: Cloudflare.DurableObject("Counter", { scriptName: aScriptName }),
                   },
                 });
                 return { a, b };
@@ -946,9 +880,7 @@ export default { async fetch() { return new Response("v4"); } };
             .pipe(Effect.flip);
 
           expect(error._tag).toEqual("DurableObjectTransferRequired");
-          expect(
-            (yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/get`)).value,
-          ).toBe(1);
+          expect((yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/get`)).value).toBe(1);
 
           yield* scratch.destroy();
         }).pipe(logLevel),
@@ -975,18 +907,12 @@ export default { async fetch() { return new Response("v4"); } };
           const originalNamespaceId = v1.a.durableObjectNamespaces.Counter;
           expect(originalNamespaceId).toBeDefined();
           yield* fetchJsonReady<{ ok: boolean }>(`${v1.a.url}/reset`);
-          expect(
-            (yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`))
-              .value,
-          ).toBe(1);
+          expect((yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`)).value).toBe(1);
 
           const transferredStack = (scriptName?: string) =>
             Effect.gen(function* () {
               const a = yield* Cloudflare.Worker("worker-a", {
-                script:
-                  scriptName === undefined
-                    ? hostWorkerScript
-                    : consumerWorkerScript,
+                script: scriptName === undefined ? hostWorkerScript : consumerWorkerScript,
                 env: {
                   Counter:
                     scriptName === undefined
@@ -996,11 +922,7 @@ export default { async fetch() { return new Response("v4"); } };
               });
               const b = yield* Cloudflare.Worker("worker-b", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    transferredFrom: a,
-                  }),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter", { transferredFrom: a }) },
               });
               const c = yield* Cloudflare.Worker("worker-c", {
                 script: hostWorkerScript,
@@ -1011,65 +933,44 @@ export default { async fetch() { return new Response("v4"); } };
 
           // A stays unchanged while B receives its namespace; C owns a fresh one.
           const v2 = yield* scratch.deploy(transferredStack());
-          expect(v2.b.durableObjectNamespaces.Counter).toBe(
-            originalNamespaceId,
-          );
+          expect(v2.b.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
           const unrelatedNamespaceId = v2.c.durableObjectNamespaces.Counter;
           expect(unrelatedNamespaceId).toBeDefined();
           expect(unrelatedNamespaceId).not.toBe(originalNamespaceId);
 
-          const namespaces = yield* durableObjects.listNamespaces
-            .items({ accountId })
-            .pipe(
-              Stream.runCollect,
-              Effect.repeat({
-                schedule: Schedule.spaced("1 second"),
-                times: 8,
-                until: (namespaces) =>
-                  namespaces.some(
-                    (ns) =>
-                      ns.id === originalNamespaceId &&
-                      ns.script === v2.b.workerName,
-                  ) &&
-                  namespaces.some(
-                    (ns) =>
-                      ns.id === unrelatedNamespaceId &&
-                      ns.script === v2.c.workerName,
-                  ) &&
-                  !namespaces.some(
-                    (ns) =>
-                      ns.script === v2.a.workerName && ns.class === "Counter",
-                  ),
-              }),
-            );
+          const namespaces = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
+            Stream.runCollect,
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+              until: (namespaces) =>
+                namespaces.some(
+                  (ns) => ns.id === originalNamespaceId && ns.script === v2.b.workerName,
+                ) &&
+                namespaces.some(
+                  (ns) => ns.id === unrelatedNamespaceId && ns.script === v2.c.workerName,
+                ) &&
+                !namespaces.some((ns) => ns.script === v2.a.workerName && ns.class === "Counter"),
+            }),
+          );
+          expect(namespaces.find((ns) => ns.id === originalNamespaceId)).toMatchObject({
+            script: v2.b.workerName,
+            class: "Counter",
+          });
+          expect(namespaces.find((ns) => ns.id === unrelatedNamespaceId)).toMatchObject({
+            script: v2.c.workerName,
+            class: "Counter",
+          });
           expect(
-            namespaces.find((ns) => ns.id === originalNamespaceId),
-          ).toMatchObject({ script: v2.b.workerName, class: "Counter" });
-          expect(
-            namespaces.find((ns) => ns.id === unrelatedNamespaceId),
-          ).toMatchObject({ script: v2.c.workerName, class: "Counter" });
-          expect(
-            namespaces.some(
-              (ns) => ns.script === v2.a.workerName && ns.class === "Counter",
-            ),
+            namespaces.some((ns) => ns.script === v2.a.workerName && ns.class === "Counter"),
           ).toBe(false);
-          expect(
-            (yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`)).value,
-          ).toBe(1);
-          expect(
-            (yield* fetchJsonReady<{ value: number }>(`${v2.c.url}/get`)).value,
-          ).toBe(0);
+          expect((yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`)).value).toBe(1);
+          expect((yield* fetchJsonReady<{ value: number }>(`${v2.c.url}/get`)).value).toBe(0);
 
-          const error = yield* scratch
-            .deploy(transferredStack(v2.c.workerName))
-            .pipe(Effect.flip);
+          const error = yield* scratch.deploy(transferredStack(v2.c.workerName)).pipe(Effect.flip);
           expect(error._tag).toBe("DurableObjectTransferRequired");
-          expect(
-            (yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`)).value,
-          ).toBe(1);
-          expect(
-            (yield* fetchJsonReady<{ value: number }>(`${v2.c.url}/get`)).value,
-          ).toBe(0);
+          expect((yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`)).value).toBe(1);
+          expect((yield* fetchJsonReady<{ value: number }>(`${v2.c.url}/get`)).value).toBe(0);
 
           yield* scratch.destroy();
         }).pipe(logLevel),
@@ -1094,18 +995,14 @@ export default { async fetch() { return new Response("v4"); } };
               return {
                 b: yield* Cloudflare.Worker("worker-b", {
                   script: hostWorkerScript,
-                  env: {
-                    Counter: Cloudflare.DurableObject("Counter"),
-                  },
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
                 }),
               };
             }),
           );
 
           yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
-          const written = yield* fetchJsonReady<{ value: number }>(
-            `${v1.b.url}/increment`,
-          );
+          const written = yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/increment`);
           expect(written.value).toBe(1);
 
           // Phase 1: worker-a takes the class, naming the former host by
@@ -1114,26 +1011,18 @@ export default { async fetch() { return new Response("v4"); } };
             Effect.gen(function* () {
               const b = yield* Cloudflare.Worker("worker-b", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter"),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter") },
               });
               const a = yield* Cloudflare.Worker("worker-a", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    transferredFrom: b,
-                  }),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter", { transferredFrom: b }) },
               });
               return { a, b };
             }),
           );
 
           // The namespace moved to worker-a with its data intact.
-          const viaA = yield* fetchJsonReady<{ value: number }>(
-            `${v2.a.url}/get`,
-          );
+          const viaA = yield* fetchJsonReady<{ value: number }>(`${v2.a.url}/get`);
           expect(viaA.value).toBe(1);
 
           // Phase 2: worker-b drops the DO entirely. Its deploy observes the
@@ -1145,19 +1034,13 @@ export default { async fetch() { return new Response("v4"); } };
               });
               const a = yield* Cloudflare.Worker("worker-a", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    transferredFrom: b,
-                  }),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter", { transferredFrom: b }) },
               });
               return { a, b };
             }),
           );
 
-          const afterRemoval = yield* fetchJsonReady<{ value: number }>(
-            `${v3.a.url}/increment`,
-          );
+          const afterRemoval = yield* fetchJsonReady<{ value: number }>(`${v3.a.url}/increment`);
           expect(afterRemoval.value).toBe(2);
 
           yield* scratch.destroy();
@@ -1207,12 +1090,8 @@ export default { async fetch() { return new Response("${version}"); } };
 
           const tags = yield* getWorkerTags(v1.worker.workerName, accountId);
           expect(tags.length).toBeLessThanOrEqual(10);
-          expect(tags.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(
-            1,
-          );
-          expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(
-            0,
-          );
+          expect(tags.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(1);
+          expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
           expect(Object.keys(v1.worker.durableObjectNamespaces).sort()).toEqual(
             ids.map((_, i) => `Class${i}`).sort(),
@@ -1225,10 +1104,7 @@ export default { async fetch() { return new Response("${version}"); } };
               return {
                 worker: yield* Cloudflare.Worker("worker", {
                   script: makeScript(
-                    [
-                      "Class0V2",
-                      ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`),
-                    ],
+                    ["Class0V2", ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`)],
                     "v2",
                   ),
                   env: Object.fromEntries(
@@ -1245,10 +1121,7 @@ export default { async fetch() { return new Response("${version}"); } };
           );
           expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
           expect(Object.keys(v2.worker.durableObjectNamespaces).sort()).toEqual(
-            [
-              "Class0V2",
-              ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`),
-            ].sort(),
+            ["Class0V2", ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`)].sort(),
           );
           expect(v2.worker.durableObjectNamespaces.Class0V2).toBe(
             v1.worker.durableObjectNamespaces.Class0,
@@ -1260,36 +1133,32 @@ export default { async fetch() { return new Response("${version}"); } };
             );
           }
 
-          const namespaces = yield* durableObjects.listNamespaces
-            .items({ accountId })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((namespaces) =>
-                namespaces.filter((ns) => ns.script === v2.worker.workerName),
-              ),
-              Effect.repeat({
-                schedule: Schedule.spaced("2 seconds"),
-                until: (namespaces) =>
-                  namespaces.length === 19 &&
-                  new Set(namespaces.map((ns) => ns.id)).size === 19 &&
-                  namespaces.every(
-                    (ns) =>
-                      ns.class !== undefined &&
-                      ns.class !== null &&
-                      v2.worker.durableObjectNamespaces[ns.class] === ns.id,
-                  ),
-                times: 8,
-              }),
-            );
+          const namespaces = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
+            Stream.runCollect,
+            Effect.map((namespaces) =>
+              namespaces.filter((ns) => ns.script === v2.worker.workerName),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (namespaces) =>
+                namespaces.length === 19 &&
+                new Set(namespaces.map((ns) => ns.id)).size === 19 &&
+                namespaces.every(
+                  (ns) =>
+                    ns.class !== undefined &&
+                    ns.class !== null &&
+                    v2.worker.durableObjectNamespaces[ns.class] === ns.id,
+                ),
+              times: 8,
+            }),
+          );
           expect(namespaces).toHaveLength(19);
           expect(namespaces.map((ns) => ns.id).sort()).toEqual(
             Object.values(v2.worker.durableObjectNamespaces).sort(),
           );
-          expect(
-            namespaces.some(
-              (ns) => ns.id === v1.worker.durableObjectNamespaces.Class19,
-            ),
-          ).toBe(false);
+          expect(namespaces.some((ns) => ns.id === v1.worker.durableObjectNamespaces.Class19)).toBe(
+            false,
+          );
 
           yield* scratch.destroy();
         }).pipe(logLevel),
@@ -1318,12 +1187,8 @@ export class MeterClass extends DurableObject {}
 export default { async fetch() { return new Response("v1"); } };
 `,
                   env: {
-                    Counter: Cloudflare.DurableObject("Counter", {
-                      className: "CounterClass",
-                    }),
-                    Meter: Cloudflare.DurableObject("Meter", {
-                      className: "MeterClass",
-                    }),
+                    Counter: Cloudflare.DurableObject("Counter", { className: "CounterClass" }),
+                    Meter: Cloudflare.DurableObject("Meter", { className: "MeterClass" }),
                   },
                 }),
               };
@@ -1359,12 +1224,8 @@ export class MeterClass extends DurableObject {}
 export default { async fetch() { return new Response("v2"); } };
 `,
                   env: {
-                    Counter: Cloudflare.DurableObject("Counter", {
-                      className: "CounterClassV2",
-                    }),
-                    Meter: Cloudflare.DurableObject("Meter", {
-                      className: "MeterClass",
-                    }),
+                    Counter: Cloudflare.DurableObject("Counter", { className: "CounterClassV2" }),
+                    Meter: Cloudflare.DurableObject("Meter", { className: "MeterClass" }),
                   },
                 }),
               };
@@ -1374,12 +1235,8 @@ export default { async fetch() { return new Response("v2"); } };
 
           // The deploy rewrote the mapping in the packed format.
           const rolledForward = yield* getWorkerTags(scriptName, accountId);
-          expect(
-            rolledForward.filter((t) => t.startsWith("alchemy:dos:")),
-          ).toHaveLength(1);
-          expect(
-            rolledForward.filter((t) => t.startsWith("alchemy:do:")),
-          ).toHaveLength(0);
+          expect(rolledForward.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(1);
+          expect(rolledForward.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
           yield* scratch.destroy();
         }).pipe(logLevel),
@@ -1413,18 +1270,12 @@ export default { async fetch() { return new Response("v2"); } };
               const a = yield* Cloudflare.Worker("worker-a", {
                 script: hostWorkerScript,
                 env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    transferredFrom: "worker-b",
-                  }),
+                  Counter: Cloudflare.DurableObject("Counter", { transferredFrom: "worker-b" }),
                 },
               });
               const b = yield* Cloudflare.Worker("worker-b", {
                 script: consumerWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    scriptName: a.workerName,
-                  }),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter", { scriptName: a.workerName }) },
               });
               return { a, b };
             }),
@@ -1437,9 +1288,7 @@ export default { async fetch() { return new Response("v2"); } };
           yield* fetchJsonReady<{ ok: boolean }>(`${v1.a.url}/reset`);
           yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`);
           yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`);
-          const aBefore = (yield* fetchJsonReady<{ value: number }>(
-            `${v1.a.url}/get`,
-          )).value;
+          const aBefore = (yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/get`)).value;
           expect(aBefore).toBeGreaterThanOrEqual(2);
 
           // worker-b now hosts its OWN same-name Counter — an isolated twin.
@@ -1448,16 +1297,12 @@ export default { async fetch() { return new Response("v2"); } };
               const a = yield* Cloudflare.Worker("worker-a", {
                 script: hostWorkerScript,
                 env: {
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    transferredFrom: "worker-b",
-                  }),
+                  Counter: Cloudflare.DurableObject("Counter", { transferredFrom: "worker-b" }),
                 },
               });
               const b = yield* Cloudflare.Worker("worker-b", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter"),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter") },
               });
               return { a, b };
             }),
@@ -1469,14 +1314,9 @@ export default { async fetch() { return new Response("v2"); } };
           // version answers with the twin's empty count.
           yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`).pipe(
             Effect.flatMap((r) =>
-              r.value === 0
-                ? Effect.void
-                : Effect.fail(new Error(`stale: twin sees ${r.value}`)),
+              r.value === 0 ? Effect.void : Effect.fail(new Error(`stale: twin sees ${r.value}`)),
             ),
-            Effect.retry({
-              schedule: readinessSchedule,
-              times: readinessRetries,
-            }),
+            Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
           );
 
           // Force a real reconcile of worker-a with the stale declaration while
@@ -1488,42 +1328,31 @@ export default { async fetch() { return new Response("v2"); } };
                 script: hostWorkerScript,
                 env: {
                   FORCE_UPDATE: "1",
-                  Counter: Cloudflare.DurableObject("Counter", {
-                    transferredFrom: "worker-b",
-                  }),
+                  Counter: Cloudflare.DurableObject("Counter", { transferredFrom: "worker-b" }),
                 },
               });
               const b = yield* Cloudflare.Worker("worker-b", {
                 script: hostWorkerScript,
-                env: {
-                  Counter: Cloudflare.DurableObject("Counter"),
-                },
+                env: { Counter: Cloudflare.DurableObject("Counter") },
               });
               return { a, b };
             }),
           );
 
-          const aAfter = yield* fetchJsonReady<{ value: number }>(
-            `${v3.a.url}/get`,
-          );
+          const aAfter = yield* fetchJsonReady<{ value: number }>(`${v3.a.url}/get`);
           expect(aAfter.value).toBe(aBefore);
           // worker-b was a noop in v3, but its v2 upload was only moments ago —
           // an edge metal can still serve the v1 (cross-script) version, whose
           // /get reads worker-a's non-zero counter. Poll until the twin's own
           // empty namespace answers: a genuinely stolen/deleted namespace never
           // reads 0, so the bounded retry still fails in the regression case.
-          const twinAfter = yield* fetchJsonReady<{ value: number }>(
-            `${v3.b.url}/get`,
-          ).pipe(
+          const twinAfter = yield* fetchJsonReady<{ value: number }>(`${v3.b.url}/get`).pipe(
             Effect.flatMap((r) =>
               r.value === 0
                 ? Effect.succeed(r)
                 : Effect.fail(new Error(`stale: twin sees ${r.value}`)),
             ),
-            Effect.retry({
-              schedule: readinessSchedule,
-              times: readinessRetries,
-            }),
+            Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
           );
           expect(twinAfter.value).toBe(0);
 

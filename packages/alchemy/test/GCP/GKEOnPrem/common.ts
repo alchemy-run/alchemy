@@ -1,9 +1,7 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
+import { GcpEnvironment } from "@/GCP/Environment";
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 
 // User clusters need a registered on-prem admin cluster (fleet membership
 // name).

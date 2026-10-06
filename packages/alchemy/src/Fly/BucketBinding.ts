@@ -2,10 +2,10 @@ import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
 import type { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -33,9 +33,7 @@ export interface TigrisS3Scope {
   region: RegionName;
 }
 
-const isFlyHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
+const isFlyHost = (value: unknown): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
   ((value as { Type?: string }).Type === "Fly.Service" ||
@@ -56,8 +54,8 @@ const authorizeS3 = <A, E>(
       Layer.mergeAll(
         fromCredentials(
           {
-            accessKeyId: scope.accessKeyId,
-            secretAccessKey: scope.secretAccessKey,
+            accessKeyId: Redacted.make(scope.accessKeyId),
+            secretAccessKey: Redacted.make(scope.secretAccessKey),
           },
           scope.region,
         ),
@@ -67,15 +65,9 @@ const authorizeS3 = <A, E>(
     ),
   ) as Effect.Effect<A, E, RuntimeContext>;
 
-export const makeTigrisS3Binding = <
-  I extends { Bucket?: string },
-  A,
-  E,
->(options: {
+export const makeTigrisS3Binding = <I extends { Bucket?: string }, A, E>(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  operation: (input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
 }) =>
   Effect.succeed(
     Effect.fn(function* (bucket: Bucket) {

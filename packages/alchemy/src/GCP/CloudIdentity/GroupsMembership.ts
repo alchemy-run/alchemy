@@ -17,11 +17,7 @@ import {
   sameJson,
   sameText,
 } from "./internal.ts";
-import {
-  resourceNameFromOperation,
-  waitForOperation,
-  waitUntilPresent,
-} from "./operations.ts";
+import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from "./operations.ts";
 
 export type GroupsMembershipRole = {
   /** Role name: `OWNER`, `MANAGER`, or `MEMBER`. */
@@ -112,9 +108,7 @@ export type GroupsMembership = Resource<
  * @resource
  * @category CloudIdentity
  */
-export const GroupsMembership = Resource<GroupsMembership>(
-  "GCP.CloudIdentity.GroupsMembership",
-);
+export const GroupsMembership = Resource<GroupsMembership>("GCP.CloudIdentity.GroupsMembership");
 
 export class GroupsMembershipNotResolved extends Data.TaggedError(
   "GCP.CloudIdentity.GroupsMembershipNotResolved",
@@ -125,14 +119,10 @@ export class GroupsMembershipNotResolved extends Data.TaggedError(
 
 const DEFAULT_ROLES: GroupsMembershipRole[] = [{ name: "MEMBER" }];
 
-const rolesOf = (
-  roles: cloudidentity.MembershipRoleList | undefined,
-): GroupsMembershipRole[] =>
+const rolesOf = (roles: cloudidentity.MembershipRoleList | undefined): GroupsMembershipRole[] =>
   (roles ?? DEFAULT_ROLES).map((role) => ({
     name: role.name,
-    expiryDetail: role.expiryDetail
-      ? { expireTime: role.expiryDetail.expireTime }
-      : undefined,
+    expiryDetail: role.expiryDetail ? { expireTime: role.expiryDetail.expireTime } : undefined,
   }));
 
 const desiredRoles = (roles: GroupsMembershipRole[] | undefined) => {
@@ -144,9 +134,7 @@ const desiredRoles = (roles: GroupsMembershipRole[] | undefined) => {
 };
 
 const roleNames = (roles: GroupsMembershipRole[]) =>
-  [...roles]
-    .map((role) => role.name ?? "MEMBER")
-    .sort((left, right) => left.localeCompare(right));
+  [...roles].map((role) => role.name ?? "MEMBER").sort((left, right) => left.localeCompare(right));
 
 const parentOfName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -179,11 +167,7 @@ const observeMembership = (input: {
   Effect.gen(function* () {
     const byName = yield* getMembership(input.name ?? "");
     if (byName !== undefined) return byName;
-    return yield* getMembershipByKey(
-      input.parent,
-      input.memberKeyId,
-      input.memberKeyNamespace,
-    );
+    return yield* getMembershipByKey(input.parent, input.memberKeyId, input.memberKeyNamespace);
   });
 
 const syncRoles = (
@@ -197,47 +181,41 @@ const syncRoles = (
 
     const currentNames = new Set(roleNames(observed));
     const desiredNames = new Set(roleNames(desired));
-    const addRoles = desired.filter(
-      (role) => !currentNames.has(role.name ?? "MEMBER"),
-    );
+    const addRoles = desired.filter((role) => !currentNames.has(role.name ?? "MEMBER"));
     const removeRoles = roleNames(observed).filter(
       (role) => role !== "MEMBER" && !desiredNames.has(role),
     );
 
     let next = current;
     if (addRoles.length > 0 || removeRoles.length > 0) {
-      const modified =
-        yield* cloudidentity.modifyMembershipRolesGroupsMemberships({
-          name,
-          body: {
-            addRoles: addRoles.length > 0 ? addRoles : undefined,
-            removeRoles: removeRoles.length > 0 ? removeRoles : undefined,
-          },
-        });
+      const modified = yield* cloudidentity.modifyMembershipRolesGroupsMemberships({
+        name,
+        body: {
+          addRoles: addRoles.length > 0 ? addRoles : undefined,
+          removeRoles: removeRoles.length > 0 ? removeRoles : undefined,
+        },
+      });
       next = modified.membership ?? next;
     }
 
-    const memberExpiry = desired.find((role) => role.name === "MEMBER")
-      ?.expiryDetail?.expireTime;
-    const observedExpiry = rolesOf(next.roles).find(
-      (role) => role.name === "MEMBER",
-    )?.expiryDetail?.expireTime;
+    const memberExpiry = desired.find((role) => role.name === "MEMBER")?.expiryDetail?.expireTime;
+    const observedExpiry = rolesOf(next.roles).find((role) => role.name === "MEMBER")?.expiryDetail
+      ?.expireTime;
     if (!sameText(memberExpiry, observedExpiry) && memberExpiry !== undefined) {
-      const modified =
-        yield* cloudidentity.modifyMembershipRolesGroupsMemberships({
-          name,
-          body: {
-            updateRolesParams: [
-              {
-                fieldMask: "expiry_detail.expire_time",
-                membershipRole: {
-                  name: "MEMBER",
-                  expiryDetail: { expireTime: memberExpiry },
-                },
+      const modified = yield* cloudidentity.modifyMembershipRolesGroupsMemberships({
+        name,
+        body: {
+          updateRolesParams: [
+            {
+              fieldMask: "expiry_detail.expire_time",
+              membershipRole: {
+                name: "MEMBER",
+                expiryDetail: { expireTime: memberExpiry },
               },
-            ],
-          },
-        });
+            },
+          ],
+        },
+      });
       next = modified.membership ?? next;
     }
 
@@ -269,8 +247,7 @@ export const GroupsMembershipProvider = () =>
         name: output?.name,
         parent,
         memberKeyId,
-        memberKeyNamespace:
-          olds?.memberKeyNamespace ?? output?.memberKeyNamespace,
+        memberKeyNamespace: olds?.memberKeyNamespace ?? output?.memberKeyNamespace,
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, parent);
@@ -286,9 +263,7 @@ export const GroupsMembershipProvider = () =>
             group.name
               ? listMemberships(group.name).pipe(
                   Effect.map((memberships) =>
-                    memberships.map((membership) =>
-                      toAttrs(membership, group.name ?? ""),
-                    ),
+                    memberships.map((membership) => toAttrs(membership, group.name ?? "")),
                   ),
                 )
               : Effect.succeed([]),
@@ -329,10 +304,7 @@ export const GroupsMembershipProvider = () =>
           );
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
-            Effect.catchTag(
-              "GCP.CloudIdentity.OperationPending",
-              () => Effect.void,
-            ),
+            Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
           );
           const createdName = resourceNameFromOperation(created);
           if (createdName !== undefined) {

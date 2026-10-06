@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Channel, StreamKey } from "@/AWS/IVS";
-import * as Test from "@/Test/Alchemy";
 import * as ivs from "@distilled.cloud/aws/ivs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Channel, StreamKey } from "@/AWS/IVS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,9 +13,7 @@ const assertStreamKeyGone = (arn: string) =>
   Effect.gen(function* () {
     const streamKey = yield* ivs.getStreamKey({ arn }).pipe(
       Effect.map((r) => r.streamKey),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (streamKey !== undefined) {
       return yield* Effect.fail(new Error(`stream key '${arn}' still exists`));
@@ -83,9 +81,7 @@ test.provider(
           return { channel, streamKey };
         }),
       );
-      expect(redeployed.streamKey.streamKeyArn).toBe(
-        deployed.streamKey.streamKeyArn,
-      );
+      expect(redeployed.streamKey.streamKeyArn).toBe(deployed.streamKey.streamKeyArn);
 
       // Destroy and verify out-of-band with a typed wait-until-gone.
       yield* stack.destroy();

@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface DeleteObjectRequest extends Omit<
-  storage.DeleteObjectsRequest,
-  "bucket"
-> {}
+export interface DeleteObjectRequest extends Omit<storage.DeleteObjectsRequest, "bucket"> {}
 
 /**
  * Runtime binding for Cloud Storage `objects.delete`.
@@ -33,14 +30,8 @@ export interface DeleteObject extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteObjectRequest,
-    ) => Effect.Effect<
-      storage.DeleteObjectsResponse,
-      storage.DeleteObjectsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<storage.DeleteObjectsResponse, storage.DeleteObjectsError, RuntimeContext>
   >
 > {}
 
-export const DeleteObject = Binding.Service<DeleteObject>(
-  "GCP.Storage.DeleteObject",
-);
+export const DeleteObject = Binding.Service<DeleteObject>("GCP.Storage.DeleteObject");

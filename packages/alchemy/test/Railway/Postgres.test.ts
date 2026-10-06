@@ -1,42 +1,32 @@
-import { RailwayAuth } from "@/Railway/AuthProvider.ts";
-import { fromAuthProvider } from "@/Railway/Credentials.ts";
 import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suitePartition } from "./suiteProject.ts";
-import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
 import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
+import { suitePartition } from "./suiteProject.ts";
+import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
-const { test } = Test.make({
-  providers: Railway.providers(),
-});
+const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(
-      Layer.merge(
-        GraphQLLive,
-        fromAuthProvider().pipe(Layer.provide(RailwayAuth)),
-      ),
-    ),
+    Effect.provide(Layer.merge(GraphQLLive, fromAuthProvider().pipe(Layer.provide(RailwayAuth)))),
   );
 
 const firstOk = (rows: unknown): unknown => {
@@ -69,14 +59,8 @@ const selectOne = (url: string) =>
     // bound backoff to 50 seconds; each connection attempt also has a timeout.
   }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 10 }));
 
-const readVariables = Query.fn(
-  (projectId: string, environmentId: string, serviceId: string) =>
-    RailwayApi.variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    }),
+const readVariables = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
+  RailwayApi.variables({ projectId, environmentId, serviceId, unrendered: true }),
 );
 
 const readServiceDeletedAt = Query.fn((id: string) => ({
@@ -93,15 +77,10 @@ const readService = Query.fn((id: string) => {
   };
 });
 
-const readServiceInstance = Query.fn(
-  (environmentId: string, serviceId: string) => {
-    const instance = RailwayApi.serviceInstance({ environmentId, serviceId });
-    return {
-      serviceId: instance.serviceId,
-      image: instance.source.image,
-    };
-  },
-);
+const readServiceInstance = Query.fn((environmentId: string, serviceId: string) => {
+  const instance = RailwayApi.serviceInstance({ environmentId, serviceId });
+  return { serviceId: instance.serviceId, image: instance.source.image };
+});
 
 const readVolumeInstance = Query.fn((id: string) => {
   const volume = RailwayApi.volumeInstance({ id });
@@ -139,23 +118,15 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const readServiceVariables = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
+const readServiceVariables = (projectId: string, environmentId: string, serviceId: string) =>
   readVariables(projectId, environmentId, serviceId).pipe(
     Effect.map(asVariableMap),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed({} as Record<string, string>),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed({} as Record<string, string>)),
   );
 
 const waitUntilServiceGone = (serviceId: string) =>
   readServiceDeletedAt(serviceId).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -164,10 +135,7 @@ const waitUntilServiceGone = (serviceId: string) =>
     }),
   );
 
-class NotReady extends Data.TaggedError("NotReady")<{
-  status: number;
-  body?: unknown;
-}> {
+class NotReady extends Data.TaggedError("NotReady")<{ status: number; body?: unknown }> {
   override get message() {
     return this.body === undefined
       ? `status ${this.status}`
@@ -180,10 +148,7 @@ class NotReady extends Data.TaggedError("NotReady")<{
 // longer shares its deadline with database and volume provisioning.
 const DatabaseFixtureStack = Alchemy.Stack(
   "RailwayPostgresFixture",
-  {
-    providers: Railway.providers(),
-    state: Alchemy.localState(),
-  },
+  { providers: Railway.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     return yield* Db;
   }),
@@ -191,10 +156,7 @@ const DatabaseFixtureStack = Alchemy.Stack(
 
 const FixtureStack = Alchemy.Stack(
   "RailwayPostgresFixture",
-  {
-    providers: Railway.providers(),
-    state: Alchemy.localState(),
-  },
+  { providers: Railway.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const project = yield* Site;
     const db = yield* Db;
@@ -230,9 +192,7 @@ test.provider(
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
       expect(created.db.projectId).toEqual(created.project.projectId);
-      expect(created.db.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.db.environmentId).toEqual(created.environment.environmentId);
       expect(created.db.name).toEqual(expect.any(String));
       expect(created.db.name.length).toBeGreaterThan(0);
       expect(created.db.name.length).toBeLessThanOrEqual(32);
@@ -246,14 +206,10 @@ test.provider(
       expect(created.db.tcpProxyDomain).toContain("proxy.rlwy.net");
       expect(created.db.tcpProxyPort).toEqual(expect.any(Number));
       expect(created.db.tcpProxyPort).toBeGreaterThan(0);
-      expect(
-        created.db.connectionUri.includes(
-          `${created.db.name}.railway.internal`,
-        ),
-      ).toEqual(true);
-      expect(
-        created.db.publicConnectionUri.includes(created.db.tcpProxyDomain!),
-      ).toEqual(true);
+      expect(created.db.connectionUri.includes(`${created.db.name}.railway.internal`)).toEqual(
+        true,
+      );
+      expect(created.db.publicConnectionUri.includes(created.db.tcpProxyDomain!)).toEqual(true);
 
       const fetched = yield* readService(created.db.serviceId);
       expect(fetched.id).toEqual(created.db.serviceId);
@@ -261,10 +217,7 @@ test.provider(
       expect(fetched.projectId).toEqual(created.db.projectId);
       expect(fetched.deletedAt).toBeNull();
 
-      const instance = yield* readServiceInstance(
-        created.db.environmentId,
-        created.db.serviceId,
-      );
+      const instance = yield* readServiceInstance(created.db.environmentId, created.db.serviceId);
       expect(instance.serviceId).toEqual(created.db.serviceId);
       expect(instance.image).toEqual(expect.stringContaining("postgres-ssl"));
 
@@ -274,10 +227,7 @@ test.provider(
       expect(volume.mountPath).toEqual("/var/lib/postgresql/data");
       expect(volume.serviceId).toEqual(created.db.serviceId);
 
-      const proxies = yield* readTcpProxies(
-        created.db.environmentId,
-        created.db.serviceId,
-      );
+      const proxies = yield* readTcpProxies(created.db.environmentId, created.db.serviceId);
       const liveProxy = proxies.find(
         (proxy) => proxy.deletedAt == null && proxy.syncStatus !== "DELETED",
       );
@@ -287,9 +237,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Postgres);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (row) => row.serviceId === created.db.serviceId,
-      );
+      const found = listed.find((row) => row.serviceId === created.db.serviceId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.db.name);
       expect(found?.projectId).toEqual(created.db.projectId);
@@ -297,18 +245,12 @@ test.provider(
       const rows = yield* selectOne(created.db.publicConnectionUri);
       expect(firstOk(rows)).toEqual(1);
 
-      const nextName =
-        created.db.name.slice(0, -1) +
-        (created.db.name.endsWith("z") ? "y" : "z");
+      const nextName = created.db.name.slice(0, -1) + (created.db.name.endsWith("z") ? "y" : "z");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const { project, environment } = yield* suitePartition;
-          const db = yield* Railway.Postgres("Db", {
-            project,
-            environment,
-            name: nextName,
-          });
+          const db = yield* Railway.Postgres("Db", { project, environment, name: nextName });
           return { project, environment, db };
         }),
       );
@@ -317,9 +259,7 @@ test.provider(
       expect(updated.db.name).toEqual(nextName);
       expect(updated.db.projectId).toEqual(created.db.projectId);
       expect(updated.db.volumeId).toEqual(created.db.volumeId);
-      expect(
-        updated.db.connectionUri.includes(`${nextName}.railway.internal`),
-      ).toEqual(true);
+      expect(updated.db.connectionUri.includes(`${nextName}.railway.internal`)).toEqual(true);
 
       const fetchedUpdate = yield* readService(updated.db.serviceId);
       expect(fetchedUpdate.id).toEqual(updated.db.serviceId);
@@ -329,9 +269,7 @@ test.provider(
 
       const gone = yield* waitUntilServiceGone(created.db.serviceId);
       expect(gone).toEqual("gone");
-      const volumeGone = yield* waitUntilVolumeGone(
-        created.db.volumeInstanceId,
-      );
+      const volumeGone = yield* waitUntilVolumeGone(created.db.volumeInstanceId);
       expect(volumeGone).toEqual("gone");
     }).pipe(logLevel),
   {
@@ -368,12 +306,8 @@ describe(
     });
 
     beforeAll(deploy(DatabaseFixtureStack), { timeout: 120_000 });
-    const fixture = beforeAll(deploy(FixtureStack), {
-      timeout: 120_000,
-    });
-    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-      timeout: 120_000,
-    });
+    const fixture = beforeAll(deploy(FixtureStack), { timeout: 120_000 });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), { timeout: 120_000 });
 
     test(
       "a Service connects and SELECTs through ConnectPostgres",
@@ -391,9 +325,7 @@ describe(
         const vars = yield* distilled(
           readServiceVariables(out.projectId, out.environmentId, out.serviceId),
         );
-        expect(
-          (vars[Railway.DATABASE_URL_SECRET] ?? "").length,
-        ).toBeGreaterThan(0);
+        expect((vars[Railway.DATABASE_URL_SECRET] ?? "").length).toBeGreaterThan(0);
 
         const client = yield* HttpClient.HttpClient;
         const get = (path: string) =>
@@ -404,18 +336,13 @@ describe(
             }),
             Effect.flatMap((res) =>
               res.status === 200
-                ? res.json.pipe(
-                    Effect.mapError(() => new NotReady({ status: res.status })),
-                  )
+                ? res.json.pipe(Effect.mapError(() => new NotReady({ status: res.status })))
                 : Effect.fail(new NotReady({ status: res.status })),
             ),
             Effect.retry({
               while: (e) =>
                 e._tag === "NotReady" &&
-                (e.status === 0 ||
-                  e.status === 404 ||
-                  e.status === 502 ||
-                  e.status === 503),
+                (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
               schedule: Schedule.exponential("500 millis").pipe(
                 Schedule.upTo({ duration: "45 seconds" }),
               ),
@@ -430,18 +357,13 @@ describe(
           }),
           Effect.flatMap((res) =>
             res.status === 200
-              ? res.text.pipe(
-                  Effect.mapError(() => new NotReady({ status: res.status })),
-                )
+              ? res.text.pipe(Effect.mapError(() => new NotReady({ status: res.status })))
               : Effect.fail(new NotReady({ status: res.status })),
           ),
           Effect.retry({
             while: (e) =>
               e._tag === "NotReady" &&
-              (e.status === 0 ||
-                e.status === 404 ||
-                e.status === 502 ||
-                e.status === 503),
+              (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
             schedule: Schedule.exponential("500 millis").pipe(
               Schedule.upTo({ duration: "45 seconds" }),
             ),
@@ -480,15 +402,9 @@ describe(
         expect(out.functionUrl).toContain("up.railway.app");
 
         const vars = yield* distilled(
-          readServiceVariables(
-            out.projectId,
-            out.environmentId,
-            out.functionId,
-          ),
+          readServiceVariables(out.projectId, out.environmentId, out.functionId),
         );
-        expect(
-          (vars[Railway.DATABASE_URL_SECRET] ?? "").length,
-        ).toBeGreaterThan(0);
+        expect((vars[Railway.DATABASE_URL_SECRET] ?? "").length).toBeGreaterThan(0);
 
         const client = yield* HttpClient.HttpClient;
         const get = (path: string) =>
@@ -499,9 +415,7 @@ describe(
             }),
             Effect.flatMap((res) =>
               res.status === 200
-                ? res.json.pipe(
-                    Effect.mapError(() => new NotReady({ status: res.status })),
-                  )
+                ? res.json.pipe(Effect.mapError(() => new NotReady({ status: res.status })))
                 : res.text.pipe(
                     Effect.catch(() => Effect.succeed("")),
                     Effect.flatMap((body) =>
@@ -512,10 +426,7 @@ describe(
             Effect.retry({
               while: (e) =>
                 e._tag === "NotReady" &&
-                (e.status === 0 ||
-                  e.status === 404 ||
-                  e.status === 502 ||
-                  e.status === 503),
+                (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
               schedule: Schedule.exponential("500 millis").pipe(
                 Schedule.upTo({ duration: "45 seconds" }),
               ),

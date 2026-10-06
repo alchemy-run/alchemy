@@ -208,22 +208,16 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.Spanner.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.Spanner.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.Spanner.InstanceNotResolved")<{
   name: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.Spanner.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.Spanner.InstanceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.Spanner.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.Spanner.InstanceStillExists")<{
   name: string;
 }> {}
 
@@ -241,8 +235,7 @@ const normalizeEnum = (value: string | undefined, fallback: string) => {
 const normalizeInstanceType = (value: string | undefined) =>
   normalizeEnum(value, DEFAULT_INSTANCE_TYPE);
 
-const normalizeEdition = (value: string | undefined) =>
-  normalizeEnum(value, DEFAULT_EDITION);
+const normalizeEdition = (value: string | undefined) => normalizeEnum(value, DEFAULT_EDITION);
 
 const normalizeBackupSchedule = (value: string | undefined) =>
   normalizeEnum(value, DEFAULT_BACKUP_SCHEDULE);
@@ -252,11 +245,7 @@ const defaultConfigId = (region: string) => `regional-${region}`;
 const configIdOf = (config: string | undefined, region: string) =>
   lastSegment(config ?? defaultConfigId(region)).toLowerCase();
 
-const configNameOf = (
-  project: string,
-  config: string | undefined,
-  region: string,
-) => {
+const configNameOf = (project: string, config: string | undefined, region: string) => {
   const raw = (config ?? defaultConfigId(region)).trim();
   if (raw.includes("/")) return raw;
   return `projects/${project}/instanceConfigs/${raw}`;
@@ -270,12 +259,9 @@ const parseName = (name: string) => {
   const instancesAt = parts.lastIndexOf("instances");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     instanceId:
-      instancesAt >= 0 && parts[instancesAt + 1]
-        ? parts[instancesAt + 1]!
-        : lastSegment(name),
+      instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -334,10 +320,8 @@ const autoscalingOf = (
       ? {
           highPriorityCpuUtilizationPercent:
             config.autoscalingTargets.highPriorityCpuUtilizationPercent,
-          totalCpuUtilizationPercent:
-            config.autoscalingTargets.totalCpuUtilizationPercent,
-          storageUtilizationPercent:
-            config.autoscalingTargets.storageUtilizationPercent,
+          totalCpuUtilizationPercent: config.autoscalingTargets.totalCpuUtilizationPercent,
+          storageUtilizationPercent: config.autoscalingTargets.storageUtilizationPercent,
         }
       : undefined,
   };
@@ -352,13 +336,9 @@ const replicaCapacityOf = (
     processingUnits: item.processingUnits,
   }));
 
-const autoscalingKey = (config: AutoscalingConfig | undefined) =>
-  JSON.stringify(config ?? null);
+const autoscalingKey = (config: AutoscalingConfig | undefined) => JSON.stringify(config ?? null);
 
-const toAttrs = (
-  instance: spanner.Instance,
-  project: string,
-): Instance["Attributes"] => {
+const toAttrs = (instance: spanner.Instance, project: string): Instance["Attributes"] => {
   const name = instance.name ?? "";
   const parsed = parseName(name);
   return {
@@ -389,9 +369,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance
-        ? Effect.succeed(instance)
-        : Effect.fail(new InstanceNotResolved({ name })),
+      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceNotResolved",
@@ -426,9 +404,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceStillExists",
@@ -467,9 +443,7 @@ const toCreateInstance = (
     instanceType,
   };
   if (!free) {
-    body.edition = news.edition
-      ? normalizeEdition(news.edition)
-      : DEFAULT_EDITION;
+    body.edition = news.edition ? normalizeEdition(news.edition) : DEFAULT_EDITION;
     body.defaultBackupScheduleType = news.defaultBackupScheduleType
       ? normalizeBackupSchedule(news.defaultBackupScheduleType)
       : DEFAULT_BACKUP_SCHEDULE;
@@ -496,22 +470,13 @@ export const InstanceProvider = () =>
 
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
-      const previousConfig = configIdOf(
-        olds?.config ?? output?.config,
-        env.region,
-      );
+      const previousConfig = configIdOf(olds?.config ?? output?.config, env.region);
       const nextConfig = configIdOf(news.config ?? output?.config, env.region);
-      const previousType = normalizeInstanceType(
-        olds?.instanceType ?? output?.instanceType,
-      );
-      const nextType = normalizeInstanceType(
-        news.instanceType ?? output?.instanceType,
-      );
+      const previousType = normalizeInstanceType(olds?.instanceType ?? output?.instanceType);
+      const nextType = normalizeInstanceType(news.instanceType ?? output?.instanceType);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousConfig !== nextConfig ||
         previousType !== nextType;
 
@@ -532,9 +497,7 @@ export const InstanceProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -548,9 +511,7 @@ export const InstanceProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.instances ?? [])),
             Stream.filter((instance) =>
-              Object.keys(instance.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(instance.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((instance) => toAttrs(instance, env.project)),
             Stream.runCollect,

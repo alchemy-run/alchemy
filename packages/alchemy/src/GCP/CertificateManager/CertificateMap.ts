@@ -136,9 +136,7 @@ export type CertificateMap = Resource<
  * @resource
  * @category CertificateManager
  */
-export const CertificateMap = Resource<CertificateMap>(
-  "GCP.CertificateManager.CertificateMap",
-);
+export const CertificateMap = Resource<CertificateMap>("GCP.CertificateManager.CertificateMap");
 
 export class CertificateMapNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapNotResolved",
@@ -175,11 +173,7 @@ const rfc1035 = (name: string): string => {
 const normalizeLocation = (location: string | undefined) =>
   lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
 
-const resourceName = (
-  project: string,
-  location: string,
-  certificateMapId: string,
-) =>
+const resourceName = (project: string, location: string, certificateMapId: string) =>
   `projects/${project}/locations/${location}/certificateMaps/${certificateMapId}`;
 
 const parseName = (name: string) => {
@@ -188,14 +182,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    certificateMapId:
-      mapsAt >= 0 && parts[mapsAt + 1] ? parts[mapsAt + 1]! : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    certificateMapId: mapsAt >= 0 && parts[mapsAt + 1] ? parts[mapsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -203,11 +193,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateMapId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateMapId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (certificateMapId !== undefined) return certificateMapId;
     if (existing !== undefined) return existing;
@@ -256,13 +242,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map
-        ? Effect.succeed(map)
-        : Effect.fail(new CertificateMapNotResolved({ name })),
+      map ? Effect.succeed(map) : Effect.fail(new CertificateMapNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateMapNotResolved",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateMapNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -271,13 +254,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map === undefined
-        ? Effect.void
-        : Effect.fail(new CertificateMapStillExists({ name })),
+      map === undefined ? Effect.void : Effect.fail(new CertificateMapStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateMapStillExists",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateMapStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -309,17 +289,11 @@ export const CertificateMapProvider = () =>
 
       const previousId = olds?.certificateMapId ?? output?.certificateMapId;
       const nextId = news.certificateMapId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation;
 
       if (!replace) return undefined;
@@ -330,20 +304,13 @@ export const CertificateMapProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const certificateMapId = yield* toId(
-        id,
-        olds?.certificateMapId,
-        output?.certificateMapId,
-      );
+      const certificateMapId = yield* toId(id, olds?.certificateMapId, output?.certificateMapId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, certificateMapId);
+      const name = output?.name ?? resourceName(env.project, location, certificateMapId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -354,11 +321,7 @@ export const CertificateMapProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const certificateMapId = yield* toId(
-        id,
-        news.certificateMapId,
-        output?.certificateMapId,
-      );
+      const certificateMapId = yield* toId(id, news.certificateMapId, output?.certificateMapId);
       const location = normalizeLocation(news.location ?? output?.location);
       const name = resourceName(env.project, location, certificateMapId);
       const desiredLabels = {
@@ -399,8 +362,7 @@ export const CertificateMapProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
@@ -408,16 +370,15 @@ export const CertificateMapProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* certificatemanager.patchProjectsLocationsCertificateMaps({
+        const operation = yield* certificatemanager.patchProjectsLocationsCertificateMaps({
+          name,
+          updateMask: updateMask.join(","),
+          body: {
             name,
-            updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

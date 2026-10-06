@@ -135,9 +135,7 @@ export type GoldengateDeploymentProps = {
   /**
    * Oracle license model (`LICENSE_INCLUDED`, `BRING_YOUR_OWN_LICENSE`).
    */
-  licenseModel?:
-    | oracle.GoldengateDeploymentPropertiesLicenseModelEnum
-    | (string & {});
+  licenseModel?: oracle.GoldengateDeploymentPropertiesLicenseModelEnum | (string & {});
   /**
    * GoldenGate environment type (from `ListGoldengateDeploymentEnvironments`).
    */
@@ -272,11 +270,7 @@ export const GoldengateDeployment = Resource<GoldengateDeployment>(
   "GCP.OracleDatabase.GoldengateDeployment",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  goldengateDeploymentId: string,
-) =>
+const resourceName = (project: string, location: string, goldengateDeploymentId: string) =>
   `projects/${project}/locations/${location}/goldengateDeployments/${goldengateDeploymentId}`;
 
 const subnetOf = (
@@ -292,17 +286,12 @@ const subnetOf = (
   return `${network}/odbSubnets/${odbSubnet}`;
 };
 
-const networkOf = (
-  odbNetwork: string | undefined,
-  project: string,
-  location: string,
-) =>
+const networkOf = (odbNetwork: string | undefined, project: string, location: string) =>
   odbNetwork === undefined || odbNetwork.length === 0
     ? undefined
     : expandParent(odbNetwork, project, location, "odbNetworks");
 
-const desiredType = (type: string | undefined) =>
-  type ?? DEFAULT_DEPLOYMENT_TYPE;
+const desiredType = (type: string | undefined) => type ?? DEFAULT_DEPLOYMENT_TYPE;
 
 const toAttrs = (deployment: oracle.GoldengateDeployment, project: string) => {
   const name = deployment.name ?? "";
@@ -349,17 +338,13 @@ const getByName = (name: string) =>
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
-    oracle.listProjectsLocationsGoldengateDeployments
-      .pages({ parent, pageSize: 1000 })
-      .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.goldengateDeployments ?? []),
-        ),
-        Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-      ),
+    oracle.listProjectsLocationsGoldengateDeployments.pages({ parent, pageSize: 1000 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.goldengateDeployments ?? [])),
+      Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
+    ),
   );
 
 const toCreateBody = (
@@ -413,29 +398,21 @@ export const GoldengateDeploymentProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousType = desiredType(
-        olds?.deploymentType ?? output?.deploymentType,
-      );
+      const previousType = desiredType(olds?.deploymentType ?? output?.deploymentType);
       const nextType = desiredType(news.deploymentType ?? previousType);
-      const previousOgg =
-        olds?.oggData?.deployment ?? output?.oggDeployment ?? "";
+      const previousOgg = olds?.oggData?.deployment ?? output?.oggDeployment ?? "";
       const nextOgg = news.oggData?.deployment ?? previousOgg;
       const previousZone = olds?.gcpOracleZone ?? output?.gcpOracleZone ?? "";
       const nextZone = news.gcpOracleZone ?? previousZone;
-      const previousSubnet = lastSegment(
-        olds?.odbSubnet ?? output?.odbSubnet ?? "",
-      );
+      const previousSubnet = lastSegment(olds?.odbSubnet ?? output?.odbSubnet ?? "");
       const nextSubnet = lastSegment(news.odbSubnet ?? previousSubnet);
       return replaceOnIdentity({
-        previousId:
-          olds?.goldengateDeploymentId ?? output?.goldengateDeploymentId,
+        previousId: olds?.goldengateDeploymentId ?? output?.goldengateDeploymentId,
         nextId:
           news.goldengateDeploymentId ??
           olds?.goldengateDeploymentId ??
           output?.goldengateDeploymentId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -457,18 +434,12 @@ export const GoldengateDeploymentProvider = () =>
         output?.goldengateDeploymentId,
         "goldengate",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, goldengateDeploymentId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, goldengateDeploymentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -486,9 +457,7 @@ export const GoldengateDeploymentProvider = () =>
         output?.goldengateDeploymentId,
         "goldengate",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, goldengateDeploymentId);
       const odbNetwork = networkOf(news.odbNetwork, env.project, location);
       const odbSubnet = subnetOf(
@@ -510,13 +479,7 @@ export const GoldengateDeploymentProvider = () =>
           .createProjectsLocationsGoldengateDeployments({
             parent: parentOf(env.project, location),
             goldengateDeploymentId,
-            body: toCreateBody(
-              news,
-              desiredLabels,
-              displayName,
-              odbNetwork,
-              odbSubnet,
-            ),
+            body: toCreateBody(news, desiredLabels, displayName, odbNetwork, odbSubnet),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {

@@ -40,12 +40,7 @@ export interface CreateJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.CreateJobRequest,
-    ) => Effect.Effect<
-      dataexchange.CreateJobResponse,
-      dataexchange.CreateJobError
-    >
+    ) => Effect.Effect<dataexchange.CreateJobResponse, dataexchange.CreateJobError>
   >
 > {}
-export const CreateJob = Binding.Service<CreateJob>(
-  "AWS.DataExchange.CreateJob",
-);
+export const CreateJob = Binding.Service<CreateJob>("AWS.DataExchange.CreateJob");

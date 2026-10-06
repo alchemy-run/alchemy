@@ -22,9 +22,7 @@ import {
   parseDescription,
 } from "./operations.ts";
 
-export type DataCollectorType =
-  | apigee.GoogleCloudApigeeV1DataCollectorTypeEnum
-  | (string & {});
+export type DataCollectorType = apigee.GoogleCloudApigeeV1DataCollectorTypeEnum | (string & {});
 
 export type DatacollectorProps = {
   /**
@@ -104,9 +102,7 @@ export type Datacollector = Resource<
  * @resource
  * @category Apigee
  */
-export const Datacollector = Resource<Datacollector>(
-  "GCP.Apigee.Datacollector",
-);
+export const Datacollector = Resource<Datacollector>("GCP.Apigee.Datacollector");
 
 export class DatacollectorNotResolved extends Data.TaggedError(
   "GCP.Apigee.DatacollectorNotResolved",
@@ -119,10 +115,7 @@ const DEFAULT_TYPE = "STRING";
 const resourceName = (organization: string, dataCollectorId: string) =>
   `${orgNameOf(organization)}/datacollectors/${dataCollectorId}`;
 
-const toAttrs = (
-  collector: apigee.GoogleCloudApigeeV1DataCollector,
-  organization: string,
-) => {
+const toAttrs = (collector: apigee.GoogleCloudApigeeV1DataCollector, organization: string) => {
   const name = collector.name ?? "";
   const parsed = parseDescription(collector.description);
   return {
@@ -139,11 +132,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDatacollectors({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const DatacollectorProvider = () =>
   Provider.succeed(Datacollector, {
@@ -166,9 +155,7 @@ export const DatacollectorProvider = () =>
       const typeChanged = previousType !== nextType;
       if (idChanged || orgChanged || typeChanged) {
         const sameName =
-          !idChanged &&
-          !orgChanged &&
-          (news.dataCollectorId ?? previousId) === previousId;
+          !idChanged && !orgChanged && (news.dataCollectorId ?? previousId) === previousId;
         return { action: "replace" as const, deleteFirst: sameName };
       }
       return undefined;
@@ -176,10 +163,7 @@ export const DatacollectorProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
       const dataCollectorId = yield* dcCollectorId(
         id,
         olds?.dataCollectorId,
@@ -266,11 +250,6 @@ export const DatacollectorProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsDatacollectors({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

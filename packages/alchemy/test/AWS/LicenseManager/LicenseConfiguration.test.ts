@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import { LicenseConfiguration } from "@/AWS/LicenseManager";
-import type { LicenseConfigurationProps } from "@/AWS/LicenseManager/LicenseConfiguration.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { LicenseConfiguration } from "@/AWS/LicenseManager";
+import type { LicenseConfigurationProps } from "@/AWS/LicenseManager/LicenseConfiguration.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -51,12 +51,7 @@ test.provider(
       expect(error._tag).toBe("LicenseConfigurationNotFound");
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:licensemanager",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:licensemanager", "live"],
     timeout: 60_000,
   },
 );
@@ -65,13 +60,9 @@ test.provider(
 // deletes do not refund it). Keep create-based lifecycle coverage explicit so
 // aggregate sweeps never exhaust the shared account for the rest of the day.
 // The typed not-found probe and provider-diff assertion remain unconditional.
-const RUN_CREATE_LIFECYCLE =
-  process.env.AWS_TEST_LICENSE_MANAGER_CREATE === "1";
+const RUN_CREATE_LIFECYCLE = process.env.AWS_TEST_LICENSE_MANAGER_CREATE === "1";
 
-const callDiff = (
-  olds: LicenseConfigurationProps,
-  news: LicenseConfigurationProps,
-) =>
+const callDiff = (olds: LicenseConfigurationProps, news: LicenseConfigurationProps) =>
   Effect.gen(function* () {
     const provider = yield* Provider.findProvider(LicenseConfiguration);
     return yield* provider.diff!({
@@ -91,9 +82,7 @@ const isLive = (status: string | undefined) => status !== "DELETED";
 const getLive = (arn: string) =>
   licensemanager.getLicenseConfiguration({ LicenseConfigurationArn: arn }).pipe(
     Effect.map((r) => (isLive(r.Status) ? r : undefined)),
-    Effect.catchTag("LicenseConfigurationNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("LicenseConfigurationNotFound", () => Effect.succeed(undefined)),
   );
 
 test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
@@ -117,9 +106,7 @@ test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
       );
 
       expect(licenses.licenseConfigurationId).toMatch(/^lic-/);
-      expect(licenses.licenseConfigurationArn).toContain(
-        ":license-configuration:",
-      );
+      expect(licenses.licenseConfigurationArn).toContain(":license-configuration:");
       expect(licenses.licenseCountingType).toBe("vCPU");
 
       // Out-of-band verification via distilled.
@@ -130,9 +117,7 @@ test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
       expect(observed.LicenseCountingType).toBe("vCPU");
       expect(observed.LicenseCount).toBe(10);
       expect(observed.LicenseCountHardLimit).toBe(false);
-      const tags = Object.fromEntries(
-        (observed.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = Object.fromEntries((observed.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.fixture).toBe("license-configuration");
       expect(tags["alchemy::id"]).toBe("Licenses");
 
@@ -151,20 +136,14 @@ test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
       );
 
       // Same physical resource — update, not replace.
-      expect(updated.licenseConfigurationArn).toBe(
-        licenses.licenseConfigurationArn,
-      );
+      expect(updated.licenseConfigurationArn).toBe(licenses.licenseConfigurationArn);
       const afterUpdate = yield* licensemanager.getLicenseConfiguration({
         LicenseConfigurationArn: licenses.licenseConfigurationArn,
       });
       expect(afterUpdate.LicenseCount).toBe(20);
       expect(afterUpdate.LicenseCountHardLimit).toBe(true);
-      expect(afterUpdate.Description).toBe(
-        "alchemy license-manager test (updated)",
-      );
-      const updatedTags = Object.fromEntries(
-        (afterUpdate.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect(afterUpdate.Description).toBe("alchemy license-manager test (updated)");
+      const updatedTags = Object.fromEntries((afterUpdate.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.phase).toBe("two");
 
       // Destroy and verify deletion out-of-band (soft-delete counts).
@@ -173,12 +152,7 @@ test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
       expect(gone).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:licensemanager",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:licensemanager", "live"],
     timeout: 120_000,
   },
 );
@@ -225,9 +199,7 @@ test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
       );
 
       expect(second.licenseCountingType).toBe("Core");
-      expect(second.licenseConfigurationArn).not.toBe(
-        first.licenseConfigurationArn,
-      );
+      expect(second.licenseConfigurationArn).not.toBe(first.licenseConfigurationArn);
 
       // The replaced (old) configuration is deleted.
       const old = yield* getLive(first.licenseConfigurationArn);
@@ -238,12 +210,7 @@ test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
       expect(gone).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:licensemanager",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:licensemanager", "live"],
     timeout: 120_000,
   },
 );

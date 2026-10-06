@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import IdentityCenterBindingsFunctionLive, {
-  IdentityCenterBindingsFunction,
-} from "./handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import IdentityCenterBindingsFunctionLive, { IdentityCenterBindingsFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -85,10 +83,7 @@ const sharedStack = Core.scratchStack(testOptions, "IdentityCenterBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -99,21 +94,12 @@ const postJson = (path: string) =>
 
 describe.sequential(
   "IdentityCenter Bindings (E2E)",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:identitycenter",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:identitycenter", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
         if (!RUN_LIVE) return;
-        yield* Effect.logInfo(
-          "IdentityCenter E2E setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("IdentityCenter E2E setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("IdentityCenter E2E setup: deploying fixture");
@@ -130,9 +116,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -149,15 +133,11 @@ describe.sequential(
     );
 
     describe("binding registration", () => {
-      test.provider.skipIf(!RUN_LIVE)(
-        "all twenty capabilities initialize in the runtime",
-        () =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/bindings")) as {
-              bound: string[];
-            };
-            expect(response.bound).toHaveLength(20);
-          }),
+      test.provider.skipIf(!RUN_LIVE)("all twenty capabilities initialize in the runtime", () =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/bindings")) as { bound: string[] };
+          expect(response.bound).toHaveLength(20);
+        }),
       );
     });
 
@@ -166,9 +146,7 @@ describe.sequential(
         "listGroups sees the fixture group and getGroupId resolves it",
         () =>
           Effect.gen(function* () {
-            const groups = (yield* getJson("/groups")) as {
-              displayNames: string[];
-            };
+            const groups = (yield* getJson("/groups")) as { displayNames: string[] };
             expect(groups.displayNames).toContain("alchemy-idc-bindings-group");
 
             const groupId = (yield* getJson("/group-id")) as {
@@ -206,9 +184,7 @@ describe.sequential(
             expect(result.userId).toBeTruthy();
             expect(result.resolvedMatches).toBe(true);
             expect(result.userName).toBe("alchemy-idc-bindings-user");
-            expect(result.displayNameAfter).toBe(
-              "Alchemy Bindings Test User (updated)",
-            );
+            expect(result.displayNameAfter).toBe("Alchemy Bindings Test User (updated)");
           }),
         { timeout: 120_000 },
       );
@@ -263,9 +239,7 @@ describe.sequential(
         () =>
           Effect.gen(function* () {
             const result = (yield* getJson("/assignments")) as {
-              forPrincipal:
-                | { ok: true; count: number }
-                | { ok: false; errorTag: string };
+              forPrincipal: { ok: true; count: number } | { ok: false; errorTag: string };
             };
             // Organization instances answer with a count; account instances
             // reject ListAccountAssignmentsForPrincipal with a typed tag.

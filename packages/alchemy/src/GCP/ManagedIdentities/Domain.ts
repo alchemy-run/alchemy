@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ADMIN,
@@ -175,10 +170,8 @@ export const Domain = Resource<Domain>("GCP.ManagedIdentities.Domain");
 const resourceName = (project: string, domainName: string) =>
   `${globalParent(project)}/domains/${domainName}`;
 
-const locationsOf = (
-  values: readonly string[] | undefined,
-  defaultLocation: string,
-) => (values ?? [defaultLocation]).map(normalizeLocation);
+const locationsOf = (values: readonly string[] | undefined, defaultLocation: string) =>
+  (values ?? [defaultLocation]).map(normalizeLocation);
 
 const networksOf = (values: readonly string[] | undefined, project: string) =>
   (values ?? [DEFAULT_NETWORK]).map((value) => networkOf(value, project));
@@ -233,26 +226,19 @@ export const DomainProvider = () =>
         previousId: previousName.length > 0 ? previousName : undefined,
         nextId: nextName.length > 0 ? nextName : undefined,
         extra:
-          (previousRange !== undefined &&
-            news.reservedIpRange !== previousRange) ||
+          (previousRange !== undefined && news.reservedIpRange !== previousRange) ||
           (news.admin !== undefined && adminOf(news.admin) !== previousAdmin),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const domainName = yield* toDomainName(
-        id,
-        olds?.domainName,
-        output?.domainName,
-      );
+      const domainName = yield* toDomainName(id, olds?.domainName, output?.domainName);
       const name = output?.name ?? resourceName(env.project, domainName);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -264,20 +250,13 @@ export const DomainProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const domainName = yield* toDomainName(
-        id,
-        news.domainName,
-        output?.domainName,
-      );
+      const domainName = yield* toDomainName(id, news.domainName, output?.domainName);
       const name = resourceName(env.project, domainName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const locations = locationsOf(
-        news.locations ?? output?.locations,
-        env.region,
-      );
+      const locations = locationsOf(news.locations ?? output?.locations, env.region);
       const authorizedNetworks = networksOf(
         news.authorizedNetworks ?? output?.authorizedNetworks,
         env.project,
@@ -328,23 +307,21 @@ export const DomainProvider = () =>
         news.authorizedNetworks !== undefined &&
           !sameStringList(observedNetworks, authorizedNetworks) &&
           "authorized_networks",
-        (current.auditLogsEnabled === true) !== auditLogsEnabled &&
-          "audit_logs_enabled",
+        (current.auditLogsEnabled === true) !== auditLogsEnabled && "audit_logs_enabled",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* managedidentities.patchProjectsLocationsGlobalDomains({
+        const operation = yield* managedidentities.patchProjectsLocationsGlobalDomains({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              locations,
-              authorizedNetworks,
-              auditLogsEnabled,
-            },
-          });
+            labels: desiredLabels,
+            locations,
+            authorizedNetworks,
+            auditLogsEnabled,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

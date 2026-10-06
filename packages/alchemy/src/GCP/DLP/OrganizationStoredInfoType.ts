@@ -28,8 +28,7 @@ import {
 type StoredInfoTypeConfig = dlp.GooglePrivacyDlpV2StoredInfoTypeConfig;
 type StoredInfoTypeRegex = dlp.GooglePrivacyDlpV2Regex;
 type StoredInfoTypeDictionary = dlp.GooglePrivacyDlpV2Dictionary;
-type StoredInfoTypeLargeCustomDictionary =
-  dlp.GooglePrivacyDlpV2LargeCustomDictionaryConfig;
+type StoredInfoTypeLargeCustomDictionary = dlp.GooglePrivacyDlpV2LargeCustomDictionaryConfig;
 
 export type OrganizationStoredInfoTypeProps = {
   /**
@@ -192,13 +191,7 @@ const getByName = (name: string) =>
 
 export const OrganizationStoredInfoTypeProvider = () =>
   Provider.succeed(OrganizationStoredInfoType, {
-    stables: [
-      "name",
-      "storedInfoTypeId",
-      "organization",
-      "organizationId",
-      "project",
-    ],
+    stables: ["name", "storedInfoTypeId", "organization", "organizationId", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -230,10 +223,7 @@ export const OrganizationStoredInfoTypeProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(
-        id,
-        existing.currentVersion?.config?.description,
-      ))
+      return (yield* ownedByAlchemy(id, existing.currentVersion?.config?.description))
         ? attrs
         : Unowned(attrs);
     }),
@@ -255,18 +245,13 @@ export const OrganizationStoredInfoTypeProvider = () =>
           ),
         );
         return items
-          .filter((stored) =>
-            hasOwnershipMarker(stored.currentVersion?.config?.description),
-          )
+          .filter((stored) => hasOwnershipMarker(stored.currentVersion?.config?.description))
           .map((stored) => toAttrs(stored, organization, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const storedInfoTypeId = yield* toResourceId(
         id,
         news.storedInfoTypeId,
@@ -297,20 +282,11 @@ export const OrganizationStoredInfoTypeProvider = () =>
       }
 
       const observed = current.currentVersion?.config;
-      const displayChanged = !jsonEqual(
-        observed?.displayName,
-        news.displayName,
-      );
+      const displayChanged = !jsonEqual(observed?.displayName, news.displayName);
       const descriptionChanged = (observed?.description ?? "") !== description;
       const regexChanged = !jsonEqual(observed?.regex, news.regex);
-      const dictionaryChanged = !jsonEqual(
-        observed?.dictionary,
-        news.dictionary,
-      );
-      const largeChanged = !jsonEqual(
-        observed?.largeCustomDictionary,
-        news.largeCustomDictionary,
-      );
+      const dictionaryChanged = !jsonEqual(observed?.dictionary, news.dictionary);
+      const largeChanged = !jsonEqual(observed?.largeCustomDictionary, news.largeCustomDictionary);
 
       if (
         displayChanged ||
@@ -335,10 +311,7 @@ export const OrganizationStoredInfoTypeProvider = () =>
       }
 
       const readyName = current.name ?? name;
-      current = yield* waitForStoredInfoTypeReady(
-        readyName,
-        getByName(readyName),
-      );
+      current = yield* waitForStoredInfoTypeReady(readyName, getByName(readyName));
       return toAttrs(current, organization, env.project);
     }),
 

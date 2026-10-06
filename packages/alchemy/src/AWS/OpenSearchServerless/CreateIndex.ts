@@ -45,6 +45,4 @@ export interface CreateIndex extends Binding.Service<
     ) => Effect.Effect<aoss.CreateIndexResponse, aoss.CreateIndexError>
   >
 > {}
-export const CreateIndex = Binding.Service<CreateIndex>(
-  "AWS.OpenSearchServerless.CreateIndex",
-);
+export const CreateIndex = Binding.Service<CreateIndex>("AWS.OpenSearchServerless.CreateIndex");

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -20,17 +17,15 @@ const waitUntilGone = (indexId: string) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;
 
-    return yield* datastore
-      .getProjectsIndexes({ projectId: project, indexId })
-      .pipe(
-        Effect.as("found" as const),
-        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
-          until: (status) => status === "gone",
-          times: 24,
-        }),
-      );
+    return yield* datastore.getProjectsIndexes({ projectId: project, indexId }).pipe(
+      Effect.as("found" as const),
+      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (status) => status === "gone",
+        times: 24,
+      }),
+    );
   });
 
 test.provider(
@@ -52,9 +47,7 @@ test.provider(
       const page = yield* datastore.listProjectsIndexes({
         projectId: project,
       });
-      expect((page.indexes ?? []).map((index) => index.indexId)).not.toContain(
-        "CICAgOjXh4AA",
-      );
+      expect((page.indexes ?? []).map((index) => index.indexId)).not.toContain("CICAgOjXh4AA");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -93,9 +86,7 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.indexId).toEqual(created.indexId);
       expect(fetched.kind).toEqual(created.kind);
-      expect(
-        (fetched.properties ?? []).some((property) => property.name === "done"),
-      ).toEqual(true);
+      expect((fetched.properties ?? []).some((property) => property.name === "done")).toEqual(true);
 
       yield* stack.destroy();
 

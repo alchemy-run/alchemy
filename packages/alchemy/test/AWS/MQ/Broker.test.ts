@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Broker } from "@/AWS/MQ";
-import * as Test from "@/Test/Alchemy";
 import * as mq from "@distilled.cloud/aws/mq";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Broker } from "@/AWS/MQ";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,9 +16,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        mq.describeBroker({
-          BrokerId: "b-00000000-0000-0000-0000-000000000000",
-        }),
+        mq.describeBroker({ BrokerId: "b-00000000-0000-0000-0000-000000000000" }),
       );
       expect(error._tag).toBe("NotFoundException");
     }),
@@ -29,22 +27,13 @@ const assertBrokerGone = (brokerId: string) =>
   Effect.gen(function* () {
     const status = yield* mq.describeBroker({ BrokerId: brokerId }).pipe(
       Effect.map((r) => r.BrokerState ?? "UNKNOWN"),
-      Effect.catchTag("NotFoundException", () =>
-        Effect.succeed("GONE" as const),
-      ),
+      Effect.catchTag("NotFoundException", () => Effect.succeed("GONE" as const)),
     );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`MQ broker still exists (state: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`MQ broker still exists (state: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]) }),
   );
 
 // A broker bills per instance-hour and takes 5-10 min to provision, so the
@@ -57,11 +46,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const engines = yield* mq.describeBrokerEngineTypes({
-        EngineType: "ACTIVEMQ",
-      });
-      const engineVersion =
-        engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
+      const engines = yield* mq.describeBrokerEngineTypes({ EngineType: "ACTIVEMQ" });
+      const engineVersion = engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
       expect(engineVersion).toBeDefined();
 
       const broker = yield* stack.deploy(
@@ -73,12 +59,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             hostInstanceType: "mq.t3.micro",
             deploymentMode: "SINGLE_INSTANCE",
             publiclyAccessible: true,
-            users: [
-              {
-                username: "alchemyadmin",
-                password: Redacted.make("SuperSecretPassw0rd!"),
-              },
-            ],
+            users: [{ username: "alchemyadmin", password: Redacted.make("SuperSecretPassw0rd!") }],
             tags: { team: "messaging" },
           });
         }),

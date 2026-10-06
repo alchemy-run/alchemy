@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { PaymentLink } from "./PaymentLink.ts";
 
-export interface RetrievePaymentLinkRequest extends Omit<
-  GetPaymentLinkRequest,
-  "payment_link"
-> {}
+export interface RetrievePaymentLinkRequest extends Omit<GetPaymentLinkRequest, "payment_link"> {}
 
 /**
  * Retrieve a bound Stripe Payment Link over HTTP.

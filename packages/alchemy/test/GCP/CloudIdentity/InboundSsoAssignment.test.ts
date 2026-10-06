@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudidentity from "@distilled.cloud/gcp/cloudidentity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { customer, domain, logLevel, runGroupLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -79,22 +79,17 @@ test.provider.skipIf(!runGroupLifecycle)(
             domain,
             displayName: "Engineering",
           });
-          const assignment = yield* GCP.CloudIdentity.InboundSsoAssignment(
-            "EngSso",
-            {
-              customer,
-              targetGroup: group.name,
-              ssoMode: "SSO_OFF",
-              rank: 1,
-            },
-          );
+          const assignment = yield* GCP.CloudIdentity.InboundSsoAssignment("EngSso", {
+            customer,
+            targetGroup: group.name,
+            ssoMode: "SSO_OFF",
+            rank: 1,
+          });
           return { group, assignment };
         }),
       );
 
-      expect(
-        created.assignment.name.startsWith("inboundSsoAssignments/"),
-      ).toEqual(true);
+      expect(created.assignment.name.startsWith("inboundSsoAssignments/")).toEqual(true);
       expect(created.assignment.ssoMode).toEqual("SSO_OFF");
 
       const fetched = yield* cloudidentity.getInboundSsoAssignments({
@@ -109,15 +104,12 @@ test.provider.skipIf(!runGroupLifecycle)(
             groupKeyId: created.group.groupKeyId,
             displayName: "Engineering",
           });
-          const assignment = yield* GCP.CloudIdentity.InboundSsoAssignment(
-            "EngSso",
-            {
-              customer,
-              targetGroup: group.name,
-              ssoMode: "SSO_OFF",
-              rank: 2,
-            },
-          );
+          const assignment = yield* GCP.CloudIdentity.InboundSsoAssignment("EngSso", {
+            customer,
+            targetGroup: group.name,
+            ssoMode: "SSO_OFF",
+            rank: 2,
+          });
           return { group, assignment };
         }),
       );

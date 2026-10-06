@@ -1,9 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { LanguageModel } from "effect/ai/LanguageModel";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
-import type { LanguageModel } from "effect/ai/LanguageModel";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { LanguageModelOptions } from "../AI/LanguageModel.ts";
 import type { AIBinding } from "./AIBinding.ts";
@@ -137,11 +137,7 @@ export interface AIClient {
     model: Name,
     inputs: AiModels[Name]["inputs"],
     options?: AiOptions,
-  ): Effect.Effect<
-    AiModels[Name]["postProcessedOutputs"],
-    WorkersAIError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<AiModels[Name]["postProcessedOutputs"], WorkersAIError, RuntimeContext>;
   /**
    * List Workers AI models from the catalog, optionally filtered.
    */

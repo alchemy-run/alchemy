@@ -27,12 +27,7 @@ export interface ListCoverage extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListCoverageRequest,
-    ) => Effect.Effect<
-      inspector2.ListCoverageResponse,
-      inspector2.ListCoverageError
-    >
+    ) => Effect.Effect<inspector2.ListCoverageResponse, inspector2.ListCoverageError>
   >
 > {}
-export const ListCoverage = Binding.Service<ListCoverage>(
-  "AWS.Inspector2.ListCoverage",
-);
+export const ListCoverage = Binding.Service<ListCoverage>("AWS.Inspector2.ListCoverage");

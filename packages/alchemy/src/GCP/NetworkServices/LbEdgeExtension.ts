@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -219,9 +214,7 @@ export type LbEdgeExtension = Resource<
  * @resource
  * @category NetworkServices
  */
-export const LbEdgeExtension = Resource<LbEdgeExtension>(
-  "GCP.NetworkServices.LbEdgeExtension",
-);
+export const LbEdgeExtension = Resource<LbEdgeExtension>("GCP.NetworkServices.LbEdgeExtension");
 
 export const toExtension = (
   value: ExtensionChainExtension | networkservices.ExtensionChainExtension,
@@ -250,10 +243,7 @@ export const toChain = (
   extensions: (value.extensions ?? []).map(toExtension),
 });
 
-const toAttrs = (
-  extension: networkservices.LbEdgeExtension,
-  project: string,
-) => {
+const toAttrs = (extension: networkservices.LbEdgeExtension, project: string) => {
   const name = extension.name ?? "";
   const parsed = parseName(name, COLLECTION, DEFAULT_GLOBAL);
   return {
@@ -295,14 +285,10 @@ export const LbEdgeExtensionProvider = () =>
         DEFAULT_GLOBAL,
       );
       const previousScheme =
-        olds?.loadBalancingScheme ??
-        output?.loadBalancingScheme ??
-        DEFAULT_SCHEME;
+        olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? DEFAULT_SCHEME;
       const nextScheme = news.loadBalancingScheme ?? previousScheme;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousScheme !== nextScheme
       ) {
@@ -319,19 +305,13 @@ export const LbEdgeExtensionProvider = () =>
         output?.lbEdgeExtensionId,
         "lb-edge-extension",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, lbEdgeExtensionId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, lbEdgeExtensionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -357,16 +337,8 @@ export const LbEdgeExtensionProvider = () =>
         output?.lbEdgeExtensionId,
         "lb-edge-extension",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        lbEdgeExtensionId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, lbEdgeExtensionId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -407,16 +379,9 @@ export const LbEdgeExtensionProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const rulesChanged = !sameStringList(
-        current.forwardingRules,
-        desiredRules,
-      );
-      const chainsChanged = !sameJson(
-        (current.extensionChains ?? []).map(toChain),
-        desiredChains,
-      );
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const rulesChanged = !sameStringList(current.forwardingRules, desiredRules);
+      const chainsChanged = !sameJson((current.extensionChains ?? []).map(toChain), desiredChains);
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -426,24 +391,20 @@ export const LbEdgeExtensionProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsLbEdgeExtensions({
+        const operation = yield* networkservices.patchProjectsLocationsLbEdgeExtensions({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              forwardingRules: desiredRules,
-              extensionChains: desiredChains,
-              loadBalancingScheme,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            forwardingRules: desiredRules,
+            extensionChains: desiredChains,
+            loadBalancingScheme,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

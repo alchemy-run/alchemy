@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Endpoint } from "@/AWS/DMS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as dms from "@distilled.cloud/aws/database-migration-service";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Endpoint } from "@/AWS/DMS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,10 +31,7 @@ const assertGone = (identifier: string) =>
         : Effect.fail(new Error(`endpoint '${identifier}' status: ${status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -126,9 +123,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Endpoint);
       const all = yield* provider.list();
-      expect(all.some((e) => e.endpointArn === endpoint.endpointArn)).toBe(
-        true,
-      );
+      expect(all.some((e) => e.endpointArn === endpoint.endpointArn)).toBe(true);
 
       yield* stack.destroy();
       yield* assertGone(endpoint.endpointIdentifier);

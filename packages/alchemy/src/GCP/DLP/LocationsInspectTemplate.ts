@@ -155,8 +155,7 @@ const toAttrs = (
     displayName: template.displayName,
     description: parsed.text,
     inspectConfig: template.inspectConfig,
-    allowLimitedAvailabilityInfoTypes:
-      template.allowLimitedAvailabilityInfoTypes === true,
+    allowLimitedAvailabilityInfoTypes: template.allowLimitedAvailabilityInfoTypes === true,
     createTime: template.createTime,
     updateTime: template.updateTime,
   };
@@ -178,9 +177,7 @@ export const LocationsInspectTemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const idChanged =
-        previousId !== undefined &&
-        news.templateId !== undefined &&
-        news.templateId !== previousId;
+        previousId !== undefined && news.templateId !== undefined && news.templateId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -191,23 +188,13 @@ export const LocationsInspectTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const templateId = yield* toResourceId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, templateId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const templateId = yield* toResourceId(id, olds?.templateId, output?.templateId);
+      const name = output?.name ?? resourceName(env.project, location, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -231,20 +218,12 @@ export const LocationsInspectTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const templateId = yield* toResourceId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const templateId = yield* toResourceId(id, news.templateId, output?.templateId);
       const name = resourceName(env.project, location, templateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
-      const allowLimitedAvailabilityInfoTypes =
-        news.allowLimitedAvailabilityInfoTypes === true;
+      const allowLimitedAvailabilityInfoTypes = news.allowLimitedAvailabilityInfoTypes === true;
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -272,20 +251,11 @@ export const LocationsInspectTemplateProvider = () =>
 
       const displayChanged = !jsonEqual(current.displayName, news.displayName);
       const descriptionChanged = (current.description ?? "") !== description;
-      const configChanged = !jsonEqual(
-        current.inspectConfig,
-        news.inspectConfig,
-      );
+      const configChanged = !jsonEqual(current.inspectConfig, news.inspectConfig);
       const limitedChanged =
-        (current.allowLimitedAvailabilityInfoTypes === true) !==
-        allowLimitedAvailabilityInfoTypes;
+        (current.allowLimitedAvailabilityInfoTypes === true) !== allowLimitedAvailabilityInfoTypes;
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        configChanged ||
-        limitedChanged
-      ) {
+      if (displayChanged || descriptionChanged || configChanged || limitedChanged) {
         current = yield* dlp
           .patchProjectsLocationsInspectTemplates({
             name: current.name ?? name,
@@ -294,9 +264,7 @@ export const LocationsInspectTemplateProvider = () =>
                 displayChanged ? "displayName" : undefined,
                 descriptionChanged ? "description" : undefined,
                 configChanged ? "inspectConfig" : undefined,
-                limitedChanged
-                  ? "allowLimitedAvailabilityInfoTypes"
-                  : undefined,
+                limitedChanged ? "allowLimitedAvailabilityInfoTypes" : undefined,
               ),
               inspectTemplate: {
                 displayName: news.displayName,

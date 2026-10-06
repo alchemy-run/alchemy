@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { isLocalId } from "../LocalRuntime.ts";
@@ -53,9 +53,7 @@ export const QueryDatabaseLocal = Layer.effect(
     // providers layer). Capture the full context so the HTTP query ops run
     // with the current credentials — no `host.bind`, no minted token.
     const environment = yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // The FULL ambient context, for the dev-mode gateway: booting an
     // ephemeral workerd needs the platform services (FileSystem, Path,
     // spawner, HttpClient) and the Cloudflare environment, all of which are
@@ -82,11 +80,7 @@ export const QueryDatabaseLocal = Layer.effect(
           Effect.provideContext(ambient),
           (eff) => Effect.runPromise(eff as Effect.Effect<never, never>),
         ) as Promise<{
-          result: Array<{
-            results?: unknown;
-            success?: boolean | null;
-            meta?: unknown;
-          }>;
+          result: Array<{ results?: unknown; success?: boolean | null; meta?: unknown }>;
         }>;
 
     return Effect.fn(function* (database: Database) {
@@ -99,11 +93,7 @@ export const QueryDatabaseLocal = Layer.effect(
             ? Effect.succeed(makeD1DatabaseFromTransport(localTransport(id)))
             : Effect.map(environment, ({ accountId }) =>
                 makeHttpD1Database(
-                  {
-                    accountId,
-                    authorize: (eff) =>
-                      eff.pipe(Effect.provideContext(context)),
-                  },
+                  { accountId, authorize: (eff) => eff.pipe(Effect.provideContext(context)) },
                   id,
                 ),
               ),

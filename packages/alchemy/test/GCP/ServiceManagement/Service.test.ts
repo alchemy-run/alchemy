@@ -1,30 +1,24 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as servicemanagement from "@distilled.cloud/gcp/servicemanagement_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const missingNameOf = (project: string) =>
-  `alch-missing.endpoints.${project}.cloud.goog`;
+const missingNameOf = (project: string) => `alch-missing.endpoints.${project}.cloud.goog`;
 
 const waitUntilGone = (serviceName: string) =>
   servicemanagement.getServices({ serviceName }).pipe(
     Effect.as("found" as const),
     // Service Management answers a missing service with 403 "not found or
     // permission denied", typed ServiceNotFound.
-    Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -40,18 +34,16 @@ test.provider(
       const missingName = missingNameOf(project);
       yield* stack.destroy();
 
-      const error = yield* Effect.flip(
-        servicemanagement.getServices({ serviceName: missingName }),
-      );
+      const error = yield* Effect.flip(servicemanagement.getServices({ serviceName: missingName }));
       expect(error._tag).toEqual("ServiceNotFound");
 
       const page = yield* servicemanagement.listServices({
         producerProjectId: project,
         pageSize: 10,
       });
-      expect(
-        (page.services ?? []).map((service) => service.serviceName),
-      ).not.toContain(missingName);
+      expect((page.services ?? []).map((service) => service.serviceName)).not.toContain(
+        missingName,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),

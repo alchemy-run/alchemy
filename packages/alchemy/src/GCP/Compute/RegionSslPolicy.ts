@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 import type {
   SslPolicyMinTlsVersion,
   SslPolicyPostQuantumKeyExchange,
@@ -138,9 +134,7 @@ export type RegionSslPolicy = Resource<
  * @resource
  * @category Compute
  */
-export const RegionSslPolicy = Resource<RegionSslPolicy>(
-  "GCP.Compute.RegionSslPolicy",
-);
+export const RegionSslPolicy = Resource<RegionSslPolicy>("GCP.Compute.RegionSslPolicy");
 
 export class RegionSslPolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionSslPolicyNotResolved",
@@ -241,16 +235,10 @@ const asMinTlsVersion = (value: string | undefined): SslPolicyMinTlsVersion => {
   }
 };
 
-const featuresOf = (features: readonly string[] | undefined): string[] => [
-  ...(features ?? []),
-];
+const featuresOf = (features: readonly string[] | undefined): string[] => [...(features ?? [])];
 
-const sameFeatures = (
-  observed?: readonly string[],
-  desired?: readonly string[],
-) =>
-  [...(observed ?? [])].sort().join("\0") ===
-  [...(desired ?? [])].sort().join("\0");
+const sameFeatures = (observed?: readonly string[], desired?: readonly string[]) =>
+  [...(observed ?? [])].sort().join("\0") === [...(desired ?? [])].sort().join("\0");
 
 const toBody = (
   sslPolicyName: string,
@@ -265,16 +253,12 @@ const toBody = (
     description: encodeDescription(ownership, props.description),
     profile,
     minTlsVersion: props.minTlsVersion ?? DEFAULT_MIN_TLS,
-    customFeatures:
-      profile === "CUSTOM" ? featuresOf(props.customFeatures) : [],
+    customFeatures: profile === "CUSTOM" ? featuresOf(props.customFeatures) : [],
     postQuantumKeyExchange: props.postQuantumKeyExchange,
   };
 };
 
-const toAttrs = (
-  policy: compute.SslPolicy,
-  project: string,
-): RegionSslPolicy["Attributes"] => {
+const toAttrs = (policy: compute.SslPolicy, project: string): RegionSslPolicy["Attributes"] => {
   const parsed = parseDescription(policy.description);
   return {
     sslPolicyName: policy.name ?? policy.id ?? "",
@@ -294,16 +278,10 @@ const toAttrs = (
   };
 };
 
-const needsUpdate = (
-  current: compute.SslPolicy,
-  desired: compute.SslPolicy,
-) => {
+const needsUpdate = (current: compute.SslPolicy, desired: compute.SslPolicy) => {
   if ((current.description ?? "") !== (desired.description ?? "")) return true;
   if (asProfile(current.profile) !== asProfile(desired.profile)) return true;
-  if (
-    asMinTlsVersion(current.minTlsVersion) !==
-    asMinTlsVersion(desired.minTlsVersion)
-  ) {
+  if (asMinTlsVersion(current.minTlsVersion) !== asMinTlsVersion(desired.minTlsVersion)) {
     return true;
   }
   if (!sameFeatures(current.customFeatures, desired.customFeatures)) {
@@ -311,8 +289,7 @@ const needsUpdate = (
   }
   if (
     desired.postQuantumKeyExchange !== undefined &&
-    (current.postQuantumKeyExchange ?? "DEFAULT") !==
-      desired.postQuantumKeyExchange
+    (current.postQuantumKeyExchange ?? "DEFAULT") !== desired.postQuantumKeyExchange
   ) {
     return true;
   }
@@ -324,11 +301,7 @@ const getByName = (project: string, region: string, sslPolicy: string) =>
     .getRegionSslPolicies({ project, region, sslPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const awaitResource = (
-  project: string,
-  region: string,
-  sslPolicyName: string,
-) =>
+const awaitResource = (project: string, region: string, sslPolicyName: string) =>
   getByName(project, region, sslPolicyName).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -339,36 +312,19 @@ const awaitResource = (
 
 export const RegionSslPolicyProvider = () =>
   Provider.succeed(RegionSslPolicy, {
-    stables: [
-      "sslPolicyName",
-      "project",
-      "region",
-      "sslPolicyId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["sslPolicyName", "project", "region", "sslPolicyId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.sslPolicyName ?? output?.sslPolicyName;
       const nextName = news.sslPolicyName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       if (previousRegion !== nextRegion) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -376,15 +332,8 @@ export const RegionSslPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sslPolicyName = yield* toName(
-        id,
-        olds?.sslPolicyName,
-        output?.sslPolicyName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const sslPolicyName = yield* toName(id, olds?.sslPolicyName, output?.sslPolicyName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, sslPolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -408,9 +357,7 @@ export const RegionSslPolicyProvider = () =>
               .filter((policy) => (policy.region ?? "").length > 0)
               .filter((policy) => {
                 const { labels } = parseDescription(policy.description);
-                return Object.keys(labels).some((key) =>
-                  key.startsWith("alchemy-"),
-                );
+                return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
               })
               .map((policy) => toAttrs(policy, env.project)),
           ),
@@ -419,11 +366,7 @@ export const RegionSslPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sslPolicyName = yield* toName(
-        id,
-        news.sslPolicyName,
-        output?.sslPolicyName,
-      );
+      const sslPolicyName = yield* toName(id, news.sslPolicyName, output?.sslPolicyName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(sslPolicyName, news, ownership);
@@ -463,11 +406,7 @@ export const RegionSslPolicyProvider = () =>
             sslPolicy: sslPolicyName,
             body: toBody(sslPolicyName, news, ownership, current.fingerprint),
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, sslPolicyName);
         if (current === undefined) {
           return yield* new RegionSslPolicyNotResolved({

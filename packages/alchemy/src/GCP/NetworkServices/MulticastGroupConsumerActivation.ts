@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -158,42 +153,18 @@ export type MulticastGroupConsumerActivation = Resource<
  * @resource
  * @category NetworkServices
  */
-export const MulticastGroupConsumerActivation =
-  Resource<MulticastGroupConsumerActivation>(
-    "GCP.NetworkServices.MulticastGroupConsumerActivation",
-  );
+export const MulticastGroupConsumerActivation = Resource<MulticastGroupConsumerActivation>(
+  "GCP.NetworkServices.MulticastGroupConsumerActivation",
+);
 
-const toAssociation = (
-  project: string,
-  location: string,
-  value: string | undefined,
-) =>
-  value
-    ? toNamedResource(project, location, "multicastConsumerAssociations", value)
-    : undefined;
+const toAssociation = (project: string, location: string, value: string | undefined) =>
+  value ? toNamedResource(project, location, "multicastConsumerAssociations", value) : undefined;
 
-const toRangeActivation = (
-  project: string,
-  location: string,
-  value: string | undefined,
-) =>
-  value
-    ? toNamedResource(
-        project,
-        location,
-        "multicastGroupRangeActivations",
-        value,
-      )
-    : undefined;
+const toRangeActivation = (project: string, location: string, value: string | undefined) =>
+  value ? toNamedResource(project, location, "multicastGroupRangeActivations", value) : undefined;
 
-const toGroup = (
-  project: string,
-  location: string,
-  value: string | undefined,
-) =>
-  value
-    ? toNamedResource(project, location, "multicastGroups", value)
-    : undefined;
+const toGroup = (project: string, location: string, value: string | undefined) =>
+  value ? toNamedResource(project, location, "multicastGroups", value) : undefined;
 
 const toLogConfig = (
   config: MulticastLogConfig | networkservices.MulticastLogConfig | undefined,
@@ -202,10 +173,7 @@ const toLogConfig = (
   return { enabled: config.enabled };
 };
 
-const toAttrs = (
-  activation: networkservices.MulticastGroupConsumerActivation,
-  project: string,
-) => {
+const toAttrs = (activation: networkservices.MulticastGroupConsumerActivation, project: string) => {
   const name = activation.name ?? "";
   const parsed = parseName(name, COLLECTION, DEFAULT_ZONE);
   const location = parsed.location || DEFAULT_ZONE;
@@ -258,40 +226,27 @@ export const MulticastGroupConsumerActivationProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId =
-        olds?.multicastGroupConsumerActivationId ??
-        output?.multicastGroupConsumerActivationId;
+        olds?.multicastGroupConsumerActivationId ?? output?.multicastGroupConsumerActivationId;
       const nextId = news.multicastGroupConsumerActivationId
-        ? rfc1035(
-            news.multicastGroupConsumerActivationId,
-            "mcast-gca",
-            MAX_MULTICAST_NAME_LENGTH,
-          )
+        ? rfc1035(news.multicastGroupConsumerActivationId, "mcast-gca", MAX_MULTICAST_NAME_LENGTH)
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         DEFAULT_ZONE,
       );
       const previousAssociation = linkKey(
-        olds?.multicastConsumerAssociation ??
-          output?.multicastConsumerAssociation,
+        olds?.multicastConsumerAssociation ?? output?.multicastConsumerAssociation,
       );
       const nextAssociation = linkKey(news.multicastConsumerAssociation);
       const previousRange = linkKey(
-        olds?.multicastGroupRangeActivation ??
-          output?.multicastGroupRangeActivation,
+        olds?.multicastGroupRangeActivation ?? output?.multicastGroupRangeActivation,
       );
       const nextRange = linkKey(news.multicastGroupRangeActivation);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
-        (previousAssociation.length > 0 &&
-          previousAssociation !== nextAssociation) ||
+        (previousAssociation.length > 0 && previousAssociation !== nextAssociation) ||
         (previousRange.length > 0 && previousRange !== nextRange)
       ) {
         return { action: "replace" as const };
@@ -308,36 +263,24 @@ export const MulticastGroupConsumerActivationProvider = () =>
         "mcast-gca",
         MAX_MULTICAST_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       const name =
         output?.name ??
-        resourceName(
-          env.project,
-          location,
-          COLLECTION,
-          multicastGroupConsumerActivationId,
-        );
+        resourceName(env.project, location, COLLECTION, multicastGroupConsumerActivationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* collectPages(
-          networkservices.listProjectsLocationsMulticastGroupConsumerActivations.pages(
-            {
-              parent: parentOf(env.project, "-"),
-              pageSize: 1000,
-            },
-          ),
+          networkservices.listProjectsLocationsMulticastGroupConsumerActivations.pages({
+            parent: parentOf(env.project, "-"),
+            pageSize: 1000,
+          }),
           (page) => page.multicastGroupConsumerActivations,
         );
         return items
@@ -354,10 +297,7 @@ export const MulticastGroupConsumerActivationProvider = () =>
         "mcast-gca",
         MAX_MULTICAST_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_ZONE);
       const name = resourceName(
         env.project,
         location,
@@ -378,11 +318,7 @@ export const MulticastGroupConsumerActivationProvider = () =>
         location,
         news.multicastGroupRangeActivation,
       );
-      const multicastGroup = toGroup(
-        env.project,
-        location,
-        news.multicastGroup,
-      );
+      const multicastGroup = toGroup(env.project, location, news.multicastGroup);
       const logConfig = toLogConfig(news.logConfig);
 
       let current = yield* getByName(name);
@@ -421,32 +357,24 @@ export const MulticastGroupConsumerActivationProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const updateMask = changedFields([
         ["labels", labelsChanged],
-        [
-          "description",
-          (current.description ?? "") !== (news.description ?? ""),
-        ],
+        ["description", (current.description ?? "") !== (news.description ?? "")],
         ["logConfig", !sameJson(observed.logConfig, logConfig)],
       ]);
 
       if (updateMask.length > 0) {
         const operation =
-          yield* networkservices.patchProjectsLocationsMulticastGroupConsumerActivations(
-            {
+          yield* networkservices.patchProjectsLocationsMulticastGroupConsumerActivations({
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                logConfig,
-              },
+              labels: desiredLabels,
+              description: news.description,
+              logConfig,
             },
-          );
+          });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

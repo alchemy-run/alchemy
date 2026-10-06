@@ -1,10 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import {
   deleteAgent,
   deleteEntityType,
@@ -12,14 +13,10 @@ import {
   ensureEntityType,
   quotaTolerant,
 } from "./parent.ts";
-import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 const agentDisplayName = "alch-df-set";
@@ -76,9 +73,7 @@ test.provider.skipIf(!runLifecycle)(
             sessionId: "alchemy",
             entityTypeId,
             entityOverrideMode: "ENTITY_OVERRIDE_MODE_OVERRIDE",
-            entities: [
-              { value: "cerulean", synonyms: ["cerulean", "blue-green"] },
-            ],
+            entities: [{ value: "cerulean", synonyms: ["cerulean", "blue-green"] }],
           });
         }),
       );
@@ -87,14 +82,11 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.agent).toEqual(agentName);
       expect(created.sessionId).toEqual("alchemy");
       expect(created.entityTypeId).toEqual(entityTypeId);
-      expect(
-        created.entities.some((entity) => entity.value === "cerulean"),
-      ).toEqual(true);
+      expect(created.entities.some((entity) => entity.value === "cerulean")).toEqual(true);
 
-      const fetched =
-        yield* dialogflow.getProjectsLocationsAgentsSessionsEntityTypes({
-          name: created.name,
-        });
+      const fetched = yield* dialogflow.getProjectsLocationsAgentsSessionsEntityTypes({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       const updated = yield* stack.deploy(
@@ -113,9 +105,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(
-        updated.entities.some((entity) => entity.value === "scarlet"),
-      ).toEqual(true);
+      expect(updated.entities.some((entity) => entity.value === "scarlet")).toEqual(true);
 
       yield* stack.destroy();
 

@@ -72,18 +72,12 @@ export const mapOf = (
   map: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(map ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-export const dataKey = (
-  map: Record<string, string | undefined> | null | undefined,
-) =>
+export const dataKey = (map: Record<string, string | undefined> | null | undefined) =>
   JSON.stringify(
     Object.fromEntries(
-      Object.entries(mapOf(map)).sort(([left], [right]) =>
-        left.localeCompare(right),
-      ),
+      Object.entries(mapOf(map)).sort(([left], [right]) => left.localeCompare(right)),
     ),
   );

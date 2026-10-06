@@ -130,11 +130,8 @@ export type Dependency = Resource<
  */
 export const Dependency = Resource<Dependency>("GCP.ApiHub.Dependency");
 
-const resourceName = (
-  project: string,
-  location: string,
-  dependencyId: string,
-) => `${locationParent(project, location)}/dependencies/${dependencyId}`;
+const resourceName = (project: string, location: string, dependencyId: string) =>
+  `${locationParent(project, location)}/dependencies/${dependencyId}`;
 
 const toEntity = (
   entity: apihub.GoogleCloudApihubV1DependencyEntityReference | undefined,
@@ -162,9 +159,7 @@ const toAttrs = (
     consumer: toEntity(dependency.consumer),
     supplier: toEntity(dependency.supplier),
     discoveryMode:
-      dependency.discoveryMode === undefined
-        ? undefined
-        : `${dependency.discoveryMode}`,
+      dependency.discoveryMode === undefined ? undefined : `${dependency.discoveryMode}`,
     state: dependency.state === undefined ? undefined : `${dependency.state}`,
     errorDetail: dependency.errorDetail,
     attributes: dependency.attributes,
@@ -197,53 +192,32 @@ export const DependencyProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.dependencyId ?? output?.dependencyId,
         nextId: news.dependencyId ?? olds?.dependencyId ?? output?.dependencyId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
-          !sameJson(
-            news.consumer ?? olds?.consumer,
-            olds?.consumer ?? output?.consumer,
-          ) ||
-          !sameJson(
-            news.supplier ?? olds?.supplier,
-            olds?.supplier ?? output?.supplier,
-          ),
+          !sameJson(news.consumer ?? olds?.consumer, olds?.consumer ?? output?.consumer) ||
+          !sameJson(news.supplier ?? olds?.supplier, olds?.supplier ?? output?.supplier),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const dependencyId = yield* toPhysicalId(
-        id,
-        olds?.dependencyId,
-        output?.dependencyId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dependencyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const dependencyId = yield* toPhysicalId(id, olds?.dependencyId, output?.dependencyId);
+      const name = output?.name ?? resourceName(env.project, location, dependencyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listDependencies(
-          locationParent(env.project, env.region),
-        );
+        const items = yield* listDependencies(locationParent(env.project, env.region));
         return items
           .filter((item) => hasOwnershipMarker(item.description))
           .map((item) => toAttrs(item, env.project, env.region));
@@ -251,18 +225,10 @@ export const DependencyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
-      const dependencyId = yield* toPhysicalId(
-        id,
-        news.dependencyId,
-        output?.dependencyId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dependencyId);
+      const dependencyId = yield* toPhysicalId(id, news.dependencyId, output?.dependencyId);
+      const name = output?.name ?? resourceName(env.project, location, dependencyId);
       const ownership = yield* createOwnership(id);
       const description = encodeOwnership(ownership, news.description);
       const consumer = entityOf(news.consumer);

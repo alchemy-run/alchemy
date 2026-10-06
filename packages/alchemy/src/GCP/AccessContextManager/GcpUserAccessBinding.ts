@@ -143,9 +143,7 @@ export class GcpUserAccessBindingNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  binding: acm.GcpUserAccessBinding,
-): GcpUserAccessBinding["Attributes"] => {
+const toAttrs = (binding: acm.GcpUserAccessBinding): GcpUserAccessBinding["Attributes"] => {
   const name = binding.name ?? "";
   const parts = name.split("/").filter((part) => part.length > 0);
   const orgsAt = parts.lastIndexOf("organizations");
@@ -174,11 +172,7 @@ const listBindings = (organization: string) =>
       pageSize: 100,
     }),
     (page) => page.gcpUserAccessBindings,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as acm.GcpUserAccessBinding[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as acm.GcpUserAccessBinding[])));
 
 const findByGroupKey = (organization: string, groupKey: string) =>
   Effect.gen(function* () {
@@ -186,11 +180,7 @@ const findByGroupKey = (organization: string, groupKey: string) =>
     return bindings.find((binding) => binding.groupKey === groupKey);
   });
 
-const observe = (
-  name: string | undefined,
-  organization: string,
-  groupKey: string | undefined,
-) =>
+const observe = (name: string | undefined, organization: string, groupKey: string | undefined) =>
   Effect.gen(function* () {
     if (name !== undefined && name.length > 0) {
       const byName = yield* getByName(name);
@@ -215,16 +205,12 @@ export const GcpUserAccessBindingProvider = () =>
         nextOrg !== undefined &&
         lastSegment(previousOrg) !== lastSegment(nextOrg);
       const previousGroup = olds?.groupKey ?? output?.groupKey;
-      const groupChanged =
-        previousGroup !== undefined && news.groupKey !== previousGroup;
+      const groupChanged = previousGroup !== undefined && news.groupKey !== previousGroup;
       return replaceOnIdentity(orgChanged || groupChanged);
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      const organization = yield* resolveOrganization(
-        olds?.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(olds?.organization, output?.organization);
       const existing = yield* observe(
         output?.name,
         organization,
@@ -253,10 +239,7 @@ export const GcpUserAccessBindingProvider = () =>
       }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const desiredLevels = news.accessLevels ?? [];
       const desiredDryRun = news.dryRunAccessLevels ?? [];
 
@@ -268,10 +251,8 @@ export const GcpUserAccessBindingProvider = () =>
             parent: organization,
             body: {
               groupKey: news.groupKey,
-              accessLevels:
-                desiredLevels.length > 0 ? desiredLevels : undefined,
-              dryRunAccessLevels:
-                desiredDryRun.length > 0 ? desiredDryRun : undefined,
+              accessLevels: desiredLevels.length > 0 ? desiredLevels : undefined,
+              dryRunAccessLevels: desiredDryRun.length > 0 ? desiredDryRun : undefined,
               sessionSettings: news.sessionSettings,
               scopedAccessSettings: news.scopedAccessSettings,
               restrictedClientApplications: news.restrictedClientApplications,
@@ -310,23 +291,14 @@ export const GcpUserAccessBindingProvider = () =>
         });
       }
 
-      const levelsChanged = !sameStringList(
-        current.accessLevels,
-        desiredLevels,
-      );
-      const dryRunChanged = !sameStringList(
-        current.dryRunAccessLevels,
-        desiredDryRun,
-      );
+      const levelsChanged = !sameStringList(current.accessLevels, desiredLevels);
+      const dryRunChanged = !sameStringList(current.dryRunAccessLevels, desiredDryRun);
       const sessionChanged =
         news.sessionSettings !== undefined &&
         !jsonEqual(current.sessionSettings, news.sessionSettings);
       const appsChanged =
         news.restrictedClientApplications !== undefined &&
-        !jsonEqual(
-          current.restrictedClientApplications,
-          news.restrictedClientApplications,
-        );
+        !jsonEqual(current.restrictedClientApplications, news.restrictedClientApplications);
       const scopedChanged =
         news.scopedAccessSettings !== undefined &&
         !jsonEqual(current.scopedAccessSettings, news.scopedAccessSettings);

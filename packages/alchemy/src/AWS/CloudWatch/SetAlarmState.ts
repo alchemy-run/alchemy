@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { AlarmResource } from "./binding-common.ts";
 
-export interface SetAlarmStateRequest extends Omit<
-  cloudwatch.SetAlarmStateInput,
-  "AlarmName"
-> {}
+export interface SetAlarmStateRequest extends Omit<cloudwatch.SetAlarmStateInput, "AlarmName"> {}
 
 /**
  * Runtime binding for `cloudwatch:SetAlarmState` — force the bound alarm
@@ -39,13 +36,8 @@ export interface SetAlarmState extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetAlarmStateRequest,
-    ) => Effect.Effect<
-      cloudwatch.SetAlarmStateResponse,
-      cloudwatch.SetAlarmStateError
-    >
+    ) => Effect.Effect<cloudwatch.SetAlarmStateResponse, cloudwatch.SetAlarmStateError>
   >
 > {}
 
-export const SetAlarmState = Binding.Service<SetAlarmState>(
-  "AWS.CloudWatch.SetAlarmState",
-);
+export const SetAlarmState = Binding.Service<SetAlarmState>("AWS.CloudWatch.SetAlarmState");

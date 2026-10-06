@@ -13,13 +13,9 @@ export const PROJECT_DISPLAY_MAX = 30;
 export const LIEN_REASON_MAX = 200;
 export const LIEN_ORIGIN_MAX = 200;
 export const DEFAULT_LIEN_ORIGIN = "alchemy.effect";
-export const DEFAULT_LIEN_RESTRICTIONS = [
-  "resourcemanager.projects.delete",
-] as const;
+export const DEFAULT_LIEN_RESTRICTIONS = ["resourcemanager.projects.delete"] as const;
 
-export class ParentRequired extends Data.TaggedError(
-  "GCP.ResourceManager.ParentRequired",
-)<{
+export class ParentRequired extends Data.TaggedError("GCP.ResourceManager.ParentRequired")<{
   project: string;
 }> {}
 
@@ -30,9 +26,7 @@ export const lastSegment = (value: string) => {
 };
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const folderParent = (value: string) =>
   value.startsWith("folders/") ? value : `folders/${lastSegment(value)}`;
@@ -54,10 +48,7 @@ export const normalizeHierarchyParent = (value: string) => {
   return folderParent(value);
 };
 
-export const sameHierarchyParent = (
-  left: string | undefined,
-  right: string | undefined,
-) => {
+export const sameHierarchyParent = (left: string | undefined, right: string | undefined) => {
   if (left === undefined || right === undefined) return left === right;
   if (left === right) return true;
   const leftKind = left.split("/")[0];
@@ -65,8 +56,7 @@ export const sameHierarchyParent = (
   return leftKind === rightKind && lastSegment(left) === lastSegment(right);
 };
 
-export const isDeleteRequested = (state: string | undefined) =>
-  state === "DELETE_REQUESTED";
+export const isDeleteRequested = (state: string | undefined) => state === "DELETE_REQUESTED";
 
 export const resourceNameFromOperation = (
   operation: resourcemanager.Operation,
@@ -80,9 +70,7 @@ export const projectIdFromOperation = (
   operation: resourcemanager.Operation,
 ): string | undefined => {
   const projectId = operation.response?.projectId;
-  return typeof projectId === "string" && projectId.length > 0
-    ? projectId
-    : undefined;
+  return typeof projectId === "string" && projectId.length > 0 ? projectId : undefined;
 };
 
 const parentOf = (name: string) =>
@@ -108,10 +96,7 @@ export const tryResolveParent = () =>
     return yield* parentOf(`projects/${env.project}`).pipe(
       Effect.map((parent) => {
         if (parent === undefined || parent.length === 0) return undefined;
-        if (
-          parent.startsWith("folders/") ||
-          parent.startsWith("organizations/")
-        ) {
+        if (parent.startsWith("folders/") || parent.startsWith("organizations/")) {
           return parent;
         }
         return undefined;
@@ -119,10 +104,7 @@ export const tryResolveParent = () =>
     );
   });
 
-export const resolveParent = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveParent = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined && explicit.length > 0) {
       return normalizeHierarchyParent(explicit);
@@ -153,8 +135,7 @@ export const sortedStrings = (values: readonly string[] | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
+) => JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
 
 export const collectPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
@@ -176,11 +157,9 @@ export const waitForOperation = (
   operation: resourcemanager.Operation,
   options?: { notFoundOk?: boolean; allowAlreadyExists?: boolean },
 ) =>
-  waitForGcpOperation(
-    operation,
-    (name) => resourcemanager.getOperations({ name }),
-    { budget: "10 minutes" },
-  ).pipe(
+  waitForGcpOperation(operation, (name) => resourcemanager.getOperations({ name }), {
+    budget: "10 minutes",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         (error._tag === "GCP.OperationFailed" &&

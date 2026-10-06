@@ -24,8 +24,7 @@ import {
 
 type StoredInfoTypeRegex = dlp.GooglePrivacyDlpV2Regex;
 type StoredInfoTypeDictionary = dlp.GooglePrivacyDlpV2Dictionary;
-type StoredInfoTypeLargeCustomDictionary =
-  dlp.GooglePrivacyDlpV2LargeCustomDictionaryConfig;
+type StoredInfoTypeLargeCustomDictionary = dlp.GooglePrivacyDlpV2LargeCustomDictionaryConfig;
 
 export type StoredInfoTypeProps = {
   /**
@@ -121,9 +120,7 @@ export type StoredInfoType = Resource<
  * @resource
  * @category DLP
  */
-export const StoredInfoType = Resource<StoredInfoType>(
-  "GCP.DLP.StoredInfoType",
-);
+export const StoredInfoType = Resource<StoredInfoType>("GCP.DLP.StoredInfoType");
 
 export class StoredInfoTypeNotResolved extends Data.TaggedError(
   "GCP.DLP.StoredInfoTypeNotResolved",
@@ -145,10 +142,7 @@ const configOf = (
   largeCustomDictionary: props.largeCustomDictionary,
 });
 
-const toAttrs = (
-  stored: dlp.GooglePrivacyDlpV2StoredInfoType,
-  project: string,
-) => {
+const toAttrs = (stored: dlp.GooglePrivacyDlpV2StoredInfoType, project: string) => {
   const name = stored.name ?? "";
   const config = stored.currentVersion?.config;
   const parsed = parseOwnership(config?.description);
@@ -198,10 +192,7 @@ export const StoredInfoTypeProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(
-        id,
-        existing.currentVersion?.config?.description,
-      ))
+      return (yield* ownedByAlchemy(id, existing.currentVersion?.config?.description))
         ? attrs
         : Unowned(attrs);
     }),
@@ -221,9 +212,7 @@ export const StoredInfoTypeProvider = () =>
           ),
         );
         return items
-          .filter((stored) =>
-            hasOwnershipMarker(stored.currentVersion?.config?.description),
-          )
+          .filter((stored) => hasOwnershipMarker(stored.currentVersion?.config?.description))
           .map((stored) => toAttrs(stored, env.project));
       }),
 
@@ -259,20 +248,11 @@ export const StoredInfoTypeProvider = () =>
       }
 
       const observed = current.currentVersion?.config;
-      const displayChanged = !jsonEqual(
-        observed?.displayName,
-        news.displayName,
-      );
+      const displayChanged = !jsonEqual(observed?.displayName, news.displayName);
       const descriptionChanged = (observed?.description ?? "") !== description;
       const regexChanged = !jsonEqual(observed?.regex, news.regex);
-      const dictionaryChanged = !jsonEqual(
-        observed?.dictionary,
-        news.dictionary,
-      );
-      const largeChanged = !jsonEqual(
-        observed?.largeCustomDictionary,
-        news.largeCustomDictionary,
-      );
+      const dictionaryChanged = !jsonEqual(observed?.dictionary, news.dictionary);
+      const largeChanged = !jsonEqual(observed?.largeCustomDictionary, news.largeCustomDictionary);
 
       if (
         displayChanged ||
@@ -297,10 +277,7 @@ export const StoredInfoTypeProvider = () =>
       }
 
       const readyName = current.name ?? name;
-      current = yield* waitForStoredInfoTypeReady(
-        readyName,
-        getByName(readyName),
-      );
+      current = yield* waitForStoredInfoTypeReady(readyName, getByName(readyName));
       return toAttrs(current, env.project);
     }),
 

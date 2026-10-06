@@ -23,10 +23,7 @@ import {
   updateMaskOf,
 } from "./ownership.ts";
 
-export type PhraseMatcherType =
-  | "PHRASE_MATCHER_TYPE_UNSPECIFIED"
-  | "ALL_OF"
-  | "ANY_OF";
+export type PhraseMatcherType = "PHRASE_MATCHER_TYPE_UNSPECIFIED" | "ALL_OF" | "ANY_OF";
 
 export type PhraseMatcherRole =
   | "ROLE_UNSPECIFIED"
@@ -178,9 +175,7 @@ export type PhraseMatcher = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const PhraseMatcher = Resource<PhraseMatcher>(
-  "GCP.ContactCenterInsights.PhraseMatcher",
-);
+export const PhraseMatcher = Resource<PhraseMatcher>("GCP.ContactCenterInsights.PhraseMatcher");
 
 export class PhraseMatcherNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.PhraseMatcherNotResolved",
@@ -190,16 +185,11 @@ export class PhraseMatcherNotResolved extends Data.TaggedError(
 
 const DEFAULT_TYPE: PhraseMatcherType = "ALL_OF";
 
-const resourceName = (
-  project: string,
-  location: string,
-  phraseMatcherId: string,
-) => `${locationParent(project, location)}/phraseMatchers/${phraseMatcherId}`;
+const resourceName = (project: string, location: string, phraseMatcherId: string) =>
+  `${locationParent(project, location)}/phraseMatchers/${phraseMatcherId}`;
 
 const groupsOf = (
-  groups:
-    | cci.GoogleCloudContactcenterinsightsV1PhraseMatchRuleGroupList
-    | undefined,
+  groups: cci.GoogleCloudContactcenterinsightsV1PhraseMatchRuleGroupList | undefined,
 ): PhraseMatchRuleGroup[] | undefined => {
   if (groups === undefined) return undefined;
   return groups.map((group) => ({
@@ -220,10 +210,7 @@ const groupsOf = (
   }));
 };
 
-const toAttrs = (
-  matcher: cci.GoogleCloudContactcenterinsightsV1PhraseMatcher,
-  project: string,
-) => {
+const toAttrs = (matcher: cci.GoogleCloudContactcenterinsightsV1PhraseMatcher, project: string) => {
   const name = matcher.name ?? "";
   const parsed = parseOwnership(matcher.displayName);
   return {
@@ -272,13 +259,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
 
 export const PhraseMatcherProvider = () =>
   Provider.succeed(PhraseMatcher, {
-    stables: [
-      "name",
-      "phraseMatcherId",
-      "location",
-      "project",
-      "revisionCreateTime",
-    ],
+    stables: ["name", "phraseMatcherId", "location", "project", "revisionCreateTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -303,13 +284,9 @@ export const PhraseMatcherProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const knownId = olds?.phraseMatcherId ?? output?.phraseMatcherId;
-      const name =
-        output?.name ??
-        (knownId ? resourceName(env.project, location, knownId) : "");
+      const name = output?.name ?? (knownId ? resourceName(env.project, location, knownId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined) {
         const ownership = yield* createInternalLabels(id);
@@ -320,30 +297,21 @@ export const PhraseMatcherProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
       const knownId = news.phraseMatcherId ?? output?.phraseMatcherId;
-      const name =
-        output?.name ??
-        (knownId ? resourceName(env.project, location, knownId) : "");
+      const name = output?.name ?? (knownId ? resourceName(env.project, location, knownId) : "");
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
       const type = news.type ?? DEFAULT_TYPE;
@@ -368,11 +336,7 @@ export const PhraseMatcherProvider = () =>
               phraseMatchRuleGroups,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(parent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(parent, displayName)));
         current = created ?? (yield* findByDisplayName(parent, displayName));
       }
 

@@ -22,13 +22,9 @@ const DEFAULT_EDITION = "ENTERPRISE";
 const DEFAULT_SLOT_CAPACITY = "0";
 const MAX_NAME_LENGTH = 64;
 
-export type ReservationEdition =
-  | bigqueryreservation.ReservationEditionEnum
-  | (string & {});
+export type ReservationEdition = bigqueryreservation.ReservationEditionEnum | (string & {});
 
-export type ReservationScalingMode =
-  | bigqueryreservation.ReservationScalingModeEnum
-  | (string & {});
+export type ReservationScalingMode = bigqueryreservation.ReservationScalingModeEnum | (string & {});
 
 export type ReservationAutoscale = {
   /**
@@ -225,9 +221,7 @@ export type Reservation = Resource<
  * @resource
  * @category BigQueryReservation
  */
-export const Reservation = Resource<Reservation>(
-  "GCP.BigQueryReservation.Reservation",
-);
+export const Reservation = Resource<Reservation>("GCP.BigQueryReservation.Reservation");
 
 export class ReservationNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.ReservationNotResolved",
@@ -259,14 +253,10 @@ const slotCapacityOf = (value: string | undefined) =>
 const ignoreIdleSlotsOf = (value: boolean | undefined, edition: string) =>
   value ?? edition === "STANDARD";
 
-const resourceName = (
-  project: string,
-  location: string,
-  reservationId: string,
-) => `projects/${project}/locations/${location}/reservations/${reservationId}`;
+const resourceName = (project: string, location: string, reservationId: string) =>
+  `projects/${project}/locations/${location}/reservations/${reservationId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -274,10 +264,8 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     reservationId:
       reservationsAt >= 0 && parts[reservationsAt + 1]
         ? parts[reservationsAt + 1]!
@@ -289,11 +277,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  reservationId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, reservationId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (reservationId !== undefined) return reservationId;
     if (existing !== undefined) return existing;
@@ -307,9 +291,7 @@ const toId = (
   });
 
 const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
@@ -355,9 +337,7 @@ const listOwnedAt = (project: string, location: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.reservations ?? [])),
       Stream.filter((item) =>
-        Object.keys(item.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(item.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((item) => toAttrs(item, project)),
       Stream.runCollect,
@@ -365,12 +345,8 @@ const listOwnedAt = (project: string, location: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
-const desiredAutoscale = (
-  news: ReservationProps,
-): bigqueryreservation.Autoscale | undefined =>
-  news.autoscale === undefined
-    ? undefined
-    : compact({ maxSlots: news.autoscale.maxSlots });
+const desiredAutoscale = (news: ReservationProps): bigqueryreservation.Autoscale | undefined =>
+  news.autoscale === undefined ? undefined : compact({ maxSlots: news.autoscale.maxSlots });
 
 const desiredSchedulingPolicy = (
   news: ReservationProps,
@@ -408,14 +384,7 @@ const toBody = (
 
 export const ReservationProvider = () =>
   Provider.succeed(Reservation, {
-    stables: [
-      "name",
-      "reservationId",
-      "project",
-      "location",
-      "edition",
-      "creationTime",
-    ],
+    stables: ["name", "reservationId", "project", "location", "edition", "creationTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -423,25 +392,15 @@ export const ReservationProvider = () =>
 
       const previousId = olds?.reservationId ?? output?.reservationId;
       const nextId = news.reservationId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const previousEdition = normalizeEdition(
-        olds?.edition ?? output?.edition,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const previousEdition = normalizeEdition(olds?.edition ?? output?.edition);
       const nextEdition = normalizeEdition(news.edition ?? previousEdition);
-      const previousAuxiliary =
-        olds?.multiRegionAuxiliary ?? output?.multiRegionAuxiliary;
-      const nextAuxiliary =
-        news.multiRegionAuxiliary ?? previousAuxiliary ?? false;
+      const previousAuxiliary = olds?.multiRegionAuxiliary ?? output?.multiRegionAuxiliary;
+      const nextAuxiliary = news.multiRegionAuxiliary ?? previousAuxiliary ?? false;
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousEdition !== nextEdition ||
         (previousAuxiliary === true) !== (nextAuxiliary === true);
@@ -450,30 +409,19 @@ export const ReservationProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const reservationId = yield* toId(
-        id,
-        olds?.reservationId,
-        output?.reservationId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, reservationId);
+      const reservationId = yield* toId(id, olds?.reservationId, output?.reservationId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, reservationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -493,14 +441,8 @@ export const ReservationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const reservationId = yield* toId(
-        id,
-        news.reservationId,
-        output?.reservationId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const reservationId = yield* toId(id, news.reservationId, output?.reservationId);
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, reservationId);
       const parent = parentOf(env.project, location);
       const desiredLabels = {
@@ -536,22 +478,17 @@ export const ReservationProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const slotCapacityChanged =
-        slotCapacityOf(current.slotCapacity) !== slotCapacity;
-      const ignoreIdleSlotsChanged =
-        (current.ignoreIdleSlots === true) !== ignoreIdleSlots;
+      const slotCapacityChanged = slotCapacityOf(current.slotCapacity) !== slotCapacity;
+      const ignoreIdleSlotsChanged = (current.ignoreIdleSlots === true) !== ignoreIdleSlots;
       const autoscaleChanged =
         news.autoscale !== undefined &&
         (current.autoscale?.maxSlots ?? "") !== (news.autoscale.maxSlots ?? "");
       const concurrencyChanged =
-        news.concurrency !== undefined &&
-        (current.concurrency ?? "") !== news.concurrency;
+        news.concurrency !== undefined && (current.concurrency ?? "") !== news.concurrency;
       const maxSlotsChanged =
-        news.maxSlots !== undefined &&
-        (current.maxSlots ?? "") !== news.maxSlots;
+        news.maxSlots !== undefined && (current.maxSlots ?? "") !== news.maxSlots;
       const scalingModeChanged =
-        news.scalingMode !== undefined &&
-        (current.scalingMode ?? "") !== news.scalingMode;
+        news.scalingMode !== undefined && (current.scalingMode ?? "") !== news.scalingMode;
       const reservationGroupChanged =
         news.reservationGroup !== undefined &&
         (current.reservationGroup ?? "") !== news.reservationGroup;
@@ -560,8 +497,7 @@ export const ReservationProvider = () =>
         (current.secondaryLocation ?? "") !== news.secondaryLocation;
       const schedulingPolicyChanged =
         news.schedulingPolicy !== undefined &&
-        jsonOf(current.schedulingPolicy) !==
-          jsonOf(desiredSchedulingPolicy(news));
+        jsonOf(current.schedulingPolicy) !== jsonOf(desiredSchedulingPolicy(news));
 
       const updateMask = [
         labelsChanged ? "labels" : undefined,
@@ -577,16 +513,14 @@ export const ReservationProvider = () =>
       ].filter((field): field is string => field !== undefined);
 
       if (updateMask.length > 0) {
-        current = yield* bigqueryreservation.patchProjectsLocationsReservations(
-          {
-            name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: toBody(news, desiredLabels, {
-              slotCapacity,
-              ignoreIdleSlots,
-            }),
-          },
-        );
+        current = yield* bigqueryreservation.patchProjectsLocationsReservations({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: toBody(news, desiredLabels, {
+            slotCapacity,
+            ignoreIdleSlots,
+          }),
+        });
       }
 
       return toAttrs(current, env.project);

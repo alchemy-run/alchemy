@@ -1,17 +1,12 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import {
-  currentProject,
-  TEST_ATTESTATION,
-  TEST_POD,
-  TEST_RESOURCE_URI,
-} from "./common.ts";
+import { currentProject, TEST_ATTESTATION, TEST_POD, TEST_RESOURCE_URI } from "./common.ts";
 import BinaryAuthorizationBindingsHost, {
   GkePolicy,
   Verifier,
@@ -20,10 +15,7 @@ import BinaryAuthorizationBindingsHost, {
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "BinaryAuthorizationBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "BinaryAuthorizationBindings");
 
 let baseUrl: string;
 let hostAccount: string;
@@ -40,9 +32,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -69,9 +59,7 @@ const attestorRolesOf = (attestor: string, account: string) =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${account}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
           .map((binding) => binding.role),
       ),
     );
@@ -79,12 +67,7 @@ const attestorRolesOf = (attestor: string, account: string) =>
 describe.skipIf(!dockerAvailable)(
   "BinaryAuthorization Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:binaryauthorization",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:binaryauthorization", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -132,9 +115,7 @@ describe.skipIf(!dockerAvailable)(
               userOwnedGrafeasNote?: { noteReference?: string };
             }>(baseUrl, "getAttestor");
             expect(live.name).toEqual(viewed.name);
-            expect(live.userOwnedGrafeasNote?.noteReference).toEqual(
-              viewed.noteReference,
-            );
+            expect(live.userOwnedGrafeasNote?.noteReference).toEqual(viewed.noteReference);
 
             expect(yield* attestorRolesOf(viewed.name, hostAccount)).toEqual([
               "roles/binaryauthorization.attestorsViewer",
@@ -153,23 +134,18 @@ describe.skipIf(!dockerAvailable)(
         "validates against the attestor as the host's service account, granted on the attestor only",
         (_stack) =>
           Effect.gen(function* () {
-            const result = yield* expectProbe<{ result?: string }>(
-              baseUrl,
-              "validateAttestation",
-            );
+            const result = yield* expectProbe<{ result?: string }>(baseUrl, "validateAttestation");
             // The attestor has no public keys, so nothing can verify.
             expect(result.result).toEqual("ATTESTATION_NOT_VERIFIABLE");
             const expected =
-              yield* binaryauthorization.validateAttestationOccurrenceProjectsAttestors(
-                {
-                  attestor: verifier.name,
-                  body: {
-                    occurrenceResourceUri: TEST_RESOURCE_URI,
-                    occurrenceNote: verifier.noteReference,
-                    attestation: TEST_ATTESTATION,
-                  },
+              yield* binaryauthorization.validateAttestationOccurrenceProjectsAttestors({
+                attestor: verifier.name,
+                body: {
+                  occurrenceResourceUri: TEST_RESOURCE_URI,
+                  occurrenceNote: verifier.noteReference,
+                  attestation: TEST_ATTESTATION,
                 },
-              );
+              });
             expect(result.result).toEqual(expected.result);
 
             expect(yield* attestorRolesOf(verifier.name, hostAccount)).toEqual([
@@ -193,10 +169,9 @@ describe.skipIf(!dockerAvailable)(
               baseUrl,
               "getPlatformsPolicy",
             );
-            const expected =
-              yield* binaryauthorization.getProjectsPlatformsPolicies({
-                name: policyName,
-              });
+            const expected = yield* binaryauthorization.getProjectsPlatformsPolicies({
+              name: policyName,
+            });
             expect(live.name).toEqual(policyName);
             expect(live.etag).toEqual(expected.etag);
             expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
@@ -213,15 +188,11 @@ describe.skipIf(!dockerAvailable)(
         "evaluates a pod against the platform policy as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<{ verdict?: string }>(
-              baseUrl,
-              "evaluateGkePolicy",
-            );
-            const expected =
-              yield* binaryauthorization.evaluateProjectsPlatformsGkePolicies({
-                name: policyName,
-                body: { resource: TEST_POD },
-              });
+            const live = yield* expectProbe<{ verdict?: string }>(baseUrl, "evaluateGkePolicy");
+            const expected = yield* binaryauthorization.evaluateProjectsPlatformsGkePolicies({
+              name: policyName,
+              body: { resource: TEST_POD },
+            });
             expect(live.verdict).toEqual(expected.verdict);
             expect(live.verdict).toEqual(expect.any(String));
             expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);

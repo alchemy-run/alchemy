@@ -32,6 +32,4 @@ export interface DeleteEndpoint extends Binding.Service<
   >
 > {}
 
-export const DeleteEndpoint = Binding.Service<DeleteEndpoint>(
-  "AWS.SNS.DeleteEndpoint",
-);
+export const DeleteEndpoint = Binding.Service<DeleteEndpoint>("AWS.SNS.DeleteEndpoint");

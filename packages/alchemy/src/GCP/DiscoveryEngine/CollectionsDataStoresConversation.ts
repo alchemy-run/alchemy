@@ -91,10 +91,9 @@ export type CollectionsDataStoresConversation = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const CollectionsDataStoresConversation =
-  Resource<CollectionsDataStoresConversation>(
-    "GCP.DiscoveryEngine.CollectionsDataStoresConversation",
-  );
+export const CollectionsDataStoresConversation = Resource<CollectionsDataStoresConversation>(
+  "GCP.DiscoveryEngine.CollectionsDataStoresConversation",
+);
 
 export class CollectionsDataStoresConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresConversationNotResolved",
@@ -138,14 +137,7 @@ const getByName = (name: string) =>
 
 export const CollectionsDataStoresConversationProvider = () =>
   Provider.succeed(CollectionsDataStoresConversation, {
-    stables: [
-      "name",
-      "conversationId",
-      "dataStore",
-      "project",
-      "location",
-      "startTime",
-    ],
+    stables: ["name", "conversationId", "dataStore", "project", "location", "startTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -194,30 +186,26 @@ export const CollectionsDataStoresConversationProvider = () =>
 
       const resource = current.name ?? "";
       const stateChanged = (current.state ?? "") !== state;
-      const userChanged =
-        userPseudoId !== undefined && current.userPseudoId !== userPseudoId;
+      const userChanged = userPseudoId !== undefined && current.userPseudoId !== userPseudoId;
       const messagesChanged = !sameJson(current.messages, news.messages);
 
       if (stateChanged || userChanged || messagesChanged) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresConversations(
-            {
-              name: resource,
-              updateMask: [
-                stateChanged ? "state" : undefined,
-                userChanged ? "user_pseudo_id" : undefined,
-                messagesChanged ? "messages" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name: resource,
-                state,
-                userPseudoId,
-                messages: news.messages,
-              },
-            },
-          );
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresConversations({
+          name: resource,
+          updateMask: [
+            stateChanged ? "state" : undefined,
+            userChanged ? "user_pseudo_id" : undefined,
+            messagesChanged ? "messages" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name: resource,
+            state,
+            userPseudoId,
+            messages: news.messages,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type LoggingConfig,
@@ -196,9 +191,7 @@ export type GoogleApiSource = Resource<
  * @resource
  * @category Eventarc
  */
-export const GoogleApiSource = Resource<GoogleApiSource>(
-  "GCP.Eventarc.GoogleApiSource",
-);
+export const GoogleApiSource = Resource<GoogleApiSource>("GCP.Eventarc.GoogleApiSource");
 
 const toProjectSubscriptions = (
   value: ProjectSubscriptions | eventarc.ProjectSubscriptions | undefined,
@@ -209,20 +202,13 @@ const toProjectSubscriptions = (
 };
 
 const toOrganizationSubscription = (
-  value:
-    | OrganizationSubscription
-    | eventarc.OrganizationSubscription
-    | undefined,
+  value: OrganizationSubscription | eventarc.OrganizationSubscription | undefined,
 ): OrganizationSubscription | undefined => {
   if (value === undefined || value.enabled === undefined) return undefined;
   return { enabled: value.enabled };
 };
 
-const toAttrs = (
-  source: eventarc.GoogleApiSource,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (source: eventarc.GoogleApiSource, project: string, region: string) => {
   const name = source.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   return {
@@ -234,9 +220,7 @@ const toAttrs = (
     displayName: source.displayName,
     cryptoKeyName: source.cryptoKeyName,
     loggingConfig: toLoggingConfig(source.loggingConfig),
-    organizationSubscription: toOrganizationSubscription(
-      source.organizationSubscription,
-    ),
+    organizationSubscription: toOrganizationSubscription(source.organizationSubscription),
     projectSubscriptions: toProjectSubscriptions(source.projectSubscriptions),
     labels: userLabels(source.labels),
     annotations: userAnnotations(source.annotations),
@@ -254,14 +238,7 @@ const getByName = (name: string) =>
 
 export const GoogleApiSourceProvider = () =>
   Provider.succeed(GoogleApiSource, {
-    stables: [
-      "name",
-      "googleApiSourceId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "googleApiSourceId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -270,18 +247,13 @@ export const GoogleApiSourceProvider = () =>
       const nextId = news.googleApiSourceId
         ? rfc1035(news.googleApiSourceId, "google-api-source")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -297,19 +269,13 @@ export const GoogleApiSourceProvider = () =>
         output?.googleApiSourceId,
         "google-api-source",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, googleApiSourceId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, googleApiSourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -335,37 +301,18 @@ export const GoogleApiSourceProvider = () =>
         output?.googleApiSourceId,
         "google-api-source",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        googleApiSourceId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, googleApiSourceId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const destination = expandResource(
-        news.destination,
-        env.project,
-        location,
-        "messageBuses",
-      );
+      const destination = expandResource(news.destination, env.project, location, "messageBuses");
       const desiredLogging = toLoggingConfig(news.loggingConfig);
       const desiredCrypto =
-        news.cryptoKeyName && news.cryptoKeyName.length > 0
-          ? news.cryptoKeyName
-          : undefined;
-      const desiredAnnotations = news.annotations
-        ? tagRecord(news.annotations)
-        : undefined;
-      const desiredOrg = toOrganizationSubscription(
-        news.organizationSubscription,
-      );
+        news.cryptoKeyName && news.cryptoKeyName.length > 0 ? news.cryptoKeyName : undefined;
+      const desiredAnnotations = news.annotations ? tagRecord(news.annotations) : undefined;
+      const desiredOrg = toOrganizationSubscription(news.organizationSubscription);
       const desiredProjects = toProjectSubscriptions(news.projectSubscriptions);
 
       let current = yield* getByName(name);
@@ -406,36 +353,18 @@ export const GoogleApiSourceProvider = () =>
       const updateMask = changedFields([
         ["labels", upsert.length > 0 || removed.length > 0],
         ["destination", textKey(current.destination) !== destination],
-        [
-          "displayName",
-          textKey(current.displayName) !== textKey(news.displayName),
-        ],
-        [
-          "cryptoKeyName",
-          cryptoKeyKey(current.cryptoKeyName) !== cryptoKeyKey(desiredCrypto),
-        ],
-        [
-          "loggingConfig",
-          loggingKey(current.loggingConfig) !== loggingKey(desiredLogging),
-        ],
+        ["displayName", textKey(current.displayName) !== textKey(news.displayName)],
+        ["cryptoKeyName", cryptoKeyKey(current.cryptoKeyName) !== cryptoKeyKey(desiredCrypto)],
+        ["loggingConfig", loggingKey(current.loggingConfig) !== loggingKey(desiredLogging)],
         [
           "organizationSubscription",
-          !sameJson(
-            toOrganizationSubscription(current.organizationSubscription),
-            desiredOrg,
-          ),
+          !sameJson(toOrganizationSubscription(current.organizationSubscription), desiredOrg),
         ],
         [
           "projectSubscriptions",
-          !sameJson(
-            toProjectSubscriptions(current.projectSubscriptions),
-            desiredProjects,
-          ),
+          !sameJson(toProjectSubscriptions(current.projectSubscriptions), desiredProjects),
         ],
-        [
-          "annotations",
-          !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {}),
-        ],
+        ["annotations", !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {})],
       ]);
 
       if (updateMask.length > 0) {
@@ -455,10 +384,7 @@ export const GoogleApiSourceProvider = () =>
           },
         });
         yield* waitForOperation(patched);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
@@ -482,9 +408,7 @@ export const GoogleApiSourceProvider = () =>
       ).pipe(
         Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
-            Effect.flatMap((current) =>
-              current === undefined ? Effect.void : Effect.fail(error),
-            ),
+            Effect.flatMap((current) => (current === undefined ? Effect.void : Effect.fail(error))),
           ),
         ),
       );

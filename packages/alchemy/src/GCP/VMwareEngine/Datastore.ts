@@ -173,8 +173,7 @@ const nfsOf = (
             netappVolume: value.googleFileService.netappVolume,
             filestoreInstance: value.googleFileService.filestoreInstance,
           },
-    googleVmwareFileService:
-      value.googleVmwareFileService === undefined ? undefined : {},
+    googleVmwareFileService: value.googleVmwareFileService === undefined ? undefined : {},
     thirdPartyFileService:
       value.thirdPartyFileService === undefined
         ? undefined
@@ -186,11 +185,7 @@ const nfsOf = (
   };
 };
 
-const toAttrs = (
-  item: vmwareengine.Datastore,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: vmwareengine.Datastore, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
@@ -217,14 +212,7 @@ const getByName = (name: string) =>
 
 export const DatastoreProvider = () =>
   Provider.succeed(Datastore, {
-    stables: [
-      "name",
-      "datastoreId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "datastoreId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -234,10 +222,7 @@ export const DatastoreProvider = () =>
         nextId: news.datastoreId
           ? rfc1035(news.datastoreId, "datastore")
           : (olds?.datastoreId ?? output?.datastoreId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -254,12 +239,8 @@ export const DatastoreProvider = () =>
         output?.datastoreId,
         "datastore",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, datastoreId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, datastoreId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -270,17 +251,14 @@ export const DatastoreProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsDatastores.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.datastores,
-            ),
+        const items = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsDatastores.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.datastores,
+          ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
@@ -295,10 +273,7 @@ export const DatastoreProvider = () =>
         output?.datastoreId,
         "datastore",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, datastoreId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
@@ -339,12 +314,8 @@ export const DatastoreProvider = () =>
         (item) => item.state,
       );
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const nfsChanged = !sameJson(
-        nfsOf(current.nfsDatastore),
-        nfsOf(news.nfsDatastore),
-      );
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const nfsChanged = !sameJson(nfsOf(current.nfsDatastore), nfsOf(news.nfsDatastore));
       const updateMask = changedFields([
         ["description", descriptionChanged],
         ["nfsDatastore", nfsChanged],

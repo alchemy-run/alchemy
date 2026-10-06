@@ -6,8 +6,7 @@ import type { Database } from "../Firestore/Database.ts";
 import type { DatastoreDatabaseRequest } from "./BindingHttp.ts";
 
 /** Request for {@link Lookup}; project and database come from the bound database. */
-export type LookupRequest =
-  DatastoreDatabaseRequest<datastore.LookupProjectsRequest>;
+export type LookupRequest = DatastoreDatabaseRequest<datastore.LookupProjectsRequest>;
 
 /**
  * Runtime binding for Datastore `projects.lookup`.
@@ -43,11 +42,7 @@ export interface Lookup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: LookupRequest,
-    ) => Effect.Effect<
-      datastore.LookupResponse,
-      datastore.LookupProjectsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<datastore.LookupResponse, datastore.LookupProjectsError, RuntimeContext>
   >
 > {}
 

@@ -252,14 +252,7 @@ const toAttrs = (row: datamanager.UserList, project: string) => {
 
 export const AccountTypesUserListProvider = () =>
   Provider.succeed(AccountTypesUserList, {
-    stables: [
-      "name",
-      "userListId",
-      "parent",
-      "accountType",
-      "account",
-      "project",
-    ],
+    stables: ["name", "userListId", "parent", "accountType", "account", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -287,19 +280,11 @@ export const AccountTypesUserListProvider = () =>
         accountType: olds?.accountType ?? output?.accountType,
         account: olds?.account ?? output?.account,
       });
-      const name = lookupName(
-        parent,
-        olds?.userListId ?? output?.userListId,
-        output?.name,
-      );
+      const name = lookupName(parent, olds?.userListId ?? output?.userListId, output?.name);
       const byName = yield* getUserList(name);
       if (byName !== undefined) return toAttrs(byName, env.project);
       if (parent.length === 0) return undefined;
-      const displayName = yield* toDisplayName(
-        id,
-        olds?.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, olds?.displayName, output?.displayName);
       const existing = yield* findUserListByDisplayName(displayName, parent);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -321,17 +306,9 @@ export const AccountTypesUserListProvider = () =>
             "AccountTypesUserList requires parent or account (accountTypes/{accountType}/accounts/{account})",
         });
       }
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const description = news.description;
-      const name = lookupName(
-        parent,
-        news.userListId ?? output?.userListId,
-        output?.name,
-      );
+      const name = lookupName(parent, news.userListId ?? output?.userListId, output?.name);
 
       let current = yield* getUserList(name);
       if (current === undefined) {
@@ -339,18 +316,13 @@ export const AccountTypesUserListProvider = () =>
       }
 
       const ingested = toIngestedBody(
-        news.ingestedUserListInfo ??
-          ingestedFromRow(current?.ingestedUserListInfo),
+        news.ingestedUserListInfo ?? ingestedFromRow(current?.ingestedUserListInfo),
       );
       const membershipStatus =
-        news.membershipStatus ??
-        current?.membershipStatus ??
-        DEFAULT_MEMBERSHIP_STATUS;
-      const membershipDuration =
-        news.membershipDuration ?? current?.membershipDuration;
+        news.membershipStatus ?? current?.membershipStatus ?? DEFAULT_MEMBERSHIP_STATUS;
+      const membershipDuration = news.membershipDuration ?? current?.membershipDuration;
       const integrationCode = news.integrationCode ?? current?.integrationCode;
-      const accountAccessStatus =
-        news.accountAccessStatus ?? current?.accountAccessStatus;
+      const accountAccessStatus = news.accountAccessStatus ?? current?.accountAccessStatus;
       const targetNetworkInfo =
         news.targetNetworkInfo ?? targetNetworkOf(current?.targetNetworkInfo);
 
@@ -395,22 +367,10 @@ export const AccountTypesUserListProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const membershipChanged = !sameText(
-        current.membershipStatus,
-        membershipStatus,
-      );
-      const durationChanged = !sameText(
-        current.membershipDuration,
-        membershipDuration,
-      );
-      const integrationChanged = !sameText(
-        current.integrationCode,
-        integrationCode,
-      );
-      const accessChanged = !sameText(
-        current.accountAccessStatus,
-        accountAccessStatus,
-      );
+      const membershipChanged = !sameText(current.membershipStatus, membershipStatus);
+      const durationChanged = !sameText(current.membershipDuration, membershipDuration);
+      const integrationChanged = !sameText(current.integrationCode, integrationCode);
+      const accessChanged = !sameText(current.accountAccessStatus, accountAccessStatus);
       const networkChanged =
         JSON.stringify(targetNetworkOf(current.targetNetworkInfo) ?? null) !==
         JSON.stringify(targetNetworkInfo ?? null);
@@ -445,8 +405,6 @@ export const AccountTypesUserListProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* ignoreMissing(
-        datamanager.deleteAccountTypesAccountsUserLists({ name: output.name }),
-      );
+      yield* ignoreMissing(datamanager.deleteAccountTypesAccountsUserLists({ name: output.name }));
     }),
   });

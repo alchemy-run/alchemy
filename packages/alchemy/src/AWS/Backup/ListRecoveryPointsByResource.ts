@@ -35,7 +35,6 @@ export interface ListRecoveryPointsByResource extends Binding.Service<
     >
   >
 > {}
-export const ListRecoveryPointsByResource =
-  Binding.Service<ListRecoveryPointsByResource>(
-    "AWS.Backup.ListRecoveryPointsByResource",
-  );
+export const ListRecoveryPointsByResource = Binding.Service<ListRecoveryPointsByResource>(
+  "AWS.Backup.ListRecoveryPointsByResource",
+);

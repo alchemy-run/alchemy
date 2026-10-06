@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -135,16 +130,10 @@ export type DataDomain = Resource<
  */
 export const DataDomain = Resource<DataDomain>("GCP.Dataplex.DataDomain");
 
-const resourceName = (
-  project: string,
-  location: string,
-  dataDomainId: string,
-) => `projects/${project}/locations/${location}/dataDomains/${dataDomainId}`;
+const resourceName = (project: string, location: string, dataDomainId: string) =>
+  `projects/${project}/locations/${location}/dataDomains/${dataDomainId}`;
 
-const toAttrs = (
-  domain: dataplex.GoogleCloudDataplexV1DataDomain,
-  project: string,
-) => {
+const toAttrs = (domain: dataplex.GoogleCloudDataplexV1DataDomain, project: string) => {
   const name = domain.name ?? "";
   const parsed = parseName(name, "dataDomains");
   return {
@@ -177,9 +166,7 @@ const listDomains = (project: string, region: string) => {
       }),
       (page) => page.dataDomains,
     ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
+      Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
   return listAtLocation(project, region, collect);
@@ -206,10 +193,7 @@ export const DataDomainProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.dataDomainId ?? output?.dataDomainId,
         nextId: news.dataDomainId ?? olds?.dataDomainId ?? output?.dataDomainId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -227,18 +211,12 @@ export const DataDomainProvider = () =>
         output?.dataDomainId,
         "datadomain",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dataDomainId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, dataDomainId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -256,10 +234,7 @@ export const DataDomainProvider = () =>
         output?.dataDomainId,
         "datadomain",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, dataDomainId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -295,19 +270,11 @@ export const DataDomainProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== news.displayName;
-      const contactsChanged =
-        fingerprint(current.contacts) !== fingerprint(news.contacts);
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== news.displayName;
+      const contactsChanged = fingerprint(current.contacts) !== fingerprint(news.contacts);
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        displayNameChanged ||
-        contactsChanged
-      ) {
+      if (labelsChanged || descriptionChanged || displayNameChanged || contactsChanged) {
         const operation = yield* dataplex.patchProjectsLocationsDataDomains({
           name: current.name ?? name,
           updateMask: [
@@ -327,10 +294,7 @@ export const DataDomainProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

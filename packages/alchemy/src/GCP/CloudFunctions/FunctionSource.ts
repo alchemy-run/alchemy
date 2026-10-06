@@ -96,9 +96,7 @@ export const makeFunctionSource = Effect.gen(function* () {
       ...output.files.map((file) => ({
         path: file.path,
         content:
-          typeof file.content === "string"
-            ? new TextEncoder().encode(file.content)
-            : file.content,
+          typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
       })),
       { path: "package.json", content: packageJson },
     ];
@@ -116,14 +114,13 @@ export const makeFunctionSource = Effect.gen(function* () {
     kmsKeyName?: string;
   }) {
     const archive = yield* zipFiles(options.files);
-    const target =
-      yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
-        parent: options.parent,
-        body: {
-          environment: "GEN_2",
-          ...(options.kmsKeyName ? { kmsKeyName: options.kmsKeyName } : {}),
-        },
-      });
+    const target = yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
+      parent: options.parent,
+      body: {
+        environment: "GEN_2",
+        ...(options.kmsKeyName ? { kmsKeyName: options.kmsKeyName } : {}),
+      },
+    });
     if (target.uploadUrl === undefined || target.storageSource === undefined) {
       return yield* new FunctionSourceUploadFailed({
         status: 0,
@@ -134,10 +131,7 @@ export const makeFunctionSource = Effect.gen(function* () {
     const response = yield* http
       .execute(
         HttpClientRequest.put(target.uploadUrl).pipe(
-          HttpClientRequest.bodyUint8Array(
-            new Uint8Array(archive),
-            "application/zip",
-          ),
+          HttpClientRequest.bodyUint8Array(new Uint8Array(archive), "application/zip"),
         ),
       )
       .pipe(

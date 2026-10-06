@@ -21,12 +21,7 @@ import type { Channel } from "./Channel.ts";
  * the runtime half injects the channel's ARN into every request as
  * `channelArn`.
  */
-export const makeIvsChannelHttpBinding = <
-  I extends { channelArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeIvsChannelHttpBinding = <I extends { channelArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.IVS.GetStream`. */
   tag: string;
   /** The distilled operation; `channelArn` is injected from the channel. */

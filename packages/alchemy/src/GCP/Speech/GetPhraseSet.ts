@@ -36,14 +36,8 @@ export interface GetPhraseSet extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetPhraseSetRequest,
-    ) => Effect.Effect<
-      speech.PhraseSet,
-      speech.GetProjectsLocationsPhraseSetsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<speech.PhraseSet, speech.GetProjectsLocationsPhraseSetsError, RuntimeContext>
   >
 > {}
 
-export const GetPhraseSet = Binding.Service<GetPhraseSet>(
-  "GCP.Speech.GetPhraseSet",
-);
+export const GetPhraseSet = Binding.Service<GetPhraseSet>("GCP.Speech.GetPhraseSet");

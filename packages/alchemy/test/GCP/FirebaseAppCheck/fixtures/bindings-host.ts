@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 import { lifecycleAppId } from "../common.ts";
 
@@ -17,9 +17,7 @@ export default class AppCheckBindingsHost extends GCP.Function<AppCheckBindingsH
   "AppCheckBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const exchange = yield* GCP.FirebaseAppCheck.ExchangeDebugToken(
-      yield* Local,
-    );
+    const exchange = yield* GCP.FirebaseAppCheck.ExchangeDebugToken(yield* Local);
 
     return {
       fetch: serveProbes({

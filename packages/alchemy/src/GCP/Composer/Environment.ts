@@ -10,7 +10,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -18,6 +17,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 // Composer rejects 64-character ids (even on GET) despite documenting
@@ -78,22 +78,16 @@ export type WorkloadsConfig = composer.WorkloadsConfig;
 export type PrivateEnvironmentConfig = composer.PrivateEnvironmentConfig;
 export type StorageConfig = composer.StorageConfig;
 export type MaintenanceWindow = composer.MaintenanceWindow;
-export type WebServerNetworkAccessControl =
-  composer.WebServerNetworkAccessControl;
-export type MasterAuthorizedNetworksConfig =
-  composer.MasterAuthorizedNetworksConfig;
+export type WebServerNetworkAccessControl = composer.WebServerNetworkAccessControl;
+export type MasterAuthorizedNetworksConfig = composer.MasterAuthorizedNetworksConfig;
 export type RecoveryConfig = composer.RecoveryConfig;
 export type DataRetentionConfig = composer.DataRetentionConfig;
 export type DatabaseConfig = composer.DatabaseConfig;
 export type WebServerConfig = composer.WebServerConfig;
 export type EncryptionConfig = composer.EncryptionConfig;
 
-export type EnvironmentSize =
-  | composer.EnvironmentConfigEnvironmentSizeEnum
-  | (string & {});
-export type ResilienceMode =
-  | composer.EnvironmentConfigResilienceModeEnum
-  | (string & {});
+export type EnvironmentSize = composer.EnvironmentConfigEnvironmentSizeEnum | (string & {});
+export type ResilienceMode = composer.EnvironmentConfigResilienceModeEnum | (string & {});
 export type EnvironmentState = composer.EnvironmentStateEnum | (string & {});
 
 export type EnvironmentProps = {
@@ -250,16 +244,12 @@ export class EnvironmentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class EnvironmentNotReady extends Data.TaggedError(
-  "GCP.Composer.EnvironmentNotReady",
-)<{
+export class EnvironmentNotReady extends Data.TaggedError("GCP.Composer.EnvironmentNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class EnvironmentFailed extends Data.TaggedError(
-  "GCP.Composer.EnvironmentFailed",
-)<{
+export class EnvironmentFailed extends Data.TaggedError("GCP.Composer.EnvironmentFailed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -276,10 +266,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -294,11 +282,8 @@ const rfc1035 = (name: string): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  environmentId: string,
-) => `projects/${project}/locations/${location}/environments/${environmentId}`;
+const resourceName = (project: string, location: string, environmentId: string) =>
+  `projects/${project}/locations/${location}/environments/${environmentId}`;
 
 const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -306,12 +291,9 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     environmentId:
       environmentsAt >= 0 && parts[environmentsAt + 1]
         ? parts[environmentsAt + 1]!
@@ -323,11 +305,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  environmentId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, environmentId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       environmentId ??
@@ -363,13 +341,10 @@ const mapOf = (
   map: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(map ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-const mapKey = (map: Record<string, string | undefined> | null | undefined) =>
-  jsonKey(mapOf(map));
+const mapKey = (map: Record<string, string | undefined> | null | undefined) => jsonKey(mapOf(map));
 
 const sizeOf = (size: string | undefined) => {
   const value = (size ?? "").toUpperCase();
@@ -386,10 +361,7 @@ const pluginsOf = (mode: string | undefined) => {
   return value === "WEB_SERVER_PLUGINS_MODE_UNSPECIFIED" ? "" : value;
 };
 
-const imageVersionMatches = (
-  desired: string | undefined,
-  observed: string | undefined,
-) => {
+const imageVersionMatches = (desired: string | undefined, observed: string | undefined) => {
   if (desired === undefined || desired.length === 0) return true;
   if (observed === undefined) return false;
   if (desired === observed) return true;
@@ -405,9 +377,7 @@ const fieldChanged = (next: unknown, prev: unknown) =>
   next !== undefined && prev !== undefined && jsonKey(next) !== jsonKey(prev);
 
 const networkChanged = (next: string | undefined, prev: string | undefined) =>
-  next !== undefined &&
-  prev !== undefined &&
-  networkId(next) !== networkId(prev);
+  next !== undefined && prev !== undefined && networkId(next) !== networkId(prev);
 
 const listChanged = (
   next: ReadonlyArray<string> | undefined,
@@ -443,22 +413,13 @@ const immutableChanged = (
         networkChanged(nextNode?.serviceAccount, prevNode?.serviceAccount) ||
         listChanged(nextNode?.oauthScopes, prevNode?.oauthScopes) ||
         listChanged(nextNode?.tags, prevNode?.tags) ||
-        fieldChanged(
-          nextNode?.ipAllocationPolicy,
-          prevNode?.ipAllocationPolicy,
-        ) ||
-        fieldChanged(
-          nextNode?.enableIpMasqAgent,
-          prevNode?.enableIpMasqAgent,
-        ) ||
+        fieldChanged(nextNode?.ipAllocationPolicy, prevNode?.ipAllocationPolicy) ||
+        fieldChanged(nextNode?.enableIpMasqAgent, prevNode?.enableIpMasqAgent) ||
         fieldChanged(
           nextNode?.composerInternalIpv4CidrBlock,
           prevNode?.composerInternalIpv4CidrBlock,
         ) ||
-        networkChanged(
-          nextNode?.composerNetworkAttachment,
-          prevNode?.composerNetworkAttachment,
-        ) ||
+        networkChanged(nextNode?.composerNetworkAttachment, prevNode?.composerNetworkAttachment) ||
         fieldChanged(
           nextConfig.encryptionConfig?.kmsKeyName,
           prevConfig.encryptionConfig?.kmsKeyName,
@@ -467,18 +428,12 @@ const immutableChanged = (
           nextConfig.softwareConfig?.pythonVersion,
           prevConfig.softwareConfig?.pythonVersion,
         ) ||
-        fieldChanged(
-          nextConfig.databaseConfig?.zone,
-          prevConfig.databaseConfig?.zone,
-        ) ||
+        fieldChanged(nextConfig.databaseConfig?.zone, prevConfig.databaseConfig?.zone) ||
         fieldChanged(
           nextPrivate?.enablePrivateEnvironment,
           prevPrivate?.enablePrivateEnvironment,
         ) ||
-        fieldChanged(
-          nextPrivate?.networkingType,
-          prevPrivate?.networkingType,
-        ) ||
+        fieldChanged(nextPrivate?.networkingType, prevPrivate?.networkingType) ||
         networkChanged(
           nextPrivate?.cloudComposerConnectionSubnetwork,
           prevPrivate?.cloudComposerConnectionSubnetwork,
@@ -487,26 +442,14 @@ const immutableChanged = (
           nextPrivate?.cloudComposerNetworkIpv4CidrBlock,
           prevPrivate?.cloudComposerNetworkIpv4CidrBlock,
         ) ||
-        fieldChanged(
-          nextPrivate?.cloudSqlIpv4CidrBlock,
-          prevPrivate?.cloudSqlIpv4CidrBlock,
-        ) ||
-        fieldChanged(
-          nextPrivate?.webServerIpv4CidrBlock,
-          prevPrivate?.webServerIpv4CidrBlock,
-        ) ||
+        fieldChanged(nextPrivate?.cloudSqlIpv4CidrBlock, prevPrivate?.cloudSqlIpv4CidrBlock) ||
+        fieldChanged(nextPrivate?.webServerIpv4CidrBlock, prevPrivate?.webServerIpv4CidrBlock) ||
         fieldChanged(
           nextPrivate?.enablePrivatelyUsedPublicIps,
           prevPrivate?.enablePrivatelyUsedPublicIps,
         ) ||
-        fieldChanged(
-          nextPrivate?.privateClusterConfig,
-          prevPrivate?.privateClusterConfig,
-        ) ||
-        fieldChanged(
-          nextPrivate?.networkingConfig,
-          prevPrivate?.networkingConfig,
-        ) ||
+        fieldChanged(nextPrivate?.privateClusterConfig, prevPrivate?.privateClusterConfig) ||
+        fieldChanged(nextPrivate?.networkingConfig, prevPrivate?.networkingConfig) ||
         fieldChanged(
           nextPrivate?.enablePrivateBuildsOnly,
           prevPrivate?.enablePrivateBuildsOnly,
@@ -517,11 +460,7 @@ const immutableChanged = (
   );
 };
 
-const toAttrs = (
-  environment: composer.Environment,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (environment: composer.Environment, project: string, region: string) => {
   const name = environment.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -555,17 +494,15 @@ const getByName = (name: string) =>
 
 // Environment creates run 20-30 minutes, deletes 10-20.
 const waitForOperation = (operation: composer.Operation) =>
-  waitForGcpOperation(
-    operation,
-    (name) => composer.getProjectsLocationsOperations({ name }),
-    { budget: "45 minutes", interval: "15 seconds" },
-  );
+  waitForGcpOperation(operation, (name) => composer.getProjectsLocationsOperations({ name }), {
+    budget: "45 minutes",
+    interval: "15 seconds",
+  });
 
 const waitUntilRunning = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (environment): environment is composer.Environment =>
-        environment !== undefined,
+      (environment): environment is composer.Environment => environment !== undefined,
       () => new EnvironmentNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -596,9 +533,7 @@ const waitUntilRunning = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((environment) =>
-      environment === undefined
-        ? Effect.void
-        : Effect.fail(new EnvironmentStillExists({ name })),
+      environment === undefined ? Effect.void : Effect.fail(new EnvironmentStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Composer.EnvironmentStillExists",
@@ -618,9 +553,7 @@ const listOwnedAt = (project: string, location: string) =>
       Stream.filter(
         (environment) =>
           !isPlaceholder(environment) &&
-          Object.keys(environment.labels ?? {}).some((key) =>
-            key.startsWith("alchemy-"),
-          ),
+          Object.keys(environment.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((environment) => toAttrs(environment, project, location)),
       Stream.runCollect,
@@ -675,8 +608,7 @@ const desiredPatches = (
   }
   if (
     nextSoftware?.airflowConfigOverrides !== undefined &&
-    mapKey(nextSoftware.airflowConfigOverrides) !==
-      mapKey(currentSoftware?.airflowConfigOverrides)
+    mapKey(nextSoftware.airflowConfigOverrides) !== mapKey(currentSoftware?.airflowConfigOverrides)
   ) {
     patches.push({
       mask: "config.softwareConfig.airflowConfigOverrides",
@@ -702,10 +634,7 @@ const desiredPatches = (
   }
   if (
     nextSoftware?.imageVersion !== undefined &&
-    !imageVersionMatches(
-      nextSoftware.imageVersion,
-      currentSoftware?.imageVersion,
-    )
+    !imageVersionMatches(nextSoftware.imageVersion, currentSoftware?.imageVersion)
   ) {
     patches.push({
       mask: "config.softwareConfig.imageVersion",
@@ -737,8 +666,7 @@ const desiredPatches = (
       body: {
         config: {
           softwareConfig: {
-            cloudDataLineageIntegration:
-              nextSoftware.cloudDataLineageIntegration,
+            cloudDataLineageIntegration: nextSoftware.cloudDataLineageIntegration,
           },
         },
       },
@@ -780,16 +708,14 @@ const desiredPatches = (
       mask: "config.webServerNetworkAccessControl",
       body: {
         config: {
-          webServerNetworkAccessControl:
-            nextConfig.webServerNetworkAccessControl,
+          webServerNetworkAccessControl: nextConfig.webServerNetworkAccessControl,
         },
       },
     });
   }
   if (
     nextConfig?.databaseConfig?.machineType !== undefined &&
-    (current.config?.databaseConfig?.machineType ?? "") !==
-      nextConfig.databaseConfig.machineType
+    (current.config?.databaseConfig?.machineType ?? "") !== nextConfig.databaseConfig.machineType
   ) {
     patches.push({
       mask: "config.databaseConfig.machineType",
@@ -804,8 +730,7 @@ const desiredPatches = (
   }
   if (
     nextConfig?.webServerConfig?.machineType !== undefined &&
-    (current.config?.webServerConfig?.machineType ?? "") !==
-      nextConfig.webServerConfig.machineType
+    (current.config?.webServerConfig?.machineType ?? "") !== nextConfig.webServerConfig.machineType
   ) {
     patches.push({
       mask: "config.webServerConfig.machineType",
@@ -820,8 +745,7 @@ const desiredPatches = (
   }
   if (
     nextConfig?.maintenanceWindow !== undefined &&
-    jsonKey(nextConfig.maintenanceWindow) !==
-      jsonKey(current.config?.maintenanceWindow)
+    jsonKey(nextConfig.maintenanceWindow) !== jsonKey(current.config?.maintenanceWindow)
   ) {
     patches.push({
       mask: "config.maintenanceWindow",
@@ -830,8 +754,7 @@ const desiredPatches = (
   }
   if (
     nextConfig?.workloadsConfig !== undefined &&
-    jsonKey(nextConfig.workloadsConfig) !==
-      jsonKey(current.config?.workloadsConfig)
+    jsonKey(nextConfig.workloadsConfig) !== jsonKey(current.config?.workloadsConfig)
   ) {
     patches.push({
       mask: "config.workloadsConfig",
@@ -840,8 +763,7 @@ const desiredPatches = (
   }
   if (
     nextConfig?.environmentSize !== undefined &&
-    sizeOf(nextConfig.environmentSize) !==
-      sizeOf(current.config?.environmentSize)
+    sizeOf(nextConfig.environmentSize) !== sizeOf(current.config?.environmentSize)
   ) {
     patches.push({
       mask: "config.environmentSize",
@@ -850,8 +772,7 @@ const desiredPatches = (
   }
   if (
     nextConfig?.resilienceMode !== undefined &&
-    resilienceOf(nextConfig.resilienceMode) !==
-      resilienceOf(current.config?.resilienceMode)
+    resilienceOf(nextConfig.resilienceMode) !== resilienceOf(current.config?.resilienceMode)
   ) {
     patches.push({
       mask: "config.resilienceMode",
@@ -867,16 +788,14 @@ const desiredPatches = (
       mask: "config.masterAuthorizedNetworksConfig",
       body: {
         config: {
-          masterAuthorizedNetworksConfig:
-            nextConfig.masterAuthorizedNetworksConfig,
+          masterAuthorizedNetworksConfig: nextConfig.masterAuthorizedNetworksConfig,
         },
       },
     });
   }
   if (
     nextConfig?.recoveryConfig !== undefined &&
-    jsonKey(nextConfig.recoveryConfig) !==
-      jsonKey(current.config?.recoveryConfig)
+    jsonKey(nextConfig.recoveryConfig) !== jsonKey(current.config?.recoveryConfig)
   ) {
     patches.push({
       mask: "config.recoveryConfig",
@@ -885,8 +804,7 @@ const desiredPatches = (
   }
   if (
     nextConfig?.dataRetentionConfig !== undefined &&
-    jsonKey(nextConfig.dataRetentionConfig) !==
-      jsonKey(current.config?.dataRetentionConfig)
+    jsonKey(nextConfig.dataRetentionConfig) !== jsonKey(current.config?.dataRetentionConfig)
   ) {
     patches.push({
       mask: "config.dataRetentionConfig",
@@ -901,14 +819,7 @@ const desiredPatches = (
 
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
-    stables: [
-      "name",
-      "environmentId",
-      "project",
-      "location",
-      "uuid",
-      "createTime",
-    ],
+    stables: ["name", "environmentId", "project", "location", "uuid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -916,18 +827,10 @@ export const EnvironmentProvider = () =>
 
       const previousId = olds?.environmentId ?? output?.environmentId;
       const nextId = news.environmentId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         immutableChanged(news, olds, output);
 
@@ -935,31 +838,19 @@ export const EnvironmentProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const environmentId = yield* toId(
-        id,
-        olds?.environmentId,
-        output?.environmentId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, environmentId);
+      const environmentId = yield* toId(id, olds?.environmentId, output?.environmentId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, environmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -975,15 +866,8 @@ export const EnvironmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const environmentId = yield* toId(
-        id,
-        news.environmentId,
-        output?.environmentId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const environmentId = yield* toId(id, news.environmentId, output?.environmentId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, environmentId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -1033,12 +917,7 @@ export const EnvironmentProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const patches = desiredPatches(
-        news,
-        current,
-        desiredLabels,
-        labelsChanged,
-      );
+      const patches = desiredPatches(news, current, desiredLabels, labelsChanged);
 
       for (const patch of patches) {
         const operation = yield* composer

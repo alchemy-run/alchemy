@@ -31,9 +31,7 @@ export type BackupScheduleEncryptionConfig = {
    * Encryption type (`USE_DATABASE_ENCRYPTION`,
    * `GOOGLE_DEFAULT_ENCRYPTION`, `CUSTOMER_MANAGED_ENCRYPTION`).
    */
-  encryptionType?:
-    | spanner.CreateBackupEncryptionConfigEncryptionTypeEnum
-    | (string & {});
+  encryptionType?: spanner.CreateBackupEncryptionConfigEncryptionTypeEnum | (string & {});
   /** Cloud KMS key. Prefer `kmsKeyNames` for new schedules. */
   kmsKeyName?: string;
   /** Cloud KMS keys covering every region of the instance config. */
@@ -163,10 +161,9 @@ export type InstancesDatabasesBackupSchedule = Resource<
  * @resource
  * @category Spanner
  */
-export const InstancesDatabasesBackupSchedule =
-  Resource<InstancesDatabasesBackupSchedule>(
-    "GCP.Spanner.InstancesDatabasesBackupSchedule",
-  );
+export const InstancesDatabasesBackupSchedule = Resource<InstancesDatabasesBackupSchedule>(
+  "GCP.Spanner.InstancesDatabasesBackupSchedule",
+);
 
 export class BackupScheduleNotResolved extends Data.TaggedError(
   "GCP.Spanner.BackupScheduleNotResolved",
@@ -174,11 +171,7 @@ export class BackupScheduleNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toId = (
-  id: string,
-  backupScheduleId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, backupScheduleId: string | undefined, existing?: string) =>
   toPhysicalId(id, backupScheduleId, existing, MAX_BACKUP_SCHEDULE_ID_LENGTH);
 
 const encryptionOf = (
@@ -233,9 +226,7 @@ const getByName = (name: string) =>
     .getProjectsInstancesDatabasesBackupSchedules({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toBody = (
-  news: InstancesDatabasesBackupScheduleProps,
-): spanner.BackupSchedule => {
+const toBody = (news: InstancesDatabasesBackupScheduleProps): spanner.BackupSchedule => {
   const incremental = news.incremental === true;
   const body: spanner.BackupSchedule = {
     spec: {
@@ -256,34 +247,22 @@ const toBody = (
 
 export const InstancesDatabasesBackupScheduleProvider = () =>
   Provider.succeed(InstancesDatabasesBackupSchedule, {
-    stables: [
-      "name",
-      "backupScheduleId",
-      "databaseId",
-      "instanceId",
-      "project",
-    ],
+    stables: ["name", "backupScheduleId", "databaseId", "instanceId", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
       const previousId = olds?.backupScheduleId ?? output?.backupScheduleId;
       const nextId = news.backupScheduleId ?? previousId;
-      const previousInstance = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const previousInstance = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       const nextInstance = instanceIdOf(news.instance);
-      const previousDatabase = databaseIdOf(
-        olds?.database ?? output?.databaseId ?? "",
-      );
+      const previousDatabase = databaseIdOf(olds?.database ?? output?.databaseId ?? "");
       const nextDatabase = databaseIdOf(news.database);
       const previousIncremental = olds?.incremental ?? output?.incremental;
       const nextIncremental = news.incremental ?? previousIncremental;
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance) ||
         (previousDatabase.length > 0 && previousDatabase !== nextDatabase) ||
         (previousIncremental !== undefined &&
@@ -296,26 +275,12 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const backupScheduleId = yield* toId(
-        id,
-        olds?.backupScheduleId,
-        output?.backupScheduleId,
-      );
-      const instanceId = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
-      const databaseId = databaseIdOf(
-        olds?.database ?? output?.databaseId ?? "",
-      );
+      const backupScheduleId = yield* toId(id, olds?.backupScheduleId, output?.backupScheduleId);
+      const instanceId = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
+      const databaseId = databaseIdOf(olds?.database ?? output?.databaseId ?? "");
       if (instanceId.length === 0 || databaseId.length === 0) return undefined;
       const name =
-        output?.name ??
-        backupScheduleName(
-          env.project,
-          instanceId,
-          databaseId,
-          backupScheduleId,
-        );
+        output?.name ?? backupScheduleName(env.project, instanceId, databaseId, backupScheduleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -333,9 +298,7 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
           (database) => {
             const parent = database.name;
             if (parent === undefined || parent.length === 0) {
-              return Effect.succeed(
-                [] as InstancesDatabasesBackupSchedule["Attributes"][],
-              );
+              return Effect.succeed([] as InstancesDatabasesBackupSchedule["Attributes"][]);
             }
             return spanner.listProjectsInstancesDatabasesBackupSchedules
               .pages({
@@ -343,16 +306,12 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
                 pageSize: 1000,
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.backupSchedules ?? []),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.backupSchedules ?? [])),
                 Stream.map((schedule) => toAttrs(schedule, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () =>
-                  Effect.succeed(
-                    [] as InstancesDatabasesBackupSchedule["Attributes"][],
-                  ),
+                  Effect.succeed([] as InstancesDatabasesBackupSchedule["Attributes"][]),
                 ),
               );
           },
@@ -365,18 +324,9 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
       const env = yield* GcpEnvironment.current;
       const instanceId = instanceIdOf(news.instance);
       const databaseId = databaseIdOf(news.database);
-      const backupScheduleId = yield* toId(
-        id,
-        news.backupScheduleId,
-        output?.backupScheduleId,
-      );
+      const backupScheduleId = yield* toId(id, news.backupScheduleId, output?.backupScheduleId);
       const parent = databaseName(env.project, instanceId, databaseId);
-      const name = backupScheduleName(
-        env.project,
-        instanceId,
-        databaseId,
-        backupScheduleId,
-      );
+      const name = backupScheduleName(env.project, instanceId, databaseId, backupScheduleId);
       const desiredCron = news.spec?.cron ?? DEFAULT_CRON;
       const desiredRetention = news.retentionDuration ?? DEFAULT_RETENTION;
 

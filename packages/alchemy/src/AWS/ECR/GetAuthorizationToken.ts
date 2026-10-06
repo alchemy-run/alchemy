@@ -39,10 +39,7 @@ export interface GetAuthorizationToken extends Binding.Service<
   GetAuthorizationToken,
   "AWS.ECR.GetAuthorizationToken",
   () => Effect.Effect<
-    () => Effect.Effect<
-      ecr.GetAuthorizationTokenResponse,
-      ecr.GetAuthorizationTokenError
-    >
+    () => Effect.Effect<ecr.GetAuthorizationTokenResponse, ecr.GetAuthorizationTokenError>
   >
 > {}
 

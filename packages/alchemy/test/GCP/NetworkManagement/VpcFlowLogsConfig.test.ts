@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -62,16 +59,13 @@ test.provider.skipIf(!runLifecycle)(
           const network = yield* GCP.Compute.Network("FlowVpc", {
             autoCreateSubnetworks: false,
           });
-          const logs = yield* GCP.NetworkManagement.VpcFlowLogsConfig(
-            "VpcLogs",
-            {
-              network: network.selfLink ?? network.networkName,
-              description: "flow logs a",
-              labels: { env: "test" },
-              aggregationInterval: "INTERVAL_5_SEC",
-              flowSampling: 1,
-            },
-          );
+          const logs = yield* GCP.NetworkManagement.VpcFlowLogsConfig("VpcLogs", {
+            network: network.selfLink ?? network.networkName,
+            description: "flow logs a",
+            labels: { env: "test" },
+            aggregationInterval: "INTERVAL_5_SEC",
+            flowSampling: 1,
+          });
           return { network, logs };
         }),
       );
@@ -85,18 +79,15 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.logs.state).toEqual("ENABLED");
       expect(created.logs.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networkmanagement.getProjectsLocationsVpcFlowLogsConfigs({
-          name: created.logs.name,
-        });
+      const fetched = yield* networkmanagement.getProjectsLocationsVpcFlowLogsConfigs({
+        name: created.logs.name,
+      });
       expect(fetched.name).toEqual(created.logs.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("flow logs a");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -104,17 +95,14 @@ test.provider.skipIf(!runLifecycle)(
             autoCreateSubnetworks: false,
             networkName: created.network.networkName,
           });
-          const logs = yield* GCP.NetworkManagement.VpcFlowLogsConfig(
-            "VpcLogs",
-            {
-              vpcFlowLogsConfigId: created.logs.vpcFlowLogsConfigId,
-              network: network.selfLink ?? network.networkName,
-              description: "flow logs b",
-              labels: { env: "prod", role: "logs" },
-              aggregationInterval: "INTERVAL_1_MIN",
-              flowSampling: 0.5,
-            },
-          );
+          const logs = yield* GCP.NetworkManagement.VpcFlowLogsConfig("VpcLogs", {
+            vpcFlowLogsConfigId: created.logs.vpcFlowLogsConfigId,
+            network: network.selfLink ?? network.networkName,
+            description: "flow logs b",
+            labels: { env: "prod", role: "logs" },
+            aggregationInterval: "INTERVAL_1_MIN",
+            flowSampling: 0.5,
+          });
           return { network, logs };
         }),
       );
@@ -125,10 +113,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.logs.aggregationInterval).toEqual("INTERVAL_1_MIN");
       expect(updated.logs.flowSampling).toEqual(0.5);
 
-      const refetched =
-        yield* networkmanagement.getProjectsLocationsVpcFlowLogsConfigs({
-          name: created.logs.name,
-        });
+      const refetched = yield* networkmanagement.getProjectsLocationsVpcFlowLogsConfigs({
+        name: created.logs.name,
+      });
       expect(refetched.description).toEqual("flow logs b");
       expect(refetched.aggregationInterval).toEqual("INTERVAL_1_MIN");
       expect(refetched.labels?.env).toEqual("prod");

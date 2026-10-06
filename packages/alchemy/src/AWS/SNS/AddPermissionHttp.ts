@@ -1,7 +1,7 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Layer from "effect/Layer";
-import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import { AddPermission } from "./AddPermission.ts";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 
 export const AddPermissionHttp = Layer.effect(
   AddPermission,

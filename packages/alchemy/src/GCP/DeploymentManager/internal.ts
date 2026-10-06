@@ -1,6 +1,6 @@
 import * as deploymentmanager from "@distilled.cloud/gcp/deploymentmanager_v2";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -70,9 +70,7 @@ export const labelsToRecord = (
     (labels ?? [])
       .filter(
         (entry): entry is { key: string; value: string } =>
-          typeof entry.key === "string" &&
-          entry.key.length > 0 &&
-          typeof entry.value === "string",
+          typeof entry.key === "string" && entry.key.length > 0 && typeof entry.value === "string",
       )
       .map((entry) => [entry.key, entry.value]),
   );
@@ -107,8 +105,7 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 /**
  * Wait on a Deployment Manager operation (Compute-style `status: "DONE"`).
@@ -126,15 +123,13 @@ export const waitForOperation = (
     return waitForLongRunningOperation(
       operation,
       (name) => {
-        const get = deploymentmanager
-          .getOperations({ project, operation: lastSegment(name) })
-          .pipe(
-            Effect.tap((current) =>
-              Effect.sync(() => {
-                latest = current;
-              }),
-            ),
-          );
+        const get = deploymentmanager.getOperations({ project, operation: lastSegment(name) }).pipe(
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              latest = current;
+            }),
+          ),
+        );
         const observe: Effect.Effect<
           deploymentmanager.Operation,
           deploymentmanager.GetOperationsError,
@@ -183,8 +178,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DeploymentManager.ResourceNotResolved",
+      while: (error) => error._tag === "GCP.DeploymentManager.ResourceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -200,8 +194,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DeploymentManager.ResourceStillExists",
+      while: (error) => error._tag === "GCP.DeploymentManager.ResourceStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -233,21 +226,13 @@ export const listOwnedDeployments = (project: string) =>
   ).pipe(
     Effect.map((items) =>
       items.filter((item) =>
-        Object.keys(labelsToRecord(item.labels)).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(labelsToRecord(item.labels)).some((key) => key.startsWith("alchemy-")),
       ),
     ),
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as deploymentmanager.Deployment[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as deploymentmanager.Deployment[])),
   );
 
-export const getManifest = (
-  project: string,
-  deployment: string,
-  manifest: string | undefined,
-) => {
+export const getManifest = (project: string, deployment: string, manifest: string | undefined) => {
   if (manifest === undefined || manifest.length === 0) {
     return Effect.succeed(undefined);
   }
@@ -260,10 +245,7 @@ export const getManifest = (
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 };
 
-export const settleDeployment = (
-  project: string,
-  item: deploymentmanager.Deployment,
-) =>
+export const settleDeployment = (project: string, item: deploymentmanager.Deployment) =>
   Effect.gen(function* () {
     const operation = item.operation;
     if (operation !== undefined && operation.status !== "DONE") {

@@ -6,10 +6,7 @@ import type { QApp } from "./QApp.ts";
 /**
  * Request for {@link ListQApps} — `instanceId` is injected from the bound Q App.
  */
-export interface ListQAppsRequest extends Omit<
-  qapps.ListQAppsInput,
-  "instanceId"
-> {}
+export interface ListQAppsRequest extends Omit<qapps.ListQAppsInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:ListQApps`.
@@ -35,9 +32,7 @@ export interface ListQApps extends Binding.Service<
   (
     app: QApp,
   ) => Effect.Effect<
-    (
-      request?: ListQAppsRequest,
-    ) => Effect.Effect<qapps.ListQAppsOutput, qapps.ListQAppsError>
+    (request?: ListQAppsRequest) => Effect.Effect<qapps.ListQAppsOutput, qapps.ListQAppsError>
   >
 > {}
 

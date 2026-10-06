@@ -179,16 +179,12 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string) =>
-  scc.listFoldersSecurityHealthAnalyticsSettingsCustomModules
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.securityHealthAnalyticsCustomModules ?? []),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  scc.listFoldersSecurityHealthAnalyticsSettingsCustomModules.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.securityHealthAnalyticsCustomModules ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (parent: string, id: string) =>
   Effect.gen(function* () {
@@ -215,10 +211,7 @@ export const FolderSecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const folder = yield* resolveFolder(
-        olds?.folder ?? output?.folder,
-        output?.folder,
-      );
+      const folder = yield* resolveFolder(olds?.folder ?? output?.folder, output?.folder);
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) {
         existing = yield* findOwned(shaSettingsParent(folder), id);
@@ -237,9 +230,7 @@ export const FolderSecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
         if (folder === undefined) return [];
         const modules = yield* listAt(shaSettingsParent(folder));
         return modules
-          .filter((module) =>
-            hasOwnershipMarker(module.customConfig?.description),
-          )
+          .filter((module) => hasOwnershipMarker(module.customConfig?.description))
           .map((module) => toAttrs(module, folder, env.project));
       }),
 
@@ -248,11 +239,7 @@ export const FolderSecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
       const folder = yield* resolveFolder(news.folder, output?.folder);
       const parent = shaSettingsParent(folder);
       const ownership = yield* createInternalLabels(id);
-      const displayName = yield* toShaDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toShaDisplayName(id, news.displayName, output?.displayName);
       const customConfig = desiredCustomConfig(ownership, news.customConfig);
       const enablementState = news.enablementState ?? DEFAULT_ENABLEMENT;
       const cloudProvider = news.cloudProvider ?? DEFAULT_CLOUD_PROVIDER;
@@ -289,18 +276,15 @@ export const FolderSecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
         fingerprint(current.customConfig) !== fingerprint(customConfig)
           ? "customConfig"
           : undefined,
-        !sameText(current.enablementState, enablementState)
-          ? "enablementState"
-          : undefined,
+        !sameText(current.enablementState, enablementState) ? "enablementState" : undefined,
       );
 
       if (updateMask.length > 0) {
-        current =
-          yield* scc.patchFoldersSecurityHealthAnalyticsSettingsCustomModules({
-            name: currentName,
-            updateMask,
-            body: { displayName, customConfig, enablementState },
-          });
+        current = yield* scc.patchFoldersSecurityHealthAnalyticsSettingsCustomModules({
+          name: currentName,
+          updateMask,
+          body: { displayName, customConfig, enablementState },
+        });
       }
 
       return toAttrs(current, folder, env.project);

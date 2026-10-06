@@ -162,33 +162,24 @@ export type GatewaySecurityPoliciesRule = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const GatewaySecurityPoliciesRule =
-  Resource<GatewaySecurityPoliciesRule>(
-    "GCP.NetworkSecurity.GatewaySecurityPoliciesRule",
-  );
+export const GatewaySecurityPoliciesRule = Resource<GatewaySecurityPoliciesRule>(
+  "GCP.NetworkSecurity.GatewaySecurityPoliciesRule",
+);
 
-const parentPolicyName = (
-  project: string,
-  location: string,
-  gatewaySecurityPolicy: string,
-) => {
+const parentPolicyName = (project: string, location: string, gatewaySecurityPolicy: string) => {
   const canonical = canonicalizeLink(gatewaySecurityPolicy);
   if (canonical.includes("/gatewaySecurityPolicies/")) return canonical;
   return `projects/${project}/locations/${location}/gatewaySecurityPolicies/${canonical}`;
 };
 
-const resourceNameOf = (parent: string, ruleId: string) =>
-  `${parent}/rules/${ruleId}`;
+const resourceNameOf = (parent: string, ruleId: string) => `${parent}/rules/${ruleId}`;
 
 const parentFromRuleName = (name: string) => {
   const index = name.lastIndexOf("/rules/");
   return index >= 0 ? name.slice(0, index) : name;
 };
 
-const locationFromParent = (
-  gatewaySecurityPolicy: string,
-  fallback: string,
-) => {
+const locationFromParent = (gatewaySecurityPolicy: string, fallback: string) => {
   const canonical = canonicalizeLink(gatewaySecurityPolicy);
   if (!canonical.includes("/locations/")) return fallback;
   return parseName(canonical, "gatewaySecurityPolicies", fallback).location;
@@ -240,29 +231,19 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.gatewaySecurityPolicyRuleId ??
-        output?.gatewaySecurityPolicyRuleId;
+      const previousId = olds?.gatewaySecurityPolicyRuleId ?? output?.gatewaySecurityPolicyRuleId;
       const nextId = news.gatewaySecurityPolicyRuleId
         ? rfc1035(news.gatewaySecurityPolicyRuleId, "rule")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
-        news.location ??
-          locationFromParent(news.gatewaySecurityPolicy, previousLocation),
+        news.location ?? locationFromParent(news.gatewaySecurityPolicy, previousLocation),
         env.region,
       );
-      const previousParent = linkKey(
-        olds?.gatewaySecurityPolicy ?? output?.gatewaySecurityPolicy,
-      );
+      const previousParent = linkKey(olds?.gatewaySecurityPolicy ?? output?.gatewaySecurityPolicy);
       const nextParent = linkKey(news.gatewaySecurityPolicy);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousParent.length > 0 && previousParent !== nextParent)
       ) {
@@ -314,12 +295,10 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
           policies.filter((policy) => (policy.name ?? "").length > 0),
           (policy) =>
             collectPages(
-              networksecurity.listProjectsLocationsGatewaySecurityPoliciesRules.pages(
-                {
-                  parent: policy.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              networksecurity.listProjectsLocationsGatewaySecurityPoliciesRules.pages({
+                parent: policy.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.gatewaySecurityPolicyRules,
             ),
           { concurrency: 4 },
@@ -338,11 +317,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
           locationFromParent(news.gatewaySecurityPolicy, env.region),
         env.region,
       );
-      const parent = parentPolicyName(
-        env.project,
-        location,
-        news.gatewaySecurityPolicy,
-      );
+      const parent = parentPolicyName(env.project, location, news.gatewaySecurityPolicy);
       const ruleId = yield* toPhysicalId(
         id,
         news.gatewaySecurityPolicyRuleId,
@@ -390,17 +365,14 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
         return yield* new NetworksecurityNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const profileChanged = (current.basicProfile ?? "") !== news.basicProfile;
       const priorityChanged = (current.priority ?? 0) !== news.priority;
       const enabledChanged = (current.enabled !== false) !== enabled;
-      const sessionChanged =
-        (current.sessionMatcher ?? "") !== news.sessionMatcher;
+      const sessionChanged = (current.sessionMatcher ?? "") !== news.sessionMatcher;
       const applicationChanged =
         (current.applicationMatcher ?? "") !== (news.applicationMatcher ?? "");
-      const tlsChanged =
-        (current.tlsInspectionEnabled === true) !== tlsInspectionEnabled;
+      const tlsChanged = (current.tlsInspectionEnabled === true) !== tlsInspectionEnabled;
       const updateMask = changedFields([
         ["description", descriptionChanged],
         ["basicProfile", profileChanged],
@@ -412,28 +384,24 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networksecurity.patchProjectsLocationsGatewaySecurityPoliciesRules(
-            {
+        const operation = yield* networksecurity.patchProjectsLocationsGatewaySecurityPoliciesRules(
+          {
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                description: desiredDescription,
-                basicProfile: news.basicProfile,
-                priority: news.priority,
-                enabled,
-                sessionMatcher: news.sessionMatcher,
-                applicationMatcher: news.applicationMatcher,
-                tlsInspectionEnabled,
-              },
+              description: desiredDescription,
+              basicProfile: news.basicProfile,
+              priority: news.priority,
+              enabled,
+              sessionMatcher: news.sessionMatcher,
+              applicationMatcher: news.applicationMatcher,
+              tlsInspectionEnabled,
             },
-          );
-        yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
+          },
         );
+        yield* waitForOperation(operation);
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

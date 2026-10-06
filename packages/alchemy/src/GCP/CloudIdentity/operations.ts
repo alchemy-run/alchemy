@@ -16,11 +16,9 @@ export class CloudidentityOperationPending extends Data.TaggedError(
   operation: string;
 }> {}
 
-const alreadyExists = (error: cloudidentity.Status | undefined) =>
-  error?.code === 6;
+const alreadyExists = (error: cloudidentity.Status | undefined) => error?.code === 6;
 
-const isNotFoundStatus = (error: cloudidentity.Status | undefined) =>
-  error?.code === 5;
+const isNotFoundStatus = (error: cloudidentity.Status | undefined) => error?.code === 5;
 
 export const resourceNameFromOperation = (
   operation: cloudidentity.Operation,

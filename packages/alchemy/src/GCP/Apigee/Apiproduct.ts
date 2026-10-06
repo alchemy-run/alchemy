@@ -9,12 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  fromAttributes,
-  toAttributes,
-  userAttributeList,
-  type Attribute,
-} from "./ownership.ts";
-import {
   lastSegment,
   orgParent,
   resolveOrgId,
@@ -22,6 +16,7 @@ import {
   sortedStrings,
   toPhysicalId,
 } from "./operations.ts";
+import { fromAttributes, toAttributes, userAttributeList, type Attribute } from "./ownership.ts";
 
 const MAX_NAME_LENGTH = 255;
 
@@ -168,9 +163,7 @@ export type Apiproduct = Resource<
  */
 export const Apiproduct = Resource<Apiproduct>("GCP.Apigee.Apiproduct");
 
-export class ApiproductNotResolved extends Data.TaggedError(
-  "GCP.Apigee.ApiproductNotResolved",
-)<{
+export class ApiproductNotResolved extends Data.TaggedError("GCP.Apigee.ApiproductNotResolved")<{
   name: string;
 }> {}
 
@@ -209,11 +202,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApiproducts({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const toBody = (
   apiproductId: string,
@@ -260,9 +249,7 @@ export const ApiproductProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        olds?.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const apiproductId = yield* toPhysicalId(
         id,
         olds?.apiproductId,
@@ -294,9 +281,7 @@ export const ApiproductProvider = () =>
           );
         return (page.apiProduct ?? [])
           .filter(
-            (product) =>
-              fromAttributes(product.attributes).labels["alchemy-id"] !==
-              undefined,
+            (product) => fromAttributes(product.attributes).labels["alchemy-id"] !== undefined,
           )
           .map((product) => toAttrs(product, env.project, organizationId));
       }),
@@ -304,9 +289,7 @@ export const ApiproductProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        news.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        news.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const apiproductId = yield* toPhysicalId(
         id,
         news.apiproductId,
@@ -317,12 +300,7 @@ export const ApiproductProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = news.description;
       const desiredAttributes = toAttributes(ownership, news.attributes);
-      const body = toBody(
-        apiproductId,
-        news,
-        desiredDescription,
-        desiredAttributes,
-      );
+      const body = toBody(apiproductId, news, desiredDescription, desiredAttributes);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -348,18 +326,9 @@ export const ApiproductProvider = () =>
         (current.quotaInterval ?? "") !== (news.quotaInterval ?? "") ||
         (current.quotaTimeUnit ?? "") !== (news.quotaTimeUnit ?? "") ||
         (current.space ?? "") !== (news.space ?? "") ||
-        !sameJson(
-          sortedStrings(current.environments),
-          sortedStrings(news.environments),
-        ) ||
-        !sameJson(
-          sortedStrings(current.proxies),
-          sortedStrings(news.proxies),
-        ) ||
-        !sameJson(
-          sortedStrings(current.apiResources),
-          sortedStrings(news.apiResources),
-        ) ||
+        !sameJson(sortedStrings(current.environments), sortedStrings(news.environments)) ||
+        !sameJson(sortedStrings(current.proxies), sortedStrings(news.proxies)) ||
+        !sameJson(sortedStrings(current.apiResources), sortedStrings(news.apiResources)) ||
         !sameJson(sortedStrings(current.scopes), sortedStrings(news.scopes)) ||
         !sameJson(current.attributes ?? [], desiredAttributes);
 
@@ -376,11 +345,6 @@ export const ApiproductProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApiproducts({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

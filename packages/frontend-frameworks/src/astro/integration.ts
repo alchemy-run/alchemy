@@ -1,3 +1,8 @@
+import { appendFile, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { KvNamespace } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
+import cloudflareVitePlugin from "@alchemy.run/cloudflare-runtime/vite";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -27,27 +32,9 @@
  *   IMAGES binding is remote-only in our runtime).
  */
 import { removeTrailingForwardSlash } from "@astrojs/internal-helpers/path";
-import {
-  createRedirectsFromAstroRoutes,
-  printAsRedirects,
-} from "@astrojs/underscore-redirects";
-import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import cloudflareVitePlugin from "@alchemy.run/cloudflare-runtime/vite";
-import { KvNamespace } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import type {
-  AstroConfig,
-  AstroIntegration,
-  IntegrationResolvedRoute,
-} from "astro";
+import { createRedirectsFromAstroRoutes, printAsRedirects } from "@astrojs/underscore-redirects";
+import type { AstroConfig, AstroIntegration, IntegrationResolvedRoute } from "astro";
 import { passthroughImageService, sessionDrivers } from "astro/config";
-import {
-  appendFile,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import type * as vite from "vite";
 import { createConfigPlugin } from "./config-plugin.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
@@ -56,13 +43,11 @@ import { createWorkerdPrerenderEnvironmentPlugin } from "./prerender-environment
 import { createNodePrerenderPlugin } from "./prerender-middleware.ts";
 
 /** The Worker entry module (the vendored `@astrojs/cloudflare` server entrypoint). */
-export const SERVER_ENTRYPOINT =
-  "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
+export const SERVER_ENTRYPOINT = "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
 
 /** The production endpoint of the passthrough image service. */
 export const IMAGE_PASSTHROUGH_ENDPOINT = fileURLToPath(
-  import.meta
-    .resolve("@alchemy.run/frontend-frameworks/astro/image-passthrough-endpoint"),
+  import.meta.resolve("@alchemy.run/frontend-frameworks/astro/image-passthrough-endpoint"),
 );
 
 export interface DistilledCloudflareOptions {
@@ -133,9 +118,7 @@ export interface DistilledCloudflareOptions {
    * is assets-only (no worker).
    * @internal
    */
-  readonly onBuildOutput?:
-    | ((buildOutput: "static" | "server") => void)
-    | undefined;
+  readonly onBuildOutput?: ((buildOutput: "static" | "server") => void) | undefined;
 }
 
 /**
@@ -150,15 +133,12 @@ const UNSUPPORTED_UPSTREAM_OPTIONS: Record<string, string> = {
     "the Cloudflare Images binding image service is not supported (the IMAGES binding is remote-only in our runtime)",
   platformProxy:
     "there is no wrangler platform proxy; dev bindings are passed via `vite.worker.bindings`",
-  configPath:
-    "there is no wrangler config file; pass worker options via `vite`",
+  configPath: "there is no wrangler config file; pass worker options via `vite`",
   persistState: "workerd state is in-memory in this fork's dev runtime",
   auxiliaryWorkers:
     "auxiliary workers are not supported; compose bindings via `vite.worker.bindings`",
-  inspectorPort:
-    "the workerd inspector is not exposed by this fork's dev runtime",
-  viteEnvironment:
-    "the worker environment is pinned to Astro's `ssr` environment",
+  inspectorPort: "the workerd inspector is not exposed by this fork's dev runtime",
+  viteEnvironment: "the worker environment is pinned to Astro's `ssr` environment",
   cloudflareModules:
     "`.wasm`/`.bin`/`.txt` worker modules are handled by `@alchemy.run/cloudflare-runtime/vite`",
   experimental: "upstream experimental options are not supported by this fork",
@@ -166,15 +146,11 @@ const UNSUPPORTED_UPSTREAM_OPTIONS: Record<string, string> = {
 
 /** Reject upstream adapter options we would otherwise silently ignore. */
 const assertSupportedOptions = (options: DistilledCloudflareOptions): void => {
-  const offending = Object.keys(options).filter(
-    (key) => key in UNSUPPORTED_UPSTREAM_OPTIONS,
-  );
+  const offending = Object.keys(options).filter((key) => key in UNSUPPORTED_UPSTREAM_OPTIONS);
   if (offending.length > 0) {
     throw new Error(
       "@alchemy.run/frontend-frameworks/astro: unsupported @astrojs/cloudflare option(s):\n" +
-        offending
-          .map((key) => `  - \`${key}\`: ${UNSUPPORTED_UPSTREAM_OPTIONS[key]}`)
-          .join("\n") +
+        offending.map((key) => `  - \`${key}\`: ${UNSUPPORTED_UPSTREAM_OPTIONS[key]}`).join("\n") +
         "\nSupported options: `vite`, `prerenderEnvironment`, `sessionKVBindingName`, `sessions`, `sessionDevKV`.",
     );
   }
@@ -185,36 +161,26 @@ const assertSupportedOptions = (options: DistilledCloudflareOptions): void => {
  * `cloudflareKVBinding` driver — vendored from upstream
  * (`usesCloudflareKVSessionDriver`).
  */
-const CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT =
-  sessionDrivers.cloudflareKVBinding().entrypoint;
+const CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT = sessionDrivers.cloudflareKVBinding().entrypoint;
 
 type SessionConfigLike =
   | {
-      driver?:
-        | string
-        | { entrypoint: string | { toString(): string } }
-        | undefined;
+      driver?: string | { entrypoint: string | { toString(): string } } | undefined;
       cookie?: unknown;
       ttl?: unknown;
     }
   | undefined;
 
-export const usesCloudflareKVSessionDriver = (
-  session: SessionConfigLike,
-): boolean => {
+export const usesCloudflareKVSessionDriver = (session: SessionConfigLike): boolean => {
   const driver = session?.driver;
   if (!driver) {
     return false;
   }
   if (typeof driver === "string") {
-    return (
-      driver === "cloudflareKVBinding" || driver === "cloudflare-kv-binding"
-    );
+    return driver === "cloudflareKVBinding" || driver === "cloudflare-kv-binding";
   }
   const entrypoint =
-    typeof driver.entrypoint === "string"
-      ? driver.entrypoint
-      : driver.entrypoint.toString();
+    typeof driver.entrypoint === "string" ? driver.entrypoint : driver.entrypoint.toString();
   return (
     entrypoint === CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT ||
     entrypoint.endsWith("cloudflare-kv-binding")
@@ -237,10 +203,7 @@ export const withDevSessionKv = (
   // when none is configured.
   worker: {
     ...viteOptions?.worker,
-    bindings: [
-      ...(viteOptions?.worker?.bindings ?? []),
-      KvNamespace.local({ binding }),
-    ],
+    bindings: [...(viteOptions?.worker?.bindings ?? []), KvNamespace.local({ binding })],
   } as CloudflareVitePluginOptions["worker"],
 });
 
@@ -292,8 +255,7 @@ export const makeIntegrationPluginOptions = (
     command?: "dev" | "build" | "preview" | "sync";
   } = {},
 ): CloudflareVitePluginOptions => {
-  const workerdPrerender =
-    prerenderEnvironment === "workerd" && command === "build";
+  const workerdPrerender = prerenderEnvironment === "workerd" && command === "build";
   return {
     ...viteOptions,
     main: SERVER_ENTRYPOINT,
@@ -310,9 +272,7 @@ export const makeIntegrationPluginOptions = (
   };
 };
 
-export function distilledCloudflare(
-  options: DistilledCloudflareOptions = {},
-): AstroIntegration {
+export function distilledCloudflare(options: DistilledCloudflareOptions = {}): AstroIntegration {
   assertSupportedOptions(options);
   const prerenderEnvironment = options.prerenderEnvironment ?? "workerd";
   const sessionKVBindingName = options.sessionKVBindingName ?? "SESSION";
@@ -361,9 +321,7 @@ export function distilledCloudflare(
           } as typeof config.session;
         }
         const needsSessionKVBinding =
-          sessions &&
-          session !== false &&
-          usesCloudflareKVSessionDriver(session);
+          sessions && session !== false && usesCloudflareKVSessionDriver(session);
         _needsSessionKVBinding = needsSessionKVBinding;
 
         // In dev, satisfy the session KV binding with an in-memory local KV
@@ -437,15 +395,10 @@ export function distilledCloudflare(
                   if (isTypeGenPhase) {
                     return { optimizeDeps: { noDiscovery: true, include: [] } };
                   }
-                  const isServerEnvironment = [
-                    "astro",
-                    "ssr",
-                    "prerender",
-                  ].includes(environmentName);
-                  if (
-                    isServerEnvironment &&
-                    !environmentOptions.optimizeDeps?.noDiscovery
-                  ) {
+                  const isServerEnvironment = ["astro", "ssr", "prerender"].includes(
+                    environmentName,
+                  );
+                  if (isServerEnvironment && !environmentOptions.optimizeDeps?.noDiscovery) {
                     return {
                       optimizeDeps: {
                         include: [
@@ -502,9 +455,7 @@ export function distilledCloudflare(
                   } else if (environmentName === "client") {
                     return {
                       optimizeDeps: {
-                        include: [
-                          "astro/runtime/client/dev-toolbar/entrypoint.js",
-                        ],
+                        include: ["astro/runtime/client/dev-toolbar/entrypoint.js"],
                         ignoreOutdatedRequests: true,
                       },
                     };
@@ -516,8 +467,7 @@ export function distilledCloudflare(
                 enforce: "post",
                 name: "@alchemy.run/frontend-frameworks/astro:cf-externals",
                 applyToEnvironment: (environment) =>
-                  environment.name === "ssr" ||
-                  environment.name === "prerender",
+                  environment.name === "ssr" || environment.name === "prerender",
                 config(conf) {
                   if (conf.ssr) {
                     // Cloudflare does not support externalizing modules in server environments
@@ -544,12 +494,7 @@ export function distilledCloudflare(
       "astro:routes:resolved": ({ routes }) => {
         _routes = routes;
       },
-      "astro:config:done": ({
-        setAdapter,
-        config,
-        injectTypes,
-        buildOutput,
-      }) => {
+      "astro:config:done": ({ setAdapter, config, injectTypes, buildOutput }) => {
         // The user's astro.config.* loads natively and this integration is
         // merged over it, so a user-declared adapter (e.g. upstream
         // @astrojs/cloudflare) would collide with the one the deploy target
@@ -573,16 +518,12 @@ export function distilledCloudflare(
           // `dist/client/base/foo.css`). `astro:build:done` moves the special
           // files back up, and the cloudflare target's `finish` pass points
           // `BuildOutput.clientDirectory` back at the original directory.
-          config.build.client = new URL(
-            "." + config.base + "/",
-            config.build.client,
-          );
+          config.build.client = new URL("." + config.base + "/", config.build.client);
         }
         options.onOriginalClientDir?.(fileURLToPath(_originalClientDir));
         injectTypes({
           filename: "cloudflare.d.ts",
-          content:
-            '/// <reference types="@alchemy.run/frontend-frameworks/astro/types.d.ts" />',
+          content: '/// <reference types="@alchemy.run/frontend-frameworks/astro/types.d.ts" />',
         });
         setAdapter({
           name: "@alchemy.run/frontend-frameworks/astro",
@@ -717,9 +658,7 @@ export function distilledCloudflare(
           config: _config,
           routeToDynamicTargetMap: new Map(
             Array.from(
-              _routes
-                .filter((route) => route.type === "redirect")
-                .map((route) => [route, ""]),
+              _routes.filter((route) => route.type === "redirect").map((route) => [route, ""]),
             ),
           ),
           dir,

@@ -118,22 +118,15 @@ const toAttrs = (
   };
 };
 
-const toAttrsLive = (
-  service: servicemanagement.ManagedService,
-  project: string,
-) =>
+const toAttrsLive = (service: servicemanagement.ManagedService, project: string) =>
   Effect.gen(function* () {
     const serviceName = service.serviceName ?? "";
-    const config =
-      serviceName.length > 0 ? yield* getLatestConfig(serviceName) : undefined;
+    const config = serviceName.length > 0 ? yield* getLatestConfig(serviceName) : undefined;
     return toAttrs(service, project, config?.title);
   });
 
-const desiredProducer = (
-  news: ServiceProps,
-  project: string,
-  existing?: string,
-) => news.producerProjectId ?? existing ?? project;
+const desiredProducer = (news: ServiceProps, project: string, existing?: string) =>
+  news.producerProjectId ?? existing ?? project;
 
 export const ServiceProvider = () =>
   Provider.succeed(Service, {
@@ -149,8 +142,7 @@ export const ServiceProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousProducer =
-        olds?.producerProjectId ?? output?.producerProjectId;
+      const previousProducer = olds?.producerProjectId ?? output?.producerProjectId;
       if (
         previousProducer !== undefined &&
         news.producerProjectId !== undefined &&
@@ -175,8 +167,7 @@ export const ServiceProvider = () =>
       // Managed services have no labels. A generated `alch-` name derives
       // from this stack, stage and logical id; any other name is only ours
       // when state already records it.
-      return output !== undefined ||
-        isGeneratedServiceName(serviceName, env.project)
+      return output !== undefined || isGeneratedServiceName(serviceName, env.project)
         ? attrs
         : Unowned(attrs);
     }),
@@ -202,11 +193,7 @@ export const ServiceProvider = () =>
         output?.serviceName,
         env.project,
       );
-      const producerProjectId = desiredProducer(
-        news,
-        env.project,
-        output?.producerProjectId,
-      );
+      const producerProjectId = desiredProducer(news, env.project, output?.producerProjectId);
 
       let current = yield* getByName(serviceName);
 
@@ -220,17 +207,13 @@ export const ServiceProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag(["Conflict", "ServiceSoftDeleted"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["Conflict", "ServiceSoftDeleted"], () => Effect.succeed(undefined)),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
           current = yield* waitUntilExists(serviceName);
         } else {
-          current =
-            (yield* undeleteService(serviceName)) ??
-            (yield* waitUntilExists(serviceName));
+          current = (yield* undeleteService(serviceName)) ?? (yield* waitUntilExists(serviceName));
         }
       }
 
@@ -248,8 +231,7 @@ export const ServiceProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (error) =>
-                error._tag === "NotFound" || error._tag === "ServiceNotFound",
+              while: (error) => error._tag === "NotFound" || error._tag === "ServiceNotFound",
               times: 8,
               schedule: Schedule.spaced("2 seconds"),
             }),
@@ -268,9 +250,7 @@ export const ServiceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

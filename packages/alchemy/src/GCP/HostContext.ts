@@ -3,10 +3,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-} from "../Server/Process.ts";
+import { createHostRuntimeContext, type HostRuntimeContext } from "../Server/Process.ts";
 
 /**
  * Claims an inbound HTTP request for an event source (a Pub/Sub push
@@ -15,9 +12,7 @@ import {
  */
 export type GcpHttpListener = (
   request: HttpServerRequest,
-) =>
-  | Effect.Effect<HttpServerResponse.HttpServerResponse, never, any>
-  | undefined;
+) => Effect.Effect<HttpServerResponse.HttpServerResponse, never, any> | undefined;
 
 /**
  * Runtime context of an HTTP-serving GCP host (`GCP.Run.Service`,
@@ -38,9 +33,7 @@ export const isGcpListenHost = (
   typeof (value as { listen?: unknown }).listen === "function" &&
   typeof (value as { serve?: unknown }).serve === "function";
 
-const notFound = Effect.succeed(
-  HttpServerResponse.text("Not Found", { status: 404 }),
-);
+const notFound = Effect.succeed(HttpServerResponse.text("Not Found", { status: 404 }));
 
 export const createGcpHostRuntimeContext =
   (type: string) =>

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   asCountString,
@@ -182,9 +177,7 @@ export type ConnectCluster = Resource<
  * @resource
  * @category ManagedKafka
  */
-export const ConnectCluster = Resource<ConnectCluster>(
-  "GCP.ManagedKafka.ConnectCluster",
-);
+export const ConnectCluster = Resource<ConnectCluster>("GCP.ManagedKafka.ConnectCluster");
 
 export class ConnectClusterNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ConnectClusterNotResolved",
@@ -192,21 +185,13 @@ export class ConnectClusterNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  connectClusterId: string,
-) =>
+const resourceName = (project: string, location: string, connectClusterId: string) =>
   `projects/${project}/locations/${location}/connectClusters/${connectClusterId}`;
 
 const kafkaClusterOf = (value: string, project: string, location: string) =>
   expandParent(value, project, location, "clusters");
 
-const primarySubnetOf = (
-  news: ConnectClusterProps,
-  project: string,
-  location: string,
-) =>
+const primarySubnetOf = (news: ConnectClusterProps, project: string, location: string) =>
   news.primarySubnet ??
   news.gcpConfig?.accessConfig?.networkConfigs?.[0]?.primarySubnet ??
   defaultSubnet(project, location);
@@ -224,8 +209,7 @@ const desiredGcpConfig = (
           news.additionalSubnets ??
           news.gcpConfig?.accessConfig?.networkConfigs?.[0]?.additionalSubnets,
         dnsDomainNames:
-          news.dnsDomainNames ??
-          news.gcpConfig?.accessConfig?.networkConfigs?.[0]?.dnsDomainNames,
+          news.dnsDomainNames ?? news.gcpConfig?.accessConfig?.networkConfigs?.[0]?.dnsDomainNames,
       },
     ],
   },
@@ -245,8 +229,7 @@ const toAttrs = (cluster: kafka.ConnectCluster, project: string) => {
     state: cluster.state,
     vcpuCount: cluster.capacityConfig?.vcpuCount,
     memoryBytes: cluster.capacityConfig?.memoryBytes,
-    primarySubnet:
-      cluster.gcpConfig?.accessConfig?.networkConfigs?.[0]?.primarySubnet,
+    primarySubnet: cluster.gcpConfig?.accessConfig?.networkConfigs?.[0]?.primarySubnet,
     config: stringMapOf(cluster.config),
     createTime: cluster.createTime,
     updateTime: cluster.updateTime,
@@ -255,28 +238,14 @@ const toAttrs = (cluster: kafka.ConnectCluster, project: string) => {
 
 export const ConnectClusterProvider = () =>
   Provider.succeed(ConnectCluster, {
-    stables: [
-      "name",
-      "connectClusterId",
-      "project",
-      "location",
-      "kafkaCluster",
-      "createTime",
-    ],
+    stables: ["name", "connectClusterId", "project", "location", "kafkaCluster", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const previousKafka = olds?.kafkaCluster ?? output?.kafkaCluster ?? "";
-      const nextKafka = kafkaClusterOf(
-        news.kafkaCluster,
-        env.project,
-        location,
-      );
+      const nextKafka = kafkaClusterOf(news.kafkaCluster, env.project, location);
       const previousSubnet = olds?.primarySubnet ?? output?.primarySubnet ?? "";
       const nextSubnet = primarySubnetOf(news, env.project, location);
       return replaceOnIdentity({
@@ -284,10 +253,7 @@ export const ConnectClusterProvider = () =>
         nextId: news.connectClusterId
           ? rfc1035(news.connectClusterId, "connect", MAX_CLUSTER_ID_LENGTH)
           : (olds?.connectClusterId ?? output?.connectClusterId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         extra: previousKafka !== nextKafka || previousSubnet !== nextSubnet,
       });
@@ -302,27 +268,18 @@ export const ConnectClusterProvider = () =>
         "connect",
         MAX_CLUSTER_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, connectClusterId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectClusterId);
       const existing = yield* getConnectCluster(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clusters = yield* listAlchemyConnectClusters(
-          env.project,
-          env.region,
-        );
+        const clusters = yield* listAlchemyConnectClusters(env.project, env.region);
         return clusters.map((cluster) => toAttrs(cluster, env.project));
       }),
 
@@ -335,30 +292,16 @@ export const ConnectClusterProvider = () =>
         "connect",
         MAX_CLUSTER_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, connectClusterId);
-      const kafkaCluster = kafkaClusterOf(
-        news.kafkaCluster,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectClusterId);
+      const kafkaCluster = kafkaClusterOf(news.kafkaCluster, env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const capacity = {
-        vcpuCount: asCountString(
-          news.capacityConfig?.vcpuCount,
-          DEFAULT_VCPU_COUNT,
-        ),
-        memoryBytes: asCountString(
-          news.capacityConfig?.memoryBytes,
-          DEFAULT_MEMORY_BYTES,
-        ),
+        vcpuCount: asCountString(news.capacityConfig?.vcpuCount, DEFAULT_VCPU_COUNT),
+        memoryBytes: asCountString(news.capacityConfig?.memoryBytes, DEFAULT_MEMORY_BYTES),
       };
       const gcpConfig = desiredGcpConfig(news, env.project, location);
 
@@ -391,23 +334,16 @@ export const ConnectClusterProvider = () =>
         return yield* new ConnectClusterNotResolved({ name });
       }
 
-      current = yield* waitUntilReady(
-        getConnectCluster(name),
-        name,
-        (cluster) => cluster.state,
-      );
+      current = yield* waitUntilReady(getConnectCluster(name), name, (cluster) => cluster.state);
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const capacityChanged =
-        (current.capacityConfig?.vcpuCount ?? "") !==
-          (capacity.vcpuCount ?? "") ||
-        (current.capacityConfig?.memoryBytes ?? "") !==
-          (capacity.memoryBytes ?? "");
+        (current.capacityConfig?.vcpuCount ?? "") !== (capacity.vcpuCount ?? "") ||
+        (current.capacityConfig?.memoryBytes ?? "") !== (capacity.memoryBytes ?? "");
       const configChanged =
-        fingerprint(stringMapOf(current.config)) !==
-        fingerprint(stringMapOf(news.config));
+        fingerprint(stringMapOf(current.config)) !== fingerprint(stringMapOf(news.config));
       const secretsChanged =
         fingerprint(current.gcpConfig?.secretPaths ?? []) !==
         fingerprint(gcpConfig.secretPaths ?? []);
@@ -429,11 +365,7 @@ export const ConnectClusterProvider = () =>
           },
         });
         yield* waitForOperation(op);
-        current = yield* waitUntilReady(
-          getConnectCluster(name),
-          name,
-          (cluster) => cluster.state,
-        );
+        current = yield* waitUntilReady(getConnectCluster(name), name, (cluster) => cluster.state);
       }
 
       if (current === undefined) {

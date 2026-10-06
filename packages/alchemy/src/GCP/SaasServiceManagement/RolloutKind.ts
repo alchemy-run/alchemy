@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -181,9 +176,7 @@ export type RolloutKind = Resource<
  * @resource
  * @category SaasServiceManagement
  */
-export const RolloutKind = Resource<RolloutKind>(
-  "GCP.SaasServiceManagement.RolloutKind",
-);
+export const RolloutKind = Resource<RolloutKind>("GCP.SaasServiceManagement.RolloutKind");
 
 const toAttrs = (item: saasservicemgmt.RolloutKind, project: string) => {
   const name = item.name ?? "";
@@ -206,10 +199,8 @@ const toAttrs = (item: saasservicemgmt.RolloutKind, project: string) => {
     unitFilter: item.unitFilter,
     unitUpdatePacing: item.unitUpdatePacing
       ? {
-          maxConcurrentOperationsPercent:
-            item.unitUpdatePacing.maxConcurrentOperationsPercent,
-          maxConcurrentOperationsCount:
-            item.unitUpdatePacing.maxConcurrentOperationsCount,
+          maxConcurrentOperationsPercent: item.unitUpdatePacing.maxConcurrentOperationsPercent,
+          maxConcurrentOperationsCount: item.unitUpdatePacing.maxConcurrentOperationsCount,
         }
       : undefined,
     labels: userLabels(item.labels),
@@ -236,9 +227,7 @@ const listOwned = (project: string, location: string) =>
     }),
     (page) => page.rolloutKinds,
   ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelKeys(item.labels)),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelKeys(item.labels))),
     Effect.flatMap((items) =>
       items.length > 0
         ? Effect.succeed(items)
@@ -249,35 +238,22 @@ const listOwned = (project: string, location: string) =>
             }),
             (page) => page.rolloutKinds,
           ).pipe(
-            Effect.map((fallback) =>
-              fallback.filter((item) => hasAlchemyLabelKeys(item.labels)),
-            ),
+            Effect.map((fallback) => fallback.filter((item) => hasAlchemyLabelKeys(item.labels))),
           ),
     ),
   );
 
 export const RolloutKindProvider = () =>
   Provider.succeed(RolloutKind, {
-    stables: [
-      "name",
-      "rolloutKindId",
-      "project",
-      "location",
-      "unitKindId",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "rolloutKindId", "project", "location", "unitKindId", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.rolloutKindId ?? output?.rolloutKindId,
-        nextId:
-          news.rolloutKindId ?? olds?.rolloutKindId ?? output?.rolloutKindId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        nextId: news.rolloutKindId ?? olds?.rolloutKindId ?? output?.rolloutKindId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -293,18 +269,12 @@ export const RolloutKindProvider = () =>
         output?.rolloutKindId,
         "rk",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, rolloutKindId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, rolloutKindId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -322,25 +292,13 @@ export const RolloutKindProvider = () =>
         output?.rolloutKindId,
         "rk",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        rolloutKindId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, rolloutKindId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const unitKind = expandName(
-        news.unitKind,
-        env.project,
-        location,
-        "unitKinds",
-      );
+      const unitKind = expandName(news.unitKind, env.project, location, "unitKinds");
       const annotations = news.annotations;
 
       let current = yield* getByName(output?.name ?? name);
@@ -374,12 +332,10 @@ export const RolloutKindProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const annotationsChanged =
         annotations !== undefined &&
-        fingerprint(userAnnotations(current.annotations)) !==
-          fingerprint(annotations);
+        fingerprint(userAnnotations(current.annotations)) !== fingerprint(annotations);
       const strategyChanged =
         news.rolloutOrchestrationStrategy !== undefined &&
-        (current.rolloutOrchestrationStrategy ?? "") !==
-          news.rolloutOrchestrationStrategy;
+        (current.rolloutOrchestrationStrategy ?? "") !== news.rolloutOrchestrationStrategy;
       const updateStrategyChanged =
         news.updateUnitKindStrategy !== undefined &&
         (current.updateUnitKindStrategy ?? "") !== news.updateUnitKindStrategy;
@@ -387,12 +343,10 @@ export const RolloutKindProvider = () =>
         news.errorBudget !== undefined &&
         fingerprint(current.errorBudget) !== fingerprint(news.errorBudget);
       const filterChanged =
-        news.unitFilter !== undefined &&
-        (current.unitFilter ?? "") !== news.unitFilter;
+        news.unitFilter !== undefined && (current.unitFilter ?? "") !== news.unitFilter;
       const pacingChanged =
         news.unitUpdatePacing !== undefined &&
-        fingerprint(current.unitUpdatePacing) !==
-          fingerprint(news.unitUpdatePacing);
+        fingerprint(current.unitUpdatePacing) !== fingerprint(news.unitUpdatePacing);
       const mask = fieldMask([
         labelsChanged && "labels",
         annotationsChanged && "annotations",
@@ -425,16 +379,14 @@ export const RolloutKindProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* saasservicemgmt
-        .deleteProjectsLocationsRolloutKinds({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* saasservicemgmt.deleteProjectsLocationsRolloutKinds({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

@@ -33,9 +33,7 @@ export const encodeValue = (value: unknown): firestore.Value => {
   if (typeof value === "boolean") return { booleanValue: value };
   if (typeof value === "bigint") return { integerValue: value.toString() };
   if (typeof value === "number") {
-    return Number.isSafeInteger(value)
-      ? { integerValue: String(value) }
-      : { doubleValue: value };
+    return Number.isSafeInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
   }
   if (typeof value === "string") return { stringValue: value };
   if (value instanceof Date) return { timestampValue: value.toISOString() };
@@ -66,8 +64,7 @@ export const decodeValue = (value: firestore.Value): unknown => {
   if (value.booleanValue !== undefined) return value.booleanValue;
   if (value.integerValue !== undefined) {
     const big = BigInt(value.integerValue);
-    return big >= BigInt(Number.MIN_SAFE_INTEGER) &&
-      big <= BigInt(Number.MAX_SAFE_INTEGER)
+    return big >= BigInt(Number.MIN_SAFE_INTEGER) && big <= BigInt(Number.MAX_SAFE_INTEGER)
       ? Number(big)
       : big;
   }
@@ -91,9 +88,7 @@ export const decodeValue = (value: firestore.Value): unknown => {
   return null;
 };
 
-export const decodeFields = (
-  fields: firestore.ValueMap | undefined,
-): Record<string, unknown> => {
+export const decodeFields = (fields: firestore.ValueMap | undefined): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields ?? {})) {
     if (value !== undefined) out[key] = decodeValue(value);

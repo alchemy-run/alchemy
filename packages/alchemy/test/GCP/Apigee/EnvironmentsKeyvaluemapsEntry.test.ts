@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs a provisioned Apigee organization on the testing project (paid, or
 // ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
@@ -24,9 +21,7 @@ const waitUntilGone = (name: string) =>
   apigee.getOrganizationsEnvironmentsKeyvaluemapsEntries({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("ApigeeResourceNotFound", () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("ApigeeResourceNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -69,14 +64,11 @@ test.provider.skipIf(!runLifecycle)(
           const map = yield* GCP.Apigee.EnvironmentsKeyvaluemap("Config", {
             environment: environment.environmentId,
           });
-          const entry = yield* GCP.Apigee.EnvironmentsKeyvaluemapsEntry(
-            "ApiKey",
-            {
-              environment: environment.environmentId,
-              keyvaluemap: map.keyvaluemapId,
-              value: "secret",
-            },
-          );
+          const entry = yield* GCP.Apigee.EnvironmentsKeyvaluemapsEntry("ApiKey", {
+            environment: environment.environmentId,
+            keyvaluemap: map.keyvaluemapId,
+            value: "secret",
+          });
           return { environment, map, entry };
         }),
       );
@@ -85,10 +77,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.entry.keyvaluemapId).toEqual(created.map.keyvaluemapId);
       expect(created.entry.value).toEqual("secret");
 
-      const fetched =
-        yield* apigee.getOrganizationsEnvironmentsKeyvaluemapsEntries({
-          name: created.entry.name,
-        });
+      const fetched = yield* apigee.getOrganizationsEnvironmentsKeyvaluemapsEntries({
+        name: created.entry.name,
+      });
       expect(fetched.value).toEqual("secret");
 
       const updated = yield* stack.deploy(
@@ -101,15 +92,12 @@ test.provider.skipIf(!runLifecycle)(
             environment: environment.environmentId,
             keyvaluemapId: created.map.keyvaluemapId,
           });
-          const entry = yield* GCP.Apigee.EnvironmentsKeyvaluemapsEntry(
-            "ApiKey",
-            {
-              environment: environment.environmentId,
-              keyvaluemap: map.keyvaluemapId,
-              entryId: created.entry.entryId,
-              value: "rotated",
-            },
-          );
+          const entry = yield* GCP.Apigee.EnvironmentsKeyvaluemapsEntry("ApiKey", {
+            environment: environment.environmentId,
+            keyvaluemap: map.keyvaluemapId,
+            entryId: created.entry.entryId,
+            value: "rotated",
+          });
           return { environment, map, entry };
         }),
       );

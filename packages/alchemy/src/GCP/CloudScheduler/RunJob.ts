@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Job } from "./Job.ts";
 
-export interface RunJobRequest extends Omit<
-  scheduler.RunProjectsLocationsJobsRequest,
-  "name"
-> {}
+export interface RunJobRequest extends Omit<scheduler.RunProjectsLocationsJobsRequest, "name"> {}
 
 /**
  * Runtime binding for Cloud Scheduler `jobs.run`.
@@ -34,11 +31,7 @@ export interface RunJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RunJobRequest,
-    ) => Effect.Effect<
-      scheduler.Job,
-      scheduler.RunProjectsLocationsJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<scheduler.Job, scheduler.RunProjectsLocationsJobsError, RuntimeContext>
   >
 > {}
 

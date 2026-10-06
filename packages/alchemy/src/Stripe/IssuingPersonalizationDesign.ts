@@ -22,8 +22,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const NAME_MAX_LENGTH = 250;
 const LOOKUP_KEY_MAX_LENGTH = 200;
@@ -31,11 +31,7 @@ const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
 
 /** Whether this personalization design can be used to create cards. */
-export type IssuingPersonalizationDesignStatus =
-  | "active"
-  | "inactive"
-  | "rejected"
-  | "review";
+export type IssuingPersonalizationDesignStatus = "active" | "inactive" | "rejected" | "review";
 
 /** Reason a card logo was rejected. */
 export type IssuingPersonalizationDesignCardLogoRejection =
@@ -158,13 +154,9 @@ export type IssuingPersonalizationDesign = Resource<
     /** Whether this design can be used to create cards. */
     status: IssuingPersonalizationDesignStatus;
     /** Reasons the card logo was rejected, if any. */
-    cardLogoRejectionReasons:
-      | IssuingPersonalizationDesignCardLogoRejection[]
-      | undefined;
+    cardLogoRejectionReasons: IssuingPersonalizationDesignCardLogoRejection[] | undefined;
     /** Reasons the carrier text was rejected, if any. */
-    carrierTextRejectionReasons:
-      | IssuingPersonalizationDesignCarrierTextRejection[]
-      | undefined;
+    carrierTextRejectionReasons: IssuingPersonalizationDesignCarrierTextRejection[] | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Unix timestamp when the design was created. */
@@ -246,11 +238,11 @@ export type IssuingPersonalizationDesign = Resource<
  * @resource
  * @product Issuing
  */
-export const IssuingPersonalizationDesign =
-  Resource<IssuingPersonalizationDesign>("Stripe.IssuingPersonalizationDesign");
+export const IssuingPersonalizationDesign = Resource<IssuingPersonalizationDesign>(
+  "Stripe.IssuingPersonalizationDesign",
+);
 
-type IssuingPersonalizationDesignAttributes =
-  IssuingPersonalizationDesign["Attributes"];
+type IssuingPersonalizationDesignAttributes = IssuingPersonalizationDesign["Attributes"];
 
 const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
@@ -258,18 +250,10 @@ const userMetadata = (
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
-const toLookupKey = (
-  id: string,
-  lookupKey: string | undefined,
-  existing?: string,
-) =>
+const toLookupKey = (id: string, lookupKey: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (lookupKey !== undefined && lookupKey.length > 0) return lookupKey;
     if (existing !== undefined && existing.length > 0) return existing;
@@ -280,9 +264,7 @@ const toLookupKey = (
     });
   });
 
-const idOf = (
-  value: string | { readonly id: string } | null | undefined,
-): string | undefined => {
+const idOf = (value: string | { readonly id: string } | null | undefined): string | undefined => {
   if (value == null) return undefined;
   return typeof value === "string" ? value : value.id;
 };
@@ -325,13 +307,9 @@ const toWireCarrierText = (
   input: IssuingPersonalizationDesignCarrierText,
 ): CreateIssuingPersonalizationDesignRequestCarrierText => ({
   ...(input.footerBody !== undefined ? { footer_body: input.footerBody } : {}),
-  ...(input.footerTitle !== undefined
-    ? { footer_title: input.footerTitle }
-    : {}),
+  ...(input.footerTitle !== undefined ? { footer_title: input.footerTitle } : {}),
   ...(input.headerBody !== undefined ? { header_body: input.headerBody } : {}),
-  ...(input.headerTitle !== undefined
-    ? { header_title: input.headerTitle }
-    : {}),
+  ...(input.headerTitle !== undefined ? { header_title: input.headerTitle } : {}),
 });
 
 const toAttrs = (
@@ -347,8 +325,7 @@ const toAttrs = (
   isPlatformDefault: design.preferences.is_platform_default ?? undefined,
   status: design.status,
   cardLogoRejectionReasons: design.rejection_reasons.card_logo ?? undefined,
-  carrierTextRejectionReasons:
-    design.rejection_reasons.carrier_text ?? undefined,
+  carrierTextRejectionReasons: design.rejection_reasons.carrier_text ?? undefined,
   metadata: userMetadata(design.metadata),
   created: design.created,
   livemode: design.livemode,
@@ -451,9 +428,7 @@ export const IssuingPersonalizationDesignProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -468,11 +443,7 @@ export const IssuingPersonalizationDesignProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
       const name = yield* toName(id, news.name, output?.name);
-      const lookupKey = yield* toLookupKey(
-        id,
-        news.lookupKey,
-        output?.lookupKey,
-      );
+      const lookupKey = yield* toLookupKey(id, news.lookupKey, output?.lookupKey);
       const metadata = yield* desiredMetadata(id, news.metadata);
       const desiredCardLogo = news.cardLogo;
       const desiredCarrierText = compactCarrierText(news.carrierText);
@@ -492,9 +463,7 @@ export const IssuingPersonalizationDesignProvider = () =>
           lookup_key: lookupKey,
           transfer_lookup_key: true,
           metadata,
-          ...(desiredCardLogo !== undefined
-            ? { card_logo: desiredCardLogo }
-            : {}),
+          ...(desiredCardLogo !== undefined ? { card_logo: desiredCardLogo } : {}),
           ...(desiredCarrierText !== undefined
             ? { carrier_text: toWireCarrierText(desiredCarrierText) }
             : {}),
@@ -511,17 +480,14 @@ export const IssuingPersonalizationDesignProvider = () =>
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const nameChanged = (current.name ?? "") !== name;
       const lookupKeyChanged = (current.lookup_key ?? "") !== lookupKey;
-      const physicalBundleChanged =
-        (idOf(current.physical_bundle) ?? "") !== desiredPhysicalBundle;
-      const cardLogoChanged =
-        (idOf(current.card_logo) ?? "") !== (desiredCardLogo ?? "");
+      const physicalBundleChanged = (idOf(current.physical_bundle) ?? "") !== desiredPhysicalBundle;
+      const cardLogoChanged = (idOf(current.card_logo) ?? "") !== (desiredCardLogo ?? "");
       const carrierTextChanged = !deepEqual(
         fromObservedCarrierText(current.carrier_text),
         desiredCarrierText,
         { stripNullish: true },
       );
-      const preferencesChanged =
-        current.preferences.is_default !== desiredIsDefault;
+      const preferencesChanged = current.preferences.is_default !== desiredIsDefault;
 
       if (
         !nameChanged &&
@@ -538,12 +504,8 @@ export const IssuingPersonalizationDesignProvider = () =>
       const updated = yield* UpdateIssuingPersonalizationDesign({
         personalization_design: current.id,
         ...(nameChanged ? { name } : {}),
-        ...(lookupKeyChanged
-          ? { lookup_key: lookupKey, transfer_lookup_key: true }
-          : {}),
-        ...(physicalBundleChanged
-          ? { physical_bundle: desiredPhysicalBundle }
-          : {}),
+        ...(lookupKeyChanged ? { lookup_key: lookupKey, transfer_lookup_key: true } : {}),
+        ...(physicalBundleChanged ? { physical_bundle: desiredPhysicalBundle } : {}),
         ...(cardLogoChanged
           ? {
               card_logo: desiredCardLogo !== undefined ? desiredCardLogo : "",
@@ -552,20 +514,14 @@ export const IssuingPersonalizationDesignProvider = () =>
         ...(carrierTextChanged
           ? {
               carrier_text:
-                desiredCarrierText !== undefined
-                  ? toWireCarrierText(desiredCarrierText)
-                  : "",
+                desiredCarrierText !== undefined ? toWireCarrierText(desiredCarrierText) : "",
             }
           : {}),
-        ...(preferencesChanged
-          ? { preferences: { is_default: desiredIsDefault } }
-          : {}),
+        ...(preferencesChanged ? { preferences: { is_default: desiredIsDefault } } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

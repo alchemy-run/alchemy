@@ -163,10 +163,9 @@ export type SignedNodesDeploymentsDevice = Resource<
  * @resource
  * @category SasPortal
  */
-export const SignedNodesDeploymentsDevice =
-  Resource<SignedNodesDeploymentsDevice>(
-    "GCP.SasPortal.SignedNodesDeploymentsDevice",
-  );
+export const SignedNodesDeploymentsDevice = Resource<SignedNodesDeploymentsDevice>(
+  "GCP.SasPortal.SignedNodesDeploymentsDevice",
+);
 
 export class SignedNodesDeploymentsDeviceNotResolved extends Data.TaggedError(
   "GCP.SasPortal.SignedNodesDeploymentsDeviceNotResolved",
@@ -175,11 +174,7 @@ export class SignedNodesDeploymentsDeviceNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  device: sasportal.SasPortalDevice,
-  parent: string,
-  project: string,
-) => {
+const toAttrs = (device: sasportal.SasPortalDevice, parent: string, project: string) => {
   const name = device.name ?? "";
   return {
     name,
@@ -217,9 +212,7 @@ export const SignedNodesDeploymentsDeviceProvider = () =>
       const parent = expandPath(olds?.parent ?? output?.parent ?? "");
       const name = olds?.name ?? output?.name ?? "";
       let existing = yield* getDeploymentDevice(name);
-      let locatedParent = existing
-        ? parentOf(existing.name ?? "") || parent
-        : parent;
+      let locatedParent = existing ? parentOf(existing.name ?? "") || parent : parent;
       if (existing === undefined) {
         const found =
           (yield* findOwnedNodeDeploymentDevice(id, parent)) ??
@@ -229,9 +222,7 @@ export const SignedNodesDeploymentsDeviceProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, locatedParent, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -264,15 +255,10 @@ export const SignedNodesDeploymentsDeviceProvider = () =>
       const ownership = yield* ownershipLabels(id);
       const displayName = encodeOwnershipLine(
         ownership,
-        yield* toDisplayName(
-          id,
-          news.displayName ?? decoded?.displayName,
-          output?.displayName,
-        ),
+        yield* toDisplayName(id, news.displayName ?? decoded?.displayName, output?.displayName),
         MAX_DISPLAY_NAME_LENGTH,
       );
-      const serialNumber =
-        news.serialNumber ?? output?.serialNumber ?? decoded?.serialNumber;
+      const serialNumber = news.serialNumber ?? output?.serialNumber ?? decoded?.serialNumber;
       const desired = deviceBody({
         displayName,
         serialNumber,
@@ -327,35 +313,19 @@ export const SignedNodesDeploymentsDeviceProvider = () =>
       const nameChanged = !sameText(current.displayName, displayName);
       const allowlistsChanged =
         news.grantRangeAllowlists !== undefined &&
-        !sameJson(
-          frequencyRangesOf(current.grantRangeAllowlists),
-          news.grantRangeAllowlists,
-        );
+        !sameJson(frequencyRangesOf(current.grantRangeAllowlists), news.grantRangeAllowlists);
       const configChanged =
         news.preloadedConfig !== undefined &&
-        !sameJson(
-          deviceConfigOf(current.preloadedConfig),
-          news.preloadedConfig,
-        );
+        !sameJson(deviceConfigOf(current.preloadedConfig), news.preloadedConfig);
       const metadataChanged =
         news.deviceMetadata !== undefined &&
-        !sameJson(
-          deviceMetadataOf(current.deviceMetadata),
-          news.deviceMetadata,
-        );
-      if (
-        nameChanged ||
-        allowlistsChanged ||
-        configChanged ||
-        metadataChanged
-      ) {
+        !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
+      if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchDeploymentsDevices({
           name,
           updateMask: updateMaskOf(
             "displayName",
-            news.grantRangeAllowlists !== undefined
-              ? "grantRangeAllowlists"
-              : undefined,
+            news.grantRangeAllowlists !== undefined ? "grantRangeAllowlists" : undefined,
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
@@ -368,9 +338,9 @@ export const SignedNodesDeploymentsDeviceProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryDelete(
-        sasportal.deleteDeploymentsDevices({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryDelete(sasportal.deleteDeploymentsDevices({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getDeploymentDevice(output.name));
     }),
   });

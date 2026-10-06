@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_TYPE = "hyperdisk-balanced";
@@ -157,30 +157,22 @@ export type StoragePool = Resource<
  */
 export const StoragePool = Resource<StoragePool>("GCP.Compute.StoragePool");
 
-export class StoragePoolNotResolved extends Data.TaggedError(
-  "GCP.Compute.StoragePoolNotResolved",
-)<{
+export class StoragePoolNotResolved extends Data.TaggedError("GCP.Compute.StoragePoolNotResolved")<{
   storagePoolName: string;
   zone: string;
 }> {}
 
-export class StoragePoolNotReady extends Data.TaggedError(
-  "GCP.Compute.StoragePoolNotReady",
-)<{
+export class StoragePoolNotReady extends Data.TaggedError("GCP.Compute.StoragePoolNotReady")<{
   storagePoolName: string;
   status: string;
 }> {}
 
-export class StoragePoolFailed extends Data.TaggedError(
-  "GCP.Compute.StoragePoolFailed",
-)<{
+export class StoragePoolFailed extends Data.TaggedError("GCP.Compute.StoragePoolFailed")<{
   storagePoolName: string;
   status: string;
 }> {}
 
-export class StoragePoolStillExists extends Data.TaggedError(
-  "GCP.Compute.StoragePoolStillExists",
-)<{
+export class StoragePoolStillExists extends Data.TaggedError("GCP.Compute.StoragePoolStillExists")<{
   storagePoolName: string;
   status: string;
 }> {}
@@ -192,8 +184,7 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeZone = (zone: string | undefined) =>
-  lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
+const normalizeZone = (zone: string | undefined) => lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
 
 const asString = (value: number | string | undefined): string | undefined => {
   if (value === undefined) return undefined;
@@ -213,20 +204,13 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `s${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `s${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const poolTypeUrl = (project: string, zone: string, type: string) =>
-  type.includes("/")
-    ? type
-    : `projects/${project}/zones/${zone}/storagePoolTypes/${type}`;
+  type.includes("/") ? type : `projects/${project}/zones/${zone}/storagePoolTypes/${type}`;
 
-const toAttrs = (
-  pool: compute.StoragePool,
-  project: string,
-): StoragePool["Attributes"] => ({
+const toAttrs = (pool: compute.StoragePool, project: string): StoragePool["Attributes"] => ({
   storagePoolName: pool.name ?? pool.id ?? "",
   storagePoolId: pool.id,
   project,
@@ -249,11 +233,7 @@ const getByName = (project: string, zone: string, storagePool: string) =>
     .getStoragePools({ project, zone, storagePool })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitPoolReady = (
-  project: string,
-  zone: string,
-  storagePoolName: string,
-) =>
+const waitPoolReady = (project: string, zone: string, storagePoolName: string) =>
   getByName(project, zone, storagePoolName).pipe(
     Effect.flatMap((pool) =>
       pool?.state === "FAILED"
@@ -266,8 +246,7 @@ const waitPoolReady = (
         : Effect.succeed(pool),
     ),
     Effect.filterOrFail(
-      (pool): pool is compute.StoragePool =>
-        pool !== undefined && pool.state === "READY",
+      (pool): pool is compute.StoragePool => pool !== undefined && pool.state === "READY",
       (pool) =>
         new StoragePoolNotReady({
           storagePoolName,
@@ -318,23 +297,18 @@ export const StoragePoolProvider = () =>
       const previousName = olds?.storagePoolName ?? output?.storagePoolName;
       const nextName = news.storagePoolName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousZone = normalizeZone(olds?.zone ?? output?.zone);
       const nextZone = normalizeZone(news.zone ?? output?.zone);
       const previousType =
-        lastSegment(olds?.storagePoolType) ||
-        lastSegment(output?.storagePoolType) ||
-        DEFAULT_TYPE;
+        lastSegment(olds?.storagePoolType) || lastSegment(output?.storagePoolType) || DEFAULT_TYPE;
       const nextType = lastSegment(news.storagePoolType) || DEFAULT_TYPE;
       const previousCapacityType =
         olds?.capacityProvisioningType ?? output?.capacityProvisioningType;
       const nextCapacityType = news.capacityProvisioningType;
       const previousPerfType =
-        olds?.performanceProvisioningType ??
-        output?.performanceProvisioningType;
+        olds?.performanceProvisioningType ?? output?.performanceProvisioningType;
       const nextPerfType = news.performanceProvisioningType;
 
       const typeChanged = previousType !== nextType;
@@ -357,9 +331,7 @@ export const StoragePoolProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            nextName === previousName &&
-            previousZone === nextZone,
+            previousName !== undefined && nextName === previousName && previousZone === nextZone,
         };
       }
       return undefined;
@@ -367,18 +339,12 @@ export const StoragePoolProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const storagePoolName = yield* toName(
-        id,
-        olds?.storagePoolName,
-        output?.storagePoolName,
-      );
+      const storagePoolName = yield* toName(id, olds?.storagePoolName, output?.storagePoolName);
       const zone = normalizeZone(olds?.zone ?? output?.zone);
       const existing = yield* getByName(env.project, zone, storagePoolName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -396,9 +362,7 @@ export const StoragePoolProvider = () =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.storagePools ?? [])
               .filter((pool) =>
-                Object.keys(pool.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(pool.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((pool) => toAttrs(pool, env.project)),
           ),
@@ -407,11 +371,7 @@ export const StoragePoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const storagePoolName = yield* toName(
-        id,
-        news.storagePoolName,
-        output?.storagePoolName,
-      );
+      const storagePoolName = yield* toName(id, news.storagePoolName, output?.storagePoolName);
       const zone = normalizeZone(news.zone ?? output?.zone);
       const storagePoolType = lastSegment(news.storagePoolType) || DEFAULT_TYPE;
       const desiredLabels = {
@@ -474,16 +434,12 @@ export const StoragePoolProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const capacityChanged =
-        capacity !== undefined &&
-        capacity !== (current.poolProvisionedCapacityGb ?? "");
-      const iopsChanged =
-        iops !== undefined && iops !== (current.poolProvisionedIops ?? "");
+        capacity !== undefined && capacity !== (current.poolProvisionedCapacityGb ?? "");
+      const iopsChanged = iops !== undefined && iops !== (current.poolProvisionedIops ?? "");
       const throughputChanged =
-        throughput !== undefined &&
-        throughput !== (current.poolProvisionedThroughput ?? "");
+        throughput !== undefined && throughput !== (current.poolProvisionedThroughput ?? "");
       const labelsChanged = upsert.length > 0 || removed.length > 0;
 
       if (

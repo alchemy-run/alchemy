@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  organizationFromName,
-  toResourceId,
-} from "./names.ts";
+import { lastSegment, orgParent, organizationFromName, toResourceId } from "./names.ts";
 
 const MAX_NAME_LENGTH = 255;
 
@@ -92,9 +87,7 @@ export type KeyvaluemapsEntry = Resource<
  * @resource
  * @category Apigee
  */
-export const KeyvaluemapsEntry = Resource<KeyvaluemapsEntry>(
-  "GCP.Apigee.KeyvaluemapsEntry",
-);
+export const KeyvaluemapsEntry = Resource<KeyvaluemapsEntry>("GCP.Apigee.KeyvaluemapsEntry");
 
 export class KeyvaluemapsEntryNotResolved extends Data.TaggedError(
   "GCP.Apigee.KeyvaluemapsEntryNotResolved",
@@ -129,11 +122,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const KeyvaluemapsEntryProvider = () =>
   Provider.succeed(KeyvaluemapsEntry, {
@@ -145,11 +134,8 @@ export const KeyvaluemapsEntryProvider = () =>
       const previousMap = olds?.map ?? output?.mapId;
       const previousOrg = olds?.organization ?? output?.organization;
       if (
-        (previousId !== undefined &&
-          news.entryId !== undefined &&
-          news.entryId !== previousId) ||
-        (previousMap !== undefined &&
-          mapIdOf(news.map) !== mapIdOf(previousMap)) ||
+        (previousId !== undefined && news.entryId !== undefined && news.entryId !== previousId) ||
+        (previousMap !== undefined && mapIdOf(news.map) !== mapIdOf(previousMap)) ||
         (previousOrg !== undefined &&
           news.organization !== undefined &&
           news.organization !== previousOrg)
@@ -161,40 +147,23 @@ export const KeyvaluemapsEntryProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const mapId = mapIdOf(olds?.map ?? output?.mapId ?? "");
       if (mapId.length === 0) return undefined;
-      const entryId = yield* toResourceId(
-        id,
-        olds?.entryId,
-        output?.entryId,
-        MAX_NAME_LENGTH,
-      );
+      const entryId = yield* toResourceId(id, olds?.entryId, output?.entryId, MAX_NAME_LENGTH);
       const name = output?.name ?? resourceName(organization, mapId, entryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, mapId);
-      const generated = yield* toResourceId(
-        id,
-        undefined,
-        undefined,
-        MAX_NAME_LENGTH,
-      );
+      const generated = yield* toResourceId(id, undefined, undefined, MAX_NAME_LENGTH);
       return attrs.entryId === generated ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
+      const organization = news.organization ?? output?.organization ?? env.project;
       const mapId = mapIdOf(news.map);
-      const entryId = yield* toResourceId(
-        id,
-        news.entryId,
-        output?.entryId,
-        MAX_NAME_LENGTH,
-      );
+      const entryId = yield* toResourceId(id, news.entryId, output?.entryId, MAX_NAME_LENGTH);
       const parent = mapName(organization, news.map);
       const name = resourceName(organization, mapId, entryId);
       const desiredValue = news.value;
@@ -228,11 +197,6 @@ export const KeyvaluemapsEntryProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsKeyvaluemapsEntries({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

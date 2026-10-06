@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   asCountString,
@@ -224,9 +219,7 @@ export type Cluster = Resource<
  */
 export const Cluster = Resource<Cluster>("GCP.ManagedKafka.Cluster");
 
-export class ClusterNotResolved extends Data.TaggedError(
-  "GCP.ManagedKafka.ClusterNotResolved",
-)<{
+export class ClusterNotResolved extends Data.TaggedError("GCP.ManagedKafka.ClusterNotResolved")<{
   name: string;
 }> {}
 
@@ -249,8 +242,7 @@ const subnetsOf = (
 };
 
 const kmsOf = (cluster: kafka.Cluster | ClusterProps) =>
-  ("kmsKey" in cluster ? cluster.kmsKey : undefined) ??
-  cluster.gcpConfig?.kmsKey;
+  ("kmsKey" in cluster ? cluster.kmsKey : undefined) ?? cluster.gcpConfig?.kmsKey;
 
 const toAttrs = (cluster: kafka.Cluster, project: string) => {
   const name = cluster.name ?? "";
@@ -276,10 +268,7 @@ const toAttrs = (cluster: kafka.Cluster, project: string) => {
 
 const desiredCapacity = (news: ClusterProps): kafka.CapacityConfig => ({
   vcpuCount: asCountString(news.capacityConfig?.vcpuCount, DEFAULT_VCPU_COUNT),
-  memoryBytes: asCountString(
-    news.capacityConfig?.memoryBytes,
-    DEFAULT_MEMORY_BYTES,
-  ),
+  memoryBytes: asCountString(news.capacityConfig?.memoryBytes, DEFAULT_MEMORY_BYTES),
 });
 
 const desiredGcpConfig = (
@@ -302,25 +291,15 @@ export const ClusterProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousSubnets = fingerprint(
-        [...(olds?.subnets ?? output?.subnets ?? [])].sort(),
-      );
-      const nextSubnets = fingerprint(
-        [...subnetsOf(news, env.project, location)].sort(),
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousSubnets = fingerprint([...(olds?.subnets ?? output?.subnets ?? [])].sort());
+      const nextSubnets = fingerprint([...subnetsOf(news, env.project, location)].sort());
       return replaceOnIdentity({
         previousId: olds?.clusterId ?? output?.clusterId,
         nextId: news.clusterId
           ? rfc1035(news.clusterId, "kafka", MAX_CLUSTER_ID_LENGTH)
           : (olds?.clusterId ?? output?.clusterId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         extra:
           previousSubnets !== nextSubnets ||
@@ -337,18 +316,12 @@ export const ClusterProvider = () =>
         "kafka",
         MAX_CLUSTER_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, clusterId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, clusterId);
       const existing = yield* getCluster(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -367,12 +340,8 @@ export const ClusterProvider = () =>
         "kafka",
         MAX_CLUSTER_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, clusterId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, clusterId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -411,24 +380,17 @@ export const ClusterProvider = () =>
         return yield* new ClusterNotResolved({ name });
       }
 
-      current = yield* waitUntilReady(
-        getCluster(name),
-        name,
-        (cluster) => cluster.state,
-      );
+      current = yield* waitUntilReady(getCluster(name), name, (cluster) => cluster.state);
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const capacityChanged =
-        (current.capacityConfig?.vcpuCount ?? "") !==
-          (capacity.vcpuCount ?? "") ||
-        (current.capacityConfig?.memoryBytes ?? "") !==
-          (capacity.memoryBytes ?? "");
+        (current.capacityConfig?.vcpuCount ?? "") !== (capacity.vcpuCount ?? "") ||
+        (current.capacityConfig?.memoryBytes ?? "") !== (capacity.memoryBytes ?? "");
       const rebalanceChanged =
         (current.rebalanceConfig?.mode ?? "") !== (rebalanceConfig?.mode ?? "");
-      const tlsChanged =
-        fingerprint(current.tlsConfig) !== fingerprint(news.tlsConfig);
+      const tlsChanged = fingerprint(current.tlsConfig) !== fingerprint(news.tlsConfig);
       const updateOptionsChanged =
         fingerprint(current.updateOptions) !== fingerprint(news.updateOptions);
 
@@ -457,11 +419,7 @@ export const ClusterProvider = () =>
           },
         });
         yield* waitForOperation(op);
-        current = yield* waitUntilReady(
-          getCluster(name),
-          name,
-          (cluster) => cluster.state,
-        );
+        current = yield* waitUntilReady(getCluster(name), name, (cluster) => cluster.state);
       }
 
       if (current === undefined) {

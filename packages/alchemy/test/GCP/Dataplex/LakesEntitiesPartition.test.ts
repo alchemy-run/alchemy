@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsLakesZonesEntitiesPartitions({ name }).pipe(
@@ -88,10 +85,9 @@ test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
       expect(created.partition.entity).toEqual(created.entity.name);
       expect(created.partition.location).toContain("dt=2024-01-01");
 
-      const fetched =
-        yield* dataplex.getProjectsLocationsLakesZonesEntitiesPartitions({
-          name: created.partition.name,
-        });
+      const fetched = yield* dataplex.getProjectsLocationsLakesZonesEntitiesPartitions({
+        name: created.partition.name,
+      });
       expect(fetched.name).toEqual(created.partition.name);
       expect(fetched.values).toEqual(["2024-01-01"]);
 

@@ -284,8 +284,7 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, policyBasedRouteId: string) =>
   `projects/${project}/locations/${DEFAULT_LOCATION}/policyBasedRoutes/${policyBasedRouteId}`;
 
-const parentOf = (project: string) =>
-  `projects/${project}/locations/${DEFAULT_LOCATION}`;
+const parentOf = (project: string) => `projects/${project}/locations/${DEFAULT_LOCATION}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -293,34 +292,25 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     policyBasedRouteId:
-      routesAt >= 0 && parts[routesAt + 1]
-        ? parts[routesAt + 1]!
-        : lastSegment(name),
+      routesAt >= 0 && parts[routesAt + 1] ? parts[routesAt + 1]! : lastSegment(name),
   };
 };
 
 const toNetworkUrl = (project: string, network: string) => {
-  const stripped = network
-    .replace(COMPUTE_SELF_LINK_PREFIX, "")
-    .replace(/^\/+/, "");
+  const stripped = network.replace(COMPUTE_SELF_LINK_PREFIX, "").replace(/^\/+/, "");
   const parts = stripped.split("/").filter((part) => part.length > 0);
   const name = parts[parts.length - 1] ?? stripped;
   const projectsAt = parts.lastIndexOf("projects");
-  const owner =
-    projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
+  const owner = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
   return `projects/${owner}/global/networks/${name}`;
 };
 
 const sameRef = (left: string | undefined, right: string | undefined) =>
-  lastSegment(left ?? "").toLowerCase() ===
-  lastSegment(right ?? "").toLowerCase();
+  lastSegment(left ?? "").toLowerCase() === lastSegment(right ?? "").toLowerCase();
 
 const protocolVersionOf = (filter: PolicyBasedRouteFilter | undefined) =>
   (filter?.protocolVersion ?? "IPV4").toUpperCase();
@@ -383,16 +373,10 @@ const labelsCovered = (
   desired: Record<string, string>,
 ) => {
   const current = tagRecord(observed);
-  return Object.entries(desired).every(
-    ([key, value]) => current[key] === value,
-  );
+  return Object.entries(desired).every(([key, value]) => current[key] === value);
 };
 
-const toId = (
-  id: string,
-  policyBasedRouteId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, policyBasedRouteId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (policyBasedRouteId !== undefined) return policyBasedRouteId;
     if (existing !== undefined) return existing;
@@ -405,9 +389,7 @@ const toId = (
     );
   });
 
-const toFilterAttr = (
-  filter: networkconnectivity.Filter | undefined,
-): PolicyBasedRouteFilter => ({
+const toFilterAttr = (filter: networkconnectivity.Filter | undefined): PolicyBasedRouteFilter => ({
   protocolVersion: filter?.protocolVersion ?? "IPV4",
   ipProtocol: filter?.ipProtocol,
   srcRange: filter?.srcRange,
@@ -422,9 +404,7 @@ const toVirtualMachine = (
 };
 
 const toInterconnectAttachment = (
-  interconnectAttachment:
-    | networkconnectivity.InterconnectAttachment
-    | undefined,
+  interconnectAttachment: networkconnectivity.InterconnectAttachment | undefined,
 ): PolicyBasedRouteInterconnectAttachment | undefined => {
   if (interconnectAttachment?.region === undefined) return undefined;
   return { region: interconnectAttachment.region };
@@ -438,10 +418,7 @@ const toWarnings = (
     warningMessage: warning.warningMessage,
   }));
 
-const toAttrs = (
-  route: networkconnectivity.PolicyBasedRoute,
-  project: string,
-) => {
+const toAttrs = (route: networkconnectivity.PolicyBasedRoute, project: string) => {
   const name = route.name ?? "";
   const parsed = parseName(name);
   return {
@@ -454,9 +431,7 @@ const toAttrs = (
     nextHopIlbIp: route.nextHopIlbIp,
     nextHopOtherRoutes: route.nextHopOtherRoutes,
     virtualMachine: toVirtualMachine(route.virtualMachine),
-    interconnectAttachment: toInterconnectAttachment(
-      route.interconnectAttachment,
-    ),
+    interconnectAttachment: toInterconnectAttachment(route.interconnectAttachment),
     priority: route.priority ?? DEFAULT_PRIORITY,
     description: route.description,
     labels: userLabels(route.labels),
@@ -510,13 +485,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((route) =>
-      route
-        ? Effect.succeed(route)
-        : Effect.fail(new PolicyBasedRouteNotResolved({ name })),
+      route ? Effect.succeed(route) : Effect.fail(new PolicyBasedRouteNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteNotResolved",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -525,13 +497,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((route) =>
-      route === undefined
-        ? Effect.void
-        : Effect.fail(new PolicyBasedRouteStillExists({ name })),
+      route === undefined ? Effect.void : Effect.fail(new PolicyBasedRouteStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteStillExists",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -562,13 +531,9 @@ const listOwnedRoutes = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.policyBasedRoutes ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.policyBasedRoutes ?? [])),
       Stream.filter((route) =>
-        Object.keys(route.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(route.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((route) => toAttrs(route, project)),
       Stream.runCollect,
@@ -594,12 +559,7 @@ const matchesDesired = (
   if ((route.nextHopOtherRoutes ?? "") !== (news.nextHopOtherRoutes ?? "")) {
     return false;
   }
-  if (
-    !sameVirtualMachine(
-      toVirtualMachine(route.virtualMachine),
-      news.virtualMachine,
-    )
-  ) {
+  if (!sameVirtualMachine(toVirtualMachine(route.virtualMachine), news.virtualMachine)) {
     return false;
   }
   if (
@@ -610,9 +570,7 @@ const matchesDesired = (
   ) {
     return false;
   }
-  if (
-    (route.priority ?? DEFAULT_PRIORITY) !== (news.priority ?? DEFAULT_PRIORITY)
-  ) {
+  if ((route.priority ?? DEFAULT_PRIORITY) !== (news.priority ?? DEFAULT_PRIORITY)) {
     return false;
   }
   if ((route.description ?? "") !== (news.description ?? "")) {
@@ -627,34 +585,22 @@ const immutableChanged = (
   output: PolicyBasedRoute["Attributes"] | undefined,
 ) => {
   const previousNetwork = olds?.network ?? output?.network;
-  if (
-    previousNetwork !== undefined &&
-    !sameRef(news.network, previousNetwork)
-  ) {
+  if (previousNetwork !== undefined && !sameRef(news.network, previousNetwork)) {
     return true;
   }
   const previousFilter = olds?.filter ?? output?.filter;
-  if (
-    previousFilter !== undefined &&
-    !sameFilter(news.filter, previousFilter)
-  ) {
+  if (previousFilter !== undefined && !sameFilter(news.filter, previousFilter)) {
     return true;
   }
   const previousIlb = olds?.nextHopIlbIp ?? output?.nextHopIlbIp ?? "";
   if ((news.nextHopIlbIp ?? "") !== previousIlb) {
     return true;
   }
-  const previousOther =
-    olds?.nextHopOtherRoutes ?? output?.nextHopOtherRoutes ?? "";
+  const previousOther = olds?.nextHopOtherRoutes ?? output?.nextHopOtherRoutes ?? "";
   if ((news.nextHopOtherRoutes ?? "") !== previousOther) {
     return true;
   }
-  if (
-    !sameVirtualMachine(
-      news.virtualMachine,
-      olds?.virtualMachine ?? output?.virtualMachine,
-    )
-  ) {
+  if (!sameVirtualMachine(news.virtualMachine, olds?.virtualMachine ?? output?.virtualMachine)) {
     return true;
   }
   if (
@@ -665,8 +611,7 @@ const immutableChanged = (
   ) {
     return true;
   }
-  const previousPriority =
-    olds?.priority ?? output?.priority ?? DEFAULT_PRIORITY;
+  const previousPriority = olds?.priority ?? output?.priority ?? DEFAULT_PRIORITY;
   if ((news.priority ?? DEFAULT_PRIORITY) !== previousPriority) {
     return true;
   }
@@ -682,14 +627,7 @@ const immutableChanged = (
 
 export const PolicyBasedRouteProvider = () =>
   Provider.succeed(PolicyBasedRoute, {
-    stables: [
-      "name",
-      "policyBasedRouteId",
-      "project",
-      "location",
-      "createTime",
-      "selfLink",
-    ],
+    stables: ["name", "policyBasedRouteId", "project", "location", "createTime", "selfLink"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -698,10 +636,7 @@ export const PolicyBasedRouteProvider = () =>
       if (previousId === undefined && output === undefined) {
         return undefined;
       }
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
       if (idChanged || immutableChanged(news, olds, output)) {
         return {
           action: "replace" as const,
@@ -718,14 +653,11 @@ export const PolicyBasedRouteProvider = () =>
         olds?.policyBasedRouteId,
         output?.policyBasedRouteId,
       );
-      const name =
-        output?.name ?? resourceName(env.project, policyBasedRouteId);
+      const name = output?.name ?? resourceName(env.project, policyBasedRouteId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -741,8 +673,7 @@ export const PolicyBasedRouteProvider = () =>
         news.policyBasedRouteId,
         output?.policyBasedRouteId,
       );
-      const name =
-        output?.name ?? resourceName(env.project, policyBasedRouteId);
+      const name = output?.name ?? resourceName(env.project, policyBasedRouteId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -750,10 +681,7 @@ export const PolicyBasedRouteProvider = () =>
 
       let current = yield* getByName(name);
 
-      if (
-        current !== undefined &&
-        !matchesDesired(current, env.project, news, desiredLabels)
-      ) {
+      if (current !== undefined && !matchesDesired(current, env.project, news, desiredLabels)) {
         yield* removeRoute(current.name ?? name);
         current = undefined;
       }

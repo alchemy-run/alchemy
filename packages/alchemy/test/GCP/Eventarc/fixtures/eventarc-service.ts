@@ -1,6 +1,6 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as GCP from "@/GCP";
 
 /** Bucket whose uploads Eventarc routes to the service. */
 export const Drops = GCP.Storage.Bucket("EventarcDrops", {
@@ -13,8 +13,7 @@ export const Markers = GCP.Storage.Bucket("EventarcMarkers", {
   forceDestroy: true,
 });
 
-export const markerFor = (object: string) =>
-  `${object.replaceAll("/", "_")}.json`;
+export const markerFor = (object: string) => `${object.replaceAll("/", "_")}.json`;
 
 /**
  * Effect-native Cloud Run service (default private ingress) receiving
@@ -57,8 +56,5 @@ export default class EventarcService extends GCP.Function<EventarcService>()(
     );
 
     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
-  }).pipe(
-    Effect.provide(GCP.Storage.PutObjectHttp),
-    Effect.provide(GCP.Run.EventarcEventSource),
-  ),
+  }).pipe(Effect.provide(GCP.Storage.PutObjectHttp), Effect.provide(GCP.Run.EventarcEventSource)),
 ) {}

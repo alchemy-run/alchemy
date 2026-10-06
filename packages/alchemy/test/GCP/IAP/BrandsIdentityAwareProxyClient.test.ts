@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as iap from "@distilled.cloud/gcp/iap_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // IAP OAuth clients hang off an OAuth brand, which only an org-internal project
 // with a Workspace support email can create (createProjectsBrands otherwise
@@ -88,9 +85,7 @@ test.provider.skipIf(!!brandName)(
         }),
       );
       expect(error._tag).toEqual("BadRequest");
-      expect(error.message).toContain(
-        "Unable to parse project number and brand",
-      );
+      expect(error.message).toContain("Unable to parse project number and brand");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -137,10 +132,9 @@ test.provider.skipIf(!brandName)(
       expect(replaced.displayName).toEqual("Alchemy portal");
       expect(replaced.brand).toEqual(brand);
 
-      const fetchedReplace =
-        yield* iap.getProjectsBrandsIdentityAwareProxyClients({
-          name: replaced.name,
-        });
+      const fetchedReplace = yield* iap.getProjectsBrandsIdentityAwareProxyClients({
+        name: replaced.name,
+      });
       expect(fetchedReplace.displayName).toContain("Alchemy portal");
 
       yield* stack.destroy();

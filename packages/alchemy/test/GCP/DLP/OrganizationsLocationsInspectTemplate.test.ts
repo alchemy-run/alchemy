@@ -1,25 +1,19 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 // Organization-scoped: set GOOGLE_ORGANIZATION_ID when the credentials
 // administer the organization (the testing service account does not).
-const organizationId = process.env.GOOGLE_ORGANIZATION_ID?.trim().replace(
-  /^organizations\//,
-  "",
-);
+const organizationId = process.env.GOOGLE_ORGANIZATION_ID?.trim().replace(/^organizations\//, "");
 const organization = `organizations/${organizationId}`;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const location = "us-central1";
 
@@ -62,26 +56,21 @@ test.provider.skipIf(!organizationId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.DLP.OrganizationsLocationsInspectTemplate(
-            "Phones",
-            {
-              organization,
-              location,
-              displayName: "phones",
-              description: "detect phones",
-              inspectConfig: {
-                infoTypes: [{ name: "PHONE_NUMBER" }],
-                includeQuote: true,
-              },
+          return yield* GCP.DLP.OrganizationsLocationsInspectTemplate("Phones", {
+            organization,
+            location,
+            displayName: "phones",
+            description: "detect phones",
+            inspectConfig: {
+              infoTypes: [{ name: "PHONE_NUMBER" }],
+              includeQuote: true,
             },
-          );
+          });
         }),
       );
 
       expect(created.location).toEqual(location);
-      expect(created.name).toEqual(
-        `${parent}/inspectTemplates/${created.templateId}`,
-      );
+      expect(created.name).toEqual(`${parent}/inspectTemplates/${created.templateId}`);
 
       const fetched = yield* dlp.getOrganizationsLocationsInspectTemplates({
         name: created.name,
@@ -90,20 +79,17 @@ test.provider.skipIf(!organizationId)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.DLP.OrganizationsLocationsInspectTemplate(
-            "Phones",
-            {
-              organization,
-              location,
-              templateId: created.templateId,
-              displayName: "phones-v2",
-              description: "detect phones v2",
-              inspectConfig: {
-                infoTypes: [{ name: "PHONE_NUMBER" }],
-                includeQuote: false,
-              },
+          return yield* GCP.DLP.OrganizationsLocationsInspectTemplate("Phones", {
+            organization,
+            location,
+            templateId: created.templateId,
+            displayName: "phones-v2",
+            description: "detect phones v2",
+            inspectConfig: {
+              infoTypes: [{ name: "PHONE_NUMBER" }],
+              includeQuote: false,
             },
-          );
+          });
         }),
       );
 

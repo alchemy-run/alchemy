@@ -9,16 +9,11 @@ import {
   sanitizeLabelValue,
   toLabels,
 } from "../Labels.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 export const MAX_POLICY_ID = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.IAM.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.IAM.ResourceNotResolved")<{
   name: string;
 }> {}
 
@@ -28,18 +23,11 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const attachmentPointOf = (
-  project: string,
-  attachmentPoint?: string,
-) => {
+export const attachmentPointOf = (project: string, attachmentPoint?: string) => {
   if (attachmentPoint && attachmentPoint.length > 0) {
-    return attachmentPoint.includes("%2F")
-      ? attachmentPoint
-      : encodeURIComponent(attachmentPoint);
+    return attachmentPoint.includes("%2F") ? attachmentPoint : encodeURIComponent(attachmentPoint);
   }
-  return encodeURIComponent(
-    `cloudresourcemanager.googleapis.com/projects/${project}`,
-  );
+  return encodeURIComponent(`cloudresourcemanager.googleapis.com/projects/${project}`);
 };
 
 export const denypoliciesParent = (attachmentPoint: string) =>
@@ -53,10 +41,8 @@ export const parsePolicyName = (name: string) => {
   const policiesAt = parts.indexOf("policies");
   const denyAt = parts.lastIndexOf("denypolicies");
   return {
-    attachmentPoint:
-      policiesAt >= 0 && parts[policiesAt + 1] ? parts[policiesAt + 1]! : "",
-    policyId:
-      denyAt >= 0 && parts[denyAt + 1] ? parts[denyAt + 1]! : lastSegment(name),
+    attachmentPoint: policiesAt >= 0 && parts[policiesAt + 1] ? parts[policiesAt + 1]! : "",
+    policyId: denyAt >= 0 && parts[denyAt + 1] ? parts[denyAt + 1]! : lastSegment(name),
   };
 };
 
@@ -72,11 +58,7 @@ const rfc1035 = (value: string) => {
   return next;
 };
 
-export const toPolicyId = (
-  id: string,
-  requested: string | undefined,
-  existing?: string,
-) =>
+export const toPolicyId = (id: string, requested: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (requested !== undefined) return rfc1035(requested);
     if (existing !== undefined) return existing;
@@ -116,8 +98,7 @@ export const userAnnotations = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(annotations ?? {}).filter(
-      ([key, value]) =>
-        !key.startsWith("alchemy-") && typeof value === "string",
+      ([key, value]) => !key.startsWith("alchemy-") && typeof value === "string",
     ),
   ) as Record<string, string>;
 
@@ -148,8 +129,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

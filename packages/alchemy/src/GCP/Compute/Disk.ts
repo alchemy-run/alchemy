@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 export type DiskProps = {
   /**
@@ -171,9 +171,7 @@ export type Disk = Resource<
  */
 export const Disk = Resource<Disk>("GCP.Compute.Disk");
 
-export class DiskNotResolved extends Data.TaggedError(
-  "GCP.Compute.DiskNotResolved",
-)<{
+export class DiskNotResolved extends Data.TaggedError("GCP.Compute.DiskNotResolved")<{
   diskName: string;
   zone: string;
 }> {}
@@ -188,9 +186,7 @@ export class DiskFailed extends Data.TaggedError("GCP.Compute.DiskFailed")<{
   status: string;
 }> {}
 
-export class DiskStillExists extends Data.TaggedError(
-  "GCP.Compute.DiskStillExists",
-)<{
+export class DiskStillExists extends Data.TaggedError("GCP.Compute.DiskStillExists")<{
   diskName: string;
   status: string;
 }> {}
@@ -258,8 +254,7 @@ const waitDiskReady = (project: string, zone: string, diskName: string) =>
         : Effect.succeed(disk),
     ),
     Effect.filterOrFail(
-      (disk): disk is compute.Disk =>
-        disk !== undefined && disk.status === "READY",
+      (disk): disk is compute.Disk => disk !== undefined && disk.status === "READY",
       (disk) =>
         new DiskNotReady({
           diskName,
@@ -313,11 +308,9 @@ export const DiskProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      const previousZone =
-        lastSegment(olds?.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
+      const previousZone = lastSegment(olds?.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
       const nextZone = lastSegment(news.zone) ?? DEFAULT_ZONE;
-      const previousType =
-        lastSegment(olds?.type) ?? lastSegment(output?.type) ?? DEFAULT_TYPE;
+      const previousType = lastSegment(olds?.type) ?? lastSegment(output?.type) ?? DEFAULT_TYPE;
       const nextType = lastSegment(news.type) ?? DEFAULT_TYPE;
       const previousName = olds?.diskName ?? output?.diskName;
       const nextName = news.diskName ?? previousName;
@@ -327,15 +320,11 @@ export const DiskProvider = () =>
       const replace =
         previousZone !== nextZone ||
         previousType !== nextType ||
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         (olds?.sourceImage ?? undefined) !== (news.sourceImage ?? undefined) ||
-        (olds?.sourceSnapshot ?? undefined) !==
-          (news.sourceSnapshot ?? undefined) ||
+        (olds?.sourceSnapshot ?? undefined) !== (news.sourceSnapshot ?? undefined) ||
         (olds?.sourceDisk ?? undefined) !== (news.sourceDisk ?? undefined) ||
-        (olds?.architecture ?? undefined) !==
-          (news.architecture ?? undefined) ||
+        (olds?.architecture ?? undefined) !== (news.architecture ?? undefined) ||
         (olds?.physicalBlockSizeBytes ?? undefined) !==
           (news.physicalBlockSizeBytes ?? undefined) ||
         (olds?.enableConfidentialCompute ?? undefined) !==
@@ -346,23 +335,18 @@ export const DiskProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName === previousName &&
-          previousZone === nextZone,
+          previousName !== undefined && nextName === previousName && previousZone === nextZone,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const diskName = yield* toName(id, olds?.diskName, output?.diskName);
-      const zone =
-        lastSegment(olds?.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
+      const zone = lastSegment(olds?.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
       const existing = yield* getByName(env.project, zone, diskName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -380,9 +364,7 @@ export const DiskProvider = () =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.disks ?? [])
               .filter((disk) =>
-                Object.keys(disk.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(disk.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((disk) => toAttrs(disk, env.project)),
           ),
@@ -392,8 +374,7 @@ export const DiskProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const diskName = yield* toName(id, news.diskName, output?.diskName);
-      const zone =
-        lastSegment(news.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
+      const zone = lastSegment(news.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
       const diskType = lastSegment(news.type) ?? DEFAULT_TYPE;
       const sizeGb = news.sizeGb ?? DEFAULT_SIZE_GB;
       const desiredLabels = {
@@ -427,9 +408,7 @@ export const DiskProvider = () =>
                   ? String(news.physicalBlockSizeBytes)
                   : undefined,
               provisionedIops:
-                news.provisionedIops !== undefined
-                  ? String(news.provisionedIops)
-                  : undefined,
+                news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
               provisionedThroughput:
                 news.provisionedThroughput !== undefined
                   ? String(news.provisionedThroughput)
@@ -486,15 +465,13 @@ export const DiskProvider = () =>
         return yield* new DiskNotResolved({ diskName, zone });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const iopsChanged =
         news.provisionedIops !== undefined &&
         String(news.provisionedIops) !== (current.provisionedIops ?? "");
       const throughputChanged =
         news.provisionedThroughput !== undefined &&
-        String(news.provisionedThroughput) !==
-          (current.provisionedThroughput ?? "");
+        String(news.provisionedThroughput) !== (current.provisionedThroughput ?? "");
 
       if (descriptionChanged || iopsChanged || throughputChanged) {
         const updated = yield* compute.updateDisks({
@@ -511,9 +488,7 @@ export const DiskProvider = () =>
           body: {
             description: news.description,
             provisionedIops:
-              news.provisionedIops !== undefined
-                ? String(news.provisionedIops)
-                : undefined,
+              news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
             provisionedThroughput:
               news.provisionedThroughput !== undefined
                 ? String(news.provisionedThroughput)

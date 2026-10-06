@@ -1,13 +1,8 @@
-import * as GCP from "@/GCP";
-import {
-  decodeFields,
-  encodeFields,
-  encodeValue,
-  fieldPath,
-} from "@/GCP/Firestore/Values.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { decodeFields, encodeFields, encodeValue, fieldPath } from "@/GCP/Firestore/Values.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -102,9 +97,7 @@ describe("Values codec", () => {
   test(
     "decodes Firestore Values to plain JavaScript",
     Effect.sync(() => {
-      expect(describeFields(decodeFields(encodeFields(sample)))).toEqual(
-        expectedFields,
-      );
+      expect(describeFields(decodeFields(encodeFields(sample)))).toEqual(expectedFields);
       expect(
         decodeFields({
           geo: { geoPointValue: { latitude: 1.5, longitude: -2 } },

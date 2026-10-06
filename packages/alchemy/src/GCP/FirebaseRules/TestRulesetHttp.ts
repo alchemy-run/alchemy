@@ -1,9 +1,9 @@
 import * as firebaserules from "@distilled.cloud/gcp/firebaserules_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { bindGcpHost } from "../Host.ts";
 import type { Ruleset } from "./Ruleset.ts";
 import { TestRuleset, type TestRulesetRequest } from "./TestRuleset.ts";
-import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link TestRuleset}.
@@ -26,14 +26,14 @@ export const TestRulesetHttp = Layer.effect(
         iam: [{ role: "roles/firebaserules.admin" }],
       });
       const name = yield* ruleset.name;
-      return Effect.fn(`GCP.FirebaseRules.TestRuleset(${ruleset.LogicalId})`)(
-        function* (request: TestRulesetRequest = {}) {
-          return yield* testProjects({
-            ...request,
-            name: yield* name,
-          });
-        },
-      );
+      return Effect.fn(`GCP.FirebaseRules.TestRuleset(${ruleset.LogicalId})`)(function* (
+        request: TestRulesetRequest = {},
+      ) {
+        return yield* testProjects({
+          ...request,
+          name: yield* name,
+        });
+      });
     });
   }),
 );

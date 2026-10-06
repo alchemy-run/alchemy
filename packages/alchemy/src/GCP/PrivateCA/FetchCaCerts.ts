@@ -45,6 +45,4 @@ export interface FetchCaCerts extends Binding.Service<
   >
 > {}
 
-export const FetchCaCerts = Binding.Service<FetchCaCerts>(
-  "GCP.PrivateCA.FetchCaCerts",
-);
+export const FetchCaCerts = Binding.Service<FetchCaCerts>("GCP.PrivateCA.FetchCaCerts");
