@@ -1,5 +1,6 @@
 import type * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { deepEqual } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
@@ -66,6 +67,20 @@ export const isDurableObjectContainer = (
 
 const invalid = (message: string) => Effect.fail(new ContainerConfigurationError({ message }));
 
+/** Validate a bounded preparation deadline before publishing any images. */
+export const imagePreparationTimeoutMillis = (timeout: Duration.Input = "30 minutes") =>
+  Effect.try({
+    try: () => {
+      const millis = Duration.toMillis(timeout);
+      if (!Number.isFinite(millis) || millis <= 0) throw new Error("Invalid timeout");
+      return millis;
+    },
+    catch: () =>
+      new ContainerConfigurationError({
+        message: "imagePreparationTimeout must be a finite, positive duration.",
+      }),
+  });
+
 /**
  * Validate container props before publishing images or touching the hosting
  * Worker. Reject switches between fleet scheduling and Durable Object scheduling.
@@ -91,6 +106,7 @@ export const validateContainerConfiguration = Effect.fn(function* (
     return;
   }
 
+  yield* imagePreparationTimeoutMillis(props.imagePreparationTimeout);
   const imageNames = Object.keys(props.images ?? {});
   if (imageNames.length > MAX_NAMED_IMAGES) {
     return yield* invalid(

@@ -17,6 +17,7 @@ import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
@@ -40,11 +41,11 @@ import {
 } from "./ContainerBundle.ts";
 import {
   ContainerConfigurationError,
-  ContainerImagePreparationError,
   isDurableObjectContainer,
   durableObjectSettingsPatch,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
+import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { retryContainerPublication } from "./ContainerPublication.ts";
 
@@ -533,7 +534,8 @@ export const LiveContainerProvider = () =>
         props: AnyContainerApplicationProps,
         build: ImageBuild,
         imageRef: string,
-        session?: { note: (message: string) => Effect.Effect<void> },
+        session?: Pick<ScopedPlanStatusSession, "note">,
+        reuseRemotePublication = false,
       ) {
         const platform = publicationPlatform;
 
@@ -546,7 +548,7 @@ export const LiveContainerProvider = () =>
 
         const credentials = yield* registryCredentials(props, ["pull", "push"]);
 
-        if (build.kind !== "remote") {
+        if (build.kind !== "remote" || reuseRemotePublication) {
           const digest = yield* resolveRegistryDigest(imageRef, credentials).pipe(
             Effect.catchTag("ContainerRegistryError", (error) =>
               error.reason === "ImageNotFound" ? Effect.succeed(undefined) : Effect.fail(error),
@@ -574,7 +576,7 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
-          yield* docker.image.pull(build.image, platform);
+          yield* docker.image.pull(build.image, platform, undefined, session);
           yield* docker.image.tag(build.image, imageRef);
           yield* Effect.logInfo(`Cloudflare Container image: pushing ${imageRef}`);
           if (session) {
@@ -582,7 +584,9 @@ export const LiveContainerProvider = () =>
           }
           // Push the same platform that was pulled. A containerd image store
           // may also hold a host-architecture variant under this tag.
-          yield* docker.image.push(imageRef, credentials, platform).pipe(retryContainerPublication);
+          yield* docker.image
+            .push(imageRef, credentials, platform, undefined, session)
+            .pipe(retryContainerPublication);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -665,7 +669,8 @@ export const LiveContainerProvider = () =>
         imageRef: string,
         imageHash: string,
         previousImageRef: string | undefined,
-        session?: { note: (message: string) => Effect.Effect<void> },
+        session?: Pick<ScopedPlanStatusSession, "note">,
+        reuseRemotePublication = false,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const key = JSON.stringify([
@@ -674,10 +679,11 @@ export const LiveContainerProvider = () =>
           props.publish?.repository,
           publicationPlatform,
           build.kind,
+          reuseRemotePublication,
           imageHash,
         ]);
         const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
-          publishImage(id, props, build, imageRef, session).pipe(
+          publishImage(id, props, build, imageRef, session, reuseRemotePublication).pipe(
             Effect.onExit((exit) =>
               Exit.isFailure(exit)
                 ? Effect.sync(() => {
@@ -741,28 +747,21 @@ export const LiveContainerProvider = () =>
        * already done for the lifetime of this provider.
        */
       const preparedImages = new Set<string>();
-      const waitForImagePrepared = Effect.fn(function* (image: string) {
+      const waitForImagePrepared = Effect.fn(function* (
+        image: string,
+        name: string,
+        timeout: DurableObjectContainerProps["imagePreparationTimeout"],
+        session: Pick<ScopedPlanStatusSession, "note">,
+      ) {
         if (preparedImages.has(image)) return;
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const result = yield* Containers.prepareContainerImage({
-          accountId,
+        yield* waitForContainerImage({
           image,
-        }).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
-            until: (result) => result.status !== "pending",
-            times: 9,
-          }),
-        );
-        if (result.status !== "ready") {
-          return yield* new ContainerImagePreparationError({
-            image,
-            status: result.status,
-            message:
-              result.reason ??
-              `Image preparation is ${result.status}. Deploy again to resume preparation.`,
-          });
-        }
+          name,
+          timeout,
+          session,
+          prepare: Containers.prepareContainerImage({ accountId, image }),
+        });
         preparedImages.add(image);
       });
 
@@ -775,7 +774,7 @@ export const LiveContainerProvider = () =>
         id: string,
         props: DurableObjectContainerProps,
         output: ContainerApplication["Attributes"] | undefined,
-        session: { note: (message: string) => Effect.Effect<void> },
+        session: Pick<ScopedPlanStatusSession, "note">,
       ) {
         const images: Record<string, string> = {};
         const devImages: Record<string, DevContainerImage> = {};
@@ -797,10 +796,13 @@ export const LiveContainerProvider = () =>
               image.imageHash,
               undefined,
               session,
+              // The registry tag keyed by image inputs is the durable publication checkpoint.
+              // Reuse it after an interrupted preparation, including mirrored images.
+              true,
             );
             imageRef = published.imageRef;
           }
-          yield* waitForImagePrepared(imageRef);
+          yield* waitForImagePrepared(imageRef, image.name, props.imagePreparationTimeout, session);
 
           images[image.name] = imageRef;
           devImages[image.name] = image.dev;
@@ -884,7 +886,7 @@ export const LiveContainerProvider = () =>
         name: string;
         durableObjects: { namespaceId: string } | undefined;
         output: ContainerApplication["Attributes"] | undefined;
-        session: { note: (message: string) => Effect.Effect<void> };
+        session: Pick<ScopedPlanStatusSession, "note">;
       }) {
         if (!durableObjects) {
           return yield* new ContainerConfigurationError({
@@ -1003,7 +1005,7 @@ export const LiveContainerProvider = () =>
               namespaceId: string;
             }
           | undefined;
-        session: { note: (message: string) => Effect.Effect<void> };
+        session: Pick<ScopedPlanStatusSession, "note">;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -1136,7 +1138,7 @@ export const LiveContainerProvider = () =>
         // turns out to be gone. Threaded through so the update→create fallback
         // below preserves the binding.
         durableObjects: { namespaceId: string } | undefined;
-        session: { note: (message: string) => Effect.Effect<void> };
+        session: Pick<ScopedPlanStatusSession, "note">;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 

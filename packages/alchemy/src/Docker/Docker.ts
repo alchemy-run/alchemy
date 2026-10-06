@@ -133,6 +133,7 @@ export class Docker extends Context.Service<
         ref: string,
         platform?: string,
         context?: string,
+        session?: Pick<ScopedPlanStatusSession, "note">,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /**
        * Pushes an image to a registry. When `platform` is given, only that
@@ -148,6 +149,7 @@ export class Docker extends Context.Service<
         credentials: RegistryCredentials,
         platform?: string,
         context?: string,
+        session?: Pick<ScopedPlanStatusSession, "note">,
       ) => Effect.Effect<CommandOutput, DockerImagePublicationError>;
       /** Tags an image. */
       readonly tag: (
@@ -597,8 +599,20 @@ export const DockerLive = Layer.effect(
       }),
     );
 
+    const outputTap = (session?: Pick<ScopedPlanStatusSession, "note">) =>
+      session
+        ? Stream.tapSink(
+            Sink.make<string>()(
+              flow(
+                Stream.splitLines,
+                Stream.runForEach((line) => session.note(line, { kind: "output" })),
+              ),
+            ),
+          )
+        : undefined;
+
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
-      function* (ref, credentials, platform, context) {
+      function* (ref, credentials, platform, context, session) {
         // Write the registry credentials directly into an isolated docker config
         // as a plaintext `auths` entry and skip `docker login` entirely.
         //
@@ -623,17 +637,30 @@ export const DockerLive = Layer.effect(
         });
         yield* fs.writeFileString(path.join(dir, "config.json"), config);
         if (platform === undefined) {
-          return yield* run([...formatArgs({ context }), "push", ref], { DOCKER_CONFIG: dir });
+          return yield* run(
+            [...formatArgs({ context }), "push", ref],
+            { DOCKER_CONFIG: dir },
+            outputTap(session),
+          );
         }
-        return yield* run([...formatArgs({ context }), "push", "--platform", platform, ref], {
-          DOCKER_CONFIG: dir,
-        }).pipe(
+        return yield* run(
+          [...formatArgs({ context }), "push", "--platform", platform, ref],
+          {
+            DOCKER_CONFIG: dir,
+          },
+          outputTap(session),
+        ).pipe(
           // Engines without the containerd image store reject `--platform`
           // on push; their local tag is already narrowed to the requested
           // platform by `pull --platform`, so a plain push is equivalent.
           Effect.catchIf(
             (error) => /--platform|unknown flag|containerd/i.test(String(error)),
-            () => run([...formatArgs({ context }), "push", ref], { DOCKER_CONFIG: dir }),
+            () =>
+              run(
+                [...formatArgs({ context }), "push", ref],
+                { DOCKER_CONFIG: dir },
+                outputTap(session),
+              ),
           ),
         );
       },
@@ -690,16 +717,7 @@ export const DockerLive = Layer.effect(
           session,
           registry,
         ) {
-          const tap = session
-            ? Stream.tapSink(
-                Sink.make<string>()(
-                  flow(
-                    Stream.splitLines,
-                    Stream.runForEach((line) => session.note(line, { kind: "output" })),
-                  ),
-                ),
-              )
-            : undefined;
+          const tap = outputTap(session);
           const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
@@ -733,20 +751,26 @@ export const DockerLive = Layer.effect(
           );
           const [tag, ...tags] =
             typeof options.tag === "string" ? ([options.tag] as const) : options.tag;
-          return yield* push(tag, registry, options.platform, engineContext).pipe(
+          return yield* push(tag, registry, options.platform, engineContext, session).pipe(
             Effect.tap(() =>
-              Effect.forEach(tags, (tag) => push(tag, registry, options.platform, engineContext)),
+              Effect.forEach(tags, (tag) =>
+                push(tag, registry, options.platform, engineContext, session),
+              ),
             ),
           );
         }),
-        pull: (ref, platform, context) =>
-          run([
-            ...formatArgs({ context }),
-            "image",
-            "pull",
-            ref,
-            ...(platform ? ["--platform", platform] : []),
-          ]),
+        pull: (ref, platform, context, session) =>
+          run(
+            [
+              ...formatArgs({ context }),
+              "image",
+              "pull",
+              ref,
+              ...(platform ? ["--platform", platform] : []),
+            ],
+            undefined,
+            outputTap(session),
+          ),
         inspect: (ref, context) =>
           runInspect<Docker.Image>([...formatArgs({ context }), "image", "inspect", ref]),
         remove: (ref, force, context) =>

@@ -1,4 +1,5 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
@@ -415,6 +416,14 @@ export interface DurableObjectContainerProps extends PlatformProps {
    * Supports up to 100 images, with names between 1 and 128 characters.
    */
   images?: Record<string, ContainerImageProps>;
+  /**
+   * Maximum wait for Cloudflare to prepare each published image, including API calls.
+   * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
+   * Cancellation stops waiting; another deployment reuses the published registry image.
+   * Use an immutable source digest or change the image reference to refresh a named image.
+   * @default "30 minutes"
+   */
+  imagePreparationTimeout?: Duration.Input;
   /** Application-wide SSH access. Removing a previously declared value disables SSH. */
   wranglerSsh?: Containers.WranglerSSHConfiguration;
   /** SSH public keys allowed to access instances. Removing this property clears previously managed keys. */
@@ -449,6 +458,7 @@ export interface AnyContainerApplicationProps extends Omit<
   wranglerSsh?: Containers.WranglerSSHConfiguration;
   authorizedKeys?: Containers.UserSSHPublicKeyList;
   images?: Record<string, ContainerImageProps>;
+  imagePreparationTimeout?: Duration.Input;
   main?: string;
   image?: string;
   context?: string;

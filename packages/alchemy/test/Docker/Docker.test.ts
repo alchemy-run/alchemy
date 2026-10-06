@@ -115,7 +115,7 @@ describe("Docker registry errors", (it) => {
  * plugin version (or fails it like a missing plugin when `undefined`),
  * records every other invocation (args + env), and exits 0.
  */
-const fakeDocker = (buildxVersion: string | undefined) => {
+const fakeDocker = (buildxVersion: string | undefined, output = { stdout: "", stderr: "" }) => {
   const calls: Array<{ args: ReadonlyArray<string>; env: Record<string, string | undefined> }> = [];
   const encode = (text: string) => new TextEncoder().encode(text);
   const spawner = ChildProcessSpawner.make((command) =>
@@ -129,8 +129,8 @@ const fakeDocker = (buildxVersion: string | undefined) => {
       const stdout =
         probe && !missing
           ? `github.com/docker/buildx ${buildxVersion} 503f948aadbddb6de3ec5581f766e1d27f6975a1\n`
-          : "";
-      const stderr = missing ? "docker: 'buildx' is not a docker command.\n" : "";
+          : output.stdout;
+      const stderr = missing ? "docker: 'buildx' is not a docker command.\n" : output.stderr;
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(1),
         exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(missing ? 1 : 0)),
@@ -163,6 +163,39 @@ const registry = {
 };
 
 describe("Docker.image", (it) => {
+  it.effect(
+    "streams pull and push output through deployment notes",
+    () =>
+      Effect.gen(function* () {
+        const fake = fakeDocker("v0.26.1", {
+          stdout: "layer uploaded\n",
+          stderr: "transfer progress\n",
+        });
+        const notes: Array<{ message: string; kind?: string }> = [];
+        const session = {
+          note: (message: string, options?: { kind?: "status" | "output" }) =>
+            Effect.sync(() => {
+              notes.push({ message, kind: options?.kind });
+            }),
+        };
+        yield* Effect.gen(function* () {
+          const docker = yield* Docker;
+          yield* docker.image.pull("alpine:3.21", "linux/amd64", undefined, session);
+          yield* docker.image.push(
+            "registry.invalid/image:tag",
+            registry,
+            "linux/amd64",
+            undefined,
+            session,
+          );
+        }).pipe(Effect.provide(fake.layer));
+        expect(notes.filter((note) => note.message === "layer uploaded")).toHaveLength(2);
+        expect(notes.filter((note) => note.message === "transfer progress")).toHaveLength(2);
+        expect(notes.every((note) => note.kind === "output")).toBe(true);
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+
   it.effect(
     "exports straight to the registry on Buildx >= 0.26",
     () =>
