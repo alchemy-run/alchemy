@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   normalizeLocation,
@@ -28,8 +23,7 @@ import {
   waitUntilGone,
 } from "./operations.ts";
 
-const DEFAULT_ACTION =
-  "ALLOW" satisfies networksecurity.AuthorizationPolicyActionEnum;
+const DEFAULT_ACTION = "ALLOW" satisfies networksecurity.AuthorizationPolicyActionEnum;
 
 export type AuthorizationPolicyAction =
   | networksecurity.AuthorizationPolicyActionEnum
@@ -166,15 +160,10 @@ export const AuthorizationPolicy = Resource<AuthorizationPolicy>(
   "GCP.NetworkSecurity.AuthorizationPolicy",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  authorizationPolicyId: string,
-) =>
+const resourceName = (project: string, location: string, authorizationPolicyId: string) =>
   `projects/${project}/locations/${location}/authorizationPolicies/${authorizationPolicyId}`;
 
-const actionOf = (value: string | undefined) =>
-  (value ?? DEFAULT_ACTION).toUpperCase();
+const actionOf = (value: string | undefined) => (value ?? DEFAULT_ACTION).toUpperCase();
 
 const toRules = (
   rules: networksecurity.RuleList | AuthorizationPolicyRule[] | undefined,
@@ -184,10 +173,7 @@ const toRules = (
     destinations: rule.destinations,
   }));
 
-const toAttrs = (
-  policy: networksecurity.AuthorizationPolicy,
-  project: string,
-) => {
+const toAttrs = (policy: networksecurity.AuthorizationPolicy, project: string) => {
   const name = policy.name ?? "";
   const parsed = parseResourceName(name);
   return {
@@ -216,13 +202,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.authorizationPolicies ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.authorizationPolicies ?? [])),
       Stream.filter((policy) =>
-        Object.keys(policy.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(policy.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((policy) => toAttrs(policy, project)),
       Stream.runCollect,
@@ -232,37 +214,22 @@ const listOwned = (project: string) =>
 
 export const AuthorizationPolicyProvider = () =>
   Provider.succeed(AuthorizationPolicy, {
-    stables: [
-      "name",
-      "authorizationPolicyId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "authorizationPolicyId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.authorizationPolicyId ?? output?.authorizationPolicyId;
+      const previousId = olds?.authorizationPolicyId ?? output?.authorizationPolicyId;
       const nextId = news.authorizationPolicyId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -275,15 +242,11 @@ export const AuthorizationPolicyProvider = () =>
         "authzpolicy",
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, authorizationPolicyId);
+      const name = output?.name ?? resourceName(env.project, location, authorizationPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -344,17 +307,11 @@ export const AuthorizationPolicyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const actionChanged = actionOf(current.action) !== action;
       const rulesChanged = !sameJson(toRules(current.rules), toRules(rules));
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        actionChanged ||
-        rulesChanged
-      ) {
+      if (labelsChanged || descriptionChanged || actionChanged || rulesChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,
@@ -362,23 +319,19 @@ export const AuthorizationPolicyProvider = () =>
           rulesChanged ? "rules" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networksecurity.patchProjectsLocationsAuthorizationPolicies({
+        const operation = yield* networksecurity.patchProjectsLocationsAuthorizationPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              action,
-              rules,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            action,
+            rules,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

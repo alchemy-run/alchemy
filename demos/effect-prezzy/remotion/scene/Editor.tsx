@@ -5,8 +5,8 @@ import { mono, sans } from "../fonts.ts";
 import { vscode } from "../theme.ts";
 import { Window } from "./Desktop.tsx";
 import { languageLabel } from "./highlight.ts";
-import { TIMING, type SceneSchedule } from "./schedule.ts";
 import type { PatchView, Row } from "./patch.ts";
+import { TIMING, type SceneSchedule } from "./schedule.ts";
 
 const CODE = { fontSize: 21, lineHeight: 32, charWidth: 21 * 0.6 } as const;
 const UI = 15;
@@ -29,26 +29,22 @@ interface EditorState {
   scrollTo: number;
 }
 
-const VISIBLE_ROWS = Math.floor(
-  (WINDOW.height - TITLE_BAR - TABS - BREADCRUMBS - STATUS) / CODE.lineHeight,
-) - 1;
+const VISIBLE_ROWS =
+  Math.floor((WINDOW.height - TITLE_BAR - TABS - BREADCRUMBS - STATUS) / CODE.lineHeight) - 1;
 
 /** Keep the change in view: its top a few rows down, its end on screen when it fits. */
 const scrollFor = (view: PatchView, kind: "patch" | "open") => {
   if (kind === "open") return 0;
   const max = Math.max(0, view.rows.length - VISIBLE_ROWS);
   // The whole edit if it fits; otherwise its biggest hunk (e.g. the new code, not the imports).
-  const [first, last] = view.last - view.first <= VISIBLE_ROWS - 6 ? [view.first, view.last] : view.main;
+  const [first, last] =
+    view.last - view.first <= VISIBLE_ROWS - 6 ? [view.first, view.last] : view.main;
   let top = first - 4;
   if (last - top > VISIBLE_ROWS - 3) top = Math.min(first - 2, last - VISIBLE_ROWS + 3);
   return Math.max(0, Math.min(top, max));
 };
 
-const editorState = (
-  capture: SceneCapture,
-  plan: SceneSchedule,
-  frame: number,
-): EditorState => {
+const editorState = (capture: SceneCapture, plan: SceneSchedule, frame: number): EditorState => {
   const files = new Set(capture.start.files);
   // Start each scene with the few most recent tabs, like closing old ones between chapters.
   const tabs = capture.start.tabs.map((t) => t.file).slice(-4);
@@ -72,7 +68,8 @@ const editorState = (
       local = Infinity;
       continue;
     }
-    if (beat.kind !== "editor.open" && beat.kind !== "editor.edit" && beat.kind !== "editor.patch") continue;
+    if (beat.kind !== "editor.open" && beat.kind !== "editor.edit" && beat.kind !== "editor.patch")
+      continue;
     if (!tabs.includes(beat.file)) tabs.push(beat.file);
     active = beat.file;
     files.add(beat.file);
@@ -200,14 +197,27 @@ const ActivityIcon = ({ children, active }: { children: ReactNode; active?: bool
       opacity: active ? 1 : 0.5,
     }}
   >
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={vscode.fg} strokeWidth="1.5">
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={vscode.fg}
+      strokeWidth="1.5"
+    >
       {children}
     </svg>
   </div>
 );
 
 const ActivityBar = () => (
-  <div style={{ width: ACTIVITY_BAR, background: vscode.chromeBg, borderRight: `1px solid ${vscode.border}` }}>
+  <div
+    style={{
+      width: ACTIVITY_BAR,
+      background: vscode.chromeBg,
+      borderRight: `1px solid ${vscode.border}`,
+    }}
+  >
     <ActivityIcon active>
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
       <path d="M14 3v5h5" />
@@ -265,10 +275,15 @@ const Code = ({ state }: { state: EditorState }) => {
   const hasDel = view.rows.some((r) => r.kind === "del");
   const addedTotal = view.rows.filter((r) => r.kind === "add").length;
   // Removed lines collapse first.
-  const p = t === Infinity || !hasDel ? 1 : ease(interpolate(t, [show, show + TIMING.patchDelete], [0, 1], clamp));
+  const p =
+    t === Infinity || !hasDel
+      ? 1
+      : ease(interpolate(t, [show, show + TIMING.patchDelete], [0, 1], clamp));
   // Then added lines stream in one at a time, each at full size the moment it appears.
   const streamFrom = show + (hasDel ? TIMING.patchDelete : 0);
-  const perLine = addedTotal ? Math.min(TIMING.patchPerLine, TIMING.patchStreamMax / addedTotal) : 0;
+  const perLine = addedTotal
+    ? Math.min(TIMING.patchPerLine, TIMING.patchStreamMax / addedTotal)
+    : 0;
   const addIndex = new Map<Row, number>();
   view.rows.forEach((r) => {
     if (r.kind === "add") addIndex.set(r, addIndex.size);
@@ -286,7 +301,8 @@ const Code = ({ state }: { state: EditorState }) => {
   const heightOf = (row: Row) => (row.kind === "del" ? 1 - p : row.kind === "add" ? shown(row) : 1);
   // Pixel offset of the fractional scroll row, using the rows' current heights.
   let offset = 0;
-  for (let i = 0; i < Math.floor(scroll) && i < view.rows.length; i++) offset += heightOf(view.rows[i]!);
+  for (let i = 0; i < Math.floor(scroll) && i < view.rows.length; i++)
+    offset += heightOf(view.rows[i]!);
   offset += (scroll % 1) * heightOf(view.rows[Math.floor(scroll)] ?? view.rows[0]!);
   const settled = t === Infinity;
   return (
@@ -317,7 +333,11 @@ const Code = ({ state }: { state: EditorState }) => {
                 display: "flex",
                 position: "relative",
                 background: added ? ADD_BG : removed ? DEL_BG : undefined,
-                boxShadow: added ? `inset 3px 0 ${ADD_BAR}` : removed ? `inset 3px 0 ${DEL_BAR}` : undefined,
+                boxShadow: added
+                  ? `inset 3px 0 ${ADD_BAR}`
+                  : removed
+                    ? `inset 3px 0 ${DEL_BAR}`
+                    : undefined,
                 // Removed lines fade as they collapse; added lines appear whole.
                 opacity: row.kind === "del" ? (1 - p) ** 2 : 1,
               }}
@@ -333,7 +353,12 @@ const Code = ({ state }: { state: EditorState }) => {
               >
                 {row.kind === "del" ? "−" : row.number}
               </span>
-              <span style={{ textDecoration: removed && p > 0 ? "line-through" : undefined, textDecorationColor: DEL_BAR }}>
+              <span
+                style={{
+                  textDecoration: removed && p > 0 ? "line-through" : undefined,
+                  textDecorationColor: DEL_BAR,
+                }}
+              >
                 <Line row={row} />
               </span>
             </div>
@@ -354,24 +379,70 @@ export const Editor = ({
   frame: number;
 }) => {
   const state = editorState(capture, plan, frame);
-  const title = state.active ? `${state.active.split("/").pop()} — ${capture.project}` : capture.project;
+  const title = state.active
+    ? `${state.active.split("/").pop()} — ${capture.project}`
+    : capture.project;
   return (
     <Window title={title} background={vscode.editorBg}>
-      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", fontFamily: sans, fontSize: UI }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          fontFamily: sans,
+          fontSize: UI,
+        }}
+      >
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
           <ActivityBar />
-          <div style={{ width: SIDEBAR, background: vscode.chromeBg, borderRight: `1px solid ${vscode.border}`, color: vscode.fg }}>
-            <div style={{ height: 40, display: "flex", alignItems: "center", padding: "0 20px", fontSize: 13, letterSpacing: 0.6, color: vscode.fgMuted }}>
+          <div
+            style={{
+              width: SIDEBAR,
+              background: vscode.chromeBg,
+              borderRight: `1px solid ${vscode.border}`,
+              color: vscode.fg,
+            }}
+          >
+            <div
+              style={{
+                height: 40,
+                display: "flex",
+                alignItems: "center",
+                padding: "0 20px",
+                fontSize: 13,
+                letterSpacing: 0.6,
+                color: vscode.fgMuted,
+              }}
+            >
               EXPLORER
             </div>
-            <div style={{ height: 28, display: "flex", alignItems: "center", gap: 4, padding: "0 6px", fontWeight: 700, fontSize: 13, letterSpacing: 0.4 }}>
+            <div
+              style={{
+                height: 28,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "0 6px",
+                fontWeight: 700,
+                fontSize: 13,
+                letterSpacing: 0.4,
+              }}
+            >
               <Chevron />
               {capture.project.toUpperCase()}
             </div>
             <Tree nodes={buildTree(state.files)} depth={0} active={state.active} />
           </div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <div style={{ height: TABS, display: "flex", background: vscode.chromeBg, borderBottom: `1px solid ${vscode.border}` }}>
+            <div
+              style={{
+                height: TABS,
+                display: "flex",
+                background: vscode.chromeBg,
+                borderBottom: `1px solid ${vscode.border}`,
+              }}
+            >
               {state.tabs.map((tab) => {
                 const active = tab === state.active;
                 return (
@@ -395,7 +466,17 @@ export const Editor = ({
                 );
               })}
             </div>
-            <div style={{ height: BREADCRUMBS, display: "flex", alignItems: "center", gap: 8, padding: "0 20px", color: vscode.fgMuted, fontSize: 14 }}>
+            <div
+              style={{
+                height: BREADCRUMBS,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "0 20px",
+                color: vscode.fgMuted,
+                fontSize: 14,
+              }}
+            >
               {(state.active ?? "").split("/").map((part, i, all) => (
                 <span key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {i === all.length - 1 ? <FileIcon name={part} /> : null}
@@ -405,9 +486,7 @@ export const Editor = ({
               ))}
             </div>
             <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-              {state.view ? (
-                <Code state={state} />
-              ) : null}
+              {state.view ? <Code state={state} /> : null}
             </div>
           </div>
         </div>

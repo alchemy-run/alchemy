@@ -1,3 +1,4 @@
+import * as HttpApi from "effect/http-api/HttpApi";
 /**
  * The typed HTTP contract for git-service (DESIGN.md §5): every plane as
  * one Effect `HttpApi`, so the Worker, the clients
@@ -22,7 +23,6 @@
  * errors live in `Api/Schema.ts` and are re-exported flatly from here.
  */
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
-import * as HttpApi from "effect/http-api/HttpApi";
 import { GitHub } from "./Api/GitHub.ts";
 import { Objects } from "./Api/Objects.ts";
 import { Protocol } from "./Api/Protocol.ts";
@@ -68,15 +68,11 @@ export class GitApi extends HttpApi.make("git-service")
  *   })
  * ```
  */
-export const isRead = (
-  request: HttpServerRequest.HttpServerRequest,
-): boolean => {
+export const isRead = (request: HttpServerRequest.HttpServerRequest): boolean => {
   const url = new URL(request.url, "http://localhost");
-  if (request.method === "POST")
-    return url.pathname.endsWith("/git-upload-pack");
+  if (request.method === "POST") return url.pathname.endsWith("/git-upload-pack");
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   return (
-    !url.pathname.endsWith("/info/refs") ||
-    url.searchParams.get("service") !== "git-receive-pack"
+    !url.pathname.endsWith("/info/refs") || url.searchParams.get("service") !== "git-receive-pack"
   );
 };

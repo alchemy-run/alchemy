@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apihub from "@distilled.cloud/gcp/apihub_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs a provisioned API Hub instance in us-central1 (one per project,
 // behind a host project registration); without one writes fail with
@@ -77,20 +74,17 @@ test.provider.skipIf(!runLifecycle)(
             location,
             displayName: "v1",
           });
-          const consumerOp = yield* GCP.ApiHub.ApisVersionsOperation(
-            "ListPets",
-            {
-              version: consumerVersion.name,
-              location,
-              details: {
-                httpOperation: {
-                  method: "GET",
-                  path: { path: "/pets" },
-                },
-                description: "list pets",
+          const consumerOp = yield* GCP.ApiHub.ApisVersionsOperation("ListPets", {
+            version: consumerVersion.name,
+            location,
+            details: {
+              httpOperation: {
+                method: "GET",
+                path: { path: "/pets" },
               },
+              description: "list pets",
             },
-          );
+          });
           const supplierOp = yield* GCP.ApiHub.ApisVersionsOperation("GetPet", {
             version: supplierVersion.name,
             location,
@@ -113,12 +107,8 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.dependency.name).toContain("/dependencies/");
-      expect(created.dependency.consumer?.operationResourceName).toEqual(
-        created.consumerOp.name,
-      );
-      expect(created.dependency.supplier?.operationResourceName).toEqual(
-        created.supplierOp.name,
-      );
+      expect(created.dependency.consumer?.operationResourceName).toEqual(created.consumerOp.name);
+      expect(created.dependency.supplier?.operationResourceName).toEqual(created.supplierOp.name);
       expect(created.dependency.description).toEqual("listPets calls getPet");
 
       const fetched = yield* apihub.getProjectsLocationsDependencies({
@@ -147,20 +137,17 @@ test.provider.skipIf(!runLifecycle)(
             location,
             displayName: "v1",
           });
-          const consumerOp = yield* GCP.ApiHub.ApisVersionsOperation(
-            "ListPets",
-            {
-              version: consumerVersion.name,
-              location,
-              details: {
-                httpOperation: {
-                  method: "GET",
-                  path: { path: "/pets" },
-                },
-                description: "list pets",
+          const consumerOp = yield* GCP.ApiHub.ApisVersionsOperation("ListPets", {
+            version: consumerVersion.name,
+            location,
+            details: {
+              httpOperation: {
+                method: "GET",
+                path: { path: "/pets" },
               },
+              description: "list pets",
             },
-          );
+          });
           const supplierOp = yield* GCP.ApiHub.ApisVersionsOperation("GetPet", {
             version: supplierVersion.name,
             location,
@@ -184,9 +171,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.dependency.name).toEqual(created.dependency.name);
-      expect(updated.dependency.description).toEqual(
-        "listPets still calls getPet",
-      );
+      expect(updated.dependency.description).toEqual("listPets still calls getPet");
 
       yield* stack.destroy();
 

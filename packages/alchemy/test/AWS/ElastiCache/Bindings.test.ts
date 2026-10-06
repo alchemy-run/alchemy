@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ElastiCacheBindingsTestFunctionLive, {
   ElastiCacheBindingsTestFunction,
 } from "./bindings-handler.ts";
@@ -18,10 +18,7 @@ const NONEXISTENT_NAME = "alchemy-elasticache-nonexistent-probe";
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -34,30 +31,18 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
 
 describe.sequential(
   "ElastiCache Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:elasticache",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:elasticache", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "ElastiCache bindings setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("ElastiCache bindings setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("ElastiCache bindings setup: deploying fixture");
@@ -76,9 +61,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -107,9 +90,7 @@ describe.sequential(
 
       test.provider("surfaces the typed not-found tag", () =>
         Effect.gen(function* () {
-          const response = yield* getJson(
-            `/cache-probe?name=${NONEXISTENT_NAME}`,
-          );
+          const response = yield* getJson(`/cache-probe?name=${NONEXISTENT_NAME}`);
           expect((response as any).tag).toBe("ServerlessCacheNotFoundFault");
         }),
       );
@@ -136,9 +117,7 @@ describe.sequential(
     describe("DeleteServerlessCacheSnapshot", () => {
       test.provider("surfaces the typed not-found tag", () =>
         Effect.gen(function* () {
-          const response = yield* getJson(
-            `/delete-probe?name=${NONEXISTENT_NAME}`,
-          );
+          const response = yield* getJson(`/delete-probe?name=${NONEXISTENT_NAME}`);
           // ServiceLinkedRoleNotFoundFault: ElastiCache validates the SLR
           // before snapshot existence in accounts that never kept a cache.
           expect([
@@ -150,48 +129,36 @@ describe.sequential(
     });
 
     describe("CopyServerlessCacheSnapshot", () => {
-      test.provider(
-        "rejects a nonexistent source snapshot with a typed tag",
-        () =>
-          Effect.gen(function* () {
-            const response = yield* getJson(
-              `/copy-probe?name=${NONEXISTENT_NAME}`,
-            );
-            expect([
-              "ServerlessCacheSnapshotNotFoundFault",
-              "InvalidParameterValueException",
-              "ServiceLinkedRoleNotFoundFault",
-            ]).toContain((response as any).tag);
-          }),
+      test.provider("rejects a nonexistent source snapshot with a typed tag", () =>
+        Effect.gen(function* () {
+          const response = yield* getJson(`/copy-probe?name=${NONEXISTENT_NAME}`);
+          expect([
+            "ServerlessCacheSnapshotNotFoundFault",
+            "InvalidParameterValueException",
+            "ServiceLinkedRoleNotFoundFault",
+          ]).toContain((response as any).tag);
+        }),
       );
     });
 
-    describe(
-      "consumeCacheEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          () =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeCacheEvents must
-              // have materialized as a rule on the default bus with the Lambda
-              // as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeCacheEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", () =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeCacheEvents must
+          // have materialized as a rule on the default bus with the Lambda
+          // as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
 
     describe("ExportServerlessCacheSnapshot", () => {
       test.provider("rejects a nonexistent snapshot with a typed tag", () =>
         Effect.gen(function* () {
-          const response = yield* getJson(
-            `/export-probe?name=${NONEXISTENT_NAME}`,
-          );
+          const response = yield* getJson(`/export-probe?name=${NONEXISTENT_NAME}`);
           expect([
             "ServerlessCacheSnapshotNotFoundFault",
             "InvalidParameterValueException",

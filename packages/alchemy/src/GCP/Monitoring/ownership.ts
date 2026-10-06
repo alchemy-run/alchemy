@@ -53,24 +53,19 @@ export const parseMarker = (
 };
 
 export const hasOwnershipMarker = (value: string | undefined) =>
-  Object.keys(parseMarker(value).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseMarker(value).labels).some((key) => key.startsWith("alchemy-"));
 
 export const compactStringMap = (
   value: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> | undefined => {
   if (value == null) return undefined;
   return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(value).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 };
 
-export const toEmptyObject = (
-  value: unknown,
-): Record<string, never> | undefined => (value === undefined ? undefined : {});
+export const toEmptyObject = (value: unknown): Record<string, never> | undefined =>
+  value === undefined ? undefined : {};
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));

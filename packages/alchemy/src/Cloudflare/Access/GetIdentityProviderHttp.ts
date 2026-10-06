@@ -1,9 +1,9 @@
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
@@ -11,10 +11,7 @@ import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 import { isWorker } from "../Workers/Worker.ts";
-import {
-  type FindIdentityProviderOptions,
-  GetIdentityProvider,
-} from "./GetIdentityProvider.ts";
+import { type FindIdentityProviderOptions, GetIdentityProvider } from "./GetIdentityProvider.ts";
 import { findFirst, toAttributes } from "./IdentityProviderLookup.ts";
 
 const PERMISSION_GROUPS: PermissionGroupRef[] = [
@@ -117,10 +114,7 @@ export const GetIdentityProviderHttp = Layer.effect(
   }),
 );
 
-const makeGetIdentityProviderClient = (
-  auth: AccessIdpAuth,
-  options: FindIdentityProviderOptions,
-) =>
+const makeGetIdentityProviderClient = (auth: AccessIdpAuth, options: FindIdentityProviderOptions) =>
   Effect.fn("Cloudflare.Access.GetIdentityProvider")(function* () {
     const accountId = yield* auth.accountId;
     const match = yield* auth.authorize(
@@ -132,7 +126,5 @@ const makeGetIdentityProviderClient = (
           (options.type === undefined || idp.type === options.type),
       ),
     );
-    return match
-      ? toAttributes(match, options.zoneId, accountId, undefined)
-      : undefined;
+    return match ? toAttributes(match, options.zoneId, accountId, undefined) : undefined;
   });

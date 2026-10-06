@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,9 +22,7 @@ test.provider.skipIf(!!process.env.FAST)(
           yield* AWS.ApiGateway.GatewayResponse("AgDefault4xx", {
             restApiId: api.restApiId,
             responseType: "DEFAULT_4XX",
-            responseTemplates: {
-              "application/json": '{"message":"test"}',
-            },
+            responseTemplates: { "application/json": '{"message":"test"}' },
           });
           return { api };
         }),
@@ -57,9 +55,7 @@ test.provider.skipIf(!!process.env.FAST)(
             restApiId: api.restApiId,
             responseType: "DEFAULT_5XX",
             statusCode: "500",
-            responseTemplates: {
-              "application/json": '{"message":"v1"}',
-            },
+            responseTemplates: { "application/json": '{"message":"v1"}' },
           });
           return { api };
         }),
@@ -74,9 +70,7 @@ test.provider.skipIf(!!process.env.FAST)(
             restApiId: apiAgain.restApiId,
             responseType: "DEFAULT_5XX",
             statusCode: "502",
-            responseTemplates: {
-              "application/json": '{"message":"v2"}',
-            },
+            responseTemplates: { "application/json": '{"message":"v2"}' },
           });
         }),
       );
@@ -86,19 +80,14 @@ test.provider.skipIf(!!process.env.FAST)(
         responseType: "DEFAULT_5XX",
       });
       expect(g.statusCode).toEqual("502");
-      expect(g.responseTemplates?.["application/json"]).toEqual(
-        '{"message":"v2"}',
-      );
+      expect(g.responseTemplates?.["application/json"]).toEqual('{"message":"v2"}');
 
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);
     }),
   // Three sequential deploy/destroy cycles against API Gateway's account-wide
   // throttle: ~95s alone, >120s under a saturated full-suite run.
-  {
-    tags: ["provider:aws", "provider:aws:apigateway", "live"],
-    timeout: 240_000,
-  },
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"], timeout: 240_000 },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -115,24 +104,17 @@ test.provider.skipIf(!!process.env.FAST)(
           yield* AWS.ApiGateway.GatewayResponse("AgListDefault4xx", {
             restApiId: api.restApiId,
             responseType: "DEFAULT_4XX",
-            responseTemplates: {
-              "application/json": '{"message":"list"}',
-            },
+            responseTemplates: { "application/json": '{"message":"list"}' },
           });
           return { api };
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.GatewayResponse,
-      );
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.GatewayResponse);
       const all = yield* provider.list();
 
       expect(
-        all.some(
-          (g) =>
-            g.restApiId === api.restApiId && g.responseType === "DEFAULT_4XX",
-        ),
+        all.some((g) => g.restApiId === api.restApiId && g.responseType === "DEFAULT_4XX"),
       ).toBe(true);
 
       yield* stack.destroy();

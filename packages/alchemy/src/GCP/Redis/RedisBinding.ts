@@ -1,10 +1,10 @@
+import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as redis from "@distilled.cloud/gcp/redis_v1";
+import * as Output from "../../Output.ts";
 import type { Url } from "../../Redis/index.ts";
 import { UrlMissing as RedisUrlMissing } from "../../Redis/index.ts";
-import * as Output from "../../Output.ts";
 import { bindGcpHost, type GcpIamGrant } from "../Host.ts";
 import type { Instance } from "./Instance.ts";
 
@@ -41,9 +41,8 @@ const endpointOf = (instance: Instance) =>
 
 /** The instance name when AUTH is enabled, else `""`. */
 const authInstanceOf = (instance: Instance) =>
-  Output.map(
-    Output.all(instance.name, instance.authEnabled),
-    ([name, authEnabled]) => (authEnabled ? name : ""),
+  Output.map(Output.all(instance.name, instance.authEnabled), ([name, authEnabled]) =>
+    authEnabled ? name : "",
   );
 
 const scopedCondition = (name: string) => ({
@@ -112,10 +111,7 @@ export const makeRedisBinding = <Client>(options: {
         }
         const secret = yield* password.pipe(
           Effect.tapError((cause) =>
-            Effect.logError(
-              `Memorystore AUTH lookup failed for ${instance.LogicalId}`,
-              cause,
-            ),
+            Effect.logError(`Memorystore AUTH lookup failed for ${instance.LogicalId}`, cause),
           ),
           Effect.mapError(() => missing),
         );

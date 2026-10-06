@@ -2,15 +2,15 @@ import type { Crypto } from "effect/Crypto";
 import type { Input as DurationInput } from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import type { Path } from "effect/Path";
-import { defaultTeardown, type Teardown } from "effect/Runtime";
-import type { Stdio } from "effect/Stdio";
-import type { Terminal } from "effect/Terminal";
 import type { HttpServer } from "effect/http/HttpServer";
 import type { ServeError } from "effect/http/HttpServerError";
+import * as Layer from "effect/Layer";
+import type { Path } from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import { defaultTeardown, type Teardown } from "effect/Runtime";
 import type { WebSocketConstructor } from "effect/socket/Socket";
+import type { Stdio } from "effect/Stdio";
+import type { Terminal } from "effect/Terminal";
 import { disableCrossSpawnChdir } from "./Node.ts";
 
 const isBun = typeof Bun !== "undefined";
@@ -60,14 +60,8 @@ export type PlatformServices =
 export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
   bun: async () => {
     const [BunServices, BunSocket] = await Promise.all([
-      importPlatformPeer(
-        "@effect/platform-bun",
-        () => import("@effect/platform-bun/BunServices"),
-      ),
-      importPlatformPeer(
-        "@effect/platform-bun",
-        () => import("@effect/platform-bun/BunSocket"),
-      ),
+      importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunServices")),
+      importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunSocket")),
     ]);
     return Layer.merge(BunServices.layer, BunSocket.layerWebSocketConstructor);
   },
@@ -77,15 +71,9 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
         "@effect/platform-node",
         () => import("@effect/platform-node/NodeServices"),
       ),
-      importPlatformPeer(
-        "@effect/platform-node",
-        () => import("@effect/platform-node/NodeSocket"),
-      ),
+      importPlatformPeer("@effect/platform-node", () => import("@effect/platform-node/NodeSocket")),
     ]);
-    return Layer.merge(
-      NodeServices.layer,
-      NodeSocket.layerWebSocketConstructor,
-    );
+    return Layer.merge(NodeServices.layer, NodeSocket.layerWebSocketConstructor);
   },
 });
 

@@ -2,11 +2,11 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Http from "alchemy/Http";
 import * as SQL from "alchemy/SQL/D1";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpRouter from "effect/http/HttpRouter";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Layer from "effect/Layer";
 import { Db } from "./Db.ts";
 import { LinkNotFound, newCode, type Link } from "./Link.ts";
 import { ShortyApi } from "./ShortyApi.ts";
@@ -70,7 +70,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Effect.catchTags({
           LinkNotFound: ({ code }) =>
             HttpServerResponse.json({ _tag: "LinkNotFound", code }, { status: 404 }),
-          SqlError: () => HttpServerResponse.json({ error: "database unavailable" }, { status: 503 }),
+          SqlError: () =>
+            HttpServerResponse.json({ error: "database unavailable" }, { status: 503 }),
         }),
       ),
     };

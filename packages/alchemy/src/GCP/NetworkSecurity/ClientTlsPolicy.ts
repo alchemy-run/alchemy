@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -182,23 +177,13 @@ export type ClientTlsPolicy = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const ClientTlsPolicy = Resource<ClientTlsPolicy>(
-  "GCP.NetworkSecurity.ClientTlsPolicy",
-);
+export const ClientTlsPolicy = Resource<ClientTlsPolicy>("GCP.NetworkSecurity.ClientTlsPolicy");
 
-const resourceName = (
-  project: string,
-  location: string,
-  clientTlsPolicyId: string,
-) =>
+const resourceName = (project: string, location: string, clientTlsPolicyId: string) =>
   `projects/${project}/locations/${location}/clientTlsPolicies/${clientTlsPolicyId}`;
 
-const toCa = (
-  ca: ValidationCA | networksecurity.ValidationCA,
-): ValidationCA => ({
-  grpcEndpoint: ca.grpcEndpoint
-    ? { targetUri: ca.grpcEndpoint.targetUri }
-    : undefined,
+const toCa = (ca: ValidationCA | networksecurity.ValidationCA): ValidationCA => ({
+  grpcEndpoint: ca.grpcEndpoint ? { targetUri: ca.grpcEndpoint.targetUri } : undefined,
   certificateProviderInstance: ca.certificateProviderInstance
     ? { pluginInstance: ca.certificateProviderInstance.pluginInstance }
     : undefined,
@@ -265,9 +250,7 @@ export const ClientTlsPolicyProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -283,18 +266,12 @@ export const ClientTlsPolicyProvider = () =>
         output?.clientTlsPolicyId,
         "client-tls-policy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, clientTlsPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, clientTlsPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -320,10 +297,7 @@ export const ClientTlsPolicyProvider = () =>
         output?.clientTlsPolicyId,
         "client-tls-policy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, clientTlsPolicyId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -364,17 +338,10 @@ export const ClientTlsPolicyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const sniChanged = (current.sni ?? "") !== (news.sni ?? "");
-      const caChanged = !sameJson(
-        (current.serverValidationCa ?? []).map(toCa),
-        desiredCa,
-      );
-      const clientChanged = !sameJson(
-        toProvider(current.clientCertificate),
-        desiredClient,
-      );
+      const caChanged = !sameJson((current.serverValidationCa ?? []).map(toCa), desiredCa);
+      const clientChanged = !sameJson(toProvider(current.clientCertificate), desiredClient);
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -385,24 +352,20 @@ export const ClientTlsPolicyProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networksecurity.patchProjectsLocationsClientTlsPolicies({
+        const operation = yield* networksecurity.patchProjectsLocationsClientTlsPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              sni: news.sni,
-              serverValidationCa: desiredCa,
-              clientCertificate: desiredClient,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            sni: news.sni,
+            serverValidationCa: desiredCa,
+            clientCertificate: desiredClient,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

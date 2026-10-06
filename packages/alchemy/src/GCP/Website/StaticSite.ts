@@ -173,15 +173,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           ? ("spa" as const)
           : ("none" as const);
 
-    const {
-      NODE_SERVE_ENTRY_FILE_NAME,
-      relativeClientDirExpression,
-      writeNodeServeEntry,
-    } = yield* loadFrontendCore;
-    const servePath = path.join(
-      path.dirname(outdir),
-      NODE_SERVE_ENTRY_FILE_NAME,
-    );
+    const { NODE_SERVE_ENTRY_FILE_NAME, relativeClientDirExpression, writeNodeServeEntry } =
+      yield* loadFrontendCore;
+    const servePath = path.join(path.dirname(outdir), NODE_SERVE_ENTRY_FILE_NAME);
     yield* writeNodeServeEntry({
       output: {
         clientDirectory: outdir,

@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 /** Optional deploy-time setting from the ConfigProvider (env by default). */
 const optionalSetting = (key: string) =>
@@ -42,10 +38,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -65,8 +58,7 @@ export const encodeOwnership = (
 ): string => {
   const marker = fitMarker(labels, Math.min(800, maxLength));
   const trimmed = text?.trim();
-  const combined =
-    trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
+  const combined = trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
   return combined.slice(0, maxLength);
 };
 
@@ -93,31 +85,15 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
-const labelsMatch = (
-  expected: Record<string, string>,
-  labels: Record<string, string>,
-) =>
-  prefixMatch(
-    expected[alchemyLabelKeys.stack] ?? "",
-    labels[alchemyLabelKeys.stack] ?? "",
-  ) &&
-  prefixMatch(
-    expected[alchemyLabelKeys.stage] ?? "",
-    labels[alchemyLabelKeys.stage] ?? "",
-  ) &&
-  prefixMatch(
-    expected[alchemyLabelKeys.id] ?? "",
-    labels[alchemyLabelKeys.id] ?? "",
-  );
+const labelsMatch = (expected: Record<string, string>, labels: Record<string, string>) =>
+  prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+  prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+  prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "");
 
 export const stampCustomAttributes = (
   labels: Record<string, string>,
@@ -146,9 +122,7 @@ export const stampCustomAttributes = (
 export const stripCustomAttributes = (
   custom: readonly ReviewCustomAttribute[] | undefined,
 ): ReviewCustomAttribute[] =>
-  (custom ?? []).filter(
-    (attr) => attr.name === undefined || !attr.name.startsWith("alchemy-"),
-  );
+  (custom ?? []).filter((attr) => attr.name === undefined || !attr.name.startsWith("alchemy-"));
 
 export const ownershipFromCustomAttributes = (
   custom: readonly ReviewCustomAttribute[] | undefined,
@@ -162,9 +136,8 @@ export const ownershipFromCustomAttributes = (
   return labels;
 };
 
-export const hasCustomOwnership = (
-  custom: readonly ReviewCustomAttribute[] | undefined,
-) => Object.keys(ownershipFromCustomAttributes(custom)).length > 0;
+export const hasCustomOwnership = (custom: readonly ReviewCustomAttribute[] | undefined) =>
+  Object.keys(ownershipFromCustomAttributes(custom)).length > 0;
 
 export const ownedByAlchemy = (
   id: string,
@@ -189,9 +162,7 @@ export const ownedByAlchemy = (
 export const hasAlchemyOwnership = (input: {
   customAttributes?: readonly ReviewCustomAttribute[];
   content?: string;
-}) =>
-  hasCustomOwnership(input.customAttributes) ||
-  hasOwnershipMarker(input.content);
+}) => hasCustomOwnership(input.customAttributes) || hasOwnershipMarker(input.content);
 
 export const accountIdOf = (account: string) =>
   account.replace(/^accounts\//, "").split("/")[0] ?? account;
@@ -229,9 +200,7 @@ export const sameStringList = (
   JSON.stringify([...(left ?? [])].slice().sort()) ===
   JSON.stringify([...(right ?? [])].slice().sort());
 
-export const normalizeCustomAttributes = (
-  custom: readonly ReviewCustomAttribute[] | undefined,
-) =>
+export const normalizeCustomAttributes = (custom: readonly ReviewCustomAttribute[] | undefined) =>
   [...(custom ?? [])]
     .map((attr) => ({
       name: attr.name,
@@ -254,19 +223,14 @@ export const toResourceId = (
       maxLength,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `r${generated}`.slice(0, maxLength);
+    return /^[a-z]/.test(generated) ? generated : `r${generated}`.slice(0, maxLength);
   });
 
 /** Merchant Center accounts named in the Merchant API settings (for `list`). */
 export const configuredAccountIds = () =>
   Effect.gen(function* () {
     const ids = new Set<string>();
-    for (const key of [
-      "GCP_MERCHANTAPI_ACCOUNT_ID",
-      "GCP_CONTENT_MERCHANT_ID",
-    ]) {
+    for (const key of ["GCP_MERCHANTAPI_ACCOUNT_ID", "GCP_CONTENT_MERCHANT_ID"]) {
       const value = yield* optionalSetting(key);
       if (value) ids.add(accountIdOf(value));
     }
@@ -306,11 +270,7 @@ export const listMerchantReviewsAt = (account: string) =>
           pageSize: 250,
         }),
         (page) => page.merchantReviews,
-      ).pipe(
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed([] as reviews.MerchantReview[]),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as reviews.MerchantReview[])));
 
 export const listProductReviewsAt = (account: string) =>
   account.length === 0
@@ -321,17 +281,9 @@ export const listProductReviewsAt = (account: string) =>
           pageSize: 250,
         }),
         (page) => page.productReviews,
-      ).pipe(
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed([] as reviews.ProductReview[]),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as reviews.ProductReview[])));
 
-export const findOwnedMerchantReview = (
-  id: string,
-  account: string,
-  merchantReviewId?: string,
-) =>
+export const findOwnedMerchantReview = (id: string, account: string, merchantReviewId?: string) =>
   Effect.gen(function* () {
     const listed = yield* listMerchantReviewsAt(account);
     for (const review of listed) {
@@ -350,11 +302,7 @@ export const findOwnedMerchantReview = (
     return undefined;
   });
 
-export const findOwnedProductReview = (
-  id: string,
-  account: string,
-  productReviewId?: string,
-) =>
+export const findOwnedProductReview = (id: string, account: string, productReviewId?: string) =>
   Effect.gen(function* () {
     const listed = yield* listProductReviewsAt(account);
     for (const review of listed) {

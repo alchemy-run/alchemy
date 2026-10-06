@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Dashboard } from "./Dashboard.ts";
 
-export interface GetDashboardRequest extends Omit<
-  cloudwatch.GetDashboardInput,
-  "DashboardName"
-> {}
+export interface GetDashboardRequest extends Omit<cloudwatch.GetDashboardInput, "DashboardName"> {}
 
 /**
  * Runtime binding for `cloudwatch:GetDashboard` — read the body and
@@ -36,13 +33,8 @@ export interface GetDashboard extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetDashboardRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetDashboardOutput,
-      cloudwatch.GetDashboardError
-    >
+    ) => Effect.Effect<cloudwatch.GetDashboardOutput, cloudwatch.GetDashboardError>
   >
 > {}
 
-export const GetDashboard = Binding.Service<GetDashboard>(
-  "AWS.CloudWatch.GetDashboard",
-);
+export const GetDashboard = Binding.Service<GetDashboard>("AWS.CloudWatch.GetDashboard");

@@ -37,9 +37,7 @@ export const pushHost = (source: string) =>
   Effect.gen(function* () {
     const host = yield* Binding.Host;
     if (!isGcpListenHost(host)) {
-      return yield* Effect.die(
-        new PushHostRequired(source, (host as { Type?: string })?.Type),
-      );
+      return yield* Effect.die(new PushHostRequired(source, (host as { Type?: string })?.Type));
     }
     return host as PushHost;
   });
@@ -68,8 +66,7 @@ export const hostEndpoint = (host: PushHost) => {
 };
 
 /** Deterministic path segment for a logical id. */
-export const pathSegment = (value: string) =>
-  value.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
+export const pathSegment = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
 
 /**
  * OIDC audience for one delivery route: the route's own URL on the host.
@@ -158,9 +155,7 @@ export const listenForDeliveries = (
         audience: expectedAudience(request, path),
         email: email.value,
       }).pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning("Cannot load Google's signing keys", error),
-        ),
+        Effect.tapError((error) => Effect.logWarning("Cannot load Google's signing keys", error)),
         Effect.option,
       );
       if (verified._tag === "None") return unavailable;

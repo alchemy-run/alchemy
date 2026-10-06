@@ -62,13 +62,7 @@ export type AttributeProps = {
   /**
    * Data type. Immutable — changing it replaces the attribute.
    */
-  dataType:
-    | "DATA_TYPE_UNSPECIFIED"
-    | "ENUM"
-    | "JSON"
-    | "STRING"
-    | "URI"
-    | (string & {});
+  dataType: "DATA_TYPE_UNSPECIFIED" | "ENUM" | "JSON" | "STRING" | "URI" | (string & {});
   /**
    * Resource this attribute can attach to. Immutable — changing it
    * replaces the attribute.
@@ -220,15 +214,7 @@ const getByName = (name: string) =>
 
 export const AttributeProvider = () =>
   Provider.succeed(Attribute, {
-    stables: [
-      "name",
-      "attributeId",
-      "project",
-      "location",
-      "dataType",
-      "scope",
-      "createTime",
-    ],
+    stables: ["name", "attributeId", "project", "location", "dataType", "scope", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -236,48 +222,32 @@ export const AttributeProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.attributeId ?? output?.attributeId,
         nextId: news.attributeId ?? olds?.attributeId ?? output?.attributeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
-          (news.dataType ?? olds?.dataType) !==
-            (olds?.dataType ?? output?.dataType) ||
+          (news.dataType ?? olds?.dataType) !== (olds?.dataType ?? output?.dataType) ||
           (news.scope ?? olds?.scope) !== (olds?.scope ?? output?.scope),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const attributeId = yield* toPhysicalId(
-        id,
-        olds?.attributeId,
-        output?.attributeId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, attributeId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const attributeId = yield* toPhysicalId(id, olds?.attributeId, output?.attributeId);
+      const name = output?.name ?? resourceName(env.project, location, attributeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAttributes(
-          locationParent(env.project, env.region),
-        );
+        const items = yield* listAttributes(locationParent(env.project, env.region));
         return items
           .filter((item) => hasOwnershipMarker(item.description))
           .map((item) => toAttrs(item, env.project, env.region));
@@ -285,18 +255,10 @@ export const AttributeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
-      const attributeId = yield* toPhysicalId(
-        id,
-        news.attributeId,
-        output?.attributeId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, attributeId);
+      const attributeId = yield* toPhysicalId(id, news.attributeId, output?.attributeId);
+      const name = output?.name ?? resourceName(env.project, location, attributeId);
       const ownership = yield* createOwnership(id);
       const description = encodeOwnership(ownership, news.description);
       const allowedValues = news.allowedValues;
@@ -329,19 +291,11 @@ export const AttributeProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, news.displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const allowedChanged = !sameJson(
-        toAllowed(current.allowedValues),
-        allowedValues ?? [],
-      );
+      const allowedChanged = !sameJson(toAllowed(current.allowedValues), allowedValues ?? []);
       const cardinalityChanged =
         cardinality !== undefined && (current.cardinality ?? 1) !== cardinality;
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        allowedChanged ||
-        cardinalityChanged
-      ) {
+      if (displayChanged || descriptionChanged || allowedChanged || cardinalityChanged) {
         current = yield* apihub.patchProjectsLocationsAttributes({
           name: currentName,
           updateMask: updateMaskOf(

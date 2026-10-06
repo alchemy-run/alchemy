@@ -80,15 +80,8 @@ export interface LogEventSink extends Binding.Service<
     logGroup: LogGroup,
     props: LogEventSinkProps,
   ) => Effect.Effect<
-    Sink.Sink<
-      void,
-      Logs.InputLogEvent,
-      readonly Logs.InputLogEvent[],
-      LogEventSinkError
-    >
+    Sink.Sink<void, Logs.InputLogEvent, readonly Logs.InputLogEvent[], LogEventSinkError>
   >
 > {}
 
-export const LogEventSink = Binding.Service<LogEventSink>(
-  "AWS.Logs.LogEventSink",
-);
+export const LogEventSink = Binding.Service<LogEventSink>("AWS.Logs.LogEventSink");

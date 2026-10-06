@@ -34,7 +34,6 @@ export interface DescribeDatasetImportJob extends Binding.Service<
     >
   >
 > {}
-export const DescribeDatasetImportJob =
-  Binding.Service<DescribeDatasetImportJob>(
-    "AWS.Personalize.DescribeDatasetImportJob",
-  );
+export const DescribeDatasetImportJob = Binding.Service<DescribeDatasetImportJob>(
+  "AWS.Personalize.DescribeDatasetImportJob",
+);

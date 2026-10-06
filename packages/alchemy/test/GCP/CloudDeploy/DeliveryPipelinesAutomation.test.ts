@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as clouddeploy from "@distilled.cloud/gcp/clouddeploy_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   clouddeploy.getProjectsLocationsDeliveryPipelinesAutomations({ name }).pipe(
@@ -54,8 +51,7 @@ test.provider(
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       const serviceAccount =
-        process.env.GCP_TEST_CLOUDDEPLOY_SA ??
-        `alchemy-testing@${project}.iam.gserviceaccount.com`;
+        process.env.GCP_TEST_CLOUDDEPLOY_SA ?? `alchemy-testing@${project}.iam.gserviceaccount.com`;
       const runLocation = `projects/${project}/locations/us-central1`;
 
       yield* stack.destroy();
@@ -71,39 +67,31 @@ test.provider(
             description: "alchemy-test-automation-pipeline",
             labels: { env: "test" },
           });
-          const automation = yield* GCP.CloudDeploy.DeliveryPipelinesAutomation(
-            "Promote",
-            {
-              deliveryPipeline: pipeline.name,
-              serviceAccount,
-              selector: { targets: [{ id: "*" }] },
-              rules: [{ promoteReleaseRule: { id: "promote-release" } }],
-              description: "alchemy-test-automation",
-              labels: { env: "test" },
-            },
-          );
+          const automation = yield* GCP.CloudDeploy.DeliveryPipelinesAutomation("Promote", {
+            deliveryPipeline: pipeline.name,
+            serviceAccount,
+            selector: { targets: [{ id: "*" }] },
+            rules: [{ promoteReleaseRule: { id: "promote-release" } }],
+            description: "alchemy-test-automation",
+            labels: { env: "test" },
+          });
           return { target, pipeline, automation };
         }),
       );
 
       expect(created.automation.name).toContain("/automations/");
       expect(created.automation.automationId).toEqual(expect.any(String));
-      expect(created.automation.deliveryPipeline).toEqual(
-        created.pipeline.name,
-      );
+      expect(created.automation.deliveryPipeline).toEqual(created.pipeline.name);
       expect(created.automation.location).toEqual("us-central1");
       expect(created.automation.description).toEqual("alchemy-test-automation");
       expect(created.automation.serviceAccount).toEqual(serviceAccount);
       expect(created.automation.selector?.targets?.[0]?.id).toEqual("*");
-      expect(created.automation.rules[0]?.promoteReleaseRule?.id).toEqual(
-        "promote-release",
-      );
+      expect(created.automation.rules[0]?.promoteReleaseRule?.id).toEqual("promote-release");
       expect(created.automation.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* clouddeploy.getProjectsLocationsDeliveryPipelinesAutomations({
-          name: created.automation.name,
-        });
+      const fetched = yield* clouddeploy.getProjectsLocationsDeliveryPipelinesAutomations({
+        name: created.automation.name,
+      });
       expect(fetched.name).toEqual(created.automation.name);
       expect(fetched.description).toEqual("alchemy-test-automation");
       expect(fetched.labels?.env).toEqual("test");
@@ -121,18 +109,15 @@ test.provider(
             description: "alchemy-test-automation-pipeline",
             labels: { env: "test" },
           });
-          const automation = yield* GCP.CloudDeploy.DeliveryPipelinesAutomation(
-            "Promote",
-            {
-              automationId: created.automation.automationId,
-              deliveryPipeline: pipeline.name,
-              serviceAccount,
-              selector: { targets: [{ id: "*" }] },
-              rules: [{ promoteReleaseRule: { id: "promote-release" } }],
-              description: "alchemy-prod-automation",
-              labels: { env: "prod", role: "promote" },
-            },
-          );
+          const automation = yield* GCP.CloudDeploy.DeliveryPipelinesAutomation("Promote", {
+            automationId: created.automation.automationId,
+            deliveryPipeline: pipeline.name,
+            serviceAccount,
+            selector: { targets: [{ id: "*" }] },
+            rules: [{ promoteReleaseRule: { id: "promote-release" } }],
+            description: "alchemy-prod-automation",
+            labels: { env: "prod", role: "promote" },
+          });
           return automation;
         }),
       );

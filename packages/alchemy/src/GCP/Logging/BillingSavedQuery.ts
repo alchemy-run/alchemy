@@ -181,9 +181,7 @@ export type BillingSavedQuery = Resource<
  * @resource
  * @category Logging
  */
-export const BillingSavedQuery = Resource<BillingSavedQuery>(
-  "GCP.Logging.BillingSavedQuery",
-);
+export const BillingSavedQuery = Resource<BillingSavedQuery>("GCP.Logging.BillingSavedQuery");
 
 export class BillingSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingSavedQueryNotResolved",
@@ -191,17 +189,11 @@ export class BillingSavedQueryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  billingAccountId: string,
-  location: string,
-  savedQueryId: string,
-) =>
+const resourceName = (billingAccountId: string, location: string, savedQueryId: string) =>
   `${billingAccountParent(billingAccountId)}/locations/${location}/savedQueries/${savedQueryId}`;
 
 const parseQueryName = (name: string) => {
-  const match = name.match(
-    /^billingAccounts\/([^/]+)\/locations\/([^/]+)\/savedQueries\/([^/]+)$/,
-  );
+  const match = name.match(/^billingAccounts\/([^/]+)\/locations\/([^/]+)\/savedQueries\/([^/]+)$/);
   if (!match) return undefined;
   return {
     billingAccountId: match[1]!,
@@ -229,23 +221,14 @@ const toOpsQuery = (
   return { sqlQueryText: query.sqlQueryText };
 };
 
-const toAttrs = (
-  query: logging.SavedQuery,
-  billingAccountId: string,
-  location: string,
-) => {
+const toAttrs = (query: logging.SavedQuery, billingAccountId: string, location: string) => {
   const parsedName = parseQueryName(query.name ?? "");
-  const savedQueryId =
-    parsedName?.savedQueryId ?? lastSegment(query.name ?? "");
+  const savedQueryId = parsedName?.savedQueryId ?? lastSegment(query.name ?? "");
   const parsed = parseDescription(query.description);
   const account = parsedName?.billingAccountId ?? billingAccountId;
   const resolvedLocation = parsedName?.location ?? location;
   return {
-    name:
-      query.name ??
-      (savedQueryId
-        ? resourceName(account, resolvedLocation, savedQueryId)
-        : ""),
+    name: query.name ?? (savedQueryId ? resourceName(account, resolvedLocation, savedQueryId) : ""),
     savedQueryId,
     billingAccountId: account,
     location: resolvedLocation,
@@ -264,10 +247,7 @@ const getByName = (name: string) =>
     .getBillingAccountsLocationsSavedQueries({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toBody = (
-  props: BillingSavedQueryProps,
-  description: string,
-): logging.SavedQuery => ({
+const toBody = (props: BillingSavedQueryProps, description: string): logging.SavedQuery => ({
   displayName: props.displayName,
   description,
   visibility: props.visibility ?? "PRIVATE",
@@ -286,13 +266,7 @@ const toBody = (
 
 export const BillingSavedQueryProvider = () =>
   Provider.succeed(BillingSavedQuery, {
-    stables: [
-      "name",
-      "savedQueryId",
-      "billingAccountId",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "savedQueryId", "billingAccountId", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -306,13 +280,11 @@ export const BillingSavedQueryProvider = () =>
         previousLocation !== undefined &&
         news.location !== undefined &&
         news.location !== previousLocation;
-      const previousAccount =
-        olds?.billingAccountId ?? output?.billingAccountId;
+      const previousAccount = olds?.billingAccountId ?? output?.billingAccountId;
       const accountChanged =
         previousAccount !== undefined &&
         news.billingAccountId !== undefined &&
-        billingAccountIdOf(news.billingAccountId) !==
-          billingAccountIdOf(previousAccount);
+        billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !locationChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -323,14 +295,8 @@ export const BillingSavedQueryProvider = () =>
         output?.billingAccountId,
       );
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        olds?.savedQueryId,
-        output?.savedQueryId,
-        "q",
-      );
-      const name =
-        output?.name ?? resourceName(billingAccountId, location, savedQueryId);
+      const savedQueryId = yield* toPhysicalId(id, olds?.savedQueryId, output?.savedQueryId, "q");
+      const name = output?.name ?? resourceName(billingAccountId, location, savedQueryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, billingAccountId, location);
@@ -341,9 +307,7 @@ export const BillingSavedQueryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const billingAccountId = yield* lookupProjectBillingAccountId(
-          env.project,
-        );
+        const billingAccountId = yield* lookupProjectBillingAccountId(env.project);
         if (billingAccountId === undefined) return [];
         return yield* logging.listBillingAccountsLocationsSavedQueries
           .pages({
@@ -351,13 +315,9 @@ export const BillingSavedQueryProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.savedQueries ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.savedQueries ?? [])),
             Stream.filter((query) => hasOwnershipMarker(query.description)),
-            Stream.map((query) =>
-              toAttrs(query, billingAccountId, DEFAULT_LOCATION),
-            ),
+            Stream.map((query) => toAttrs(query, billingAccountId, DEFAULT_LOCATION)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () =>
@@ -372,12 +332,7 @@ export const BillingSavedQueryProvider = () =>
         output?.billingAccountId,
       );
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        news.savedQueryId,
-        output?.savedQueryId,
-        "q",
-      );
+      const savedQueryId = yield* toPhysicalId(id, news.savedQueryId, output?.savedQueryId, "q");
       const name = resourceName(billingAccountId, location, savedQueryId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -400,21 +355,15 @@ export const BillingSavedQueryProvider = () =>
         return yield* new BillingSavedQueryNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const displayNameChanged =
-        (current.displayName ?? "") !== news.displayName;
-      const visibilityChanged =
-        (current.visibility ?? "PRIVATE") !== desiredVisibility;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const displayNameChanged = (current.displayName ?? "") !== news.displayName;
+      const visibilityChanged = (current.visibility ?? "PRIVATE") !== desiredVisibility;
       const loggingChanged =
         news.loggingQuery !== undefined &&
         !jsonEqual(toLoggingQuery(current.loggingQuery), news.loggingQuery);
       const opsChanged =
         news.opsAnalyticsQuery !== undefined &&
-        !jsonEqual(
-          toOpsQuery(current.opsAnalyticsQuery),
-          news.opsAnalyticsQuery,
-        );
+        !jsonEqual(toOpsQuery(current.opsAnalyticsQuery), news.opsAnalyticsQuery);
 
       const updateMask = [
         descriptionChanged ? "description" : undefined,

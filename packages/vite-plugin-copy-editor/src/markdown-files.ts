@@ -18,14 +18,7 @@ import { CopyEditError } from "./text.ts";
 export const MARKDOWN_FILE_SCHEME = "md";
 
 /** Blocks edited as markdown, as a whole. */
-const BLOCKS = new Set([
-  "paragraph",
-  "heading",
-  "list",
-  "blockquote",
-  "table",
-  "code",
-]);
+const BLOCKS = new Set(["paragraph", "heading", "list", "blockquote", "table", "code"]);
 /** Containers whose children are markdown blocks (asides, JSX components). */
 const CONTAINERS = new Set(["containerDirective", "mdxJsxFlowElement"]);
 
@@ -95,11 +88,7 @@ export const markdownBlocks =
             }
             const start = node.position?.start.offset;
             const end = node.position?.end.offset;
-            if (
-              !BLOCKS.has(node.type) ||
-              start === undefined ||
-              end === undefined
-            ) {
+            if (!BLOCKS.has(node.type) || start === undefined || end === undefined) {
               continue;
             }
             const attributes = {
@@ -133,9 +122,7 @@ export const markdownBlocks =
 
 const parseId = (id: string) => {
   const m = /^md:(.+)@(\d+)-(\d+)~([0-9a-f]+)$/.exec(id);
-  return m
-    ? { file: m[1]!, start: Number(m[2]), end: Number(m[3]), version: m[4]! }
-    : undefined;
+  return m ? { file: m[1]!, start: Number(m[2]), end: Number(m[3]), version: m[4]! } : undefined;
 };
 
 /** One saved edit: the `before` characters at `at` became `after` characters. */
@@ -154,9 +141,7 @@ const outdated = () =>
   );
 
 /** Reads and writes the markdown behind blocks marked by {@link markdownBlocks}. */
-export const markdownFiles = (
-  options: MarkdownFilesOptions,
-): CopyEditHandler => {
+export const markdownFiles = (options: MarkdownFilesOptions): CopyEditHandler => {
   /** Per file, the edit saved from each version, to follow old offsets. */
   const history = new Map<string, Map<string, Step>>();
 

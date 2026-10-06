@@ -19,13 +19,9 @@ export default AWS.Lambda.Function(
         const file = yield* uploads.get("hello.txt");
         yield* jobs.send({ size: file?.size });
         return HttpServerResponse.text("ok");
-      })/*hide*/.pipe(Effect.orDie)/*end*/,
+      }) /*hide*/
+        .pipe(Effect.orDie) /*end*/,
     };
-  }).pipe(
-    Effect.provide([
-      R2.ReadBucketBinding,
-      Queues.WriteQueueBinding,
-    ]),
-  ),
+  }).pipe(Effect.provide([R2.ReadBucketBinding, Queues.WriteQueueBinding])),
 );
 // #endregion show

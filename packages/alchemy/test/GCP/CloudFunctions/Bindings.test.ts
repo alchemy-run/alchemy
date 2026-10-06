@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import CloudFunctionsBindingsHost from "./fixtures/bindings-host.ts";
 import TargetFunction from "./fixtures/target-function.ts";
@@ -33,9 +33,7 @@ const expectFunctionGrants = Effect.gen(function* () {
   });
   const condition = `resource.name == "${functionName}" || resource.name.startsWith("${functionName}/")`;
   const grants = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({
       role: binding.role,
       condition: binding.condition?.expression,
@@ -51,12 +49,7 @@ const expectFunctionGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable || !!process.env.FAST)(
   "CloudFunctions Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:cloudfunctions",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:cloudfunctions", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -89,11 +82,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "reads the function as the host's service account, scoped to the function by condition",
         (_stack) =>
           Effect.gen(function* () {
-            const live =
-              yield* expectProbe<cloudfunctions.Cloudfunctions_Function>(
-                baseUrl,
-                "getFunction",
-              );
+            const live = yield* expectProbe<cloudfunctions.Cloudfunctions_Function>(
+              baseUrl,
+              "getFunction",
+            );
             expect(live.name).toEqual(functionName);
             expect(live.state).toEqual("ACTIVE");
             expect(live.buildConfig?.entryPoint).toEqual("handler");
@@ -111,18 +103,15 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "signs a source download URL as the host's service account, scoped to the function by condition",
         (_stack) =>
           Effect.gen(function* () {
-            const { downloadUrl } =
-              yield* expectProbe<cloudfunctions.GenerateDownloadUrlResponse>(
-                baseUrl,
-                "generateDownloadUrl",
-              );
+            const { downloadUrl } = yield* expectProbe<cloudfunctions.GenerateDownloadUrlResponse>(
+              baseUrl,
+              "generateDownloadUrl",
+            );
             // The signed URL serves the function's source archive (a zip).
             const response = yield* HttpClient.get(downloadUrl ?? "");
             expect(response.status).toEqual(200);
             const bytes = new Uint8Array(yield* response.arrayBuffer);
-            expect(String.fromCharCode(bytes[0] ?? 0, bytes[1] ?? 0)).toEqual(
-              "PK",
-            );
+            expect(String.fromCharCode(bytes[0] ?? 0, bytes[1] ?? 0)).toEqual("PK");
             yield* expectFunctionGrants;
           }),
         {

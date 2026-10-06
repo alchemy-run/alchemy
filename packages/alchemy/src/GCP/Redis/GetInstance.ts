@@ -33,14 +33,8 @@ export interface GetInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetInstanceRequest,
-    ) => Effect.Effect<
-      redis.Instance,
-      redis.GetProjectsLocationsInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<redis.Instance, redis.GetProjectsLocationsInstancesError, RuntimeContext>
   >
 > {}
 
-export const GetInstance = Binding.Service<GetInstance>(
-  "GCP.Redis.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("GCP.Redis.GetInstance");

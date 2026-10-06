@@ -175,26 +175,18 @@ class NodegroupNotReady extends Data.TaggedError("EKS.NodegroupNotReady")<{
   status: eks.NodegroupStatus | undefined;
 }> {}
 
-class NodegroupStillExists extends Data.TaggedError(
-  "EKS.NodegroupStillExists",
-)<{}> {}
+class NodegroupStillExists extends Data.TaggedError("EKS.NodegroupStillExists")<{}> {}
 
-class NodegroupUpdateNotComplete extends Data.TaggedError(
-  "EKS.NodegroupUpdateNotComplete",
-)<{
+class NodegroupUpdateNotComplete extends Data.TaggedError("EKS.NodegroupUpdateNotComplete")<{
   status: eks.UpdateStatus | undefined;
 }> {}
 
 const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-const normalizeLabels = (
-  labels: Record<string, string | undefined> | undefined,
-) =>
+const normalizeLabels = (labels: Record<string, string | undefined> | undefined) =>
   Object.fromEntries(
     Object.entries(labels ?? {}).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,
@@ -202,13 +194,9 @@ const normalizeLabels = (
   );
 
 // Wait budget: ~10 min at 5s spacing — node groups reach ACTIVE in 2–5 min.
-const waitSchedule = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(120),
-]);
+const waitSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]);
 
-const taintKey = (taint: eks.Taint) =>
-  `${taint.key ?? ""}::${taint.effect ?? ""}`;
+const taintKey = (taint: eks.Taint) => `${taint.key ?? ""}::${taint.effect ?? ""}`;
 
 /**
  * Compute the `UpdateLabelsPayload` delta between observed and desired labels.
@@ -225,15 +213,11 @@ const diffLabels = (
     }
   }
   const removeLabels = Object.keys(observed).filter((key) => !(key in desired));
-  if (
-    Object.keys(addOrUpdateLabels).length === 0 &&
-    removeLabels.length === 0
-  ) {
+  if (Object.keys(addOrUpdateLabels).length === 0 && removeLabels.length === 0) {
     return undefined;
   }
   return {
-    addOrUpdateLabels:
-      Object.keys(addOrUpdateLabels).length > 0 ? addOrUpdateLabels : undefined,
+    addOrUpdateLabels: Object.keys(addOrUpdateLabels).length > 0 ? addOrUpdateLabels : undefined,
     removeLabels: removeLabels.length > 0 ? removeLabels : undefined,
   };
 };
@@ -259,8 +243,7 @@ const diffTaints = (
     return undefined;
   }
   return {
-    addOrUpdateTaints:
-      addOrUpdateTaints.length > 0 ? addOrUpdateTaints : undefined,
+    addOrUpdateTaints: addOrUpdateTaints.length > 0 ? addOrUpdateTaints : undefined,
     removeTaints: removeTaints.length > 0 ? removeTaints : undefined,
   };
 };
@@ -316,10 +299,7 @@ export const NodegroupProvider = () =>
   Provider.effect(
     Nodegroup,
     Effect.gen(function* () {
-      const toNodegroupName = (
-        id: string,
-        props: { nodegroupName?: string } = {},
-      ) =>
+      const toNodegroupName = (id: string, props: { nodegroupName?: string } = {}) =>
         props.nodegroupName
           ? Effect.succeed(props.nodegroupName)
           : createPhysicalName({ id, maxLength: 63 });
@@ -340,11 +320,7 @@ export const NodegroupProvider = () =>
       }) {
         const described = yield* eks
           .describeNodegroup({ clusterName, nodegroupName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const nodegroup = described?.nodegroup;
         if (
           !nodegroup?.nodegroupArn ||
@@ -357,10 +333,7 @@ export const NodegroupProvider = () =>
         return mapNodegroup(nodegroup, normalizeTags(nodegroup.tags));
       });
 
-      const waitForNodegroupActive = (
-        clusterName: string,
-        nodegroupName: string,
-      ) =>
+      const waitForNodegroupActive = (clusterName: string, nodegroupName: string) =>
         readNodegroup({ clusterName, nodegroupName }).pipe(
           Effect.flatMap((state) => {
             if (!state) {
@@ -369,14 +342,9 @@ export const NodegroupProvider = () =>
             if (state.status === "ACTIVE") {
               return Effect.succeed(state);
             }
-            if (
-              state.status === "CREATE_FAILED" ||
-              state.status === "DELETE_FAILED"
-            ) {
+            if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
               return Effect.fail(
-                new Error(
-                  `EKS node group '${nodegroupName}' entered ${state.status}`,
-                ),
+                new Error(`EKS node group '${nodegroupName}' entered ${state.status}`),
               );
             }
             return Effect.fail(new NodegroupNotReady({ status: state.status }));
@@ -387,15 +355,10 @@ export const NodegroupProvider = () =>
           }),
         );
 
-      const waitForNodegroupDeleted = (
-        clusterName: string,
-        nodegroupName: string,
-      ) =>
+      const waitForNodegroupDeleted = (clusterName: string, nodegroupName: string) =>
         readNodegroup({ clusterName, nodegroupName }).pipe(
           Effect.flatMap((state) =>
-            state
-              ? Effect.fail(new NodegroupStillExists())
-              : Effect.succeed(undefined),
+            state ? Effect.fail(new NodegroupStillExists()) : Effect.succeed(undefined),
           ),
           Effect.retry({
             while: (error) => error instanceof NodegroupStillExists,
@@ -403,11 +366,7 @@ export const NodegroupProvider = () =>
           }),
         );
 
-      const waitForUpdate = (
-        clusterName: string,
-        nodegroupName: string,
-        updateId: string,
-      ) =>
+      const waitForUpdate = (clusterName: string, nodegroupName: string, updateId: string) =>
         eks.describeUpdate({ name: clusterName, nodegroupName, updateId }).pipe(
           Effect.flatMap(({ update }) => {
             if (update?.status === "Successful") {
@@ -420,9 +379,7 @@ export const NodegroupProvider = () =>
                 ),
               );
             }
-            return Effect.fail(
-              new NodegroupUpdateNotComplete({ status: update?.status }),
-            );
+            return Effect.fail(new NodegroupUpdateNotComplete({ status: update?.status }));
           }),
           Effect.retry({
             while: (error) => error instanceof NodegroupUpdateNotComplete,
@@ -439,9 +396,7 @@ export const NodegroupProvider = () =>
           Effect.gen(function* () {
             const clusterNames = yield* eks.listClusters.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.clusters ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusters ?? [])),
             );
 
             const perCluster = yield* Effect.forEach(
@@ -449,14 +404,11 @@ export const NodegroupProvider = () =>
               (clusterName) =>
                 eks.listNodegroups.pages({ clusterName }).pipe(
                   Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.nodegroups ?? []),
-                  ),
+                  Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.nodegroups ?? [])),
                   Effect.flatMap((names) =>
                     Effect.forEach(
                       names,
-                      (nodegroupName) =>
-                        readNodegroup({ clusterName, nodegroupName }),
+                      (nodegroupName) => readNodegroup({ clusterName, nodegroupName }),
                       { concurrency: 5 },
                     ),
                   ),
@@ -466,17 +418,11 @@ export const NodegroupProvider = () =>
 
             return perCluster
               .flat()
-              .filter(
-                (state): state is Nodegroup["Attributes"] =>
-                  state !== undefined,
-              );
+              .filter((state): state is Nodegroup["Attributes"] => state !== undefined);
           }),
         diff: Effect.fn(function* ({ id, olds = {} as NodegroupProps, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toNodegroupName(id, olds)) !==
-            (yield* toNodegroupName(id, news ?? {}))
-          ) {
+          if ((yield* toNodegroupName(id, olds)) !== (yield* toNodegroupName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if (olds.clusterName !== news.clusterName) {
@@ -485,15 +431,11 @@ export const NodegroupProvider = () =>
           if (olds.nodeRole !== news.nodeRole) {
             return { action: "replace" } as const;
           }
-          if (
-            JSON.stringify(olds.subnets ?? []) !==
-            JSON.stringify(news.subnets ?? [])
-          ) {
+          if (JSON.stringify(olds.subnets ?? []) !== JSON.stringify(news.subnets ?? [])) {
             return { action: "replace" } as const;
           }
           if (
-            JSON.stringify(olds.instanceTypes ?? []) !==
-            JSON.stringify(news.instanceTypes ?? [])
+            JSON.stringify(olds.instanceTypes ?? []) !== JSON.stringify(news.instanceTypes ?? [])
           ) {
             return { action: "replace" } as const;
           }
@@ -503,10 +445,7 @@ export const NodegroupProvider = () =>
           if ((olds.diskSize ?? undefined) !== (news.diskSize ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds.capacityType ?? "ON_DEMAND") !==
-            (news.capacityType ?? "ON_DEMAND")
-          ) {
+          if ((olds.capacityType ?? "ON_DEMAND") !== (news.capacityType ?? "ON_DEMAND")) {
             return { action: "replace" } as const;
           }
           if (
@@ -517,18 +456,16 @@ export const NodegroupProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const clusterName = (output?.clusterName ??
-            (olds?.clusterName as string | undefined)) as string | undefined;
+          const clusterName = (output?.clusterName ?? (olds?.clusterName as string | undefined)) as
+            | string
+            | undefined;
           if (!clusterName) return undefined;
-          const nodegroupName =
-            output?.nodegroupName ?? (yield* toNodegroupName(id, olds ?? {}));
+          const nodegroupName = output?.nodegroupName ?? (yield* toNodegroupName(id, olds ?? {}));
           const state = yield* readNodegroup({ clusterName, nodegroupName });
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const clusterName = news.clusterName as string;
           const nodegroupName = yield* toNodegroupName(id, news);
           const desiredTags = {
@@ -562,9 +499,7 @@ export const NodegroupProvider = () =>
                 tags: desiredTags,
                 clientRequestToken: yield* toClientRequestToken(id, "create"),
               })
-              .pipe(
-                Effect.catchTag("ResourceInUseException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
             yield* session.note(`Creating EKS node group ${nodegroupName}...`);
             state = yield* waitForNodegroupActive(clusterName, nodegroupName);
@@ -575,20 +510,9 @@ export const NodegroupProvider = () =>
           const desiredLabels = normalizeLabels(news.labels);
           const labelsDelta = diffLabels(state.labels, desiredLabels);
           const taintsDelta = diffTaints(state.taints, news.taints ?? []);
-          const scalingChanged = scalingConfigChanged(
-            state.scalingConfig,
-            news.scalingConfig,
-          );
-          const updateCfgChanged = updateConfigChanged(
-            state.updateConfig,
-            news.updateConfig,
-          );
-          if (
-            labelsDelta ||
-            taintsDelta ||
-            scalingChanged ||
-            updateCfgChanged
-          ) {
+          const scalingChanged = scalingConfigChanged(state.scalingConfig, news.scalingConfig);
+          const updateCfgChanged = updateConfigChanged(state.updateConfig, news.updateConfig);
+          if (labelsDelta || taintsDelta || scalingChanged || updateCfgChanged) {
             const configUpdate = yield* eks.updateNodegroupConfig({
               clusterName,
               nodegroupName,
@@ -599,25 +523,16 @@ export const NodegroupProvider = () =>
               clientRequestToken: yield* toClientRequestToken(id, "config"),
             });
             if (configUpdate.update?.id) {
-              yield* session.note(
-                `Updating EKS node group config ${nodegroupName}...`,
-              );
-              yield* waitForUpdate(
-                clusterName,
-                nodegroupName,
-                configUpdate.update.id,
-              );
-              state =
-                (yield* waitForNodegroupActive(clusterName, nodegroupName)) ??
-                state;
+              yield* session.note(`Updating EKS node group config ${nodegroupName}...`);
+              yield* waitForUpdate(clusterName, nodegroupName, configUpdate.update.id);
+              state = (yield* waitForNodegroupActive(clusterName, nodegroupName)) ?? state;
             }
           }
 
           // Sync version / release version via updateNodegroupVersion.
           if (
             (news.version && state.version !== news.version) ||
-            (news.releaseVersion &&
-              state.releaseVersion !== news.releaseVersion)
+            (news.releaseVersion && state.releaseVersion !== news.releaseVersion)
           ) {
             const versionUpdate = yield* eks.updateNodegroupVersion({
               clusterName,
@@ -627,17 +542,9 @@ export const NodegroupProvider = () =>
               clientRequestToken: yield* toClientRequestToken(id, "version"),
             });
             if (versionUpdate.update?.id) {
-              yield* session.note(
-                `Updating EKS node group version ${nodegroupName}...`,
-              );
-              yield* waitForUpdate(
-                clusterName,
-                nodegroupName,
-                versionUpdate.update.id,
-              );
-              state =
-                (yield* waitForNodegroupActive(clusterName, nodegroupName)) ??
-                state;
+              yield* session.note(`Updating EKS node group version ${nodegroupName}...`);
+              yield* waitForUpdate(clusterName, nodegroupName, versionUpdate.update.id);
+              state = (yield* waitForNodegroupActive(clusterName, nodegroupName)) ?? state;
             }
           }
 
@@ -646,9 +553,7 @@ export const NodegroupProvider = () =>
           if (upsert.length > 0) {
             yield* eks.tagResource({
               resourceArn: state.nodegroupArn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value] as const),
-              ),
+              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value] as const)),
             });
           }
           if (removed.length > 0) {
@@ -663,9 +568,7 @@ export const NodegroupProvider = () =>
           const final = yield* readNodegroup({ clusterName, nodegroupName });
           if (!final) {
             return yield* Effect.fail(
-              new Error(
-                `EKS node group '${nodegroupName}' could not be read after reconcile`,
-              ),
+              new Error(`EKS node group '${nodegroupName}' could not be read after reconcile`),
             );
           }
           return final;
@@ -676,13 +579,8 @@ export const NodegroupProvider = () =>
               clusterName: output.clusterName,
               nodegroupName: output.nodegroupName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
-          yield* waitForNodegroupDeleted(
-            output.clusterName,
-            output.nodegroupName,
-          );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* waitForNodegroupDeleted(output.clusterName, output.nodegroupName);
         }),
       };
     }),

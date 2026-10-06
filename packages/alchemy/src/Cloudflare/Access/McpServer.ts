@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -183,13 +182,7 @@ export type McpServerAttributes = {
   createdAt: string | undefined;
 };
 
-export type McpServer = Resource<
-  TypeId,
-  McpServerProps,
-  McpServerAttributes,
-  never,
-  Providers
->;
+export type McpServer = Resource<TypeId, McpServerProps, McpServerAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust **AI Controls MCP server** — an upstream MCP
@@ -306,19 +299,15 @@ export const McpServerProvider = () =>
       // Attributes `read` returns. Accounts without the AI Controls
       // entitlement reject the route with the typed `Forbidden` — treat
       // them as having no servers.
-      return yield* zeroTrust.listAccessAiControlMcpServers
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((server) =>
-                toAttributes(server, accountId),
-              ),
-            ),
+      return yield* zeroTrust.listAccessAiControlMcpServers.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((server) => toAttributes(server, accountId)),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -329,11 +318,7 @@ export const McpServerProvider = () =>
       }
       // The server id is the API identity — changing it is a replacement.
       const oldId = output?.serverId ?? olds?.serverId;
-      if (
-        news.serverId !== undefined &&
-        oldId !== undefined &&
-        oldId !== news.serverId
-      ) {
+      if (news.serverId !== undefined && oldId !== undefined && oldId !== news.serverId) {
         return { action: "replace" } as const;
       }
       if (
@@ -351,8 +336,7 @@ export const McpServerProvider = () =>
 
       // The server id is deterministic (client-supplied or derived from
       // the logical id), so a direct read covers the cold case too.
-      const serverId =
-        output?.serverId ?? (yield* createServerId(id, olds?.serverId));
+      const serverId = output?.serverId ?? (yield* createServerId(id, olds?.serverId));
       const observed = yield* observeServer(acct, serverId).pipe(
         // A failed create can leave props with an invalid ID but no output.
         // That generation cannot exist; let destroy recover the saved state.
@@ -369,8 +353,7 @@ export const McpServerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const serverId =
-        output?.serverId ?? (yield* createServerId(id, news.serverId));
+      const serverId = output?.serverId ?? (yield* createServerId(id, news.serverId));
       const name = news.name ?? serverId;
 
       // 1. Observe.
@@ -431,10 +414,7 @@ export const McpServerProvider = () =>
           .syncAccessAiControlMcpServer({ accountId, id: serverId })
           .pipe(
             Effect.catchTag("McpServerSyncFailure", (error) =>
-              Effect.logDebug(
-                `capability sync for MCP server ${serverId} failed`,
-                error.body,
-              ),
+              Effect.logDebug(`capability sync for MCP server ${serverId} failed`, error.body),
             ),
           );
         // 5. Return — re-read so the discovered capabilities are reported.
@@ -475,16 +455,11 @@ type ObservedServer = zeroTrust.ReadAccessAiControlMcpServerResponse;
 const observeServer = (accountId: string, id: string) =>
   zeroTrust
     .readAccessAiControlMcpServer({ accountId, id })
-    .pipe(
-      Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)));
 
 const createServerId = (id: string, serverId: string | undefined) =>
   Effect.gen(function* () {
-    return (
-      serverId ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 32 }))
-    );
+    return serverId ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 32 }));
   });
 
 /**
@@ -495,24 +470,16 @@ const createServerId = (id: string, serverId: string | undefined) =>
 const mutableBody = (news: McpServerProps, name: string) => ({
   name,
   ...(news.description !== undefined ? { description: news.description } : {}),
-  ...(news.secureWebGateway !== undefined
-    ? { secureWebGateway: news.secureWebGateway }
-    : {}),
+  ...(news.secureWebGateway !== undefined ? { secureWebGateway: news.secureWebGateway } : {}),
   ...(news.isSharedOauthCallbackEnabled !== undefined
     ? { isSharedOauthCallbackEnabled: news.isSharedOauthCallbackEnabled }
     : {}),
-  ...(news.updatedTools !== undefined
-    ? { updatedTools: news.updatedTools }
-    : {}),
-  ...(news.updatedPrompts !== undefined
-    ? { updatedPrompts: news.updatedPrompts }
-    : {}),
+  ...(news.updatedTools !== undefined ? { updatedTools: news.updatedTools } : {}),
+  ...(news.updatedPrompts !== undefined ? { updatedPrompts: news.updatedPrompts } : {}),
   ...(news.authCredentials !== undefined
     ? { authCredentials: Redacted.value(news.authCredentials) }
     : {}),
-  ...(news.clientSecret !== undefined
-    ? { clientSecret: Redacted.value(news.clientSecret) }
-    : {}),
+  ...(news.clientSecret !== undefined ? { clientSecret: Redacted.value(news.clientSecret) } : {}),
 });
 
 /**
@@ -524,21 +491,16 @@ const secretRotated = (
   previous: Redacted.Redacted<string> | undefined,
 ): boolean =>
   desired !== undefined &&
-  (previous === undefined ||
-    Redacted.value(previous) !== Redacted.value(desired));
+  (previous === undefined || Redacted.value(previous) !== Redacted.value(desired));
 
 /**
  * Drop null/undefined members so API echoes and desired overrides compare
  * structurally.
  */
-const normalizeOverride = (
-  override: ObservedOverride,
-): McpServerCapabilityOverride => ({
+const normalizeOverride = (override: ObservedOverride): McpServerCapabilityOverride => ({
   name: override.name,
   ...(override.alias != null ? { alias: override.alias } : {}),
-  ...(override.description != null
-    ? { description: override.description }
-    : {}),
+  ...(override.description != null ? { description: override.description } : {}),
   ...(override.enabled != null ? { enabled: override.enabled } : {}),
 });
 
@@ -550,20 +512,15 @@ const overridesEqual = (
   observed: ReadonlyArray<ObservedOverride> | null | undefined,
   desired: ReadonlyArray<ObservedOverride>,
 ): boolean => {
-  const byName = (
-    a: McpServerCapabilityOverride,
-    b: McpServerCapabilityOverride,
-  ) => a.name.localeCompare(b.name);
+  const byName = (a: McpServerCapabilityOverride, b: McpServerCapabilityOverride) =>
+    a.name.localeCompare(b.name);
   return (
     JSON.stringify(normalizeOverrides(observed).sort(byName)) ===
     JSON.stringify(normalizeOverrides(desired).sort(byName))
   );
 };
 
-const toAttributes = (
-  server: ObservedServer,
-  accountId: string,
-): McpServerAttributes => ({
+const toAttributes = (server: ObservedServer, accountId: string): McpServerAttributes => ({
   serverId: server.id,
   accountId,
   name: server.name,

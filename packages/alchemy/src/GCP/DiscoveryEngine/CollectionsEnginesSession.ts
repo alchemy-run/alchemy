@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  parentBefore,
-  parseResourceName,
-  sameStringList,
-  toResourceId,
-} from "./internal.ts";
+import { parentBefore, parseResourceName, sameStringList, toResourceId } from "./internal.ts";
 
 export type CollectionsEnginesSessionProps = {
   /**
@@ -131,22 +126,16 @@ export class CollectionsEnginesSessionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (engine: string, sessionId: string) =>
-  `${engine}/sessions/${sessionId}`;
+const resourceName = (engine: string, sessionId: string) => `${engine}/sessions/${sessionId}`;
 
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesSessions({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const userLabels = (labels: readonly string[] | undefined) => [
-  ...(labels ?? []),
-];
+const userLabels = (labels: readonly string[] | undefined) => [...(labels ?? [])];
 
-const toAttrs = (
-  session: discoveryengine.GoogleCloudDiscoveryengineV1Session,
-  project: string,
-) => {
+const toAttrs = (session: discoveryengine.GoogleCloudDiscoveryengineV1Session, project: string) => {
   const name = session.name ?? "";
   const parsed = parseResourceName(name, "sessions");
   return {
@@ -168,15 +157,7 @@ const toAttrs = (
 
 export const CollectionsEnginesSessionProvider = () =>
   Provider.succeed(CollectionsEnginesSession, {
-    stables: [
-      "name",
-      "sessionId",
-      "engine",
-      "project",
-      "location",
-      "collectionId",
-      "startTime",
-    ],
+    stables: ["name", "sessionId", "engine", "project", "location", "collectionId", "startTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -185,9 +166,7 @@ export const CollectionsEnginesSessionProvider = () =>
       const nextId = news.sessionId ?? previousId;
       if (
         (previousEngine !== undefined && news.engine !== previousEngine) ||
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId)
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -197,14 +176,9 @@ export const CollectionsEnginesSessionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.engine ?? output?.engine;
-      const childId = yield* toResourceId(
-        id,
-        olds?.sessionId,
-        output?.sessionId,
-      );
+      const childId = yield* toResourceId(id, olds?.sessionId, output?.sessionId);
       const name =
-        output?.name ??
-        (parent !== undefined ? resourceName(parent, childId) : undefined);
+        output?.name ?? (parent !== undefined ? resourceName(parent, childId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -215,11 +189,7 @@ export const CollectionsEnginesSessionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sessionId = yield* toResourceId(
-        id,
-        news.sessionId,
-        output?.sessionId,
-      );
+      const sessionId = yield* toResourceId(id, news.sessionId, output?.sessionId);
       const displayName = news.displayName;
       const isPinned = news.isPinned === true;
       const labels = news.labels;
@@ -251,44 +221,33 @@ export const CollectionsEnginesSessionProvider = () =>
       }
 
       const name = current.name ?? fallbackName;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (displayName ?? "");
-      const userChanged =
-        (current.userPseudoId ?? "") !== (news.userPseudoId ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (displayName ?? "");
+      const userChanged = (current.userPseudoId ?? "") !== (news.userPseudoId ?? "");
       const stateChanged = (current.state ?? "") !== (news.state ?? "");
       const pinnedChanged = (current.isPinned === true) !== isPinned;
       const labelsChanged = !sameStringList(userLabels(current.labels), labels);
 
-      if (
-        displayNameChanged ||
-        userChanged ||
-        stateChanged ||
-        pinnedChanged ||
-        labelsChanged
-      ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsEnginesSessions(
-            {
-              name,
-              updateMask: [
-                displayNameChanged ? "display_name" : undefined,
-                userChanged ? "user_pseudo_id" : undefined,
-                stateChanged ? "state" : undefined,
-                pinnedChanged ? "is_pinned" : undefined,
-                labelsChanged ? "labels" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name,
-                displayName,
-                userPseudoId: news.userPseudoId,
-                state: news.state,
-                isPinned,
-                labels,
-              },
-            },
-          );
+      if (displayNameChanged || userChanged || stateChanged || pinnedChanged || labelsChanged) {
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesSessions({
+          name,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            userChanged ? "user_pseudo_id" : undefined,
+            stateChanged ? "state" : undefined,
+            pinnedChanged ? "is_pinned" : undefined,
+            labelsChanged ? "labels" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name,
+            displayName,
+            userPseudoId: news.userPseudoId,
+            state: news.state,
+            isPinned,
+            labels,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

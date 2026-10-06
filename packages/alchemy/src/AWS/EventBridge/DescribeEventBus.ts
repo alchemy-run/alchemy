@@ -36,10 +36,7 @@ export interface DescribeEventBus extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeEventBusRequest,
-    ) => Effect.Effect<
-      eventbridge.DescribeEventBusResponse,
-      eventbridge.DescribeEventBusError
-    >
+    ) => Effect.Effect<eventbridge.DescribeEventBusResponse, eventbridge.DescribeEventBusError>
   >
 > {}
 export const DescribeEventBus = Binding.Service<DescribeEventBus>(

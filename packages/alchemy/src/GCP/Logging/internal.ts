@@ -1,15 +1,11 @@
 import * as cloudbilling from "@distilled.cloud/gcp/cloudbilling_v1";
-import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_NAME_LENGTH = 100;
 export const DEFAULT_LOCATION = "global";
@@ -53,9 +49,7 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const toPhysicalId = (
   id: string,
@@ -83,11 +77,7 @@ export const toPhysicalId = (
     return next.slice(0, MAX_NAME_LENGTH);
   });
 
-export const toLinkId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const toLinkId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -112,13 +102,11 @@ export const locationParent = (parent: string, location: string) =>
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
-export const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+export const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 export const createOwnership = (id: string) => createInternalLabels(id);
 
-export const ownedBy = (id: string, labels: Record<string, string>) =>
-  hasAlchemyLabels(id, labels);
+export const ownedBy = (id: string, labels: Record<string, string>) => hasAlchemyLabels(id, labels);
 
 export type ParsedLoggingName = {
   parent: string;
@@ -163,9 +151,7 @@ export const parseLoggingName = (name: string): ParsedLoggingName => {
   };
 };
 
-export const isDeletedBucket = (
-  bucket: logging.LogBucket | undefined,
-): bucket is undefined =>
+export const isDeletedBucket = (bucket: logging.LogBucket | undefined): bucket is undefined =>
   bucket === undefined || bucket.lifecycleState === "DELETE_REQUESTED";
 
 export const isPendingBucket = (state: string | undefined) =>
@@ -180,10 +166,7 @@ export type LogBucketIndexConfig = {
 };
 
 export const canonIndexConfigs = (
-  configs:
-    | readonly logging.IndexConfig[]
-    | readonly LogBucketIndexConfig[]
-    | undefined,
+  configs: readonly logging.IndexConfig[] | readonly LogBucketIndexConfig[] | undefined,
 ): LogBucketIndexConfig[] =>
   [...(configs ?? [])]
     .flatMap((config) =>
@@ -191,8 +174,7 @@ export const canonIndexConfigs = (
         ? [
             {
               fieldPath: config.fieldPath,
-              type: (config.type ??
-                "INDEX_TYPE_STRING") as LogBucketIndexConfig["type"],
+              type: (config.type ?? "INDEX_TYPE_STRING") as LogBucketIndexConfig["type"],
             },
           ]
         : [],
@@ -241,9 +223,7 @@ export class BillingAccountNotResolved extends Data.TaggedError(
   project: string;
 }> {}
 
-export class FolderNotResolved extends Data.TaggedError(
-  "GCP.Logging.FolderNotResolved",
-)<{
+export class FolderNotResolved extends Data.TaggedError("GCP.Logging.FolderNotResolved")<{
   project: string;
 }> {}
 
@@ -266,16 +246,12 @@ export const folderParent = (folderId: string) =>
 export const organizationIdOf = (value: string) => lastSegment(value);
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const lookupProjectBillingAccountId = (project: string) =>
   cloudbilling.getBillingInfoProjects({ name: `projects/${project}` }).pipe(
     Effect.map((info) =>
-      info.billingAccountName
-        ? billingAccountIdOf(info.billingAccountName)
-        : undefined,
+      info.billingAccountName ? billingAccountIdOf(info.billingAccountName) : undefined,
     ),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -304,10 +280,7 @@ export const lookupProjectFolderId = (project: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-export const resolveFolderId = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveFolderId = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return lastSegment(explicit);
     if (existing !== undefined) return lastSegment(existing);
@@ -344,10 +317,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return organizationParent(explicit);
     if (existing !== undefined) return organizationParent(existing);

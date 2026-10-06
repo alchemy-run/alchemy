@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { StrictMode, useEffect, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { ShortyApi, type LinkView } from "../../src/ShortyApi.ts";
@@ -12,9 +12,7 @@ const API_URL = import.meta.env.VITE_API_URL as string;
 const makeClient = HttpApiClient.make(ShortyApi, { baseUrl: API_URL });
 
 const call = <A, E>(f: (client: Effect.Success<typeof makeClient>) => Effect.Effect<A, E>) =>
-  Effect.runPromise(
-    makeClient.pipe(Effect.flatMap(f), Effect.provide(FetchHttpClient.layer)),
-  );
+  Effect.runPromise(makeClient.pipe(Effect.flatMap(f), Effect.provide(FetchHttpClient.layer)));
 
 /** Live click count for one link, pushed by its Durable Object over a WebSocket. */
 function useClicks(code: string, initial: number) {

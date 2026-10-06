@@ -6,26 +6,18 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_TITLE_LENGTH = 256;
 export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_RESOURCE_ID_LENGTH = 50;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.AccessContextManager.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.AccessContextManager.NotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.AccessContextManager.StillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.AccessContextManager.StillExists")<{
   name: string;
 }> {}
 
@@ -42,22 +34,15 @@ export const lastSegment = (value: string) => {
 };
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const policyNameOf = (policy: string) =>
-  policy.startsWith("accessPolicies/")
-    ? policy
-    : `accessPolicies/${lastSegment(policy)}`;
+  policy.startsWith("accessPolicies/") ? policy : `accessPolicies/${lastSegment(policy)}`;
 
 export const policyIdOf = (policy: string) => lastSegment(policyNameOf(policy));
 
-export const resourceNameOf = (
-  policy: string,
-  collection: string,
-  id: string,
-) => `${policyNameOf(policy)}/${collection}/${id}`;
+export const resourceNameOf = (policy: string, collection: string, id: string) =>
+  `${policyNameOf(policy)}/${collection}/${id}`;
 
 export const parseName = (name: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -66,13 +51,9 @@ export const parseName = (name: string, collection: string) => {
   const orgsAt = parts.lastIndexOf("organizations");
   return {
     name,
-    policyId:
-      policiesAt >= 0 && parts[policiesAt + 1] ? parts[policiesAt + 1]! : "",
+    policyId: policiesAt >= 0 && parts[policiesAt + 1] ? parts[policiesAt + 1]! : "",
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -128,10 +109,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return organizationParent(explicit);
     if (existing !== undefined) return organizationParent(existing);
@@ -164,10 +142,8 @@ export const normalizeScope = (scope: string, projectNumber?: string) => {
   return `projects/${scope}`;
 };
 
-export const normalizeScopes = (
-  scopes: readonly string[] | undefined,
-  projectNumber?: string,
-) => (scopes ?? []).map((scope) => normalizeScope(scope, projectNumber));
+export const normalizeScopes = (scopes: readonly string[] | undefined, projectNumber?: string) =>
+  (scopes ?? []).map((scope) => normalizeScope(scope, projectNumber));
 
 const markerOf = (stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
@@ -177,10 +153,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -211,9 +184,7 @@ export const encodeOwnershipLine = (
 ): string => {
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   const reserved =
-    trimmed && trimmed.length > 0
-      ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 24))
-      : 0;
+    trimmed && trimmed.length > 0 ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 24)) : 0;
   const marker = fitMarker(labels, Math.max(24, maxLength - reserved));
   if (!trimmed) return marker.slice(0, maxLength);
   return `${marker} ${trimmed}`.slice(0, maxLength);
@@ -242,14 +213,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -259,18 +226,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -283,8 +241,7 @@ export const sortedStrings = (values: readonly string[] | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
+) => JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
 
 export const collectPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
@@ -303,9 +260,7 @@ export const listAccessPolicies = (organization: string) =>
       pageSize: 100,
     }),
     (page) => page.accessPolicies,
-  ).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([] as acm.AccessPolicy[])),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as acm.AccessPolicy[])));
 
 export const listOwnedPolicies = () =>
   Effect.gen(function* () {
@@ -331,11 +286,9 @@ export const resourceNameFromOperation = (
  */
 export const waitForOperation = (operation: acm.Operation) =>
   Effect.gen(function* () {
-    yield* waitForGcpOperation(
-      operation,
-      (name) => acm.getOperations({ name }),
-      { budget: "10 minutes" },
-    );
+    yield* waitForGcpOperation(operation, (name) => acm.getOperations({ name }), {
+      budget: "10 minutes",
+    });
     if (operation.done === true || !operation.name) return operation;
     return yield* acm.getOperations({ name: operation.name });
   });
@@ -346,9 +299,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AccessContextManager.NotResolved",
@@ -363,9 +314,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AccessContextManager.StillExists",
@@ -375,6 +324,4 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   );
 
 export const replaceOnIdentity = (changed: boolean) =>
-  changed
-    ? ({ action: "replace" as const, deleteFirst: false } as const)
-    : undefined;
+  changed ? ({ action: "replace" as const, deleteFirst: false } as const) : undefined;

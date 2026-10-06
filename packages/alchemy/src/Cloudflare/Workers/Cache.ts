@@ -2,11 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import {
-  Worker,
-  WorkerExecutionContext,
-  type CachePurgeError,
-} from "./Worker.ts";
+import { Worker, WorkerExecutionContext, type CachePurgeError } from "./Worker.ts";
 
 export interface CacheOptions {
   /**

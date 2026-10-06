@@ -25,9 +25,7 @@ const readVolumeInstance = Query.fn((id: string) => {
 /** Poll `volumeInstance({id})` until Railway reports the instance gone. */
 export const waitUntilVolumeGone = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
-    Effect.map((instance) =>
-      isGoneInstance(instance) ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((instance) => (isGoneInstance(instance) ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),

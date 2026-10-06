@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as connectors from "@distilled.cloud/gcp/connectors_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Entity CRUD needs a running Integration Connectors connection. Without
 // one, the entity API answers HTTP 501 (EntitiesNotImplemented).
@@ -103,10 +100,9 @@ test.provider.skipIf(!connectorsParent)(
       expect(created.name).toContain("/entities/");
       expect(created.fields).toMatchObject({ Name: "Alchemy Test" });
 
-      const fetched =
-        yield* connectors.getProjectsLocationsConnectionsEntityTypesEntities({
-          name: created.name,
-        });
+      const fetched = yield* connectors.getProjectsLocationsConnectionsEntityTypesEntities({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.fields).toMatchObject({ Name: "Alchemy Test" });
 

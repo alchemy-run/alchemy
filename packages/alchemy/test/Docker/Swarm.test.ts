@@ -1,16 +1,13 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Docker from "@/Docker";
-import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Docker from "@/Docker";
+import { inMemoryState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({
-  providers: Docker.providers(),
-  state: inMemoryState(),
-});
+const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
 // Docker.Swarm mutates engine-level state (swarm membership), so these tests
 // never touch the host engine. Each test boots a disposable docker:dind
@@ -20,9 +17,7 @@ const startDind = Effect.fn(function* (name: string, port: number) {
   const docker = yield* Docker.Docker;
   const host = `tcp://127.0.0.1:${port}`;
 
-  yield* Effect.addFinalizer(() =>
-    docker.run(["rm", "-f", name]).pipe(Effect.ignore),
-  );
+  yield* Effect.addFinalizer(() => docker.run(["rm", "-f", name]).pipe(Effect.ignore));
   yield* docker.run(["rm", "-f", name]).pipe(Effect.ignore);
   yield* docker.run([
     "run",
@@ -48,10 +43,7 @@ const startDind = Effect.fn(function* (name: string, port: number) {
 
 describe(
   "Docker.Swarm",
-  {
-    tags: ["provider:docker", "provider:docker:swarm", "local"],
-    concurrent: false,
-  },
+  { tags: ["provider:docker", "provider:docker:swarm", "local"], concurrent: false },
   () => {
     test.provider.skipIf(!!process.env.FAST)(
       "initializes a swarm on a fresh engine and deploys a service into it",
@@ -65,10 +57,7 @@ describe(
               name: "alchemy-test-dind-swarm-ctx",
               docker: `host=${host}`,
             });
-            const swarm = yield* Docker.Swarm("swarm", {
-              context,
-              advertiseAddr: "127.0.0.1",
-            });
+            const swarm = yield* Docker.Swarm("swarm", { context, advertiseAddr: "127.0.0.1" });
             const service = yield* Docker.Service("web", {
               context: swarm,
               image: "nginx:alpine",
@@ -106,20 +95,13 @@ describe(
             "{{.Swarm.LocalNodeState}}",
           ]);
           expect(state.stdout).toBe("inactive");
-          const contextGone = yield* docker.context
-            .inspect("alchemy-test-dind-swarm-ctx")
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchReason("PlatformError", "NotFound", () =>
-                Effect.succeed(true),
-              ),
-            );
+          const contextGone = yield* docker.context.inspect("alchemy-test-dind-swarm-ctx").pipe(
+            Effect.map(() => false),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
+          );
           expect(contextGone).toBe(true);
         }),
-      {
-        tags: ["provider:docker:context", "provider:docker:service"],
-        timeout: 300_000,
-      },
+      { tags: ["provider:docker:context", "provider:docker:service"], timeout: 300_000 },
     );
 
     test.provider.skipIf(!!process.env.FAST)(
@@ -134,29 +116,17 @@ describe(
           // props must be fully resolved (a plain context name, not a
           // same-plan Context resource) for the engine's adoption probe to
           // run at plan time.
-          yield* docker.run([
-            "-H",
-            host,
-            "swarm",
-            "init",
-            "--advertise-addr",
-            "127.0.0.1",
-          ]);
+          yield* docker.run(["-H", host, "swarm", "init", "--advertise-addr", "127.0.0.1"]);
           const contextName = "alchemy-test-dind-adopt-ctx";
           yield* Effect.addFinalizer(() =>
             docker.context.remove(contextName, true).pipe(Effect.ignore),
           );
           yield* docker.context.remove(contextName, true).pipe(Effect.ignore);
-          yield* docker.context.create({
-            name: contextName,
-            docker: `host=${host}`,
-          });
+          yield* docker.context.create({ name: contextName, docker: `host=${host}` });
 
           const makeSwarm = (adopted: boolean) =>
             Effect.gen(function* () {
-              const swarm = Docker.Swarm("existing-swarm", {
-                context: contextName,
-              });
+              const swarm = Docker.Swarm("existing-swarm", { context: contextName });
               return yield* adopted ? swarm.pipe(adopt(true)) : swarm;
             });
 
@@ -177,9 +147,7 @@ describe(
   },
 );
 
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -188,7 +156,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

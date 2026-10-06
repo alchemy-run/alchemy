@@ -1,6 +1,4 @@
-import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,18 +9,15 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_SLA = "NO_SLA";
 
-export type InterconnectAttachmentGroupIntent =
-  compute.InterconnectAttachmentGroupIntent;
+export type InterconnectAttachmentGroupIntent = compute.InterconnectAttachmentGroupIntent;
 export type InterconnectAttachmentGroupAttachmentMap =
   compute.InterconnectAttachmentGroupAttachmentMap;
 
@@ -77,9 +72,7 @@ export type InterconnectAttachmentGroup = Resource<
     /** Effective SLA reported by GCP. */
     configured: compute.InterconnectAttachmentGroupConfigured | undefined;
     /** Logical structure of member attachments. */
-    logicalStructure:
-      | compute.InterconnectAttachmentGroupLogicalStructure
-      | undefined;
+    logicalStructure: compute.InterconnectAttachmentGroupLogicalStructure | undefined;
     /** Optimistic-locking etag. */
     etag: string | undefined;
     /** Server-assigned numeric id. */
@@ -128,10 +121,9 @@ export type InterconnectAttachmentGroup = Resource<
  * @resource
  * @category Compute
  */
-export const InterconnectAttachmentGroup =
-  Resource<InterconnectAttachmentGroup>(
-    "GCP.Compute.InterconnectAttachmentGroup",
-  );
+export const InterconnectAttachmentGroup = Resource<InterconnectAttachmentGroup>(
+  "GCP.Compute.InterconnectAttachmentGroup",
+);
 
 export class InterconnectAttachmentGroupNotResolved extends Data.TaggedError(
   "GCP.Compute.InterconnectAttachmentGroupNotResolved",
@@ -206,16 +198,12 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const slaOf = (intent: InterconnectAttachmentGroupIntent | undefined) =>
   (intent?.availabilitySla ?? DEFAULT_SLA).toUpperCase();
 
-const membersKey = (
-  members: InterconnectAttachmentGroupAttachmentMap | undefined,
-) =>
+const membersKey = (members: InterconnectAttachmentGroupAttachmentMap | undefined) =>
   Object.entries(members ?? {})
     .map(([key, value]) => `${key}:${lastSegment(value?.attachment)}`)
     .sort()
@@ -251,10 +239,7 @@ const getByName = (project: string, interconnectAttachmentGroup: string) =>
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const awaitResource = (
-  project: string,
-  interconnectAttachmentGroupName: string,
-) =>
+const awaitResource = (project: string, interconnectAttachmentGroupName: string) =>
   getByName(project, interconnectAttachmentGroupName).pipe(
     Effect.flatMap((group) =>
       group !== undefined
@@ -266,17 +251,13 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectAttachmentGroupNotResolved",
+      while: (error) => error._tag === "GCP.Compute.InterconnectAttachmentGroupNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  interconnectAttachmentGroupName: string,
-) =>
+const waitUntilGone = (project: string, interconnectAttachmentGroupName: string) =>
   getByName(project, interconnectAttachmentGroupName).pipe(
     Effect.flatMap((group) =>
       group === undefined
@@ -288,15 +269,11 @@ const waitUntilGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectAttachmentGroupStillExists",
+      while: (error) => error._tag === "GCP.Compute.InterconnectAttachmentGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.InterconnectAttachmentGroupStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.InterconnectAttachmentGroupStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -331,14 +308,9 @@ export const InterconnectAttachmentGroupProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousName =
-        olds?.interconnectAttachmentGroupName ??
-        output?.interconnectAttachmentGroupName;
+        olds?.interconnectAttachmentGroupName ?? output?.interconnectAttachmentGroupName;
       const nextName = news.interconnectAttachmentGroupName ?? previousName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -351,10 +323,7 @@ export const InterconnectAttachmentGroupProvider = () =>
         olds?.interconnectAttachmentGroupName,
         output?.interconnectAttachmentGroupName,
       );
-      const existing = yield* getByName(
-        env.project,
-        interconnectAttachmentGroupName,
-      );
+      const existing = yield* getByName(env.project, interconnectAttachmentGroupName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -394,10 +363,7 @@ export const InterconnectAttachmentGroupProvider = () =>
         availabilitySla: slaOf(news.intent ?? output?.intent),
       };
 
-      let current = yield* getByName(
-        env.project,
-        interconnectAttachmentGroupName,
-      );
+      let current = yield* getByName(env.project, interconnectAttachmentGroupName);
 
       if (current === undefined) {
         yield* compute
@@ -419,29 +385,19 @@ export const InterconnectAttachmentGroupProvider = () =>
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
-        current = yield* awaitResource(
-          env.project,
-          interconnectAttachmentGroupName,
-        );
+        current = yield* awaitResource(env.project, interconnectAttachmentGroupName);
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const intentChanged = slaOf(current.intent) !== slaOf(intent);
       const membersChanged =
         news.attachments !== undefined &&
         membersKey(current.attachments) !== membersKey(news.attachments);
       const groupChanged =
         news.interconnectGroup !== undefined &&
-        lastSegment(current.interconnectGroup) !==
-          lastSegment(news.interconnectGroup);
+        lastSegment(current.interconnectGroup) !== lastSegment(news.interconnectGroup);
 
-      if (
-        descriptionChanged ||
-        intentChanged ||
-        membersChanged ||
-        groupChanged
-      ) {
+      if (descriptionChanged || intentChanged || membersChanged || groupChanged) {
         yield* runOp(
           env.project,
           interconnectAttachmentGroupName,
@@ -453,18 +409,12 @@ export const InterconnectAttachmentGroupProvider = () =>
               etag: current.etag,
               description: desiredDescription,
               intent,
-              attachments:
-                news.attachments !== undefined
-                  ? news.attachments
-                  : current.attachments,
-              interconnectGroup:
-                news.interconnectGroup ?? current.interconnectGroup,
+              attachments: news.attachments !== undefined ? news.attachments : current.attachments,
+              interconnectGroup: news.interconnectGroup ?? current.interconnectGroup,
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, interconnectAttachmentGroupName)) ??
-          current;
+        current = (yield* getByName(env.project, interconnectAttachmentGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project);

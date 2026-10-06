@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -55,16 +55,11 @@ test.provider.skipIf(!dockerAvailable)(
       const index = path.join(cwd, "src/index.html");
       yield* fs.writeFileString(
         index,
-        (yield* fs.readFileString(index)).replaceAll(
-          "fixture v1",
-          "fixture v2",
-        ),
+        (yield* fs.readFileString(index)).replaceAll("fixture v1", "fixture v2"),
       );
       const second = yield* deploy();
       expect(second.site.url).toBe(url);
-      expect(second.site.service!.codeHash).not.toBe(
-        first.site.service!.codeHash,
-      );
+      expect(second.site.service!.codeHash).not.toBe(first.site.service!.codeHash);
       yield* expectUrlContains(`${url}/`, "StaticSite fixture v2", {
         timeout: "60 seconds",
         label: "static v2",

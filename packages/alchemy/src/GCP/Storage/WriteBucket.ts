@@ -3,11 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  ObjectNotFound,
-  ObjectRequestFailed,
-  PutObjectContent,
-} from "./ObjectMedia.ts";
+import type { ObjectNotFound, ObjectRequestFailed, PutObjectContent } from "./ObjectMedia.ts";
 
 /** Write-only client for one Cloud Storage bucket. */
 export interface WriteBucketClient {
@@ -16,15 +12,9 @@ export interface WriteBucketClient {
     name: string,
     body: string | Uint8Array,
     options?: Omit<PutObjectContent, "name" | "body">,
-  ): Effect.Effect<
-    storage.Storage_Object,
-    ObjectNotFound | ObjectRequestFailed,
-    RuntimeContext
-  >;
+  ): Effect.Effect<storage.Storage_Object, ObjectNotFound | ObjectRequestFailed, RuntimeContext>;
   /** Delete an object. Deleting a missing object succeeds. */
-  delete(
-    object: string,
-  ): Effect.Effect<void, storage.DeleteObjectsError, RuntimeContext>;
+  delete(object: string): Effect.Effect<void, storage.DeleteObjectsError, RuntimeContext>;
 }
 
 /**
@@ -50,6 +40,4 @@ export interface WriteBucket extends Binding.Service<
   (bucket: Bucket) => Effect.Effect<WriteBucketClient>
 > {}
 
-export const WriteBucket = Binding.Service<WriteBucket>(
-  "GCP.Storage.WriteBucket",
-);
+export const WriteBucket = Binding.Service<WriteBucket>("GCP.Storage.WriteBucket");

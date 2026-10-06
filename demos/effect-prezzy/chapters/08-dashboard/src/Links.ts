@@ -49,7 +49,10 @@ export const LinksSql = Layer.effect(
       list: () =>
         sql<Link>`
           SELECT code, url, created_at AS "createdAt" FROM links
-          ORDER BY created_at DESC`.pipe(Effect.mapError(storeError), Effect.withSpan("links.list")),
+          ORDER BY created_at DESC`.pipe(
+          Effect.mapError(storeError),
+          Effect.withSpan("links.list"),
+        ),
     };
   }),
 );

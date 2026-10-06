@@ -30,10 +30,7 @@ export interface DescribeSigningJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: signer.DescribeSigningJobRequest,
-    ) => Effect.Effect<
-      signer.DescribeSigningJobResponse,
-      signer.DescribeSigningJobError
-    >
+    ) => Effect.Effect<signer.DescribeSigningJobResponse, signer.DescribeSigningJobError>
   >
 > {}
 export const DescribeSigningJob = Binding.Service<DescribeSigningJob>(

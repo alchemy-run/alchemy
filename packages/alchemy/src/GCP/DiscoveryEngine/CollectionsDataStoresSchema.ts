@@ -90,10 +90,9 @@ export type CollectionsDataStoresSchema = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const CollectionsDataStoresSchema =
-  Resource<CollectionsDataStoresSchema>(
-    "GCP.DiscoveryEngine.CollectionsDataStoresSchema",
-  );
+export const CollectionsDataStoresSchema = Resource<CollectionsDataStoresSchema>(
+  "GCP.DiscoveryEngine.CollectionsDataStoresSchema",
+);
 
 export class CollectionsDataStoresSchemaNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSchemaNotResolved",
@@ -107,10 +106,7 @@ export class CollectionsDataStoresSchemaStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  schema: discoveryengine.GoogleCloudDiscoveryengineV1Schema,
-  project: string,
-) => {
+const toAttrs = (schema: discoveryengine.GoogleCloudDiscoveryengineV1Schema, project: string) => {
   const name = schema.name ?? "";
   const parsed = parseResourceName(name, "schemas");
   return {
@@ -124,8 +120,7 @@ const toAttrs = (
   };
 };
 
-const resourceName = (dataStore: string, schemaId: string) =>
-  `${dataStore}/schemas/${schemaId}`;
+const resourceName = (dataStore: string, schemaId: string) => `${dataStore}/schemas/${schemaId}`;
 
 const getByName = (name: string) =>
   name.length === 0
@@ -142,9 +137,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new CollectionsDataStoresSchemaNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.DiscoveryEngine.CollectionsDataStoresSchemaNotResolved",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoresSchemaNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -158,9 +151,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new CollectionsDataStoresSchemaStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.DiscoveryEngine.CollectionsDataStoresSchemaStillExists",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoresSchemaStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -176,9 +167,7 @@ export const CollectionsDataStoresSchemaProvider = () =>
       const previousId = olds?.schemaId ?? output?.schemaId;
       if (
         (previousParent !== undefined && news.dataStore !== previousParent) ||
-        (previousId !== undefined &&
-          news.schemaId !== undefined &&
-          news.schemaId !== previousId)
+        (previousId !== undefined && news.schemaId !== undefined && news.schemaId !== previousId)
       ) {
         return {
           action: "replace" as const,
@@ -202,10 +191,7 @@ export const CollectionsDataStoresSchemaProvider = () =>
         32,
       );
       const name =
-        output?.name ??
-        (dataStore !== undefined
-          ? resourceName(dataStore, schemaId)
-          : undefined);
+        output?.name ?? (dataStore !== undefined ? resourceName(dataStore, schemaId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -261,17 +247,14 @@ export const CollectionsDataStoresSchemaProvider = () =>
       const structChanged = !sameJson(current.structSchema, news.structSchema);
 
       if (jsonChanged || structChanged) {
-        const patched =
-          yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresSchemas(
-            {
-              name: resource,
-              body: {
-                name: resource,
-                jsonSchema,
-                structSchema: news.structSchema,
-              },
-            },
-          );
+        const patched = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresSchemas({
+          name: resource,
+          body: {
+            name: resource,
+            jsonSchema,
+            structSchema: news.structSchema,
+          },
+        });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(resource);
       }

@@ -1,9 +1,9 @@
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
@@ -14,15 +14,11 @@ import {
 
 export const MAX_NAME_LENGTH = 63;
 
-export class EventarcNotResolved extends Data.TaggedError(
-  "GCP.Eventarc.NotResolved",
-)<{
+export class EventarcNotResolved extends Data.TaggedError("GCP.Eventarc.NotResolved")<{
   name: string;
 }> {}
 
-export class EventarcStillExists extends Data.TaggedError(
-  "GCP.Eventarc.StillExists",
-)<{
+export class EventarcStillExists extends Data.TaggedError("GCP.Eventarc.StillExists")<{
   name: string;
 }> {}
 
@@ -59,41 +55,25 @@ export const rfc1035 = (
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `projects/${project}/locations/${location}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `projects/${project}/locations/${location}/${collection}/${id}`;
 
-export const parseName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -155,9 +135,8 @@ export const toLoggingConfig = (
   return { logSeverity };
 };
 
-export const loggingKey = (
-  config: LoggingConfig | eventarc.LoggingConfig | undefined,
-) => toLoggingConfig(config)?.logSeverity ?? "";
+export const loggingKey = (config: LoggingConfig | eventarc.LoggingConfig | undefined) =>
+  toLoggingConfig(config)?.logSeverity ?? "";
 
 export const cryptoKeyKey = (name: string | undefined) =>
   name === undefined || name.length === 0 ? "" : name;
@@ -165,8 +144,7 @@ export const cryptoKeyKey = (name: string | undefined) =>
 export const textKey = (value: string | undefined) => value ?? "";
 
 export const sameJson = (left: unknown, right: unknown) =>
-  JSON.stringify(canonical(left) ?? null) ===
-  JSON.stringify(canonical(right) ?? null);
+  JSON.stringify(canonical(left) ?? null) === JSON.stringify(canonical(right) ?? null);
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -189,9 +167,8 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const changedFields = (
-  pairs: ReadonlyArray<readonly [string, boolean]>,
-) => pairs.filter(([, changed]) => changed).map(([field]) => field);
+export const changedFields = (pairs: ReadonlyArray<readonly [string, boolean]>) =>
+  pairs.filter(([, changed]) => changed).map(([field]) => field);
 
 export const compact = <T extends Record<string, unknown>>(value: T): T => {
   const next: Record<string, unknown> = {};
@@ -250,22 +227,16 @@ export const retryOnTransient = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "Conflict" || error._tag === "GCP.OperationFailed",
+      while: (error) => error._tag === "Conflict" || error._tag === "GCP.OperationFailed",
       times: 8,
       schedule: Schedule.spaced("3 seconds"),
     }),
   );
 
-export const waitUntilPresent = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new EventarcNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new EventarcNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof EventarcNotResolved,
@@ -274,15 +245,10 @@ export const waitUntilPresent = <A, E, R>(
     }),
   );
 
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new EventarcStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new EventarcStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof EventarcStillExists,
@@ -291,12 +257,7 @@ export const waitUntilGone = <A, E, R>(
     }),
   );
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>
@@ -306,8 +267,7 @@ export const collectPages = <
     Effect.map((chunk) => Array.from(chunk)),
     // A missing parent location lists as empty.
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed<Item[]>([]),
     ),
   );

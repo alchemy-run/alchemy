@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gkeonprem from "@distilled.cloud/gcp/gkeonprem_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   missingMembership,
   missingVmwareCluster,
@@ -18,10 +18,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   gkeonprem.getProjectsLocationsVmwareClustersVmwareNodePools({ name }).pipe(
@@ -65,20 +62,17 @@ test.provider.skipIf(runVmwareLifecycle)(
       const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
-            return yield* GCP.GKEOnPrem.VmwareClustersVmwareNodePool(
-              "Workers",
-              {
-                vmwareCluster: missingVmwareCluster(project),
-                config: {
-                  imageType: "ubuntu_containerd",
-                  replicas: "3",
-                  cpus: "4",
-                  memoryMb: "8192",
-                },
-                displayName: "alchemy-test-vmnp",
-                labels: { env: "test" },
+            return yield* GCP.GKEOnPrem.VmwareClustersVmwareNodePool("Workers", {
+              vmwareCluster: missingVmwareCluster(project),
+              config: {
+                imageType: "ubuntu_containerd",
+                replicas: "3",
+                cpus: "4",
+                memoryMb: "8192",
               },
-            );
+              displayName: "alchemy-test-vmnp",
+              labels: { env: "test" },
+            });
           }),
         ),
       );
@@ -100,28 +94,24 @@ test.provider.skipIf(!runVmwareLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const cluster = yield* GCP.GKEOnPrem.VmwareCluster("Workload", {
-            adminClusterMembership:
-              vmwareAdminMembership ?? missingMembership(project),
+            adminClusterMembership: vmwareAdminMembership ?? missingMembership(project),
             onPremVersion: "1.28.0-gke.1",
             controlPlaneNode: vmwareControlPlane,
             networkConfig: vmwareNetwork,
             loadBalancer: vmwareLoadBalancer,
             description: "node pool parent",
           });
-          const pool = yield* GCP.GKEOnPrem.VmwareClustersVmwareNodePool(
-            "Workers",
-            {
-              vmwareCluster: cluster.name,
-              config: {
-                imageType: "ubuntu_containerd",
-                replicas: "3",
-                cpus: "4",
-                memoryMb: "8192",
-              },
-              displayName: "alchemy-test-vmnp",
-              labels: { env: "test" },
+          const pool = yield* GCP.GKEOnPrem.VmwareClustersVmwareNodePool("Workers", {
+            vmwareCluster: cluster.name,
+            config: {
+              imageType: "ubuntu_containerd",
+              replicas: "3",
+              cpus: "4",
+              memoryMb: "8192",
             },
-          );
+            displayName: "alchemy-test-vmnp",
+            labels: { env: "test" },
+          });
           return { cluster, pool };
         }),
       );
@@ -130,10 +120,9 @@ test.provider.skipIf(!runVmwareLifecycle)(
       expect(created.pool.vmwareCluster).toEqual(created.cluster.name);
       expect(created.pool.displayName).toEqual("alchemy-test-vmnp");
 
-      const fetched =
-        yield* gkeonprem.getProjectsLocationsVmwareClustersVmwareNodePools({
-          name: created.pool.name,
-        });
+      const fetched = yield* gkeonprem.getProjectsLocationsVmwareClustersVmwareNodePools({
+        name: created.pool.name,
+      });
       expect(fetched.name).toEqual(created.pool.name);
       expect(fetched.displayName).toContain("alchemy-id=");
       expect(fetched.annotations?.["alchemy-id"]).toBeDefined();
@@ -148,34 +137,28 @@ test.provider.skipIf(!runVmwareLifecycle)(
               vmwareAdminMembership ??
               missingMembership(project),
             onPremVersion: created.cluster.onPremVersion ?? "1.28.0-gke.1",
-            controlPlaneNode:
-              created.cluster.controlPlaneNode ?? vmwareControlPlane,
+            controlPlaneNode: created.cluster.controlPlaneNode ?? vmwareControlPlane,
             networkConfig: created.cluster.networkConfig ?? vmwareNetwork,
             loadBalancer: created.cluster.loadBalancer ?? vmwareLoadBalancer,
             description: "node pool parent",
           });
-          const pool = yield* GCP.GKEOnPrem.VmwareClustersVmwareNodePool(
-            "Workers",
-            {
-              vmwareNodePoolId: created.pool.vmwareNodePoolId,
-              vmwareCluster: cluster.name,
-              config: {
-                imageType: "ubuntu_containerd",
-                replicas: "5",
-                cpus: "4",
-                memoryMb: "8192",
-              },
-              displayName: "alchemy-test-vmnp-v2",
+          const pool = yield* GCP.GKEOnPrem.VmwareClustersVmwareNodePool("Workers", {
+            vmwareNodePoolId: created.pool.vmwareNodePoolId,
+            vmwareCluster: cluster.name,
+            config: {
+              imageType: "ubuntu_containerd",
+              replicas: "5",
+              cpus: "4",
+              memoryMb: "8192",
             },
-          );
+            displayName: "alchemy-test-vmnp-v2",
+          });
           return { cluster, pool };
         }),
       );
 
       expect(updated.pool.displayName).toEqual("alchemy-test-vmnp-v2");
-      expect(updated.pool.vmwareNodePoolId).toEqual(
-        created.pool.vmwareNodePoolId,
-      );
+      expect(updated.pool.vmwareNodePoolId).toEqual(created.pool.vmwareNodePoolId);
 
       yield* stack.destroy();
       yield* waitUntilGone(created.pool.name);

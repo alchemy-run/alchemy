@@ -1,15 +1,12 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as memcache from "@distilled.cloud/gcp/memcache_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import MemcacheBindingsHost, {
-  Cache,
-  memcacheEnabled,
-} from "./fixtures/bindings-host.ts";
+import MemcacheBindingsHost, { Cache, memcacheEnabled } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -56,10 +53,7 @@ describe.skipIf(!dockerAvailable || !memcacheEnabled)(
         "reads the instance as the host's service account, granted memcache.viewer on the project",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<memcache.Instance>(
-              baseUrl,
-              "getInstance",
-            );
+            const live = yield* expectProbe<memcache.Instance>(baseUrl, "getInstance");
             expect(live.name).toEqual(instanceName);
             expect(live.state).toEqual("READY");
 
@@ -70,17 +64,13 @@ describe.skipIf(!dockerAvailable || !memcacheEnabled)(
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => ({
                 role: binding.role,
                 condition: binding.condition,
               }));
-            expect(roles).toEqual([
-              { role: "roles/memcache.viewer", condition: undefined },
-            ]);
+            expect(roles).toEqual([{ role: "roles/memcache.viewer", condition: undefined }]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:memcache", "live"],

@@ -46,6 +46,4 @@ export interface CommitCursor extends Binding.Service<
   >
 > {}
 
-export const CommitCursor = Binding.Service<CommitCursor>(
-  "GCP.PubSubLite.CommitCursor",
-);
+export const CommitCursor = Binding.Service<CommitCursor>("GCP.PubSubLite.CommitCursor");

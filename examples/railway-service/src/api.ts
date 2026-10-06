@@ -2,10 +2,10 @@ import * as Drizzle from "alchemy/Drizzle/Postgres";
 import * as Railway from "alchemy/Railway";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import {
   API_PORT,
   Cache,
@@ -61,9 +61,7 @@ export default class Api extends Railway.Service<Api>()(
         const path = new URL(request.url, "http://service").pathname;
 
         if (path === "/secret") {
-          const value = yield* Config.String(SECRET_NAME).pipe(
-            Effect.orElseSucceed(() => ""),
-          );
+          const value = yield* Config.String(SECRET_NAME).pipe(Effect.orElseSucceed(() => ""));
           return yield* HttpServerResponse.json({
             ok: value.length > 0,
             name: SECRET_NAME,
@@ -92,9 +90,7 @@ export default class Api extends Railway.Service<Api>()(
           });
           const obj = yield* getObject({ Key: OBJECT_KEY });
           const text =
-            obj.Body === undefined
-              ? ""
-              : yield* Stream.mkString(Stream.decodeText(obj.Body));
+            obj.Body === undefined ? "" : yield* Stream.mkString(Stream.decodeText(obj.Body));
           yield* deleteObject({ Key: OBJECT_KEY });
           return yield* HttpServerResponse.json({
             ok: text === "hello",
@@ -110,10 +106,7 @@ export default class Api extends Railway.Service<Api>()(
         return yield* HttpServerResponse.json({ rows }, { status: 404 });
       }).pipe(
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

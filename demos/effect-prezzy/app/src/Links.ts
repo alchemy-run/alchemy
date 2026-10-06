@@ -32,9 +32,7 @@ export class Links extends Context.Service<
   Links,
   {
     create(url: string): Effect.Effect<Link, LinkStoreError, Alchemy.RuntimeContext>;
-    get(
-      code: string,
-    ): Effect.Effect<Link, LinkNotFound | LinkStoreError, Alchemy.RuntimeContext>;
+    get(code: string): Effect.Effect<Link, LinkNotFound | LinkStoreError, Alchemy.RuntimeContext>;
     list(): Effect.Effect<Link[], LinkStoreError, Alchemy.RuntimeContext>;
     setPreview(
       code: string,

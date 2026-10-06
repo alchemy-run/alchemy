@@ -3,7 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource as makeResource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -86,13 +86,9 @@ export interface CloudControlResource extends makeResource<
  *
  * @resource
  */
-export const Resource = makeResource<CloudControlResource>(
-  "AWS.CloudControl.Resource",
-);
+export const Resource = makeResource<CloudControlResource>("AWS.CloudControl.Resource");
 
-class ResourceRequestNotSettled extends Data.TaggedError(
-  "ResourceRequestNotSettled",
-)<{
+class ResourceRequestNotSettled extends Data.TaggedError("ResourceRequestNotSettled")<{
   readonly requestToken: string;
   readonly status: string;
 }> {}
@@ -105,12 +101,8 @@ class ResourceRequestFailed extends Data.TaggedError("ResourceRequestFailed")<{
 }> {}
 
 /** Unwrap distilled's sensitive-string decoding to a plain string. */
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined || typeof value === "string"
-    ? value
-    : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined || typeof value === "string" ? value : Redacted.value(value);
 
 const parseProperties = (
   properties: string | Redacted.Redacted<string> | undefined,
@@ -126,8 +118,7 @@ const parseProperties = (
 };
 
 /** RFC 6901 escape for a JSON Pointer path segment. */
-const escapePointer = (key: string): string =>
-  key.replace(/~/g, "~0").replace(/\//g, "~1");
+const escapePointer = (key: string): string => key.replace(/~/g, "~0").replace(/\//g, "~1");
 
 /**
  * Build an RFC 6902 JSON Patch that converges the observed properties to the
@@ -141,7 +132,7 @@ const buildPatch = (
 ): Array<{ op: "add" | "replace"; path: string; value: unknown }> =>
   Object.entries(desired).flatMap(([key, value]) => {
     const hasKey = Object.prototype.hasOwnProperty.call(observed, key);
-    if (hasKey && JSON.stringify(observed[key]) === JSON.stringify(value)) {
+    if (hasKey && deepEqual(observed[key], value)) {
       return [];
     }
     return [
@@ -153,6 +144,32 @@ const buildPatch = (
     ];
   });
 
+/**
+ * Normalize `AWS::SSM::Document` state before diffing. SSM returns JSON
+ * `Content` as a formatted string, so compare it structurally, and omits
+ * the write-only `UpdateMethod`, which selects how a real change is applied
+ * rather than describing persistent document state — resend it only
+ * alongside an actual change.
+ *
+ * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-ssm-document.html
+ */
+const resourcePatch = (
+  typeName: string,
+  observed: Record<string, unknown>,
+  desired: Record<string, unknown>,
+) => {
+  if (typeName !== "AWS::SSM::Document") return buildPatch(observed, desired);
+  const { UpdateMethod, ...document } = desired;
+  const normalizeDocument = (value: Record<string, unknown>) =>
+    value.DocumentFormat === "JSON" && typeof value.Content === "string"
+      ? { ...value, Content: JSON.parse(value.Content) }
+      : value;
+  const patch = buildPatch(normalizeDocument(observed), normalizeDocument(document));
+  return patch.length > 0 && UpdateMethod !== undefined
+    ? [...patch, ...buildPatch(observed, { UpdateMethod })]
+    : patch;
+};
+
 export const CloudControlResourceProvider = () =>
   Provider.effect(
     Resource,
@@ -162,10 +179,7 @@ export const CloudControlResourceProvider = () =>
        * Operations are typically fast (seconds); budget ~5 min (60 * 5s).
        * Returns the terminal ProgressEvent, failing on FAILED.
        */
-      const waitForRequest = Effect.fn(function* (
-        requestToken: string,
-        typeName: string,
-      ) {
+      const waitForRequest = Effect.fn(function* (requestToken: string, typeName: string) {
         const event = yield* cloudcontrol
           .getResourceRequestStatus({ RequestToken: requestToken })
           .pipe(
@@ -188,10 +202,7 @@ export const CloudControlResourceProvider = () =>
             }),
             Effect.retry({
               while: (e) => e._tag === "ResourceRequestNotSettled",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(60),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
             }),
           );
         if (event?.OperationStatus !== "SUCCESS") {
@@ -208,18 +219,11 @@ export const CloudControlResourceProvider = () =>
       });
 
       /** Read live resource properties; a missing resource reads as absent. */
-      const getResource = Effect.fn(function* (
-        typeName: string,
-        identifier: string,
-      ) {
-        return yield* cloudcontrol
-          .getResource({ TypeName: typeName, Identifier: identifier })
-          .pipe(
-            Effect.map((r) => r.ResourceDescription),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const getResource = Effect.fn(function* (typeName: string, identifier: string) {
+        return yield* cloudcontrol.getResource({ TypeName: typeName, Identifier: identifier }).pipe(
+          Effect.map((r) => r.ResourceDescription),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       return {
@@ -234,10 +238,7 @@ export const CloudControlResourceProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (output?.identifier === undefined) return undefined;
-          const description = yield* getResource(
-            output.typeName,
-            output.identifier,
-          );
+          const description = yield* getResource(output.typeName, output.identifier);
           if (description?.Identifier === undefined) return undefined;
           return {
             typeName: output.typeName,
@@ -253,9 +254,7 @@ export const CloudControlResourceProvider = () =>
           // cache.
           let identifier = output?.identifier;
           let description =
-            identifier !== undefined
-              ? yield* getResource(typeName, identifier)
-              : undefined;
+            identifier !== undefined ? yield* getResource(typeName, identifier) : undefined;
 
           // 2. Ensure — create if missing, then poll to SUCCESS.
           if (description === undefined) {
@@ -265,16 +264,14 @@ export const CloudControlResourceProvider = () =>
               RoleArn: news.roleArn,
               DesiredState: JSON.stringify(news.desiredState),
             });
-            const settled = yield* waitForRequest(
-              created.ProgressEvent!.RequestToken!,
-              typeName,
-            );
+            const settled = yield* waitForRequest(created.ProgressEvent!.RequestToken!, typeName);
             identifier = settled.Identifier!;
             description = yield* getResource(typeName, identifier);
           } else {
             // 3. Sync — patch only the drifted user-specified keys.
             identifier = description.Identifier!;
-            const patch = buildPatch(
+            const patch = resourcePatch(
+              typeName,
               parseProperties(description.Properties),
               news.desiredState,
             );
@@ -286,10 +283,7 @@ export const CloudControlResourceProvider = () =>
                 Identifier: identifier,
                 PatchDocument: JSON.stringify(patch),
               });
-              yield* waitForRequest(
-                updated.ProgressEvent!.RequestToken!,
-                typeName,
-              );
+              yield* waitForRequest(updated.ProgressEvent!.RequestToken!, typeName);
               description = yield* getResource(typeName, identifier);
             }
           }
@@ -311,9 +305,7 @@ export const CloudControlResourceProvider = () =>
             })
             .pipe(
               Effect.map((r) => r.ProgressEvent),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           if (deleted?.RequestToken !== undefined) {
             yield* waitForRequest(deleted.RequestToken, output.typeName).pipe(

@@ -123,9 +123,7 @@ export interface EventAction extends Resource<
  *
  * @resource
  */
-export const EventAction = Resource<EventAction>(
-  "AWS.DataExchange.EventAction",
-);
+export const EventAction = Resource<EventAction>("AWS.DataExchange.EventAction");
 
 const toWireAction = (props: EventActionProps): dataexchange.Action => ({
   ExportRevisionToS3: {
@@ -155,8 +153,7 @@ const sameAction = (
     (a.RevisionDestination.KeyPattern ?? undefined) ===
       (b.RevisionDestination.KeyPattern ?? undefined) &&
     (a.Encryption?.Type ?? undefined) === (b.Encryption?.Type ?? undefined) &&
-    (a.Encryption?.KmsKeyArn ?? undefined) ===
-      (b.Encryption?.KmsKeyArn ?? undefined)
+    (a.Encryption?.KmsKeyArn ?? undefined) === (b.Encryption?.KmsKeyArn ?? undefined)
   );
 };
 
@@ -168,11 +165,7 @@ export const EventActionProvider = () =>
       const getById = Effect.fn(function* (eventActionId: string) {
         return yield* dataexchange
           .getEventAction({ EventActionId: eventActionId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       /**
@@ -182,24 +175,18 @@ export const EventActionProvider = () =>
        * inspection.
        */
       const findByTags = Effect.fn(function* (id: string, dataSetId: string) {
-        return yield* dataexchange.listEventActions
-          .items({ EventSourceId: dataSetId })
-          .pipe(
-            Stream.mapEffect(
-              Effect.fn(function* (entry) {
-                const tags = yield* readDataExchangeTags(entry.Arn);
-                return (yield* hasAlchemyTags(id, tags)) ? entry : undefined;
-              }),
-            ),
-            Stream.filter((entry) => entry !== undefined),
-            Stream.runHead,
-            Effect.map((head) =>
-              head._tag === "Some" ? head.value : undefined,
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* dataexchange.listEventActions.items({ EventSourceId: dataSetId }).pipe(
+          Stream.mapEffect(
+            Effect.fn(function* (entry) {
+              const tags = yield* readDataExchangeTags(entry.Arn);
+              return (yield* hasAlchemyTags(id, tags)) ? entry : undefined;
+            }),
+          ),
+          Stream.filter((entry) => entry !== undefined),
+          Stream.runHead,
+          Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       return {
@@ -216,8 +203,7 @@ export const EventActionProvider = () =>
           const attrs = {
             eventActionId: eventAction.Id!,
             eventActionArn: eventAction.Arn!,
-            dataSetId:
-              eventAction.Event?.RevisionPublished?.DataSetId ?? dataSetId!,
+            dataSetId: eventAction.Event?.RevisionPublished?.DataSetId ?? dataSetId!,
           };
           const tags = yield* readDataExchangeTags(attrs.eventActionArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -276,19 +262,14 @@ export const EventActionProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* dataexchange
-            .deleteEventAction({ EventActionId: output.eventActionId })
-            .pipe(
-              // Deletion is idempotent — a missing event action is success.
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e): boolean => e._tag === "ThrottlingException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(5),
-                ]),
-              }),
-            );
+          yield* dataexchange.deleteEventAction({ EventActionId: output.eventActionId }).pipe(
+            // Deletion is idempotent — a missing event action is success.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e): boolean => e._tag === "ThrottlingException",
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
+            }),
+          );
         }),
 
         list: () =>

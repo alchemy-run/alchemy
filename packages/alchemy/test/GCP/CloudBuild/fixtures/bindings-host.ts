@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -8,8 +8,7 @@ import { serveProbes } from "../../bindingHost.ts";
  * connection can reach.
  */
 export const remoteUri =
-  process.env.GCP_TEST_CLOUDBUILD_REPO ??
-  "https://github.com/octocat/Hello-World.git";
+  process.env.GCP_TEST_CLOUDBUILD_REPO ?? "https://github.com/octocat/Hello-World.git";
 
 /** Linked repository the host reads tokens and refs for. */
 export const Source = Effect.gen(function* () {

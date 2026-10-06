@@ -80,11 +80,7 @@ export type CommandKind = "create" | "update" | "delete";
  * else `update`.
  */
 export const commandKind = (command: RefCommand): CommandKind =>
-  command.oldOid === ZERO_OID
-    ? "create"
-    : command.newOid === ZERO_OID
-      ? "delete"
-      : "update";
+  command.oldOid === ZERO_OID ? "create" : command.newOid === ZERO_OID ? "delete" : "update";
 
 /**
  * A parsed `git-receive-pack` request.
@@ -117,6 +113,7 @@ export type ParsedReceivePack =
   | { readonly _tag: "request"; readonly request: ReceivePackRequest };
 
 // control chars, space, DEL, and git's forbidden refname metacharacters
+// oxlint-disable-next-line no-control-regex
 const REFNAME_FORBIDDEN = new RegExp("[\\x00-\\x20\\x7f\\\\~^:?*\\[]");
 
 const validRefName = (name: string): boolean =>
@@ -127,9 +124,7 @@ const validRefName = (name: string): boolean =>
   !name.endsWith(".lock") &&
   !REFNAME_FORBIDDEN.test(name);
 
-const parseCommandLine = (
-  line: string,
-): Effect.Effect<RefCommand, ProtocolError> =>
+const parseCommandLine = (line: string): Effect.Effect<RefCommand, ProtocolError> =>
   Effect.suspend(() => {
     const oldOid = line.slice(0, 40);
     const newOid = line.slice(41, 81);
@@ -141,19 +136,13 @@ const parseCommandLine = (
       line[81] !== " " ||
       ref.length === 0
     ) {
-      return Effect.fail(
-        new ProtocolError({ reason: `malformed command line: ${line}` }),
-      );
+      return Effect.fail(new ProtocolError({ reason: `malformed command line: ${line}` }));
     }
     if (!validRefName(ref)) {
-      return Effect.fail(
-        new ProtocolError({ reason: `invalid refname: ${ref}` }),
-      );
+      return Effect.fail(new ProtocolError({ reason: `invalid refname: ${ref}` }));
     }
     if (oldOid === ZERO_OID && newOid === ZERO_OID) {
-      return Effect.fail(
-        new ProtocolError({ reason: `zero-to-zero command for ${ref}` }),
-      );
+      return Effect.fail(new ProtocolError({ reason: `zero-to-zero command for ${ref}` }));
     }
     return Effect.succeed({ oldOid, newOid, ref });
   });
@@ -224,8 +213,7 @@ export const parseReceivePackRequest = Effect.fn(function* (body: Uint8Array) {
     hasPack: pos < body.length,
     atomic: capabilities.has("atomic"),
     sideband: capabilities.has("side-band-64k"),
-    reportStatus:
-      capabilities.has("report-status") || capabilities.has("report-status-v2"),
+    reportStatus: capabilities.has("report-status") || capabilities.has("report-status-v2"),
   };
   return { _tag: "request", request } as ParsedReceivePack;
 });
@@ -285,9 +273,7 @@ export interface StagedObjectRef {
  */
 export interface ConnectivityDeps {
   /** Reads a staged object's inflated content. */
-  readonly readStagedContent: (
-    oid: Oid,
-  ) => Effect.Effect<Uint8Array, StoreError>;
+  readonly readStagedContent: (oid: Oid) => Effect.Effect<Uint8Array, StoreError>;
   /**
    * Filters oids down to those existing among **live** objects (batched,
    * chunked `IN` lists; order not guaranteed).
@@ -410,17 +396,11 @@ export const reportStatus = (options: ReportStatusOptions): Uint8Array => {
   const inner = concatBytes([
     pktText(`unpack ${options.unpack}`),
     ...options.results.map((result) =>
-      pktText(
-        result.ok
-          ? `ok ${result.ref}`
-          : `ng ${result.ref} ${result.reason ?? "failed"}`,
-      ),
+      pktText(result.ok ? `ok ${result.ref}` : `ng ${result.ref} ${result.reason ?? "failed"}`),
     ),
     flushPkt,
   ]);
-  return options.sideband
-    ? concatBytes([...sidebandFrames(1, inner), flushPkt])
-    : inner;
+  return options.sideband ? concatBytes([...sidebandFrames(1, inner), flushPkt]) : inner;
 };
 
 /**

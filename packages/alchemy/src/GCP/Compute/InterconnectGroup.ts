@@ -1,6 +1,4 @@
-import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,19 +9,16 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_CAPABILITY = "NO_SLA";
 
 export type InterconnectGroupIntent = compute.InterconnectGroupIntent;
-export type InterconnectGroupInterconnectMap =
-  compute.InterconnectGroupInterconnectMap;
+export type InterconnectGroupInterconnectMap = compute.InterconnectGroupInterconnectMap;
 
 export type InterconnectGroupProps = {
   /**
@@ -118,9 +113,7 @@ export type InterconnectGroup = Resource<
  * @resource
  * @category Compute
  */
-export const InterconnectGroup = Resource<InterconnectGroup>(
-  "GCP.Compute.InterconnectGroup",
-);
+export const InterconnectGroup = Resource<InterconnectGroup>("GCP.Compute.InterconnectGroup");
 
 export class InterconnectGroupNotResolved extends Data.TaggedError(
   "GCP.Compute.InterconnectGroupNotResolved",
@@ -195,9 +188,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const capabilityOf = (intent: InterconnectGroupIntent | undefined) =>
   (intent?.topologyCapability ?? DEFAULT_CAPABILITY).toUpperCase();
@@ -207,10 +198,7 @@ const interconnectUrl = (project: string, value: string) => {
   return `projects/${project}/global/interconnects/${value}`;
 };
 
-const membersKey = (
-  project: string,
-  members: InterconnectGroupInterconnectMap | undefined,
-) =>
+const membersKey = (project: string, members: InterconnectGroupInterconnectMap | undefined) =>
   Object.entries(members ?? {})
     .map(([key, value]) => {
       const url = value?.interconnect;
@@ -267,13 +255,10 @@ const awaitResource = (project: string, interconnectGroupName: string) =>
     Effect.flatMap((group) =>
       group !== undefined
         ? Effect.succeed(group)
-        : Effect.fail(
-            new InterconnectGroupNotResolved({ interconnectGroupName }),
-          ),
+        : Effect.fail(new InterconnectGroupNotResolved({ interconnectGroupName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectGroupNotResolved",
+      while: (error) => error._tag === "GCP.Compute.InterconnectGroupNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -284,20 +269,14 @@ const waitUntilGone = (project: string, interconnectGroupName: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(
-            new InterconnectGroupStillExists({ interconnectGroupName }),
-          ),
+        : Effect.fail(new InterconnectGroupStillExists({ interconnectGroupName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectGroupStillExists",
+      while: (error) => error._tag === "GCP.Compute.InterconnectGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.InterconnectGroupStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.InterconnectGroupStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -331,14 +310,9 @@ export const InterconnectGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.interconnectGroupName ?? output?.interconnectGroupName;
+      const previousName = olds?.interconnectGroupName ?? output?.interconnectGroupName;
       const nextName = news.interconnectGroupName ?? previousName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -416,14 +390,11 @@ export const InterconnectGroupProvider = () =>
         current = yield* awaitResource(env.project, interconnectGroupName);
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const intentChanged =
-        capabilityOf(current.intent) !== capabilityOf(intent);
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const intentChanged = capabilityOf(current.intent) !== capabilityOf(intent);
       const membersChanged =
         news.interconnects !== undefined &&
-        membersKey(env.project, current.interconnects) !==
-          membersKey(env.project, interconnects);
+        membersKey(env.project, current.interconnects) !== membersKey(env.project, interconnects);
 
       if (descriptionChanged || intentChanged || membersChanged) {
         yield* runOp(
@@ -438,14 +409,11 @@ export const InterconnectGroupProvider = () =>
               description: desiredDescription,
               intent,
               interconnects:
-                news.interconnects !== undefined
-                  ? interconnects
-                  : current.interconnects,
+                news.interconnects !== undefined ? interconnects : current.interconnects,
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, interconnectGroupName)) ?? current;
+        current = (yield* getByName(env.project, interconnectGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project);

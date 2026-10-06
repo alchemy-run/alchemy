@@ -1,23 +1,20 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import LicenseManagerTestFunctionLive, {
-  LicenseManagerTestFunction,
-} from "./handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import LicenseManagerTestFunctionLive, { LicenseManagerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "LicenseManagerBindings");
-const RUN_CREATE_LIFECYCLE =
-  process.env.AWS_TEST_LICENSE_MANAGER_CREATE === "1";
+const RUN_CREATE_LIFECYCLE = process.env.AWS_TEST_LICENSE_MANAGER_CREATE === "1";
 
 // NOTE: CreateLicenseConfiguration has a small DAILY account quota (~10
 // creates/day; deletes do NOT refund it — soft-deleted configurations still
@@ -33,9 +30,7 @@ const RUN_CREATE_LIFECYCLE =
 // propagation.
 const ensureOnboarded = Effect.gen(function* () {
   yield* iam
-    .createServiceLinkedRole({
-      AWSServiceName: "license-manager.amazonaws.com",
-    })
+    .createServiceLinkedRole({ AWSServiceName: "license-manager.amazonaws.com" })
     .pipe(Effect.catchTag("InvalidInputException", () => Effect.void));
   yield* licensemanager.listLicenseConfigurations({ MaxResults: 1 }).pipe(
     Effect.retry({
@@ -48,10 +43,7 @@ const ensureOnboarded = Effect.gen(function* () {
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -70,26 +62,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const describeCreateLifecycle = describe.skipIf(!RUN_CREATE_LIFECYCLE);
 
@@ -98,15 +83,9 @@ describeCreateLifecycle.sequential("LicenseManager Bindings", () => {
     Effect.gen(function* () {
       // beforeAll runs outside the provider context — provide the AWS
       // client environment explicitly for the raw distilled calls.
-      yield* Core.withProviders(
-        ensureOnboarded,
-        testOptions,
-        "LicenseManagerBindings",
-      );
+      yield* Core.withProviders(ensureOnboarded, testOptions, "LicenseManagerBindings");
 
-      yield* Effect.logInfo(
-        "LicenseManager test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("LicenseManager test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("LicenseManager test setup: deploying fixture");
@@ -120,9 +99,7 @@ describeCreateLifecycle.sequential("LicenseManager Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `LicenseManager test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`LicenseManager test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -130,9 +107,7 @@ describeCreateLifecycle.sequential("LicenseManager Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `LicenseManager test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`LicenseManager test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -537,9 +512,7 @@ describeCreateLifecycle.sequential("LicenseManager Bindings", () => {
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* getJson("/specifications-invalid")) as any;
-            expect(["Ok", "InvalidParameterValueException"]).toContain(
-              response.tag,
-            );
+            expect(["Ok", "InvalidParameterValueException"]).toContain(response.tag);
           }),
         { timeout: 60_000 },
       );

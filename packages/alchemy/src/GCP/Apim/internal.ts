@@ -25,15 +25,11 @@ export type GclbObservationSource = {
   pscNetworkConfigs: PscNetworkConfig[];
 };
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Apim.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Apim.NotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.Apim.StillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.Apim.StillExists")<{
   name: string;
 }> {}
 
@@ -69,18 +65,13 @@ export const rfc1035 = (name: string, fallback = "apim"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+export const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${normalizeLocation(location)}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `${parentOf(project, location)}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `${parentOf(project, location)}/${collection}/${id}`;
 
 export const toPhysicalId = (
   id: string,
@@ -111,14 +102,9 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -126,8 +112,7 @@ export const parseName = (name: string, collection: string) => {
   };
 };
 
-export const hasAlchemyId = (id: string | undefined) =>
-  (id ?? "").startsWith(ALCHEMY_ID_PREFIX);
+export const hasAlchemyId = (id: string | undefined) => (id ?? "").startsWith(ALCHEMY_ID_PREFIX);
 
 export const projectIdOf = (value: string | undefined, fallback: string) => {
   if (value === undefined || value.length === 0) return fallback;
@@ -146,28 +131,19 @@ export const expandNetwork = (value: string, project: string) => {
   return `projects/${project}/global/networks/${trimmed}`;
 };
 
-export const expandSubnetwork = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const expandSubnetwork = (value: string, project: string, location: string) => {
   const trimmed = value.replace(/\/+$/, "");
   if (trimmed.includes("/subnetworks/")) {
     const owner = projectIdOf(trimmed, project);
     const parts = trimmed.split("/").filter((part) => part.length > 0);
     const regionsAt = parts.lastIndexOf("regions");
-    const region =
-      regionsAt >= 0 && parts[regionsAt + 1] ? parts[regionsAt + 1]! : location;
+    const region = regionsAt >= 0 && parts[regionsAt + 1] ? parts[regionsAt + 1]! : location;
     return `projects/${owner}/regions/${region}/subnetworks/${lastSegment(trimmed)}`;
   }
   return `projects/${project}/regions/${location}/subnetworks/${trimmed}`;
 };
 
-export const expandObservationSource = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const expandObservationSource = (value: string, project: string, location: string) => {
   const trimmed = value.replace(/\/+$/, "");
   if (trimmed.includes("/observationSources/")) return trimmed;
   return resourceName(project, location, "observationSources", trimmed);
@@ -208,11 +184,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sameStringList = (
   left: readonly string[] | undefined,
@@ -253,20 +227,14 @@ export const replaceOnIdentity = (input: {
  * `notFoundOk` also accepts a `NOT_FOUND` result or an operation that has
  * already been garbage-collected (deletes).
  */
-export const waitForOperation = (
-  operation: apim.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  waitForLongRunning(
-    operation,
-    (name) => apim.getProjectsLocationsOperations({ name }),
-    { budget: "10 minutes" },
-  ).pipe(
+export const waitForOperation = (operation: apim.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForLongRunning(operation, (name) => apim.getProjectsLocationsOperations({ name }), {
+    budget: "10 minutes",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.catchIf(
@@ -291,10 +259,7 @@ export const waitUntilExists = <A, E, R>(
     }),
   );
 
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A, E, R>,
-  name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A, E, R>, name: string) =>
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
@@ -319,11 +284,7 @@ export const waitUntilReady = <A, E, R>(
     times?: number;
     interval?: `${number} seconds`;
   },
-): Effect.Effect<
-  A & {},
-  E | ResourceNotResolved | ResourceNotReady | ResourceFailed,
-  R
-> =>
+): Effect.Effect<A & {}, E | ResourceNotResolved | ResourceNotReady | ResourceFailed, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is A & {} => value !== undefined,
@@ -346,9 +307,7 @@ export const waitUntilReady = <A, E, R>(
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error instanceof ResourceNotReady ||
-        error instanceof ResourceNotResolved,
+      while: (error) => error instanceof ResourceNotReady || error instanceof ResourceNotResolved,
       times: options?.times ?? 10,
       schedule: Schedule.spaced(options?.interval ?? "3 seconds"),
     }),

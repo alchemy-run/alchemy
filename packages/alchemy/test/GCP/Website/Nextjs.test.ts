@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
@@ -46,13 +46,7 @@ test.provider.skipIf(!dockerAvailable)(
           const site = yield* GCP.Website.Nextjs("Web", {
             rootDir,
             memo: {
-              include: [
-                "app/**",
-                "public/**",
-                "package.json",
-                "next.config.ts",
-                "tsconfig.json",
-              ],
+              include: ["app/**", "public/**", "package.json", "next.config.ts", "tsconfig.json"],
             },
           });
           return { site };
@@ -68,14 +62,10 @@ test.provider.skipIf(!dockerAvailable)(
         timeout: "180 seconds",
         label: "Nextjs /",
       });
-      yield* expectUrlContains(
-        `${url}/api/hello?echo=roundtrip`,
-        "NEXTJS_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "Nextjs /api/hello?echo=roundtrip",
-        },
-      );
+      yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "NEXTJS_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "Nextjs /api/hello?echo=roundtrip",
+      });
       yield* expectUrlContains(`${url}/static`, "NEXTJS_AWS_STATIC_MARKER", {
         timeout: "30 seconds",
         label: "Nextjs /static",

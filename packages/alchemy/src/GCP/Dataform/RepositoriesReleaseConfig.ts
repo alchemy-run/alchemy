@@ -201,11 +201,7 @@ const compilationOf = (
   defaultDatabase: config?.defaultDatabase,
 });
 
-const toAttrs = (
-  config: dataform.ReleaseConfig,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (config: dataform.ReleaseConfig, project: string, region: string) => {
   const name = config.name ?? "";
   const parsed = parseResourceName(name, "releaseConfigs", region);
   return {
@@ -246,10 +242,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       );
       return replaceOnIdentity({
         previousId: olds?.releaseConfigId ?? output?.releaseConfigId,
-        nextId:
-          news.releaseConfigId ??
-          olds?.releaseConfigId ??
-          output?.releaseConfigId,
+        nextId: news.releaseConfigId ?? olds?.releaseConfigId ?? output?.releaseConfigId,
         previousLocation: olds?.location ?? output?.location,
         nextLocation: news.location ?? olds?.location ?? output?.location,
         previousParent: olds?.repository ?? output?.repository,
@@ -259,15 +252,11 @@ export const RepositoriesReleaseConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const repository = expandRepository(
         olds?.repository ??
           output?.repository ??
-          parseResourceName(output?.name ?? "", "releaseConfigs", env.region)
-            .parent,
+          parseResourceName(output?.name ?? "", "releaseConfigs", env.region).parent,
         env.project,
         location,
       );
@@ -280,35 +269,23 @@ export const RepositoriesReleaseConfigProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      const labeled = yield* hasAlchemyLabels(
-        id,
-        existing.codeCompilationConfig?.vars,
-      );
+      const labeled = yield* hasAlchemyLabels(id, existing.codeCompilationConfig?.vars);
       return labeled || isOwnedConfig(existing) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const configs = yield* forEachOwnedRepository(
-          env.project,
-          env.region,
-          (repo) => listReleaseConfigs(repo.name ?? ""),
+        const configs = yield* forEachOwnedRepository(env.project, env.region, (repo) =>
+          listReleaseConfigs(repo.name ?? ""),
         );
         return configs.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandRepository(news.repository, env.project, location);
       const releaseConfigId = yield* toPhysicalId(
         id,
         news.releaseConfigId,
@@ -316,10 +293,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       );
       const name = resourceName(repository, releaseConfigId);
       const ownership = yield* createInternalLabels(id);
-      const codeCompilationConfig = compilationOf(
-        news.codeCompilationConfig,
-        ownership,
-      );
+      const codeCompilationConfig = compilationOf(news.codeCompilationConfig, ownership);
       const disabled = news.disabled === true;
 
       let current = yield* getByName(output?.name ?? name);
@@ -357,10 +331,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       const compilationChanged = !sameJson(
         {
           ...current.codeCompilationConfig,
-          vars: mergeOwnedVars(
-            userLabels(current.codeCompilationConfig?.vars),
-            ownership,
-          ),
+          vars: mergeOwnedVars(userLabels(current.codeCompilationConfig?.vars), ownership),
         },
         codeCompilationConfig,
       );

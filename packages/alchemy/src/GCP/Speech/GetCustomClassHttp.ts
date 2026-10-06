@@ -1,10 +1,7 @@
 import * as speech from "@distilled.cloud/gcp/speech_v1";
 import * as Layer from "effect/Layer";
 import { makeCustomClassHttpBinding } from "./BindingHttp.ts";
-import {
-  GetCustomClass,
-  type GetCustomClassRequest,
-} from "./GetCustomClass.ts";
+import { GetCustomClass, type GetCustomClassRequest } from "./GetCustomClass.ts";
 
 /**
  * HTTP implementation of {@link GetCustomClass}.

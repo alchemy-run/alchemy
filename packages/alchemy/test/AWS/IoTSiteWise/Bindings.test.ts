@@ -1,24 +1,19 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import IoTSiteWiseTestFunctionLive, {
-  IoTSiteWiseTestFunction,
-} from "./fixtures/handler.ts";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import IoTSiteWiseTestFunctionLive, { IoTSiteWiseTestFunction } from "./fixtures/handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "IoTSiteWiseBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(60),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]);
 
 let baseUrl: string;
 
@@ -35,24 +30,18 @@ const post = (path: string) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
-const postJson = (path: string) =>
-  post(path).pipe(Effect.flatMap((response) => response.json));
+const postJson = (path: string) => post(path).pipe(Effect.flatMap((response) => response.json));
 
 describe(
   "IoTSiteWise Bindings",
@@ -68,9 +57,7 @@ describe(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "IoTSiteWise test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("IoTSiteWise test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("IoTSiteWise test setup: deploying fixture");
@@ -84,21 +71,15 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `IoTSiteWise test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`IoTSiteWise test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `IoTSiteWise test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`IoTSiteWise test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -130,9 +111,7 @@ describe(
         "lists the bound asset's property summaries",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* postJson("/properties")) as {
-              count: number;
-            };
+            const response = (yield* postJson("/properties")) as { count: number };
             expect(response.count).toBeGreaterThanOrEqual(1);
           }),
         { timeout: 120_000 },
@@ -144,21 +123,14 @@ describe(
         "ingests a TQV and reads it back (current value + history)",
         (_stack) =>
           Effect.gen(function* () {
-            const put = (yield* postJson("/put")) as {
-              errorCount: number;
-              errorCodes: string[];
-            };
+            const put = (yield* postJson("/put")) as { errorCount: number; errorCodes: string[] };
             expect(put.errorCodes).toEqual([]);
             expect(put.errorCount).toBe(0);
 
             // Ingested values become readable within seconds — poll bounded.
             const value = yield* postJson("/value").pipe(
               Effect.map(
-                (body) =>
-                  body as {
-                    doubleValue: number | null;
-                    timeInSeconds: number | null;
-                  },
+                (body) => body as { doubleValue: number | null; timeInSeconds: number | null },
               ),
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
@@ -181,10 +153,7 @@ describe(
         "reads aggregates over the last hour",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* postJson("/aggregates")) as {
-              ok: boolean;
-              count: number;
-            };
+            const response = (yield* postJson("/aggregates")) as { ok: boolean; count: number };
             expect(response.ok).toBe(true);
             expect(response.count).toBeGreaterThanOrEqual(0);
           }),
@@ -197,10 +166,7 @@ describe(
         "computes interpolated values over the last hour",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* postJson("/interpolated")) as {
-              ok: boolean;
-              count: number;
-            };
+            const response = (yield* postJson("/interpolated")) as { ok: boolean; count: number };
             expect(response.ok).toBe(true);
             expect(response.count).toBeGreaterThanOrEqual(0);
           }),
@@ -216,10 +182,7 @@ describe(
             // The query index is eventually consistent for fresh assets — the
             // call succeeding with a well-formed (possibly empty) row set is
             // the contract under test.
-            const response = (yield* postJson("/query")) as {
-              ok: boolean;
-              rowCount: number;
-            };
+            const response = (yield* postJson("/query")) as { ok: boolean; rowCount: number };
             expect(response.ok).toBe(true);
             expect(response.rowCount).toBeGreaterThanOrEqual(0);
           }),

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -190,9 +185,7 @@ export const TlsRoute = Resource<TlsRoute>("GCP.NetworkServices.TlsRoute");
 
 const toDestination = (
   project: string,
-  destination:
-    | TlsRouteRouteDestination
-    | networkservices.TlsRouteRouteDestination,
+  destination: TlsRouteRouteDestination | networkservices.TlsRouteRouteDestination,
 ): TlsRouteRouteDestination => ({
   serviceName: destination.serviceName
     ? toBackendServiceResource(project, destination.serviceName)
@@ -224,32 +217,17 @@ const toRule = (
   action: toAction(project, rule.action),
 });
 
-const toMeshes = (
-  project: string,
-  location: string,
-  meshes: readonly string[] | undefined,
-) =>
-  (meshes ?? []).map((mesh) =>
-    toNamedResource(project, location, "meshes", mesh),
-  );
+const toMeshes = (project: string, location: string, meshes: readonly string[] | undefined) =>
+  (meshes ?? []).map((mesh) => toNamedResource(project, location, "meshes", mesh));
 
-const toGateways = (
-  project: string,
-  location: string,
-  gateways: readonly string[] | undefined,
-) =>
-  (gateways ?? []).map((gateway) =>
-    toNamedResource(project, location, "gateways", gateway),
-  );
+const toGateways = (project: string, location: string, gateways: readonly string[] | undefined) =>
+  (gateways ?? []).map((gateway) => toNamedResource(project, location, "gateways", gateway));
 
 const toTargetProxies = (
   project: string,
   location: string,
   proxies: readonly string[] | undefined,
-) =>
-  (proxies ?? []).map((proxy) =>
-    toNamedResource(project, location, "targetTcpProxies", proxy),
-  );
+) => (proxies ?? []).map((proxy) => toNamedResource(project, location, "targetTcpProxies", proxy));
 
 const toAttrs = (route: networkservices.TlsRoute, project: string) => {
   const name = route.name ?? "";
@@ -280,21 +258,12 @@ const getByName = (name: string) =>
 
 export const TlsRouteProvider = () =>
   Provider.succeed(TlsRoute, {
-    stables: [
-      "name",
-      "tlsRouteId",
-      "project",
-      "location",
-      "createTime",
-      "selfLink",
-    ],
+    stables: ["name", "tlsRouteId", "project", "location", "createTime", "selfLink"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.tlsRouteId ?? output?.tlsRouteId;
-      const nextId = news.tlsRouteId
-        ? rfc1035(news.tlsRouteId, "tls-route")
-        : previousId;
+      const nextId = news.tlsRouteId ? rfc1035(news.tlsRouteId, "tls-route") : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         DEFAULT_GLOBAL,
@@ -304,9 +273,7 @@ export const TlsRouteProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -316,25 +283,13 @@ export const TlsRouteProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const tlsRouteId = yield* toPhysicalId(
-        id,
-        olds?.tlsRouteId,
-        output?.tlsRouteId,
-        "tls-route",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, tlsRouteId);
+      const tlsRouteId = yield* toPhysicalId(id, olds?.tlsRouteId, output?.tlsRouteId, "tls-route");
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, tlsRouteId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -355,16 +310,8 @@ export const TlsRouteProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const tlsRouteId = yield* toPhysicalId(
-        id,
-        news.tlsRouteId,
-        output?.tlsRouteId,
-        "tls-route",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const tlsRouteId = yield* toPhysicalId(id, news.tlsRouteId, output?.tlsRouteId, "tls-route");
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, COLLECTION, tlsRouteId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -373,11 +320,7 @@ export const TlsRouteProvider = () =>
       const desiredRules = news.rules.map((rule) => toRule(env.project, rule));
       const desiredMeshes = toMeshes(env.project, location, news.meshes);
       const desiredGateways = toGateways(env.project, location, news.gateways);
-      const desiredProxies = toTargetProxies(
-        env.project,
-        location,
-        news.targetProxies,
-      );
+      const desiredProxies = toTargetProxies(env.project, location, news.targetProxies);
 
       let current = yield* getByName(name);
 
@@ -415,39 +358,29 @@ export const TlsRouteProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const updateMask = changedFields([
         ["labels", labelsChanged],
-        [
-          "description",
-          (current.description ?? "") !== (news.description ?? ""),
-        ],
+        ["description", (current.description ?? "") !== (news.description ?? "")],
         ["rules", !sameJson(observed.rules, desiredRules)],
         ["meshes", !sameStringList(observed.meshes, desiredMeshes)],
         ["gateways", !sameStringList(observed.gateways, desiredGateways)],
-        [
-          "targetProxies",
-          !sameStringList(observed.targetProxies, desiredProxies),
-        ],
+        ["targetProxies", !sameStringList(observed.targetProxies, desiredProxies)],
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsTlsRoutes({
+        const operation = yield* networkservices.patchProjectsLocationsTlsRoutes({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-              targetProxies: desiredProxies,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
+            targetProxies: desiredProxies,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

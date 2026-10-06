@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 export const Brokers = GCP.ManagedKafka.Cluster("Brokers", {
@@ -39,12 +39,8 @@ export default class KafkaBindingsHost extends GCP.Function<KafkaBindingsHost>()
   Effect.gen(function* () {
     const getCluster = yield* GCP.ManagedKafka.GetCluster(yield* Brokers);
     const getTopic = yield* GCP.ManagedKafka.GetTopic(yield* Events);
-    const getConnect = yield* GCP.ManagedKafka.GetConnectCluster(
-      yield* Connect,
-    );
-    const getRegistry = yield* GCP.ManagedKafka.GetSchemaRegistry(
-      yield* Schemas,
-    );
+    const getConnect = yield* GCP.ManagedKafka.GetConnectCluster(yield* Connect);
+    const getRegistry = yield* GCP.ManagedKafka.GetSchemaRegistry(yield* Schemas);
 
     return {
       fetch: serveProbes({

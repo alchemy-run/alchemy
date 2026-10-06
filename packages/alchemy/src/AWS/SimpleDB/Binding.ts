@@ -45,12 +45,7 @@ export const registerSimpleDbBinding = (operation: string, domain: Domain) =>
  * a runtime client that closes over the domain's physical name and injects
  * it into every request.
  */
-export const makeSimpleDbBinding = <
-  Req extends { DomainName: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeSimpleDbBinding = <Req extends { DomainName: string }, A, E, R>(options: {
   readonly operation: string;
   readonly method: Effect.Effect<(input: Req) => Effect.Effect<A, E>, never, R>;
 }) =>
@@ -59,9 +54,9 @@ export const makeSimpleDbBinding = <
     return Effect.fn(function* (domain: Domain) {
       const domainName = yield* domain.domainName;
       yield* registerSimpleDbBinding(options.operation, domain);
-      return Effect.fn(
-        `AWS.SimpleDB.${options.operation}(${domain.LogicalId})`,
-      )(function* (request?: Omit<Req, "DomainName">) {
+      return Effect.fn(`AWS.SimpleDB.${options.operation}(${domain.LogicalId})`)(function* (
+        request?: Omit<Req, "DomainName">,
+      ) {
         const name = yield* domainName;
         return yield* call({ ...request, DomainName: name } as Req);
       });

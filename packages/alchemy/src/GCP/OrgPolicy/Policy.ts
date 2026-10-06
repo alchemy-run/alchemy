@@ -202,9 +202,7 @@ export type Policy = Resource<
  */
 export const Policy = Resource<Policy>("GCP.OrgPolicy.Policy");
 
-export class PolicyNotResolved extends Data.TaggedError(
-  "GCP.OrgPolicy.PolicyNotResolved",
-)<{
+export class PolicyNotResolved extends Data.TaggedError("GCP.OrgPolicy.PolicyNotResolved")<{
   name: string;
 }> {}
 
@@ -219,9 +217,7 @@ const lastSegment = (value: string) => {
 
 const normalizeConstraint = (constraint: string | undefined) => {
   const raw = (constraint ?? "").trim();
-  return raw.startsWith(CONSTRAINTS_PREFIX)
-    ? raw.slice(CONSTRAINTS_PREFIX.length)
-    : raw;
+  return raw.startsWith(CONSTRAINTS_PREFIX) ? raw.slice(CONSTRAINTS_PREFIX.length) : raw;
 };
 
 const parentKindOf = (resource: string): PolicyParentKind => {
@@ -250,9 +246,7 @@ const sameParent = (desired: string, observed: string, project: string) => {
   if (desired === observed) return true;
   if (parentKindOf(desired) !== parentKindOf(observed)) return false;
   if (lastSegment(desired) === lastSegment(observed)) return true;
-  return (
-    parentKindOf(desired) === "projects" && lastSegment(desired) === project
-  );
+  return parentKindOf(desired) === "projects" && lastSegment(desired) === project;
 };
 
 const toRule = (
@@ -340,9 +334,7 @@ const canonicalizeRule = (rule: PolicyRule) => ({
       }
     : undefined,
   parameters:
-    rule.parameters && Object.keys(rule.parameters).length > 0
-      ? rule.parameters
-      : undefined,
+    rule.parameters && Object.keys(rule.parameters).length > 0 ? rule.parameters : undefined,
 });
 
 const canonicalizeSpec = (spec: PolicySpec | undefined) => ({
@@ -351,17 +343,10 @@ const canonicalizeSpec = (spec: PolicySpec | undefined) => ({
   rules: (spec?.rules ?? []).map(canonicalizeRule),
 });
 
-const specsEqual = (
-  left: PolicySpec | undefined,
-  right: PolicySpec | undefined,
-) =>
-  JSON.stringify(canonicalizeSpec(left)) ===
-  JSON.stringify(canonicalizeSpec(right));
+const specsEqual = (left: PolicySpec | undefined, right: PolicySpec | undefined) =>
+  JSON.stringify(canonicalizeSpec(left)) === JSON.stringify(canonicalizeSpec(right));
 
-const toAttrs = (
-  policy: orgpolicy.GoogleCloudOrgpolicyV2Policy,
-  project: string,
-) => {
+const toAttrs = (policy: orgpolicy.GoogleCloudOrgpolicyV2Policy, project: string) => {
   const name = policy.name ?? "";
   const parsed = parsePolicyName(name);
   return {
@@ -388,10 +373,7 @@ const getByName = (name: string) => {
   return get.pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 };
 
-const createPolicy = (
-  parent: string,
-  body: orgpolicy.GoogleCloudOrgpolicyV2Policy,
-) => {
+const createPolicy = (parent: string, body: orgpolicy.GoogleCloudOrgpolicyV2Policy) => {
   const kind = parentKindOf(parent);
   const request = { parent, body };
   return kind === "folders"
@@ -457,12 +439,8 @@ export const PolicyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousConstraint = normalizeConstraint(
-        olds?.constraint ?? output?.constraint,
-      );
-      const nextConstraint = normalizeConstraint(
-        news.constraint ?? previousConstraint,
-      );
+      const previousConstraint = normalizeConstraint(olds?.constraint ?? output?.constraint);
+      const nextConstraint = normalizeConstraint(news.constraint ?? previousConstraint);
       const constraintChanged =
         previousConstraint.length > 0 &&
         nextConstraint.length > 0 &&
@@ -483,12 +461,9 @@ export const PolicyProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const constraint = normalizeConstraint(
-        olds?.constraint ?? output?.constraint,
-      );
+      const constraint = normalizeConstraint(olds?.constraint ?? output?.constraint);
       if (constraint.length === 0) return undefined;
-      const parent =
-        olds?.parent ?? output?.parent ?? defaultParent(env.project);
+      const parent = olds?.parent ?? output?.parent ?? defaultParent(env.project);
       const name = output?.name ?? resourceName(parent, constraint);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -505,11 +480,8 @@ export const PolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const constraint = normalizeConstraint(
-        news.constraint ?? output?.constraint,
-      );
-      const parent =
-        news.parent ?? output?.parent ?? defaultParent(env.project);
+      const constraint = normalizeConstraint(news.constraint ?? output?.constraint);
+      const parent = news.parent ?? output?.parent ?? defaultParent(env.project);
       const name = output?.name ?? resourceName(parent, constraint);
       const desiredSpec = toSpec(news.spec);
       const desiredDryRun = toSpec(news.dryRunSpec);
@@ -531,10 +503,8 @@ export const PolicyProvider = () =>
 
       const specManaged = news.spec !== undefined;
       const dryRunManaged = news.dryRunSpec !== undefined;
-      const specChanged =
-        specManaged && !specsEqual(toSpec(current.spec), desiredSpec);
-      const dryRunChanged =
-        dryRunManaged && !specsEqual(toSpec(current.dryRunSpec), desiredDryRun);
+      const specChanged = specManaged && !specsEqual(toSpec(current.spec), desiredSpec);
+      const dryRunChanged = dryRunManaged && !specsEqual(toSpec(current.dryRunSpec), desiredDryRun);
 
       if (specChanged || dryRunChanged) {
         const observed = current;
@@ -552,9 +522,7 @@ export const PolicyProvider = () =>
               name: latest.name ?? name,
               etag: latest.etag,
               spec: specManaged ? toApiSpec(desiredSpec) : latest.spec,
-              dryRunSpec: dryRunManaged
-                ? toApiSpec(desiredDryRun)
-                : latest.dryRunSpec,
+              dryRunSpec: dryRunManaged ? toApiSpec(desiredDryRun) : latest.dryRunSpec,
             },
             updateMask,
           );

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MWAATestFunctionLive, { MWAATestFunction } from "./bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -32,9 +32,7 @@ describe(
       "createCliToken on a nonexistent environment fails with ResourceNotFoundException",
       () =>
         Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            mwaa.createCliToken({ Name: NONEXISTENT_ENVIRONMENT }),
-          );
+          const error = yield* Effect.flip(mwaa.createCliToken({ Name: NONEXISTENT_ENVIRONMENT }));
           expect(error._tag).toBe("ResourceNotFoundException");
         }),
     );
@@ -55,11 +53,7 @@ describe(
       () =>
         Effect.gen(function* () {
           const error = yield* Effect.flip(
-            mwaa.invokeRestApi({
-              Name: NONEXISTENT_ENVIRONMENT,
-              Method: "GET",
-              Path: "/dags",
-            }),
+            mwaa.invokeRestApi({ Name: NONEXISTENT_ENVIRONMENT, Method: "GET", Path: "/dags" }),
           );
           expect(error._tag).toBe("ResourceNotFoundException");
         }),
@@ -97,16 +91,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -116,10 +105,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         expect(bindings.bound).toHaveLength(4);
 
         // GetEnvironment — proves the environment-ARN grant + Name injection.
-        const env = (yield* getJson("/environment")) as {
-          status?: string;
-          errorTag?: string;
-        };
+        const env = (yield* getJson("/environment")) as { status?: string; errorTag?: string };
         expect(env.errorTag).toBeUndefined();
         expect(env.status).toBe("AVAILABLE");
 
@@ -144,10 +130,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         expect(web.hostname).toBeTruthy();
 
         // InvokeRestApi — GET /dags through the Airflow REST API.
-        const dags = (yield* getJson("/dags")) as {
-          statusCode?: number;
-          errorTag?: string;
-        };
+        const dags = (yield* getJson("/dags")) as { statusCode?: number; errorTag?: string };
         expect(dags.errorTag).toBeUndefined();
         expect(dags.statusCode).toBe(200);
       }).pipe(Effect.ensuring(sharedStack.destroy().pipe(Effect.orDie)));

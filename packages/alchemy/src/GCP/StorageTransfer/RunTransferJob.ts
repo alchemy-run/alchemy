@@ -45,6 +45,4 @@ export interface RunTransferJob extends Binding.Service<
   >
 > {}
 
-export const RunTransferJob = Binding.Service<RunTransferJob>(
-  "GCP.StorageTransfer.RunTransferJob",
-);
+export const RunTransferJob = Binding.Service<RunTransferJob>("GCP.StorageTransfer.RunTransferJob");

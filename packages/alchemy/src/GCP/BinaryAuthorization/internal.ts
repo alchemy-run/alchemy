@@ -4,12 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_ID_LENGTH = 63;
 export const DEFAULT_PLATFORM = "gke";
@@ -67,23 +63,17 @@ export const attestorName = (project: string, attestorId: string) =>
 export const platformParent = (project: string, platform: string) =>
   `${projectParent(project)}/platforms/${platform}`;
 
-export const policyName = (
-  project: string,
-  platform: string,
-  policyId: string,
-) => `${platformParent(project, platform)}/policies/${policyId}`;
+export const policyName = (project: string, platform: string, policyId: string) =>
+  `${platformParent(project, platform)}/policies/${policyId}`;
 
 export const parseAttestorName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const attestorsAt = parts.lastIndexOf("attestors");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     attestorId:
-      attestorsAt >= 0 && parts[attestorsAt + 1]
-        ? parts[attestorsAt + 1]!
-        : lastSegment(name),
+      attestorsAt >= 0 && parts[attestorsAt + 1] ? parts[attestorsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -93,16 +83,10 @@ export const parsePolicyName = (name: string) => {
   const platformsAt = parts.lastIndexOf("platforms");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     platform:
-      platformsAt >= 0 && parts[platformsAt + 1]
-        ? parts[platformsAt + 1]!
-        : DEFAULT_PLATFORM,
-    policyId:
-      policiesAt >= 0 && parts[policiesAt + 1]
-        ? parts[policiesAt + 1]!
-        : lastSegment(name),
+      platformsAt >= 0 && parts[platformsAt + 1] ? parts[platformsAt + 1]! : DEFAULT_PLATFORM,
+    policyId: policiesAt >= 0 && parts[policiesAt + 1] ? parts[policiesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -143,12 +127,9 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-export const ownedBy = (id: string, labels: Record<string, string>) =>
-  hasAlchemyLabels(id, labels);
+export const ownedBy = (id: string, labels: Record<string, string>) => hasAlchemyLabels(id, labels);
 
 export const createOwnership = (id: string) => createInternalLabels(id);
 
@@ -210,18 +191,11 @@ export const missingGet =
   (name: string) =>
     name.length === 0
       ? Effect.succeed(undefined)
-      : effect({ name }).pipe(
-          Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-        );
+      : effect({ name }).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -288,8 +262,7 @@ export const samePublicKeys = (
     if (want === undefined) return false;
     if ((obs.comment ?? "") !== (want.comment ?? "")) return false;
     if (
-      normalizePem(obs.asciiArmoredPgpPublicKey) !==
-      normalizePem(want.asciiArmoredPgpPublicKey)
+      normalizePem(obs.asciiArmoredPgpPublicKey) !== normalizePem(want.asciiArmoredPgpPublicKey)
     ) {
       return false;
     }

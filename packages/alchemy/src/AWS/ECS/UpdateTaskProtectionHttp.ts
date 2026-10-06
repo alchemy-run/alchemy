@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { toWireMinutes } from "../../Util/Duration.ts";
 import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
-import {
-  UpdateTaskProtection,
-  type UpdateTaskProtectionRequest,
-} from "./UpdateTaskProtection.ts";
+import { UpdateTaskProtection, type UpdateTaskProtectionRequest } from "./UpdateTaskProtection.ts";
 
 export const UpdateTaskProtectionHttp = Layer.effect(
   UpdateTaskProtection,
@@ -22,10 +19,7 @@ export const UpdateTaskProtectionHttp = Layer.effect(
     // "Not a valid effect: function ...".
     operation: Effect.gen(function* () {
       const op = yield* ECS.updateTaskProtection;
-      return ({
-        expiresIn,
-        ...request
-      }: UpdateTaskProtectionRequest & { cluster: string }) =>
+      return ({ expiresIn, ...request }: UpdateTaskProtectionRequest & { cluster: string }) =>
         op({ ...request, expiresInMinutes: toWireMinutes(expiresIn) });
     }),
     actions: ["ecs:UpdateTaskProtection"],

@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vision from "@distilled.cloud/gcp/vision_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -61,9 +61,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(
-        created.set.name.startsWith(
-          `projects/${project}/locations/${location}/productSets/`,
-        ),
+        created.set.name.startsWith(`projects/${project}/locations/${location}/productSets/`),
       ).toEqual(true);
       expect(created.set.productSetId.length).toBeGreaterThan(0);
       expect(created.set.displayName).toEqual("Summer");

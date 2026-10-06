@@ -17,10 +17,7 @@ export const CE_REGION = "us-east-1" as const;
 // Rate limit exceeded`. Retry it with capped exponential backoff, bounded
 // (~47s total) so a genuine quota LimitExceeded still surfaces quickly.
 const ceThrottleRetrySchedule = Schedule.max([
-  Schedule.min([
-    Schedule.exponential("1 second"),
-    Schedule.spaced("8 seconds"),
-  ]),
+  Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("8 seconds")]),
   Schedule.recurs(8),
 ]);
 
@@ -36,15 +33,11 @@ export const pinCe = <A, E extends { _tag: string }, R>(
   );
 
 /** Convert a plain tag record to Cost Explorer's `ResourceTag` list shape. */
-export const toResourceTags = (
-  tags: Record<string, string>,
-): ce.ResourceTag[] =>
+export const toResourceTags = (tags: Record<string, string>): ce.ResourceTag[] =>
   Object.entries(tags).map(([Key, Value]) => ({ Key, Value }));
 
 /** Convert a Cost Explorer `ResourceTag` list to a plain tag record. */
-export const toTagRecord = (
-  tags: readonly ce.ResourceTag[] | undefined,
-): Record<string, string> =>
+export const toTagRecord = (tags: readonly ce.ResourceTag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
 /**
@@ -52,12 +45,8 @@ export const toTagRecord = (
  * resource disappearing mid-read (`ResourceNotFoundException` → `{}`).
  */
 export const fetchCeTags = Effect.fn(function* (resourceArn: string) {
-  const listed = yield* pinCe(
-    ce.listTagsForResource({ ResourceArn: resourceArn }),
-  ).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed({ ResourceTags: [] }),
-    ),
+  const listed = yield* pinCe(ce.listTagsForResource({ ResourceArn: resourceArn })).pipe(
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ ResourceTags: [] })),
   );
   return toTagRecord(listed.ResourceTags);
 });
@@ -73,13 +62,9 @@ export const syncCeTags = Effect.fn(function* (
   const observedTags = yield* fetchCeTags(resourceArn);
   const { upsert, removed } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {
-    yield* pinCe(
-      ce.tagResource({ ResourceArn: resourceArn, ResourceTags: upsert }),
-    );
+    yield* pinCe(ce.tagResource({ ResourceArn: resourceArn, ResourceTags: upsert }));
   }
   if (removed.length > 0) {
-    yield* pinCe(
-      ce.untagResource({ ResourceArn: resourceArn, ResourceTagKeys: removed }),
-    );
+    yield* pinCe(ce.untagResource({ ResourceArn: resourceArn, ResourceTagKeys: removed }));
   }
 });

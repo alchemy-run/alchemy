@@ -1,7 +1,3 @@
-import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-} from "./GraphQL.ts";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import { Railway, type TCPProxy } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
@@ -10,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { waitUntilDeleted, projectServices as fetchProjectServices } from "./GraphQL.ts";
 import { matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -31,11 +28,8 @@ const readTcpProxies = Query.fn((environmentId: string, serviceId: string) =>
 );
 
 const tcpProxyCreate = Query.fn(
-  (input: {
-    applicationPort: number;
-    environmentId: string;
-    serviceId: string;
-  }) => proxyFields(Railway.tcpProxyCreate({ input })),
+  (input: { applicationPort: number; environmentId: string; serviceId: string }) =>
+    proxyFields(Railway.tcpProxyCreate({ input })),
 );
 
 const tcpProxyDelete = Query.fn((id: string) => Railway.tcpProxyDelete({ id }));
@@ -50,18 +44,14 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * Service identity a TCP proxy attaches to. Accepts a `Railway.Service`,
  * `Railway.Postgres`, `Railway.Redis`, or a `{ serviceId }` stub.
  */
-export type TcpProxyService = {
-  readonly serviceId: string;
-};
+export type TcpProxyService = { readonly serviceId: string };
 
 /**
  * Environment identity a TCP proxy is created in. Accepts a
  * `Railway.Project` (its primary environment), a `Railway.Environment`, or
  * an `{ environmentId }` stub.
  */
-export type TcpProxyEnvironment = {
-  readonly environmentId: string;
-};
+export type TcpProxyEnvironment = { readonly environmentId: string };
 
 export interface TcpProxyProps {
   /**
@@ -201,24 +191,18 @@ export type TcpProxy = Resource<
  */
 export const TcpProxy = Resource<TcpProxy>("Railway.TcpProxy");
 
-export class TcpProxyNotCreated extends Data.TaggedError(
-  "Railway.TcpProxyNotCreated",
-)<{
+export class TcpProxyNotCreated extends Data.TaggedError("Railway.TcpProxyNotCreated")<{
   serviceId: string;
   environmentId: string;
   applicationPort: number;
 }> {}
 
-export class TcpProxyTargetMissing extends Data.TaggedError(
-  "Railway.TcpProxyTargetMissing",
-)<{
+export class TcpProxyTargetMissing extends Data.TaggedError("Railway.TcpProxyTargetMissing")<{
   message: string;
 }> {}
 
 const isGone = (proxy: CloudProxy | undefined) =>
-  proxy === undefined ||
-  proxy.deletedAt != null ||
-  proxy.syncStatus === "DELETED";
+  proxy === undefined || proxy.deletedAt != null || proxy.syncStatus === "DELETED";
 
 const normalizeDomain = (domain: string) => domain.replace(/\.+$/, "");
 
@@ -250,16 +234,13 @@ const environmentIdOf = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const targetOf = (
-  props: Pick<TcpProxyProps, "service" | "postgres" | "redis">,
-) => props.service ?? props.postgres ?? props.redis;
+const targetOf = (props: Pick<TcpProxyProps, "service" | "postgres" | "redis">) =>
+  props.service ?? props.postgres ?? props.redis;
 
 const listProxies = (environmentId: string, serviceId: string) =>
   readTcpProxies(environmentId, serviceId).pipe(
     Effect.map((items) => items.filter((proxy) => !isGone(proxy))),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed([] as ReadonlyArray<CloudProxy>),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as ReadonlyArray<CloudProxy>)),
   );
 
 const findById = (environmentId: string, serviceId: string, id: string) =>
@@ -267,15 +248,9 @@ const findById = (environmentId: string, serviceId: string, id: string) =>
     Effect.map((items) => items.find((proxy) => proxy.id === id)),
   );
 
-const findByPort = (
-  environmentId: string,
-  serviceId: string,
-  applicationPort: number,
-) =>
+const findByPort = (environmentId: string, serviceId: string, applicationPort: number) =>
   listProxies(environmentId, serviceId).pipe(
-    Effect.map((items) =>
-      items.find((proxy) => proxy.applicationPort === applicationPort),
-    ),
+    Effect.map((items) => items.find((proxy) => proxy.applicationPort === applicationPort)),
   );
 
 const observe = Effect.fn(function* (input: {
@@ -285,19 +260,11 @@ const observe = Effect.fn(function* (input: {
   id?: string;
 }) {
   if (input.id !== undefined && input.id.length > 0) {
-    const byId = yield* findById(
-      input.environmentId,
-      input.serviceId,
-      input.id,
-    );
+    const byId = yield* findById(input.environmentId, input.serviceId, input.id);
     if (byId !== undefined) return byId;
   }
   if (input.applicationPort !== undefined) {
-    return yield* findByPort(
-      input.environmentId,
-      input.serviceId,
-      input.applicationPort,
-    );
+    return yield* findByPort(input.environmentId, input.serviceId, input.applicationPort);
   }
   return undefined;
 });
@@ -306,9 +273,7 @@ const waitUntilGone = (environmentId: string, serviceId: string, id: string) =>
   waitUntilDeleted(
     "TcpProxy",
     id,
-    findById(environmentId, serviceId, id).pipe(
-      Effect.map((proxy) => proxy === undefined),
-    ),
+    findById(environmentId, serviceId, id).pipe(Effect.map((proxy) => proxy === undefined)),
   );
 
 export const TcpProxyProvider = () =>
@@ -320,20 +285,13 @@ export const TcpProxyProvider = () =>
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const live = yield* fetchProjectServices(
-            project.projectId,
-            (service) => ({
-              id: service.id,
-              name: service.name,
-              deletedAt: service.deletedAt,
-            }),
-          ).pipe(
-            Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
-          );
+          const live = yield* fetchProjectServices(project.projectId, (service) => ({
+            id: service.id,
+            name: service.name,
+            deletedAt: service.deletedAt,
+          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
           const services = (live ?? []).filter(
-            (service) =>
-              service.deletedAt == null &&
-              matchesAlchemyPhysicalName(service.name),
+            (service) => service.deletedAt == null && matchesAlchemyPhysicalName(service.name),
           );
           const envIds = yield* projectEnvironmentIds(project);
           const nested = yield* Effect.forEach(services, (service) =>
@@ -354,8 +312,7 @@ export const TcpProxyProvider = () =>
       if (output === undefined) return undefined;
       const serviceId = serviceIdOf(targetOf(news));
       const environmentId = environmentIdOf(news.environment);
-      const serviceChanged =
-        serviceId !== undefined && serviceId !== output.serviceId;
+      const serviceChanged = serviceId !== undefined && serviceId !== output.serviceId;
       const environmentChanged =
         environmentId !== undefined && environmentId !== output.environmentId;
       const portChanged = news.applicationPort !== output.applicationPort;
@@ -367,18 +324,12 @@ export const TcpProxyProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const serviceId = output?.serviceId ?? serviceIdOf(targetOf(olds ?? {}));
-      const environmentId =
-        output?.environmentId ?? environmentIdOf(olds?.environment);
+      const environmentId = output?.environmentId ?? environmentIdOf(olds?.environment);
       const applicationPort = output?.applicationPort ?? olds?.applicationPort;
       if (serviceId === undefined || environmentId === undefined) {
         return undefined;
       }
-      const found = yield* observe({
-        environmentId,
-        serviceId,
-        applicationPort,
-        id: output?.id,
-      });
+      const found = yield* observe({ environmentId, serviceId, applicationPort, id: output?.id });
       if (found === undefined) return undefined;
       return toAttrs(found);
     }),
@@ -386,56 +337,31 @@ export const TcpProxyProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const props = news ?? ({} as TcpProxyProps);
       const serviceId = serviceIdOf(targetOf(props)) ?? output?.serviceId;
-      const environmentId =
-        environmentIdOf(props.environment) ?? output?.environmentId;
+      const environmentId = environmentIdOf(props.environment) ?? output?.environmentId;
       const applicationPort = props.applicationPort ?? output?.applicationPort;
       if (serviceId === undefined || environmentId === undefined) {
         return yield* new TcpProxyTargetMissing({
-          message:
-            "TcpProxy requires a service (or postgres/redis) and an environment",
+          message: "TcpProxy requires a service (or postgres/redis) and an environment",
         });
       }
       if (applicationPort === undefined) {
-        return yield* new TcpProxyNotCreated({
-          serviceId,
-          environmentId,
-          applicationPort: 0,
-        });
+        return yield* new TcpProxyNotCreated({ serviceId, environmentId, applicationPort: 0 });
       }
 
-      let current = yield* observe({
-        environmentId,
-        serviceId,
-        applicationPort,
-        id: output?.id,
-      });
+      let current = yield* observe({ environmentId, serviceId, applicationPort, id: output?.id });
 
       if (current === undefined) {
-        const created = yield* tcpProxyCreate({
-          applicationPort,
-          environmentId,
-          serviceId,
-        }).pipe(
-          Effect.catchTag("RailwayValidationError", () =>
-            Effect.succeed(undefined),
-          ),
+        const created = yield* tcpProxyCreate({ applicationPort, environmentId, serviceId }).pipe(
+          Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)),
         );
         current =
           created !== undefined && !isGone(created)
             ? created
-            : yield* observe({
-                environmentId,
-                serviceId,
-                applicationPort,
-              });
+            : yield* observe({ environmentId, serviceId, applicationPort });
       }
 
       if (current === undefined || isGone(current)) {
-        return yield* new TcpProxyNotCreated({
-          serviceId,
-          environmentId,
-          applicationPort,
-        });
+        return yield* new TcpProxyNotCreated({ serviceId, environmentId, applicationPort });
       }
 
       return toAttrs(current);

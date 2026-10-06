@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -16,10 +16,7 @@ const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT?.trim().replace(
 );
 const account = billingAccountId ?? "";
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getBillingAccountsLocationsBucketsViews({ name }).pipe(
@@ -105,9 +102,7 @@ test.provider.skipIf(!billingAccountId)(
       );
 
       expect(updated.view.name).toEqual(created.view.name);
-      expect(updated.view.filter).toEqual(
-        'resource.type = "gce_instance" AND severity>=ERROR',
-      );
+      expect(updated.view.filter).toEqual('resource.type = "gce_instance" AND severity>=ERROR');
 
       const last = created.view.viewId.at(-1) ?? "a";
       const nextViewId = `${created.view.viewId.slice(0, -1)}${last === "z" ? "0" : "z"}`;

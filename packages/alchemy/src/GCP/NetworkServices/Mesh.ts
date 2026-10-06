@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -33,9 +28,7 @@ import {
 
 const COLLECTION = "meshes";
 
-export type MeshEnvoyHeaders =
-  | networkservices.MeshEnvoyHeadersEnum
-  | (string & {});
+export type MeshEnvoyHeaders = networkservices.MeshEnvoyHeadersEnum | (string & {});
 
 export type MeshProps = {
   /**
@@ -158,14 +151,7 @@ const getByName = (name: string) =>
 
 export const MeshProvider = () =>
   Provider.succeed(Mesh, {
-    stables: [
-      "name",
-      "meshId",
-      "project",
-      "location",
-      "createTime",
-      "selfLink",
-    ],
+    stables: ["name", "meshId", "project", "location", "createTime", "selfLink"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -180,9 +166,7 @@ export const MeshProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -192,24 +176,13 @@ export const MeshProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const meshId = yield* toPhysicalId(
-        id,
-        olds?.meshId,
-        output?.meshId,
-        "mesh",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, COLLECTION, meshId);
+      const meshId = yield* toPhysicalId(id, olds?.meshId, output?.meshId, "mesh");
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, meshId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -230,16 +203,8 @@ export const MeshProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const meshId = yield* toPhysicalId(
-        id,
-        news.meshId,
-        output?.meshId,
-        "mesh",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const meshId = yield* toPhysicalId(id, news.meshId, output?.meshId, "mesh");
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, COLLECTION, meshId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -279,18 +244,9 @@ export const MeshProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const updateMask = changedFields([
         ["labels", labelsChanged],
-        [
-          "description",
-          (current.description ?? "") !== (news.description ?? ""),
-        ],
-        [
-          "interceptionPort",
-          (current.interceptionPort ?? 0) !== (news.interceptionPort ?? 0),
-        ],
-        [
-          "envoyHeaders",
-          (current.envoyHeaders ?? "") !== (news.envoyHeaders ?? ""),
-        ],
+        ["description", (current.description ?? "") !== (news.description ?? "")],
+        ["interceptionPort", (current.interceptionPort ?? 0) !== (news.interceptionPort ?? 0)],
+        ["envoyHeaders", (current.envoyHeaders ?? "") !== (news.envoyHeaders ?? "")],
       ]);
 
       if (updateMask.length > 0) {
@@ -306,10 +262,7 @@ export const MeshProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

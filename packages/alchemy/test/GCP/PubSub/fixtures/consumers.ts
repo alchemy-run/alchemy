@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
 import * as GCP from "@/GCP";
 import type { TopicMessage } from "@/GCP/PubSub/TopicEventSource.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 /** Marker object a consumer writes for one delivered message. */
 export const markerFor = (messageId: string) => `markers/${messageId}.json`;
@@ -15,12 +15,7 @@ export const Markers = GCP.Storage.Bucket("TopicMarkers", {
 });
 
 const recordMessages =
-  (
-    putObject: (request: {
-      name: string;
-      body: string;
-    }) => Effect.Effect<unknown, unknown, any>,
-  ) =>
+  (putObject: (request: { name: string; body: string }) => Effect.Effect<unknown, unknown, any>) =>
   (messages: Stream.Stream<TopicMessage>) =>
     messages.pipe(
       Stream.runForEach(({ message, subscription }) =>
@@ -56,10 +51,7 @@ export class PushConsumer extends GCP.Function<PushConsumer>()(
     return {
       fetch: Effect.succeed(HttpServerResponse.text("ok")),
     };
-  }).pipe(
-    Effect.provide(GCP.Run.TopicEventSource),
-    Effect.provide(GCP.Storage.PutObjectHttp),
-  ),
+  }).pipe(Effect.provide(GCP.Run.TopicEventSource), Effect.provide(GCP.Storage.PutObjectHttp)),
 ) {}
 
 /**
@@ -78,13 +70,6 @@ export class PullConsumer extends GCP.Run.WorkerPool<PullConsumer>()(
     const topic = yield* PullOrders;
     const bucket = yield* Markers;
     const putObject = yield* GCP.Storage.PutObject(bucket);
-    yield* GCP.PubSub.consumeTopicMessages(
-      topic,
-      { maxMessages: 5 },
-      recordMessages(putObject),
-    );
-  }).pipe(
-    Effect.provide(GCP.Run.TopicPullEventSource),
-    Effect.provide(GCP.Storage.PutObjectHttp),
-  ),
+    yield* GCP.PubSub.consumeTopicMessages(topic, { maxMessages: 5 }, recordMessages(putObject));
+  }).pipe(Effect.provide(GCP.Run.TopicPullEventSource), Effect.provide(GCP.Storage.PutObjectHttp)),
 ) {}

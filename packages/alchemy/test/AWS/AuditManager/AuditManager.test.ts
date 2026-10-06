@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Assessment, Control, Framework } from "@/AWS/AuditManager";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Assessment, Control, Framework } from "@/AWS/AuditManager";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,9 +23,7 @@ describe(
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* auditmanager.getAccountStatus({});
-          expect(["ACTIVE", "INACTIVE", "PENDING_ACTIVATION"]).toContain(
-            response.status,
-          );
+          expect(["ACTIVE", "INACTIVE", "PENDING_ACTIVATION"]).toContain(response.status);
         }),
       { timeout: 60_000 },
     );
@@ -41,10 +39,7 @@ describe(
           // accounts reject every control op with AccessDeniedException. Both
           // are typed tags in the distilled union — the provider's read path
           // depends on the former.
-          expect([
-            "ResourceNotFoundException",
-            "AccessDeniedException",
-          ]).toContain(error._tag);
+          expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
         }),
       { timeout: 60_000 },
     );
@@ -85,18 +80,12 @@ describe(
             yield* Effect.gen(function* () {
               const current = yield* auditmanager.getAccountStatus({});
               if (current.status !== "ACTIVE") {
-                return yield* Effect.fail({
-                  _tag: "NotActive" as const,
-                  status: current.status,
-                });
+                return yield* Effect.fail({ _tag: "NotActive" as const, status: current.status });
               }
             }).pipe(
               Effect.retry({
                 while: (e) => e._tag === "NotActive",
-                schedule: Schedule.max([
-                  Schedule.spaced("5 seconds"),
-                  Schedule.recurs(12),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
               }),
             );
           }
@@ -124,18 +113,11 @@ describe(
                 const framework = yield* Framework("ComplianceFramework", {
                   description: props.frameworkDescription,
                   complianceType: "Internal",
-                  controlSets: [
-                    {
-                      name: "Operations",
-                      controls: [{ id: control.controlId }],
-                    },
-                  ],
+                  controlSets: [{ name: "Operations", controls: [{ id: control.controlId }] }],
                   tags: { fixture: "auditmanager" },
                 });
 
-                const reports = yield* AWS.S3.Bucket("AuditReports", {
-                  forceDestroy: true,
-                });
+                const reports = yield* AWS.S3.Bucket("AuditReports", { forceDestroy: true });
 
                 const owner = yield* AWS.IAM.Role("AuditOwner", {
                   assumeRolePolicyDocument: {
@@ -156,9 +138,7 @@ describe(
                   assessmentReportsDestination: {
                     destination: Output.interpolate`s3://${reports.bucketName}`,
                   },
-                  roles: [
-                    { roleType: "PROCESS_OWNER", roleArn: owner.roleArn },
-                  ],
+                  roles: [{ roleType: "PROCESS_OWNER", roleArn: owner.roleArn }],
                   tags: { fixture: "auditmanager" },
                 });
 
@@ -182,22 +162,18 @@ describe(
           expect(assessment.frameworkId).toBe(framework.frameworkId);
 
           // Out-of-band verification via distilled.
-          const observedControl = yield* auditmanager.getControl({
-            controlId: control.controlId,
-          });
+          const observedControl = yield* auditmanager.getControl({ controlId: control.controlId });
           expect(observedControl.control?.name).toBe(control.name);
           const observedFramework = yield* auditmanager.getAssessmentFramework({
             frameworkId: framework.frameworkId,
           });
-          expect(
-            observedFramework.framework?.controlSets?.[0]?.controls?.[0]?.id,
-          ).toBe(control.controlId);
+          expect(observedFramework.framework?.controlSets?.[0]?.controls?.[0]?.id).toBe(
+            control.controlId,
+          );
           const observedAssessment = yield* auditmanager.getAssessment({
             assessmentId: assessment.assessmentId,
           });
-          expect(observedAssessment.assessment?.framework?.id).toBe(
-            framework.frameworkId,
-          );
+          expect(observedAssessment.assessment?.framework?.id).toBe(framework.frameworkId);
 
           // Update in place — descriptions flow through the update APIs and
           // ids are stable.
@@ -209,13 +185,10 @@ describe(
           expect(updated.control.controlId).toBe(control.controlId);
           expect(updated.framework.frameworkId).toBe(framework.frameworkId);
           expect(updated.assessment.assessmentId).toBe(assessment.assessmentId);
-          const reobservedFramework =
-            yield* auditmanager.getAssessmentFramework({
-              frameworkId: framework.frameworkId,
-            });
-          expect(reobservedFramework.framework?.description).toBe(
-            "updated framework",
-          );
+          const reobservedFramework = yield* auditmanager.getAssessmentFramework({
+            frameworkId: framework.frameworkId,
+          });
+          expect(reobservedFramework.framework?.description).toBe("updated framework");
 
           yield* stack.destroy();
 
@@ -225,25 +198,19 @@ describe(
               .getControl({ controlId: control.controlId })
               .pipe(
                 Effect.map(() => false),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
               );
             const frameworkGone = yield* auditmanager
               .getAssessmentFramework({ frameworkId: framework.frameworkId })
               .pipe(
                 Effect.map(() => false),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
               );
             const assessmentGone = yield* auditmanager
               .getAssessment({ assessmentId: assessment.assessmentId })
               .pipe(
                 Effect.map(() => false),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
               );
             if (!controlGone || !frameworkGone || !assessmentGone) {
               return yield* Effect.fail({ _tag: "StillExists" as const });
@@ -251,10 +218,7 @@ describe(
           }).pipe(
             Effect.retry({
               while: (e: { _tag: string }) => e._tag === "StillExists",
-              schedule: Schedule.max([
-                Schedule.spaced("5 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
             }),
           );
           yield* assertGone;

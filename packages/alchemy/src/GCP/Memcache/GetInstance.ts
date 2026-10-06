@@ -41,6 +41,4 @@ export interface GetInstance extends Binding.Service<
   >
 > {}
 
-export const GetInstance = Binding.Service<GetInstance>(
-  "GCP.Memcache.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("GCP.Memcache.GetInstance");

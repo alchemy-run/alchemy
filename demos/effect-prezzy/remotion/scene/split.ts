@@ -51,7 +51,9 @@ export const splitEdit = (beat: Edit): Edit[] => {
   });
   // Import lines arrive with the code that needs them, not as steps of their own.
   const isImports = (group: number[]) =>
-    group.every((i) => ops[i]!.kind !== "add" || ops[i]!.lines.every((l) => /^\s*(import\b|$)/.test(l)));
+    group.every(
+      (i) => ops[i]!.kind !== "add" || ops[i]!.lines.every((l) => /^\s*(import\b|$)/.test(l)),
+    );
   for (let g = groups.length - 2; g >= 0; g--) {
     if (isImports(groups[g]!)) groups.splice(g, 2, [...groups[g]!, ...groups[g + 1]!]);
   }
@@ -70,7 +72,11 @@ export const splitEdit = (beat: Edit): Edit[] => {
     });
     return `${out.join("\n")}\n`;
   };
-  const texts = [beat.before, ...(removals ? [textAt(0)] : []), ...groups.map((_, g) => textAt(g + 1))];
+  const texts = [
+    beat.before,
+    ...(removals ? [textAt(0)] : []),
+    ...groups.map((_, g) => textAt(g + 1)),
+  ];
   texts[texts.length - 1] = beat.after;
   const edits: Edit[] = [];
   for (let k = 1; k < texts.length; k++) {

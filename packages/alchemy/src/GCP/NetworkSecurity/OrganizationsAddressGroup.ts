@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   listOrganizations,
@@ -34,9 +29,7 @@ import {
 const DEFAULT_TYPE = "IPV4" satisfies networksecurity.AddressGroupTypeEnum;
 const DEFAULT_CAPACITY = 100;
 
-export type OrganizationsAddressGroupType =
-  | networksecurity.AddressGroupTypeEnum
-  | (string & {});
+export type OrganizationsAddressGroupType = networksecurity.AddressGroupTypeEnum | (string & {});
 
 export type OrganizationsAddressGroupPurpose =
   | networksecurity.AddressGroupPurposeItemEnum
@@ -163,15 +156,10 @@ export const OrganizationsAddressGroup = Resource<OrganizationsAddressGroup>(
   "GCP.NetworkSecurity.OrganizationsAddressGroup",
 );
 
-const resourceName = (
-  organization: string,
-  location: string,
-  addressGroupId: string,
-) =>
+const resourceName = (organization: string, location: string, addressGroupId: string) =>
   `organizations/${organization}/locations/${location}/addressGroups/${addressGroupId}`;
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const capacityOf = (value: number | undefined) => value ?? DEFAULT_CAPACITY;
 
@@ -209,9 +197,7 @@ const listOwned = (organization: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.addressGroups ?? [])),
       Stream.filter((group) =>
-        Object.keys(group.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(group.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map(toAttrs),
       Stream.runCollect,
@@ -237,29 +223,17 @@ export const OrganizationsAddressGroupProvider = () =>
       const nextId = news.addressGroupId ?? previousId;
       const previousOrg = olds?.organization ?? output?.organization;
       const nextOrg = news.organization ?? previousOrg;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousType = typeOf(olds?.type ?? output?.type);
       const nextType = typeOf(news.type ?? olds?.type ?? output?.type);
       const previousCapacity = capacityOf(olds?.capacity ?? output?.capacity);
-      const nextCapacity = capacityOf(
-        news.capacity ?? olds?.capacity ?? output?.capacity,
-      );
+      const nextCapacity = capacityOf(news.capacity ?? olds?.capacity ?? output?.capacity);
       const previousPurpose = sortedStrings(olds?.purpose ?? output?.purpose);
-      const nextPurpose = sortedStrings(
-        news.purpose ?? olds?.purpose ?? output?.purpose,
-      );
+      const nextPurpose = sortedStrings(news.purpose ?? olds?.purpose ?? output?.purpose);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousOrg !== undefined &&
-          nextOrg !== undefined &&
-          nextOrg !== previousOrg) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousOrg !== undefined && nextOrg !== undefined && nextOrg !== previousOrg) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousCapacity !== nextCapacity ||
@@ -293,16 +267,12 @@ export const OrganizationsAddressGroupProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
         output?.name ??
-        (organization.length > 0
-          ? resourceName(organization, location, addressGroupId)
-          : "");
+        (organization.length > 0 ? resourceName(organization, location, addressGroupId) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -375,8 +345,7 @@ export const OrganizationsAddressGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const itemsChanged = !sameStringList(current.items, items);
 
       if (labelsChanged || descriptionChanged || itemsChanged) {
@@ -386,22 +355,18 @@ export const OrganizationsAddressGroupProvider = () =>
           itemsChanged ? "items" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networksecurity.patchOrganizationsLocationsAddressGroups({
+        const operation = yield* networksecurity.patchOrganizationsLocationsAddressGroups({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              items,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            items,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current);

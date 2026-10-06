@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
 import { WorkerEnvironmentKVObject } from "./object.ts";
 
 /** The regions a DO can be hinted toward, as `/colo` accepts them. */
@@ -63,6 +63,24 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           const id = yield* object.identity().pipe(Effect.orDie);
           const colo = yield* object.colo().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ id, colo, locationHintRead });
+        }
+
+        // The same name addresses a different object inside a jurisdiction,
+        // so the two ids differ when `jurisdiction()` is honoured.
+        if (request.method === "GET" && url.pathname === "/jurisdiction") {
+          const name = url.searchParams.get("name") ?? "default";
+          const global = yield* objects.getByName(name).identity().pipe(Effect.orDie);
+          const eu = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          const euAgain = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ global, eu, euAgain });
         }
 
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the

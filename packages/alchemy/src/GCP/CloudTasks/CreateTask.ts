@@ -51,6 +51,4 @@ export interface CreateTask extends Binding.Service<
   >
 > {}
 
-export const CreateTask = Binding.Service<CreateTask>(
-  "GCP.CloudTasks.CreateTask",
-);
+export const CreateTask = Binding.Service<CreateTask>("GCP.CloudTasks.CreateTask");

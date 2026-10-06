@@ -2,6 +2,11 @@
   "name": "gcp-website-nextjs",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/gcp-website-nextjs"
+  },
   "type": "module",
   "scripts": {
     "build": "next build",
@@ -30,10 +35,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/gcp-website-nextjs"
   }
 }

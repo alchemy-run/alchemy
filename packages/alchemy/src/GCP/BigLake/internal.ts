@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
+import { isTransientGcpError } from "../Errors.ts";
 import {
   alchemyLabelKeys,
   createInternalLabels,
@@ -12,17 +13,12 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
-import { isTransientGcpError } from "../Errors.ts";
 
 /** Locations `list` scans: the pre-`GCP.Region` default plus the stack region. */
-export const listLocations = (region: string): string[] => [
-  ...new Set(["us-central1", region]),
-];
+export const listLocations = (region: string): string[] => [...new Set(["us-central1", region])];
 export const MAX_ID_LENGTH = 63;
 
-export class BiglakeNotResolved extends Data.TaggedError(
-  "GCP.BigLake.ResourceNotResolved",
-)<{
+export class BiglakeNotResolved extends Data.TaggedError("GCP.BigLake.ResourceNotResolved")<{
   name: string;
 }> {}
 
@@ -35,10 +31,7 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => {
+export const normalizeLocation = (location: string | undefined, fallback: string) => {
   const raw = lastSegment(location ?? fallback);
   const upper = raw.toUpperCase();
   if (upper === "US" || upper === "EU") return upper;
@@ -53,20 +46,13 @@ export const parseResourceName = (name: string, collection: string) => {
   const catalogsAt = parts.lastIndexOf("catalogs");
   const databasesAt = parts.lastIndexOf("databases");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    catalogId:
-      catalogsAt >= 0 && parts[catalogsAt + 1] ? parts[catalogsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    catalogId: catalogsAt >= 0 && parts[catalogsAt + 1] ? parts[catalogsAt + 1]! : "",
     catalog: catalogsAt >= 0 ? parts.slice(0, catalogsAt + 2).join("/") : "",
-    databaseId:
-      databasesAt >= 0 && parts[databasesAt + 1] ? parts[databasesAt + 1]! : "",
+    databaseId: databasesAt >= 0 && parts[databasesAt + 1] ? parts[databasesAt + 1]! : "",
     database: databasesAt >= 0 ? parts.slice(0, databasesAt + 2).join("/") : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -74,11 +60,7 @@ export const parseResourceName = (name: string, collection: string) => {
   };
 };
 
-export const expandCatalog = (
-  value: string,
-  project: string,
-  location: string,
-) =>
+export const expandCatalog = (value: string, project: string, location: string) =>
   value.includes("/catalogs/")
     ? value.replace(/\/+$/, "")
     : `${locationParent(project, location)}/catalogs/${value}`;
@@ -135,9 +117,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const ownershipMarker = (labels: Record<string, string>) =>
   `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
@@ -156,9 +137,7 @@ export const parseOwnershipMarker = (text: string | undefined) => {
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnershipMarker(text)).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnershipMarker(text)).some((key) => key.startsWith("alchemy-"));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -184,11 +163,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -248,12 +225,8 @@ export const ignoreGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (
-        error,
-      ): error is Extract<
-        E,
-        { readonly _tag: "NotFound" | "BigLakeResourceNotFound" }
-      > => isMissing(error),
+      (error): error is Extract<E, { readonly _tag: "NotFound" | "BigLakeResourceNotFound" }> =>
+        isMissing(error),
       () => Effect.void,
     ),
   );
@@ -269,22 +242,15 @@ export const missingGet =
           Effect.catchIf(
             (
               error,
-            ): error is Extract<
-              E,
-              { readonly _tag: "NotFound" | "BigLakeResourceNotFound" }
-            > => isMissing(error),
+            ): error is Extract<E, { readonly _tag: "NotFound" | "BigLakeResourceNotFound" }> =>
+              isMissing(error),
             () => Effect.succeed(undefined),
           ),
         );
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -293,12 +259,8 @@ export const collectPages = <
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (
-        error,
-      ): error is Extract<
-        E,
-        { readonly _tag: "NotFound" | "BigLakeResourceNotFound" }
-      > => isMissing(error),
+      (error): error is Extract<E, { readonly _tag: "NotFound" | "BigLakeResourceNotFound" }> =>
+        isMissing(error),
       () => emptyList<Item>(),
     ),
   );
@@ -348,14 +310,10 @@ export const listChildResources = <A, E, R>(
     concurrency: 4,
   }).pipe(Effect.map((groups) => groups.flat()));
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.BigLake.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.BigLake.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),

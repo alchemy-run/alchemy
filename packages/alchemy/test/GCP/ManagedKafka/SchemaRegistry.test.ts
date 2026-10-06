@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withKafkaClusterSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -15,10 +15,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 // cluster first and make the registry depend on it. Clusters take ~30 minutes.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   kafka.getProjectsLocationsSchemaRegistries({ name }).pipe(
@@ -48,9 +45,7 @@ test.provider(
       );
       // Without a cluster in the region every call is refused; with one
       // (other suites create them concurrently) the registry is just missing.
-      expect(["SchemaRegistryRequiresCluster", "NotFound"]).toContain(
-        error._tag,
-      );
+      expect(["SchemaRegistryRequiresCluster", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

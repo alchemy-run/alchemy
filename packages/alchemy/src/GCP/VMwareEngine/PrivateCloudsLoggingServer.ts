@@ -33,13 +33,9 @@ const DEFAULT_PORT = 514;
 const DEFAULT_PROTOCOL = "UDP";
 const DEFAULT_SOURCE_TYPE = "ESXI";
 
-export type LoggingServerProtocol =
-  | vmwareengine.LoggingServerProtocolEnum
-  | (string & {});
+export type LoggingServerProtocol = vmwareengine.LoggingServerProtocolEnum | (string & {});
 
-export type LoggingServerSourceType =
-  | vmwareengine.LoggingServerSourceTypeEnum
-  | (string & {});
+export type LoggingServerSourceType = vmwareengine.LoggingServerSourceTypeEnum | (string & {});
 
 export type PrivateCloudsLoggingServerProps = {
   /**
@@ -146,11 +142,8 @@ export const PrivateCloudsLoggingServer = Resource<PrivateCloudsLoggingServer>(
   "GCP.VMwareEngine.PrivateCloudsLoggingServer",
 );
 
-const parentCloudName = (
-  project: string,
-  location: string,
-  privateCloud: string,
-) => expandName(privateCloud, project, location, PARENT_COLLECTION);
+const parentCloudName = (project: string, location: string, privateCloud: string) =>
+  expandName(privateCloud, project, location, PARENT_COLLECTION);
 
 const resourceNameOf = (parent: string, loggingServerId: string) =>
   `${parent}/${COLLECTION}/${loggingServerId}`;
@@ -198,10 +191,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       return replaceOnIdentity({
         previousId: olds?.loggingServerId ?? output?.loggingServerId,
         nextId: news.loggingServerId
@@ -209,8 +199,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
           : (olds?.loggingServerId ?? output?.loggingServerId),
         previousLocation,
         nextLocation: normalizeLocation(
-          news.location ??
-            locationFromName(news.privateCloud, previousLocation),
+          news.location ?? locationFromName(news.privateCloud, previousLocation),
           DEFAULT_ZONE,
         ),
         previousParent: olds?.privateCloud ?? output?.privateCloud,
@@ -223,9 +212,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          (olds?.privateCloud
-            ? locationFromName(olds.privateCloud, DEFAULT_ZONE)
-            : undefined),
+          (olds?.privateCloud ? locationFromName(olds.privateCloud, DEFAULT_ZONE) : undefined),
         DEFAULT_ZONE,
       );
       const parent = parentCloudName(
@@ -245,39 +232,30 @@ export const PrivateCloudsLoggingServerProvider = () =>
       const attrs = toAttrs(existing, env.project);
       if (output?.name === (existing.name ?? name)) return attrs;
       const parentCloud = yield* getParentCloud(attrs.privateCloud);
-      return hasOwnershipMarker(parentCloud?.description)
-        ? attrs
-        : Unowned(attrs);
+      return hasOwnershipMarker(parentCloud?.description) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clouds = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsPrivateClouds.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.privateClouds,
-            ),
+        const clouds = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsPrivateClouds.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.privateClouds,
+          ),
         );
-        const ownedClouds = clouds.filter((cloud) =>
-          hasOwnershipMarker(cloud.description),
-        );
+        const ownedClouds = clouds.filter((cloud) => hasOwnershipMarker(cloud.description));
         const nested = yield* Effect.forEach(
           ownedClouds.filter((cloud) => (cloud.name ?? "").length > 0),
           (cloud) =>
             collectPages(
-              vmwareengine.listProjectsLocationsPrivateCloudsLoggingServers.pages(
-                {
-                  parent: cloud.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              vmwareengine.listProjectsLocationsPrivateCloudsLoggingServers.pages({
+                parent: cloud.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.loggingServers,
             ),
           { concurrency: 4 },
@@ -288,9 +266,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromName(news.privateCloud, DEFAULT_ZONE),
+        news.location ?? output?.location ?? locationFromName(news.privateCloud, DEFAULT_ZONE),
         DEFAULT_ZONE,
       );
       const parent = parentCloudName(env.project, location, news.privateCloud);
@@ -350,25 +326,19 @@ export const PrivateCloudsLoggingServerProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsPrivateCloudsLoggingServers(
-            {
-              name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                hostname: news.hostname,
-                port,
-                protocol,
-                sourceType,
-              },
-            },
-          );
+        const operation = yield* vmwareengine.patchProjectsLocationsPrivateCloudsLoggingServers({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            name: current.name ?? name,
+            hostname: news.hostname,
+            port,
+            protocol,
+            sourceType,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

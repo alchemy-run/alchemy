@@ -117,9 +117,7 @@ export type FolderLogScope = Resource<
  * @resource
  * @category Logging
  */
-export const FolderLogScope = Resource<FolderLogScope>(
-  "GCP.Logging.FolderLogScope",
-);
+export const FolderLogScope = Resource<FolderLogScope>("GCP.Logging.FolderLogScope");
 
 export class FolderLogScopeNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderLogScopeNotResolved",
@@ -133,8 +131,7 @@ const resourceName = (parent: string, location: string, logScopeId: string) =>
 const folderIdOf = (parent: string) =>
   parent.startsWith("folders/") ? lastSegment(parent) : undefined;
 
-const sortedNames = (names: readonly string[] | undefined) =>
-  [...(names ?? [])].slice().sort();
+const sortedNames = (names: readonly string[] | undefined) => [...(names ?? [])].slice().sort();
 
 const toAttrs = (scope: logging.LogScope, parent: string, location: string) => {
   const parsed = parseLoggingName(scope.name ?? "");
@@ -144,10 +141,7 @@ const toAttrs = (scope: logging.LogScope, parent: string, location: string) => {
   const description = parseDescription(scope.description);
   return {
     name:
-      scope.name ??
-      (logScopeId
-        ? resourceName(resolvedParent, resolvedLocation, logScopeId)
-        : ""),
+      scope.name ?? (logScopeId ? resourceName(resolvedParent, resolvedLocation, logScopeId) : ""),
     logScopeId,
     parent: resolvedParent,
     folderId: folderIdOf(resolvedParent),
@@ -166,47 +160,29 @@ const getByName = (name: string) =>
 
 export const FolderLogScopeProvider = () =>
   Provider.succeed(FolderLogScope, {
-    stables: [
-      "name",
-      "logScopeId",
-      "parent",
-      "folderId",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "logScopeId", "parent", "folderId", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.logScopeId ?? output?.logScopeId;
       const idChanged =
-        previousId !== undefined &&
-        news.logScopeId !== undefined &&
-        news.logScopeId !== previousId;
+        previousId !== undefined && news.logScopeId !== undefined && news.logScopeId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
         news.location !== previousLocation;
       const previousFolder = olds?.folderId ?? output?.folderId;
-      const folderChanged =
-        news.folderId !== undefined && news.folderId !== previousFolder;
+      const folderChanged = news.folderId !== undefined && news.folderId !== previousFolder;
       if (!idChanged && !locationChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = scopeParent(
-        env.project,
-        olds?.folderId ?? output?.folderId,
-      );
+      const parent = scopeParent(env.project, olds?.folderId ?? output?.folderId);
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const logScopeId = yield* toPhysicalId(
-        id,
-        olds?.logScopeId,
-        output?.logScopeId,
-        "s",
-      );
+      const logScopeId = yield* toPhysicalId(id, olds?.logScopeId, output?.logScopeId, "s");
       const name = output?.name ?? resourceName(parent, location, logScopeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -229,8 +205,7 @@ export const FolderLogScopeProvider = () =>
             Stream.map((scope) =>
               toAttrs(
                 scope,
-                parseLoggingName(scope.name ?? "").parent ||
-                  `projects/${env.project}`,
+                parseLoggingName(scope.name ?? "").parent || `projects/${env.project}`,
                 parseLoggingName(scope.name ?? "").location ?? DEFAULT_LOCATION,
               ),
             ),
@@ -241,17 +216,9 @@ export const FolderLogScopeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = scopeParent(
-        env.project,
-        news.folderId ?? output?.folderId,
-      );
+      const parent = scopeParent(env.project, news.folderId ?? output?.folderId);
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const logScopeId = yield* toPhysicalId(
-        id,
-        news.logScopeId,
-        output?.logScopeId,
-        "s",
-      );
+      const logScopeId = yield* toPhysicalId(id, news.logScopeId, output?.logScopeId, "s");
       const name = resourceName(parent, location, logScopeId);
       const ownership = yield* createOwnership(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -280,8 +247,7 @@ export const FolderLogScopeProvider = () =>
         sortedNames(current.resourceNames),
         sortedNames(news.resourceNames),
       );
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const updateMask = [
         namesChanged ? "resourceNames" : undefined,
         descriptionChanged ? "description" : undefined,

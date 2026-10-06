@@ -22,13 +22,20 @@ export default defineScene({
 
     await s.browser.open("http://localhost:5173", { waitFor: /alchemy\.run\s+\/\w+\s+3\b/ });
     s.pause(1.5);
-    await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["LinkRoom"], edges: ["Api->LinkRoom"] });
+    await s.diagram({
+      stage: `dev_${process.env.USER}`,
+      nodes: ["LinkRoom"],
+      edges: ["Api->LinkRoom"],
+    });
     s.pause(1);
 
     await s.editor.show("test/api.test.ts");
     s.pause(0.5);
     await s.terminal(async (t) => {
-      await t.run("test", "pnpm test", { until: /Ran \d+ tests? across[\s\S]*❯\s*$/, timeout: 300_000 });
+      await t.run("test", "pnpm test", {
+        until: /Ran \d+ tests? across[\s\S]*❯\s*$/,
+        timeout: 300_000,
+      });
       await t.sleep(1500);
     });
   },

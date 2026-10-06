@@ -26,8 +26,6 @@ export interface ReadWriteRedis extends Binding.Service<
   (instance: Instance) => Effect.Effect<ReadWriteRedisClient>
 > {}
 
-export const ReadWriteRedis = Binding.Service<ReadWriteRedis>(
-  "GCP.Redis.ReadWriteRedis",
-);
+export const ReadWriteRedis = Binding.Service<ReadWriteRedis>("GCP.Redis.ReadWriteRedis");
 
 export type ReadWriteRedisClient = ReadWriteClient;

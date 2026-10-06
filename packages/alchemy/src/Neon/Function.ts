@@ -1,12 +1,11 @@
+import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { BundleConfig } from "../Bundle/Bundle.ts";
+import type { Input } from "../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import type { Resource } from "../Resource.ts";
 import type { BranchScope } from "./BranchScope.ts";
-import type {
-  FunctionEnvironment,
-  FunctionRequest,
-} from "./FunctionEnvironment.ts";
+import type { FunctionEnvironment, FunctionRequest } from "./FunctionEnvironment.ts";
 import {
   makeFunctionRuntimeContext,
   type FunctionRuntimeContext,
@@ -26,6 +25,32 @@ export type FunctionArtifact =
     }
   | { /** Path to an existing ZIP archive. */ zip: string; directory?: never };
 
+/**
+ * {@link BranchScope} where the branch or project may also be an Effect that
+ * produces it, so `{ branch: Main }` and `{ branch: yield* Main }` both
+ * type-check.
+ */
+export type FunctionBranchScope =
+  | {
+      /** Branch resource or explicit branch identity, or an Effect producing one. */
+      branch:
+        | { projectId: string; branchId: string }
+        | Effect.Effect<Input<{ projectId: string; branchId: string }>, never, any>;
+      project?: never;
+    }
+  | {
+      /** Project whose default branch is selected at reconciliation time, or an Effect producing one. */
+      project: { projectId: string } | Effect.Effect<Input<{ projectId: string }>, never, any>;
+      branch?: never;
+    };
+
+/**
+ * The scope as providers see it. `transformProps` yields an Effect-valued
+ * `branch` or `project` before any lifecycle operation runs, so only the
+ * resolved shape reaches the provider.
+ */
+export const branchScopeOf = <P extends FunctionBranchScope>(props: P) => props as P & BranchScope;
+
 export interface FunctionCommonProps extends PlatformProps {
   /** Immutable lowercase alphanumeric identifier, at most 20 characters. Generated when omitted. */
   slug?: string;
@@ -39,7 +64,7 @@ export interface FunctionCommonProps extends PlatformProps {
   dev?: { command?: string; port?: number };
 }
 
-export type FunctionProps = BranchScope &
+export type FunctionProps = FunctionBranchScope &
   FunctionCommonProps &
   (
     | {
@@ -60,9 +85,7 @@ export interface FunctionAttributes {
   /** Observed display name. */ name: string;
   /** Public invocation URL. Authenticate callers in the handler. */ url: string;
   /** Latest deployment identifier. */ currentDeploymentId: number | undefined;
-  /** Deployment currently serving traffic. */ activeDeploymentId:
-    | number
-    | undefined;
+  /** Deployment currently serving traffic. */ activeDeploymentId: number | undefined;
   /** Latest deployment build status. */ status: string | undefined;
   /** Digest of the last successfully applied artifact, not a remote code attestation. */ codeHash:
     | string
@@ -135,4 +158,18 @@ export const Function: Platform<
   FunctionRuntimeContext
 > = Platform<Function>("Neon.Function", {
   createRuntimeContext: makeFunctionRuntimeContext,
+  // `{ branch: Main }` at module scope is an Effect. Yield it here so the
+  // branch (or project) is registered and resolved at reconcile (same as
+  // `yield* Main` inside Effect.gen).
+  transformProps: (_id, props) =>
+    Effect.gen(function* () {
+      if (globalThis.__ALCHEMY_RUNTIME__) return props;
+      const yieldRef = (value: unknown) =>
+        Effect.isEffect(value) ? (value as Effect.Effect<unknown>) : Effect.succeed(value);
+      return {
+        ...props,
+        ...(props.branch !== undefined ? { branch: yield* yieldRef(props.branch) } : {}),
+        ...(props.project !== undefined ? { project: yield* yieldRef(props.project) } : {}),
+      };
+    }),
 });

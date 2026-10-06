@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 export const Trainer = GCP.TPU.Node("Trainer", {
@@ -45,8 +45,5 @@ export default class TpuBindingsHost extends GCP.Function<TpuBindingsHost>()(
         ),
       }),
     };
-  }).pipe(
-    Effect.provide(GCP.TPU.GetNodeHttp),
-    Effect.provide(GCP.TPU.GetQueuedResourceHttp),
-  ),
+  }).pipe(Effect.provide(GCP.TPU.GetNodeHttp), Effect.provide(GCP.TPU.GetQueuedResourceHttp)),
 ) {}

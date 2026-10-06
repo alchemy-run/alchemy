@@ -76,9 +76,7 @@ export const makeKendraIndexHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${index.LogicalId})`)(function* (
-        request?: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${index.LogicalId})`)(function* (request?: Req) {
         const wire = options.prepare
           ? options.prepare(request as Req)
           : (request as unknown as Omit<I, "IndexId"> | undefined);
@@ -132,9 +130,7 @@ export const makeKendraDataSourceHttpBinding = <
                   // The data source ARN is
                   // `…:index/{indexId}/data-source/{id}` — the parent index
                   // ARN is its prefix.
-                  dataSource.arn.pipe(
-                    Output.map((arn) => arn.split("/data-source/")[0]!),
-                  ),
+                  dataSource.arn.pipe(Output.map((arn) => arn.split("/data-source/")[0]!)),
                 ],
               },
             ],

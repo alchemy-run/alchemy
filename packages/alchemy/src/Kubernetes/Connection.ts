@@ -230,7 +230,5 @@ export const KubeConfig = (options?: {
     context: options?.context,
   },
   ...(options?.registry !== undefined ? { registry: options.registry } : {}),
-  ...(options?.architecture !== undefined
-    ? { architecture: options.architecture }
-    : {}),
+  ...(options?.architecture !== undefined ? { architecture: options.architecture } : {}),
 });

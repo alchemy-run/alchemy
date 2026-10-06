@@ -10,7 +10,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -18,20 +17,15 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TYPE: privateca.CertificateAuthorityTypeEnum = "SELF_SIGNED";
 const DEFAULT_LIFETIME = "315360000s";
-const DEFAULT_ALGORITHM: privateca.KeyVersionSpecAlgorithmEnum =
-  "EC_P256_SHA256";
+const DEFAULT_ALGORITHM: privateca.KeyVersionSpecAlgorithmEnum = "EC_P256_SHA256";
 const DEFAULT_DESIRED_STATE: DesiredState = "ENABLED";
 const MAX_NAME_LENGTH = 63;
-const STEADY_STATES = new Set([
-  "ENABLED",
-  "DISABLED",
-  "STAGED",
-  "AWAITING_USER_ACTIVATION",
-]);
+const STEADY_STATES = new Set(["ENABLED", "DISABLED", "STAGED", "AWAITING_USER_ACTIVATION"]);
 
 export type DesiredState = "ENABLED" | "DISABLED" | "STAGED";
 
@@ -389,8 +383,7 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 const normalizeType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_TYPE).toUpperCase();
@@ -415,22 +408,17 @@ const parseName = (name: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const caPool = poolsAt >= 0 ? parts.slice(0, poolsAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     caPool,
-    certificateAuthorityId:
-      casAt >= 0 && parts[casAt + 1] ? parts[casAt + 1]! : lastSegment(name),
+    certificateAuthorityId: casAt >= 0 && parts[casAt + 1] ? parts[casAt + 1]! : lastSegment(name),
   };
 };
 
 const resolveParent = (project: string, caPool: string, location: string) => {
   if (caPool.includes("/")) {
     const parsed = parseName(
-      caPool.includes("/certificateAuthorities/")
-        ? caPool
-        : `${caPool}/certificateAuthorities/_`,
+      caPool.includes("/certificateAuthorities/") ? caPool : `${caPool}/certificateAuthorities/_`,
     );
     return {
       parent: parsed.caPool,
@@ -450,11 +438,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateAuthorityId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateAuthorityId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       certificateAuthorityId ??
@@ -606,20 +590,14 @@ const getByName = (name: string) =>
  * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
  * and an operation that is already gone.
  */
-const waitForOperation = (
-  operation: privateca.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  waitForGcpOperation(
-    operation,
-    (name) => privateca.getProjectsLocationsOperations({ name }),
-    { budget: "15 minutes" },
-  ).pipe(
+const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(operation, (name) => privateca.getProjectsLocationsOperations({ name }), {
+    budget: "15 minutes",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         (error._tag === "GCP.OperationFailed" &&
-          (error.code === 6 ||
-            (options?.notFoundOk === true && error.code === 5))) ||
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
         (options?.notFoundOk === true && error._tag === "NotFound"),
       () => Effect.succeed(operation),
     ),
@@ -628,13 +606,10 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      ca
-        ? Effect.succeed(ca)
-        : Effect.fail(new CertificateAuthorityNotResolved({ name })),
+      ca ? Effect.succeed(ca) : Effect.fail(new CertificateAuthorityNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.PrivateCA.CertificateAuthorityNotResolved",
+      while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -669,13 +644,10 @@ const isGone = (ca: privateca.CertificateAuthority | undefined) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      isGone(ca)
-        ? Effect.void
-        : Effect.fail(new CertificateAuthorityStillExists({ name })),
+      isGone(ca) ? Effect.void : Effect.fail(new CertificateAuthorityStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.PrivateCA.CertificateAuthorityStillExists",
+      while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -685,9 +657,7 @@ const runOperation = (
   operation: privateca.Operation | undefined,
   options?: { notFoundOk?: boolean },
 ) =>
-  operation === undefined
-    ? Effect.void
-    : waitForOperation(operation, options).pipe(Effect.asVoid);
+  operation === undefined ? Effect.void : waitForOperation(operation, options).pipe(Effect.asVoid);
 
 const listOwned = (project: string) =>
   privateca.listProjectsLocationsCaPoolsCertificateAuthorities
@@ -696,15 +666,11 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.certificateAuthorities ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.certificateAuthorities ?? [])),
       Stream.filter(
         (ca) =>
           (ca.state ?? "").toUpperCase() !== "DELETED" &&
-          Object.keys(ca.labels ?? {}).some((key) =>
-            key.startsWith("alchemy-"),
-          ),
+          Object.keys(ca.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((ca) => toAttrs(ca, project)),
       Stream.runCollect,
@@ -831,17 +797,12 @@ export const CertificateAuthorityProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousId =
-        olds?.certificateAuthorityId ?? output?.certificateAuthorityId;
+      const previousId = olds?.certificateAuthorityId ?? output?.certificateAuthorityId;
       const nextId = news.certificateAuthorityId ?? previousId;
       const previousPool = olds?.caPool ?? output?.caPool ?? "";
       const nextPool = news.caPool;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
       const previousType = normalizeType(olds?.type ?? output?.type);
       const nextType = normalizeType(news.type ?? output?.type);
       const previousLifetime = olds?.lifetime ?? output?.lifetime ?? "";
@@ -849,17 +810,14 @@ export const CertificateAuthorityProvider = () =>
       const previousBucket = olds?.gcsBucket ?? output?.gcsBucket ?? "";
       const nextBucket = news.gcsBucket ?? previousBucket;
       const previousKey = keySpecKey(olds?.keySpec ?? output?.keySpec);
-      const nextKey =
-        news.keySpec === undefined ? previousKey : keySpecKey(news.keySpec);
+      const nextKey = news.keySpec === undefined ? previousKey : keySpecKey(news.keySpec);
       const configChanged =
         news.config !== undefined &&
         olds?.config !== undefined &&
         configKey(news.config) !== configKey(olds.config);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         (previousPool !== "" && nextPool !== previousPool) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
@@ -901,9 +859,7 @@ export const CertificateAuthorityProvider = () =>
         return undefined;
       }
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -962,8 +918,7 @@ export const CertificateAuthorityProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const urlsChanged =
         news.userDefinedAccessUrls !== undefined &&
-        urlsKey(urlsOf(current.userDefinedAccessUrls)) !==
-          urlsKey(news.userDefinedAccessUrls);
+        urlsKey(urlsOf(current.userDefinedAccessUrls)) !== urlsKey(news.userDefinedAccessUrls);
       const subordinateChanged =
         news.subordinateConfig !== undefined &&
         subordinateKey(subordinateOf(current.subordinateConfig)) !==

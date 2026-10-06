@@ -2,10 +2,7 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor, type BindingIam } from "../HttpBinding.ts";
-import type {
-  PulledMessage,
-  ReadSubscriptionClient,
-} from "./ReadSubscription.ts";
+import type { PulledMessage, ReadSubscriptionClient } from "./ReadSubscription.ts";
 import type { Subscription } from "./Subscription.ts";
 import type { Topic } from "./Topic.ts";
 import type { PublishMessage, WriteTopicClient } from "./WriteTopic.ts";
@@ -28,9 +25,7 @@ export const readSubscriptionGrant: BindingIam = {
 const encode = (data: string | Uint8Array) =>
   typeof data === "string"
     ? Buffer.from(data, "utf8").toString("base64")
-    : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString(
-        "base64",
-      );
+    : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("base64");
 
 const toPubsubMessage = (message: PublishMessage): pubsub.PubsubMessage => ({
   data: encode(message.data),
@@ -77,8 +72,7 @@ export const makeWriteTopicBinding = Effect.gen(function* () {
             return response.messageIds ?? [];
           });
     return {
-      publish: (message) =>
-        publishBatch([message]).pipe(Effect.map((ids) => ids[0] ?? "")),
+      publish: (message) => publishBatch([message]).pipe(Effect.map((ids) => ids[0] ?? "")),
       publishBatch,
     } satisfies WriteTopicClient;
   });
@@ -87,8 +81,7 @@ export const makeWriteTopicBinding = Effect.gen(function* () {
 export const makeReadSubscriptionBinding = Effect.gen(function* () {
   const pull = yield* pubsub.pullProjectsSubscriptions;
   const acknowledge = yield* pubsub.acknowledgeProjectsSubscriptions;
-  const modifyAckDeadline =
-    yield* pubsub.modifyAckDeadlineProjectsSubscriptions;
+  const modifyAckDeadline = yield* pubsub.modifyAckDeadlineProjectsSubscriptions;
   return Effect.fn(function* (subscription: Subscription) {
     yield* bindGcpHost({
       tag: "GCP.PubSub.ReadSubscription",
@@ -106,9 +99,7 @@ export const makeReadSubscriptionBinding = Effect.gen(function* () {
               returnImmediately: options?.returnImmediately ?? false,
             },
           });
-          return yield* Effect.sync(() =>
-            (response.receivedMessages ?? []).map(decode),
-          );
+          return yield* Effect.sync(() => (response.receivedMessages ?? []).map(decode));
         }),
       acknowledge: (ackIds) =>
         ackIds.length === 0

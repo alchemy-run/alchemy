@@ -4,19 +4,14 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const CUSTOMER_PREFIX = "customers/";
 export const MAX_CONFIGURATION_NAME_LENGTH = 100;
 export const DEFAULT_IS_DEFAULT = false;
 export const PROBE_CUSTOMER = "customers/0";
 export const PROBE_CONFIGURATION = `${PROBE_CUSTOMER}/configurations/0`;
-export const ANDROID_DEVICE_POLICY_PACKAGE =
-  "com.google.android.apps.work.clouddpc";
+export const ANDROID_DEVICE_POLICY_PACKAGE = "com.google.android.apps.work.clouddpc";
 
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -29,8 +24,7 @@ export const parentOf = (name: string) => {
   return parts.slice(0, -2).join("/");
 };
 
-export const normalizeName = (value: string) =>
-  value.replace(/\/+$/, "").trim();
+export const normalizeName = (value: string) => value.replace(/\/+$/, "").trim();
 
 export const toCustomerName = (value: string) => {
   const trimmed = normalizeName(value);
@@ -48,22 +42,12 @@ export const toCustomerName = (value: string) => {
   return `${CUSTOMER_PREFIX}${lastSegment(trimmed)}`;
 };
 
-export const toConfigurationName = (
-  parent: string,
-  configurationId?: string,
-) => {
-  if (
-    configurationId !== undefined &&
-    configurationId.includes("/configurations/")
-  ) {
+export const toConfigurationName = (parent: string, configurationId?: string) => {
+  if (configurationId !== undefined && configurationId.includes("/configurations/")) {
     return normalizeName(configurationId);
   }
   const customer = toCustomerName(parent);
-  if (
-    configurationId !== undefined &&
-    configurationId.length > 0 &&
-    customer.length > 0
-  ) {
+  if (configurationId !== undefined && configurationId.length > 0 && customer.length > 0) {
     return `${customer}/configurations/${lastSegment(configurationId)}`;
   }
   return "";
@@ -80,10 +64,8 @@ export const toDpcName = (parent: string, value: string) => {
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBoolean = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => left === right;
+export const sameBoolean = (left: boolean | undefined, right: boolean | undefined) =>
+  left === right;
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -119,10 +101,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -143,10 +122,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -174,14 +150,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -191,18 +163,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -254,22 +217,16 @@ export const listConfigurationsAt = (parent: string) =>
         .listCustomersConfigurations({ parent: toCustomerName(parent) })
         .pipe(
           Effect.map((page) => page.configurations ?? []),
-          Effect.catchTag("NotFound", () =>
-            emptyList<androiddeviceprovisioning.Configuration>(),
-          ),
+          Effect.catchTag("NotFound", () => emptyList<androiddeviceprovisioning.Configuration>()),
         );
 
 export const listDpcsAt = (parent: string) =>
   parent.length === 0
     ? emptyList<androiddeviceprovisioning.Dpc>()
-    : androiddeviceprovisioning
-        .listCustomersDpcs({ parent: toCustomerName(parent) })
-        .pipe(
-          Effect.map((page) => page.dpcs ?? []),
-          Effect.catchTag("NotFound", () =>
-            emptyList<androiddeviceprovisioning.Dpc>(),
-          ),
-        );
+    : androiddeviceprovisioning.listCustomersDpcs({ parent: toCustomerName(parent) }).pipe(
+        Effect.map((page) => page.dpcs ?? []),
+        Effect.catchTag("NotFound", () => emptyList<androiddeviceprovisioning.Dpc>()),
+      );
 
 export const pickDpcName = (parent: string) =>
   Effect.gen(function* () {
@@ -285,9 +242,7 @@ const listSetting = (keys: readonly string[]) =>
   Effect.gen(function* () {
     const values: string[] = [];
     for (const key of keys) {
-      const raw = Option.getOrUndefined(
-        yield* Config.option(Config.String(key)),
-      )?.trim();
+      const raw = Option.getOrUndefined(yield* Config.option(Config.String(key)))?.trim();
       if (!raw) continue;
       for (const part of raw.split(/[,\s]+/)) {
         if (part.length > 0) values.push(part);
@@ -312,11 +267,7 @@ export const listCustomersAt = () =>
   collectPages(
     androiddeviceprovisioning.listCustomers.pages({ pageSize: 100 }),
     (page) => page.customers,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      emptyList<androiddeviceprovisioning.Company>(),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => emptyList<androiddeviceprovisioning.Company>()));
 
 export const listCustomerNames = () =>
   Effect.gen(function* () {
@@ -343,10 +294,7 @@ export const findOwnedConfiguration = (id: string, parent: string) =>
     return undefined;
   });
 
-export const findConfigurationByName = (
-  configurationName: string,
-  parent: string,
-) =>
+export const findConfigurationByName = (configurationName: string, parent: string) =>
   Effect.gen(function* () {
     const rows = yield* listConfigurationsAt(parent);
     return rows.find((row) => row.configurationName === configurationName);
@@ -355,12 +303,8 @@ export const findConfigurationByName = (
 export const listOwnedConfigurations = () =>
   Effect.gen(function* () {
     const parents = yield* listCustomerNames();
-    const pages = yield* Effect.forEach(
-      parents,
-      (parent) => listConfigurationsAt(parent),
-      { concurrency: 4 },
-    );
-    return pages
-      .flat()
-      .filter((row) => hasOwnershipMarker(row.configurationName));
+    const pages = yield* Effect.forEach(parents, (parent) => listConfigurationsAt(parent), {
+      concurrency: 4,
+    });
+    return pages.flat().filter((row) => hasOwnershipMarker(row.configurationName));
   });
