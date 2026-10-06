@@ -8,7 +8,8 @@
  * - `["CMD", "pg_isready", "-U", "app"]`: the arguments, each quoted so it
  *   reaches the program as one argument.
  * - `["NONE"]`: no command (the caller disables the healthcheck).
- * - any other array: treated as exec-form arguments, as before.
+ * - any other array: joined with spaces and run in the shell, as before, so
+ *   `["curl -f localhost || exit 1"]` keeps working.
  */
 export const healthcheckCommand = (cmd: string[] | string): string | undefined => {
   if (typeof cmd === "string") return cmd;
@@ -21,7 +22,7 @@ export const healthcheckCommand = (cmd: string[] | string): string | undefined =
     case "CMD":
       return rest.map(shellQuote).join(" ");
     default:
-      return cmd.map(shellQuote).join(" ");
+      return cmd.join(" ");
   }
 };
 

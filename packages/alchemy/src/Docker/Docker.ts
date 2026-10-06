@@ -291,6 +291,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -334,6 +336,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;

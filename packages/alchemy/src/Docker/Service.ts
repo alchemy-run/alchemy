@@ -17,7 +17,7 @@ import {
 import { Stack } from "../Stack.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
-import { healthcheckCommand } from "./HealthcheckCommand.ts";
+import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
 import { makeServiceImage } from "./ServiceImage.ts";
 
@@ -230,7 +230,8 @@ export declare namespace Service {
     /**
      * Command to run for health checks. A string runs in the container's
      * shell. An array follows Docker's healthcheck `Test` form:
-     * `["CMD-SHELL", "pg_isready -U app"]` or `["CMD", "pg_isready", "-U", "app"]`.
+     * `["CMD-SHELL", "pg_isready -U app"]`, `["CMD", "pg_isready", "-U", "app"]`,
+     * or `["NONE"]` to disable the image's healthcheck.
      */
     cmd: string[] | string;
     /** Time between checks, e.g. `"30s"`. */
@@ -700,6 +701,9 @@ export const ServiceProvider = () =>
                 "health-cmd": desired.healthcheck
                   ? healthcheckCommand(desired.healthcheck.cmd)
                   : undefined,
+                "no-healthcheck":
+                  desired.healthcheck !== undefined &&
+                  isHealthcheckDisabled(desired.healthcheck.cmd),
                 "health-interval": desired.healthcheck?.interval,
                 "health-timeout": desired.healthcheck?.timeout,
                 "health-retries": desired.healthcheck?.retries,
@@ -766,6 +770,8 @@ export const ServiceProvider = () =>
             "health-cmd": desired.healthcheck
               ? healthcheckCommand(desired.healthcheck.cmd)
               : undefined,
+            "no-healthcheck":
+              desired.healthcheck !== undefined && isHealthcheckDisabled(desired.healthcheck.cmd),
             "health-interval": desired.healthcheck?.interval,
             "health-timeout": desired.healthcheck?.timeout,
             "health-retries": desired.healthcheck?.retries,

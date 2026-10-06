@@ -192,6 +192,34 @@ describe(
         }),
       { timeout: 240_000 },
     );
+
+    test.provider(
+      "disables the image healthcheck with NONE",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const service = yield* stack.deploy(
+            Docker.Service("healthcheck-none-service", {
+              name: "alchemy-test-service-healthcheck-none",
+              image: "nginx:alpine",
+              healthcheck: { cmd: ["NONE"] },
+            }),
+          );
+
+          const output = yield* docker.run([
+            "service",
+            "inspect",
+            service.id,
+            "--format",
+            "{{json .Spec.TaskTemplate.ContainerSpec.Healthcheck}}",
+          ]);
+          expect(JSON.parse(output.stdout)).toEqual({ Test: ["NONE"] });
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
   },
 );
 

@@ -23,6 +23,14 @@ test.provider(
       );
       expect(healthcheckCommand(["CMD", "echo", "a b", "it's"])).toBe("echo 'a b' 'it'\\''s'");
       expect(healthcheckCommand(["NONE"])).toBeUndefined();
+      // Arrays without a Docker marker keep the old behaviour: joined with
+      // spaces and run in the shell.
+      expect(healthcheckCommand(["curl -f localhost || exit 1"])).toBe(
+        "curl -f localhost || exit 1",
+      );
+      expect(healthcheckCommand(["curl", "-f", "localhost", "||", "exit", "1"])).toBe(
+        "curl -f localhost || exit 1",
+      );
       expect(isHealthcheckDisabled(["NONE"])).toBe(true);
       expect(isHealthcheckDisabled(["CMD", "true"])).toBe(false);
     }),
@@ -439,6 +447,21 @@ describe(
         );
         const info = yield* docker.container.inspect(container.name);
         expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "true"]);
+      }),
+    );
+
+    test.provider("runs an array without a marker as a shell line, as before", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-legacy", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["true || exit 1"], interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "true || exit 1"]);
       }),
     );
 
