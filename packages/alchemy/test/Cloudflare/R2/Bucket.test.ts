@@ -1119,7 +1119,10 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
         source: { type: "env" },
       } satisfies CloudflareResolvedCredentials),
     ),
-    Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
+    Layer.succeed(
+      Credentials,
+      Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
+    ),
     Layer.succeed(
       LocalRuntimeState,
       LocalRuntimeState.of({

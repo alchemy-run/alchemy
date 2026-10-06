@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 import { PrismaApiError, type PrismaManagementClient } from "@/Prisma/Client";
 import {
@@ -148,7 +149,10 @@ describe(
           HttpClient.HttpClient,
           HttpClient.make(() => Effect.never),
         ),
-        fromApiToken({ apiToken: "fake-service-token", apiBaseUrl: FAKE_API_BASE_URL }),
+        fromApiToken({
+          apiToken: Redacted.make("fake-service-token"),
+          apiBaseUrl: FAKE_API_BASE_URL,
+        }),
       );
 
       return Effect.gen(function* () {
@@ -243,6 +247,39 @@ describe(
         expect(calls).toEqual([
           "get:deployment-1",
           "stop:deployment-1",
+          "get:deployment-1",
+          "delete:deployment-1",
+        ]);
+      }).pipe(provide(client));
+    });
+
+    it.live("waits for a deployment that is already stopping before deleting it", () => {
+      const calls: string[] = [];
+      let observed = 0;
+      const client = {
+        getDeployment: (id: string) =>
+          Effect.sync(() => {
+            calls.push(`get:${id}`);
+            return deployment(id, observed++ < 2 ? "stopping" : "stopped");
+          }),
+        deleteDeployment: (id: string) =>
+          Effect.sync(() => {
+            calls.push(`delete:${id}`);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const result = yield* destroyDeployment("deployment-1", {
+          pollIntervalMs: 1,
+        });
+        expect(result).toMatchObject({
+          previousStatus: "stopping",
+          stopped: false,
+          deleted: true,
+        });
+        expect(calls).toEqual([
+          "get:deployment-1",
+          "get:deployment-1",
           "get:deployment-1",
           "delete:deployment-1",
         ]);

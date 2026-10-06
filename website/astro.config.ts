@@ -1658,7 +1658,7 @@ export default defineConfig({
       // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
       // We want every post listed, so set it effectively unlimited.
       plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
-      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts"],
+      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts", "./src/favicon.ts"],
     }),
     mdx(),
   ],

@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.80",
+  "version": "2.0.0-beta.81",
   "description": "Infrastructure as Effects for TypeScript.",
   "keywords": [
     "alchemy",
@@ -60,6 +60,8 @@
     "./Cloudflare/Live": "./src/Cloudflare/Live.ts",
     "./Cloudflare/RpcWebSocketClient": "./src/Cloudflare/Workers/RpcWebSocketClient.ts",
     "./Cloudflare/*": "./src/Cloudflare/*/index.ts",
+    "./Cloudflare/Workers/*": "./src/Cloudflare/Workers/*.ts",
+    "./Cloudflare/R2/*": "./src/Cloudflare/R2/*.ts",
     "./Drizzle": "./src/Drizzle/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GCP": "./src/GCP/index.ts",
@@ -239,6 +241,16 @@
         "types": "./lib/Cloudflare/*/index.d.ts",
         "bun": "./src/Cloudflare/*/index.ts",
         "default": "./lib/Cloudflare/*/index.js"
+      },
+      "./Cloudflare/Workers/*": {
+        "types": "./lib/Cloudflare/Workers/*.d.ts",
+        "bun": "./src/Cloudflare/Workers/*.ts",
+        "default": "./lib/Cloudflare/Workers/*.js"
+      },
+      "./Cloudflare/R2/*": {
+        "types": "./lib/Cloudflare/R2/*.d.ts",
+        "bun": "./src/Cloudflare/R2/*.ts",
+        "default": "./lib/Cloudflare/R2/*.js"
       },
       "./Drizzle": {
         "types": "./lib/Drizzle/index.d.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.80",
+  "version": "2.0.0-beta.81",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "keywords": [
     "alchemy",

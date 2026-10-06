@@ -49,7 +49,7 @@ const withOAuthCredentials = <A, E, R>(
     effect,
     Layer.mergeAll(
       PsCredentialsModule.fromOAuth({
-        accessToken,
+        accessToken: Redacted.make(accessToken),
         organization: "",
       }),
       FetchHttpClient.layer,
