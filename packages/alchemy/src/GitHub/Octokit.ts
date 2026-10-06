@@ -1,5 +1,8 @@
-import type { Octokit as _Octokit } from "@octokit/rest";
+import { Octokit as _Octokit } from "@octokit/rest";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
+import { createSign } from "node:crypto";
 import type { AuthError } from "../Auth/AuthProvider.ts";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
 import { GitHubCredentials } from "./Credentials.ts";
@@ -66,4 +69,52 @@ export const gitHubBaseUrlChanged = (
     const oldUrl = yield* effectiveGitHubBaseUrl(olds.baseUrl);
     const newUrl = yield* effectiveGitHubBaseUrl(news.baseUrl);
     return oldUrl !== newUrl;
+  });
+
+/**
+ * An Octokit authenticated as a GitHub App: a short-lived RS256 JWT signed
+ * with the app's private key (Octokit sends a three-part token as a Bearer
+ * JWT). Build one per call — the JWT expires after nine minutes.
+ */
+export const appOctokit = (
+  appId: number,
+  privateKey: Redacted.Redacted<string>,
+  baseUrl: string | undefined,
+): _Octokit => {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: object) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  // `iat` is backdated a minute to tolerate clock drift, as GitHub advises.
+  const body = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({
+    iat: now - 60,
+    exp: now + 540,
+    iss: String(appId),
+  })}`;
+  const signature = createSign("RSA-SHA256")
+    .update(body)
+    .sign(Redacted.value(privateKey), "base64url");
+  return new _Octokit({
+    auth: `${body}.${signature}`,
+    ...(baseUrl !== undefined ? { baseUrl } : {}),
+  });
+};
+
+/** Run an Octokit call, resolving to `undefined` on the given HTTP statuses. */
+export const unlessStatus = <A>(
+  statuses: ReadonlyArray<number>,
+  call: () => Promise<A>,
+): Effect.Effect<A | undefined, Error> =>
+  Effect.tryPromise({
+    try: () =>
+      call().catch((error: unknown) => {
+        if (
+          Predicate.hasProperty(error, "status") &&
+          statuses.some((status) => status === error.status)
+        ) {
+          return undefined;
+        }
+        throw error;
+      }),
+    catch: (error) =>
+      error instanceof Error ? error : new Error(String(error)),
   });

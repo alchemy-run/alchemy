@@ -1,3 +1,4 @@
+export * from "./App.ts";
 export * as Auth from "./AuthProvider.ts";
 export * from "./BranchProtection.ts";
 export * from "./Collaborator.ts";
@@ -6,6 +7,12 @@ export { GitHubCredentials, fromEnv, fromToken } from "./Credentials.ts";
 export * from "./Env.ts";
 export * from "./Environment.ts";
 export * from "./Label.ts";
+export {
+  GitHubManualStepRequired,
+  GitHubManualStepTimeout,
+  ManualStepTimeout,
+  type ManualStep,
+} from "./ManualStep.ts";
 export * from "./Providers.ts";
 export * from "./PullRequest.ts";
 export * from "./Release.ts";

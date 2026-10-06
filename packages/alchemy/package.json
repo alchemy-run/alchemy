@@ -446,6 +446,7 @@
     "@opennextjs/aws": "catalog:",
     "@opennextjs/cloudflare": "catalog:",
     "@oxc-project/types": "catalog:",
+    "@playwright/test": "catalog:",
     "@prisma/orm-family-sql": "catalog:",
     "@prisma/orm-postgres": "catalog:",
     "@react-router/dev": "catalog:",

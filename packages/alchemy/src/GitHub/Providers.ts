@@ -2,6 +2,7 @@ import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
+import { App, AppProvider } from "./App.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
 import {
   BranchProtection,
@@ -53,6 +54,7 @@ export const providers = (options?: ProvidersOptions) =>
   Layer.effect(
     Providers,
     Provider.collection([
+      App,
       BranchProtection,
       Collaborator,
       Comment,
@@ -73,6 +75,7 @@ export const providers = (options?: ProvidersOptions) =>
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        AppProvider(),
         BranchProtectionProvider(),
         CollaboratorProvider(),
         CommentProvider(),

@@ -6977,6 +6977,9 @@ importers:
       '@oxc-project/types':
         specifier: 'catalog:'
         version: 0.146.0
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.62.0
       '@prisma/orm-family-sql':
         specifier: 'catalog:'
         version: 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.4))(magicast@0.5.4)(typanion@3.14.0)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))

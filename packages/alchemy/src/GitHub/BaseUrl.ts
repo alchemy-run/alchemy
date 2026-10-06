@@ -57,6 +57,18 @@ export const githubHostname = (baseUrl: string): string => {
 };
 
 /**
+ * The web origin (where settings pages live) for a GitHub host or API base
+ * URL; `undefined` is github.com.
+ */
+export const githubWebOrigin = (baseUrl: string | undefined): string => {
+  if (baseUrl === undefined) return "https://github.com";
+  const url = new URL(baseUrl.includes("://") ? baseUrl : `https://${baseUrl}`);
+  const host =
+    url.hostname === "api.github.com" ? "github.com" : githubHostname(url.href);
+  return `${url.protocol}//${host}`;
+};
+
+/**
  * Resolve the GitHub API base URL from the environment:
  * `GITHUB_BASE_URL` (Terraform convention), then `GITHUB_API_URL` (set by
  * GitHub Actions runners), then `GH_HOST` (gh CLI convention, a bare

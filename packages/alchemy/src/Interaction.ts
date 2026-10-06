@@ -221,6 +221,14 @@ export const accessors = {
 };
 
 /**
+ * Replaces the OS browser launcher used by {@link openUrl} when set, e.g. to
+ * drive the opened page from browser automation.
+ */
+export const BrowserLauncher = Context.Reference<
+  ((url: string) => Effect.Effect<void>) | undefined
+>("Alchemy::BrowserLauncher", { defaultValue: () => undefined });
+
+/**
  * Open a URL in the platform's default browser without invoking a shell.
  *
  * Fails with {@link BrowserOpenFailed} when the launcher exits non-zero (e.g.
@@ -230,6 +238,8 @@ export const accessors = {
  */
 export const openUrl = (url: string) =>
   Effect.gen(function* () {
+    const launch = yield* BrowserLauncher;
+    if (launch !== undefined) return yield* launch(url);
     const [command, args] =
       process.platform === "win32"
         ? (["rundll32.exe", ["url.dll,FileProtocolHandler", url]] as const)
