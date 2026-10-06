@@ -19,6 +19,25 @@ describe("Docker proxy lifetime", () => {
     }),
   );
 
+  it.live("destroys open connections when the scope ends", () =>
+    Effect.gen(function* () {
+      const server = net.createServer();
+      const socket = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const port = yield* listenOnLoopback(server);
+          return yield* Effect.callback<net.Socket>((resume) => {
+            const socket = net.connect(port, "127.0.0.1", () => resume(Effect.succeed(socket)));
+          });
+        }),
+      );
+      yield* Effect.callback<void>((resume) => {
+        if (socket.destroyed || socket.readyState === "closed") resume(Effect.void);
+        else socket.once("close", () => resume(Effect.void));
+      }).pipe(Effect.timeout("5 seconds"));
+      expect(server.listening).toBe(false);
+    }),
+  );
+
   it.effect("reports listen errors instead of waiting forever", () =>
     Effect.gen(function* () {
       const server = net.createServer();

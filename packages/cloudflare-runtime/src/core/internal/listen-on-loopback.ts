@@ -4,10 +4,23 @@ import { SystemError } from "../RuntimeError.shared.ts";
 
 /** Listen on loopback; the owning scope closes the server, including failed starts. */
 export const listenOnLoopback = Effect.fnUntraced(function* (server: NodeNet.Server) {
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      server.close();
-    }),
+  // `close()` only stops accepting; destroy open connections so in-flight
+  // requests cannot outlive the scope, and wait until the server has closed.
+  const sockets = new Set<NodeNet.Socket>();
+  const onConnection = (socket: NodeNet.Socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  };
+  yield* Effect.acquireRelease(
+    Effect.sync(() => server.on("connection", onConnection)),
+    () =>
+      Effect.callback<void>((resume) => {
+        server.close(() => {
+          server.off("connection", onConnection);
+          resume(Effect.void);
+        });
+        for (const socket of sockets) socket.destroy();
+      }),
   );
   yield* Effect.callback<void, SystemError>((resume) => {
     const cleanup = () => {

@@ -12,6 +12,7 @@ import {
   usesUnixSocketLoopback,
 } from "../DockerLoopback.ts";
 import { makeDockerLoopbackForwarders } from "../internal/docker-loopback-forwarders.ts";
+import { listenOnLoopback } from "../internal/listen-on-loopback.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
 const bin = process.env.DOCKER_BIN ?? "docker";
@@ -68,25 +69,19 @@ const setup = Effect.gen(function* () {
   };
 });
 
-const hostServer = Effect.acquireRelease(
-  Effect.callback<http.Server>((resume) => {
-    const server = http.createServer((_req, res) => res.end("host-loopback"));
-    server.once("error", (error) => resume(Effect.die(error)));
-    server.listen(0, "127.0.0.1", () => resume(Effect.succeed(server)));
-  }),
-  (server) => Effect.callback<void>((resume) => server.close(() => resume(Effect.void))),
+const hostPort = Effect.suspend(() =>
+  listenOnLoopback(http.createServer((_req, res) => res.end("host-loopback"))),
 );
 
 describe.skipIf(!usesUnixSocketLoopback() || !isDockerAvailable())(
   "Docker loopback forwarders",
   () => {
-    it.effect(
+    it.live(
       "waits for listeners, forwards host traffic and removes helpers on detach and scope close",
       () =>
         Effect.gen(function* () {
           const { name, endpoint, helpers } = yield* setup;
-          const server = yield* hostServer;
-          const port = (server.address() as import("node:net").AddressInfo).port;
+          const port = yield* hostPort;
           ensureLoopbackUnixSockets([port]);
           yield* Effect.scoped(
             Effect.gen(function* () {
@@ -107,8 +102,7 @@ describe.skipIf(!usesUnixSocketLoopback() || !isDockerAvailable())(
                 `fetch("http://127.0.0.1:${port}").then(r => r.text()).then(console.log)`,
               );
               expect(response).toBe("host-loopback");
-              const secondServer = yield* hostServer;
-              const secondPort = (secondServer.address() as import("node:net").AddressInfo).port;
+              const secondPort = yield* hostPort;
               ensureLoopbackUnixSockets([secondPort]);
               yield* manager.attach(name, [port, secondPort]);
               const replacement = yield* helpers;
@@ -129,11 +123,11 @@ describe.skipIf(!usesUnixSocketLoopback() || !isDockerAvailable())(
             }),
           );
           expect(yield* helpers).toBe("");
-        }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+        }).pipe(Effect.provide(NodeServices.layer)),
       90_000,
     );
 
-    it.effect(
+    it.live(
       "reports listener startup errors and removes the failed helper",
       () =>
         Effect.gen(function* () {
@@ -167,7 +161,7 @@ describe.skipIf(!usesUnixSocketLoopback() || !isDockerAvailable())(
             expect(result.failure.message).toContain("EADDRINUSE");
           }
           expect(yield* helpers).toBe("");
-        }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+        }).pipe(Effect.provide(NodeServices.layer)),
       90_000,
     );
   },

@@ -126,7 +126,9 @@ export const makeDockerLoopbackForwarders = Effect.fnUntraced(function* (options
       return;
     }
     const ready = yield* Deferred.make<void, SystemError>();
-    // Replaces (and removes) any previous helper for this sidecar.
+    // FiberMap.run interrupts a replaced fiber without awaiting its finalizers;
+    // remove the previous helper first so its ports are released.
+    yield* detach(name);
     yield* FiberMap.run(forwards, name, forward(name, unique, ready));
     yield* Deferred.await(ready).pipe(
       Effect.timeoutOrElse({
