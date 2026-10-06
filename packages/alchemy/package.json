@@ -73,6 +73,7 @@
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Neon": "./src/Neon/index.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
+    "./OpenRouter": "./src/OpenRouter/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Fly": "./src/Fly/index.ts",
     "./ACME": "./src/ACME/index.ts",
@@ -309,6 +310,11 @@
         "types": "./lib/Neon/*/index.d.ts",
         "bun": "./src/Neon/*/index.ts",
         "default": "./lib/Neon/*/index.js"
+      },
+      "./OpenRouter": {
+        "types": "./lib/OpenRouter/index.d.ts",
+        "bun": "./src/OpenRouter/index.ts",
+        "default": "./lib/OpenRouter/index.js"
       },
       "./Hetzner": {
         "types": "./lib/Hetzner/index.d.ts",
