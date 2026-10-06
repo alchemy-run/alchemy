@@ -26,6 +26,8 @@ export class ImageRegistryError extends Schema.TaggedError<ImageRegistryError>()
     ]),
     message: Schema.String,
     status: Schema.optional(Schema.Number),
+    /** The underlying failure (transport, credential helper, decode, or API error). */
+    cause: Schema.optional(Schema.Defect()),
   },
 ) {}
 
@@ -55,8 +57,8 @@ export interface ImagePublish {
   };
 }
 
-const failure = (reason: ImageRegistryError["reason"], message: string) =>
-  new ImageRegistryError({ reason, message });
+const failure = (reason: ImageRegistryError["reason"], message: string, cause?: unknown) =>
+  new ImageRegistryError({ reason, message, cause });
 
 export const parseImageReference = (reference: string) => {
   const digestAt = reference.lastIndexOf("@");
@@ -179,8 +181,10 @@ const configCredentials = Effect.fn(
     };
   },
   Effect.scoped,
-  Effect.mapError(() =>
-    failure("AuthenticationFailed", "Unable to read Docker registry credentials"),
+  Effect.mapError((error) =>
+    error._tag === "ImageRegistryError"
+      ? error
+      : failure("AuthenticationFailed", "Unable to read Docker registry credentials", error),
   ),
 );
 
@@ -226,7 +230,7 @@ const requestManifest = Effect.fn(function* (
   if (content) request = request.pipe(HttpClientRequest.bodyText(content.text, content.type));
   const execute = (request: HttpClientRequest.HttpClientRequest) =>
     client.execute(request).pipe(
-      Effect.mapError(() => failure("RequestFailed", "Image registry request failed")),
+      Effect.mapError((cause) => failure("RequestFailed", "Image registry request failed", cause)),
       Effect.flatMap((response) =>
         response.status === 429 || response.status >= 500
           ? Effect.fail(
@@ -259,7 +263,8 @@ const requestManifest = Effect.fn(function* (
     );
     const realm = yield* Effect.try({
       try: () => new URL(fields.realm!),
-      catch: () => failure("AuthenticationFailed", "Invalid registry authentication challenge"),
+      catch: (cause) =>
+        failure("AuthenticationFailed", "Invalid registry authentication challenge", cause),
     });
     if (realm.protocol !== "https:" && !(protocol === "http" && realm.host === host)) {
       return yield* failure(
@@ -299,7 +304,9 @@ const requestManifest = Effect.fn(function* (
       });
     const body = yield* tokenResponse.json.pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(Token)),
-      Effect.mapError(() => failure("AuthenticationFailed", "Invalid registry token response")),
+      Effect.mapError((cause) =>
+        failure("AuthenticationFailed", "Invalid registry token response", cause),
+      ),
     );
     const token = body.token ?? body.access_token;
     if (!token)
@@ -331,7 +338,9 @@ export const resolveImageManifest = Effect.fn(function* (
   const digest = yield* Schema.decodeUnknownEffect(Digest)(
     response.headers["docker-content-digest"],
   ).pipe(
-    Effect.mapError(() => failure("InvalidManifest", "Registry manifest has no valid digest")),
+    Effect.mapError((cause) =>
+      failure("InvalidManifest", "Registry manifest has no valid digest", cause),
+    ),
   );
   return { ref: `${parsed.repository}@${digest}`, digest };
 });
@@ -351,7 +360,7 @@ export const syncImageTags = Effect.fn(function* (
     if (current?.digest === source.selector) continue;
     const manifest = yield* requestManifest(reference, "GET", credentials);
     const text = yield* manifest.text.pipe(
-      Effect.mapError(() => failure("RequestFailed", "Failed to read image manifest")),
+      Effect.mapError((cause) => failure("RequestFailed", "Failed to read image manifest", cause)),
     );
     const type = manifest.headers["content-type"];
     if (!type) return yield* failure("InvalidManifest", "Image manifest has no media type");

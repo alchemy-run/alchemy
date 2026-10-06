@@ -278,6 +278,14 @@ describe(
           expect(denied.failure.reason).toBe("AuthenticationFailed");
           expect(denied.failure.status).toBe(401);
           expect(JSON.stringify(denied.failure)).not.toContain("invalid-registry-secret");
+          // A registry that cannot be reached is a request failure, not an
+          // authentication failure, and keeps the transport error as its cause.
+          const unreachable = yield* findImageManifest(
+            `localhost:${yield* findAvailablePort()}/private:release`,
+          ).pipe(Effect.result);
+          assert(Result.isFailure(unreachable));
+          expect(unreachable.failure.reason).toBe("RequestFailed");
+          expect(unreachable.failure.cause).toMatchObject({ _tag: "HttpClientError" });
           yield* stack.destroy();
         }),
       { timeout: 120_000 },
