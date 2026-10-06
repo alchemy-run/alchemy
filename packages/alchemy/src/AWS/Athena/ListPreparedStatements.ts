@@ -31,10 +31,7 @@ export interface ListPreparedStatements extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<athena.ListPreparedStatementsInput, "WorkGroup">,
-    ) => Effect.Effect<
-      athena.ListPreparedStatementsOutput,
-      athena.ListPreparedStatementsError
-    >
+    ) => Effect.Effect<athena.ListPreparedStatementsOutput, athena.ListPreparedStatementsError>
   >
 > {}
 

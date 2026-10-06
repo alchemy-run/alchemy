@@ -27,12 +27,7 @@ export interface DescribeBuckets extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.DescribeBucketsRequest,
-    ) => Effect.Effect<
-      macie2.DescribeBucketsResponse,
-      macie2.DescribeBucketsError
-    >
+    ) => Effect.Effect<macie2.DescribeBucketsResponse, macie2.DescribeBucketsError>
   >
 > {}
-export const DescribeBuckets = Binding.Service<DescribeBuckets>(
-  "AWS.Macie2.DescribeBuckets",
-);
+export const DescribeBuckets = Binding.Service<DescribeBuckets>("AWS.Macie2.DescribeBuckets");

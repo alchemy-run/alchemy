@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DomainName } from "@/AWS/ApiGateway";
 import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { assertDomainNameDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,6 +27,7 @@ test.provider.skipIf(!!process.env.FAST)(
         expect(d.tags).toBeDefined();
       }
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );
 
 // Full deploy-then-list assertion. SKIPPED by default because an API Gateway
@@ -67,4 +68,5 @@ test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(
       yield* stack.destroy();
       yield* assertDomainNameDeleted(domain.domainName);
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );

@@ -1,7 +1,7 @@
 import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 
 export interface ExportD1DatabaseOptions {
   accountId: string;
@@ -47,9 +47,7 @@ export const exportDatabase = (
 
         if (data.status === "complete" && data.result) {
           if (!data.result.filename || !data.result.signedUrl) {
-            return yield* Effect.die(
-              "D1 export completed but missing filename/signedUrl",
-            );
+            return yield* Effect.die("D1 export completed but missing filename/signedUrl");
           }
           return {
             filename: data.result.filename,

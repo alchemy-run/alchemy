@@ -1,5 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare";
 import * as Output from "@/Output.ts";
 
 export const publicationApplications = (contexts: {
@@ -29,6 +29,16 @@ export const publicationApplications = (contexts: {
     return { first, second, other, changed };
   });
 
+export const sharedApplication = (context: string, repository?: string) =>
+  Effect.gen(function* () {
+    const app = yield* Cloudflare.Container("SharedPublication", {
+      context,
+      publish: repository === undefined ? undefined : { repository },
+      maxInstances: 2,
+    }).Application;
+    return { app };
+  });
+
 export const historyApplications = (converge = false) =>
   Effect.gen(function* () {
     const target = converge
@@ -36,9 +46,7 @@ export const historyApplications = (converge = false) =>
           image: "docker.io/alpine:3.19",
         }).Application
       : undefined;
-    const image = target?.configuration.pipe(
-      Output.map((configuration) => configuration.image),
-    );
+    const image = target?.configuration.pipe(Output.map((configuration) => configuration.image));
     const first = yield* Cloudflare.Container("HistoryFirst", {
       image: image ?? "alpine:3.19",
     }).Application;
@@ -56,8 +64,7 @@ export const recoveryApplications = (delay: number, includeSecond = false) =>
       },
       maxInstances: 2,
     };
-    const first = yield* Cloudflare.Container("RecoveryFirst", props)
-      .Application;
+    const first = yield* Cloudflare.Container("RecoveryFirst", props).Application;
     const second = includeSecond
       ? yield* Cloudflare.Container("RecoverySecond", props).Application
       : undefined;

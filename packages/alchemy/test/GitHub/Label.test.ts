@@ -1,11 +1,11 @@
-import * as Output from "@/Output.ts";
-import * as Provider from "@/Provider.ts";
-import { GitHubCredentials } from "@/GitHub/Credentials.ts";
-import { Octokit } from "@/GitHub/Octokit.ts";
-import * as GitHub from "@/GitHub/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { GitHubCredentials } from "@/GitHub/Credentials.ts";
+import * as GitHub from "@/GitHub/index.ts";
+import { Octokit } from "@/GitHub/Octokit.ts";
+import * as Output from "@/Output.ts";
+import * as Provider from "@/Provider.ts";
+import * as Test from "@/Test/Alchemy.ts";
 
 const { test } = Test.make({
   providers: GitHub.providers({ baseUrl: "github.com" }),
@@ -13,9 +13,7 @@ const { test } = Test.make({
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (!["alchemy-run-test", "alchemy-run-test-2"].includes(owner)) {
-  throw new Error(
-    "GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2",
-  );
+  throw new Error("GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2");
 }
 
 const repoNameOf = (repo: GitHub.Repository) =>
@@ -103,7 +101,10 @@ test.provider(
       );
       expect(remaining.some((label) => label.name === "bug")).toBe(false);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:label", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -159,7 +160,10 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:label", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -224,7 +228,10 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:label", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -263,7 +270,11 @@ test.provider(
       const credentials = yield* yield* GitHubCredentials;
       const client = credentials.octokit();
       client.hook.before("request", (options) => {
-        if (options.url === "/user/repos") options.url = `/orgs/${owner}/repos`;
+        const url = new URL(options.url, "https://api.github.com");
+        if (url.pathname === "/user/repos") {
+          url.pathname = `/orgs/${owner}/repos`;
+          options.url = url.toString();
+        }
       });
       const provider = yield* Provider.findProvider(GitHub.Label);
       const allLabels = yield* provider
@@ -281,7 +292,10 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:label", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -320,5 +334,8 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:label", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );

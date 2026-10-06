@@ -8,14 +8,10 @@ import { preferLocalFlociImage } from "./floci-image.ts";
 // `ALCHEMY_PROFILE`.
 {
   const argv = process.argv.slice(2);
-  const index = argv.findIndex(
-    (arg) => arg === "--profile" || arg.startsWith("--profile="),
-  );
+  const index = argv.findIndex((arg) => arg === "--profile" || arg.startsWith("--profile="));
   if (index !== -1) {
     const arg = argv[index]!;
-    const profile = arg.includes("=")
-      ? arg.slice("--profile=".length)
-      : argv[index + 1];
+    const profile = arg.includes("=") ? arg.slice("--profile=".length) : argv[index + 1];
     if (profile === undefined || profile.startsWith("-")) {
       console.error("--profile requires a value, e.g. --profile testing");
       process.exit(2);
@@ -47,7 +43,9 @@ const examples = [
   "./examples/cloudflare-website-nuxt",
   "./examples/cloudflare-website-react-router",
   "./examples/cloudflare-website-sveltekit",
+  "./examples/cloudflare-website-service-bindings",
   "./examples/cloudflare-website-vite",
+  "./examples/cloudflare-website-vinext",
   "./examples/cloudflare-website-waku",
   "./examples/cloudflare-website-vocs",
   "./examples/aws-dev",
@@ -63,6 +61,7 @@ const examples = [
   // "./examples/aws-website-sveltekit",
   // "./examples/aws-website-tanstack-start",
   // "./examples/aws-website-vite",
+  // "./examples/aws-website-vinext",
   // "./examples/aws-website-waku",
   "./examples/fly-app",
   "./examples/fly-service",
@@ -88,6 +87,7 @@ const examples = [
   // "./examples/fly-website-solidstart",
   // "./examples/fly-website-sveltekit",
   // "./examples/fly-website-tanstack-start",
+  // "./examples/fly-website-vinext",
   // "./examples/fly-website-waku",
   // "./examples/fly-website-vocs",
   // "./examples/hetzner-website-astro",
@@ -98,6 +98,7 @@ const examples = [
   // "./examples/hetzner-website-solidstart",
   // "./examples/hetzner-website-sveltekit",
   // "./examples/hetzner-website-tanstack-start",
+  // "./examples/hetzner-website-vinext",
   // "./examples/hetzner-website-waku",
   // "./examples/hetzner-website-vocs",
   // "./examples/railway-website-astro",
@@ -108,6 +109,7 @@ const examples = [
   // "./examples/railway-website-solidstart",
   // "./examples/railway-website-sveltekit",
   // "./examples/railway-website-tanstack-start",
+  // "./examples/railway-website-vinext",
   // "./examples/railway-website-waku",
   // "./examples/railway-website-vocs",
   "./examples/fly-sprite",
@@ -146,9 +148,8 @@ type TaskState = Task & {
   exitCode?: number | null;
 };
 
-const readStream = async (
-  stream: ReadableStream<Uint8Array>,
-): Promise<string> => new Response(stream).text();
+const readStream = async (stream: ReadableStream<Uint8Array>): Promise<string> =>
+  new Response(stream).text();
 
 const elapsedSeconds = (state: TaskState): string => {
   if (state.startedAt === undefined) {
@@ -163,12 +164,7 @@ const makeStatusRenderer = (title: string, states: readonly TaskState[]) => {
   let renderedRows = 0;
 
   const taskLine = (state: TaskState) => {
-    const icon =
-      state.status === "ok"
-        ? "ok"
-        : state.status === "failed"
-          ? "failed"
-          : state.status;
+    const icon = state.status === "ok" ? "ok" : state.status === "failed" ? "failed" : state.status;
     const exit =
       state.exitCode === undefined || state.exitCode === 0
         ? ""
@@ -205,21 +201,14 @@ const makeStatusRenderer = (title: string, states: readonly TaskState[]) => {
     let shown = activeLines.length;
     const fits = (count: number) => {
       const overflow = count < activeLines.length ? 1 : 0;
-      return (
-        rowsForAll([header, ...activeLines.slice(0, count)]) + overflow + 1 <=
-        rows
-      );
+      return rowsForAll([header, ...activeLines.slice(0, count)]) + overflow + 1 <= rows;
     };
     while (shown > 0 && !fits(shown)) {
       shown--;
     }
     return shown === activeLines.length
       ? [header, ...activeLines]
-      : [
-          header,
-          ...activeLines.slice(0, shown),
-          `  … ${activeLines.length - shown} more`,
-        ];
+      : [header, ...activeLines.slice(0, shown), `  … ${activeLines.length - shown} more`];
   };
 
   return {
@@ -264,10 +253,7 @@ const makeStatusRenderer = (title: string, states: readonly TaskState[]) => {
   };
 };
 
-const run = async (
-  state: TaskState,
-  render: () => void,
-): Promise<CommandResult> => {
+const run = async (state: TaskState, render: () => void): Promise<CommandResult> => {
   state.status = "running";
   state.startedAt = performance.now();
   render();
@@ -351,10 +337,7 @@ const runParallel = async (
           }
         };
         if (state.serial === undefined) return start();
-        const next = (chains.get(state.serial) ?? Promise.resolve()).then(
-          start,
-          start,
-        );
+        const next = (chains.get(state.serial) ?? Promise.resolve()).then(start, start);
         chains.set(state.serial, next);
         return next;
       }),
@@ -384,9 +367,7 @@ if (failedTests.length > 0) {
   console.error("\nFailed example tests:");
   for (const failure of failedTests) {
     const exit = failure.exitCode === null ? "signal" : failure.exitCode;
-    console.error(
-      `- ${failure.label} (exit ${exit}): ${failure.command.join(" ")}`,
-    );
+    console.error(`- ${failure.label} (exit ${exit}): ${failure.command.join(" ")}`);
   }
 
   process.exit(1);

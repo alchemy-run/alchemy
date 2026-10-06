@@ -1,21 +1,17 @@
-import * as AWS from "@/AWS";
-import { PolicyStore, PolicyStoreAlias } from "@/AWS/VerifiedPermissions";
-import * as Test from "@/Test/Alchemy";
 import * as avp from "@distilled.cloud/aws/verifiedpermissions";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as AWS from "@/AWS";
+import { PolicyStore, PolicyStoreAlias } from "@/AWS/VerifiedPermissions";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const findAlias = (aliasName: string) =>
   avp
     .getPolicyStoreAlias({ aliasName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 // CreatePolicyStoreAlias currently rejects every alias name shape with a
 // typed ValidationException in this account/region (probed 2026-07-15 with
@@ -49,7 +45,10 @@ test.provider(
       }
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:verifiedpermissions", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!process.env.AWS_TEST_POLICY_STORE_ALIAS)(
@@ -90,5 +89,8 @@ test.provider.skipIf(!process.env.AWS_TEST_POLICY_STORE_ALIAS)(
       const gone = yield* findAlias(alias.aliasName);
       expect(gone).toBeUndefined();
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:verifiedpermissions", "live"],
+    timeout: 180_000,
+  },
 );

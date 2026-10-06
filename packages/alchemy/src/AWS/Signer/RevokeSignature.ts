@@ -28,12 +28,7 @@ export interface RevokeSignature extends Binding.Service<
   () => Effect.Effect<
     (
       request: signer.RevokeSignatureRequest,
-    ) => Effect.Effect<
-      signer.RevokeSignatureResponse,
-      signer.RevokeSignatureError
-    >
+    ) => Effect.Effect<signer.RevokeSignatureResponse, signer.RevokeSignatureError>
   >
 > {}
-export const RevokeSignature = Binding.Service<RevokeSignature>(
-  "AWS.Signer.RevokeSignature",
-);
+export const RevokeSignature = Binding.Service<RevokeSignature>("AWS.Signer.RevokeSignature");

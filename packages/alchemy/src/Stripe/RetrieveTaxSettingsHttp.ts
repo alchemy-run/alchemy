@@ -3,15 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
-import {
-  RetrieveTaxSettings,
-  type RetrieveTaxSettingsRequest,
-} from "./RetrieveTaxSettings.ts";
-import {
-  attachStripeToken,
-  authorizeWith,
-  resolveStripeAuth,
-} from "./StripeHttp.ts";
+import { RetrieveTaxSettings, type RetrieveTaxSettingsRequest } from "./RetrieveTaxSettings.ts";
+import { attachStripeToken, authorizeWith, resolveStripeAuth } from "./StripeHttp.ts";
 import type { TaxSettings } from "./TaxSettings.ts";
 
 /**
@@ -20,6 +13,7 @@ import type { TaxSettings } from "./TaxSettings.ts";
  * key is bound.
  *
  * @layer
+ * @product Tax
  * @provides Stripe.RetrieveTaxSettings
  */
 export const RetrieveTaxSettingsHttp = Layer.effect(
@@ -34,13 +28,12 @@ export const RetrieveTaxSettingsHttp = Layer.effect(
         ["tax_read"],
         "Stripe.RetrieveTaxSettings",
       );
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
-      return Effect.fn(`Stripe.RetrieveTaxSettings(${settings.LogicalId})`)(
-        function* (request?: RetrieveTaxSettingsRequest) {
-          return yield* auth(GetTaxSettings(request ?? {}));
-        },
-      );
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      return Effect.fn(`Stripe.RetrieveTaxSettings(${settings.LogicalId})`)(function* (
+        request?: RetrieveTaxSettingsRequest,
+      ) {
+        return yield* auth(GetTaxSettings(request ?? {}));
+      });
     });
   }),
 );

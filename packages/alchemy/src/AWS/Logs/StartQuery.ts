@@ -64,9 +64,7 @@ export interface StartQuery extends Binding.Service<
   <G extends LogGroup>(
     logGroup: G,
   ) => Effect.Effect<
-    (
-      request: StartQueryRequest,
-    ) => Effect.Effect<Logs.StartQueryResponse, Logs.StartQueryError>
+    (request: StartQueryRequest) => Effect.Effect<Logs.StartQueryResponse, Logs.StartQueryError>
   >
 > {}
 export const StartQuery = Binding.Service<StartQuery>("AWS.Logs.StartQuery");

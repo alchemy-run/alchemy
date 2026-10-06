@@ -12,17 +12,17 @@ import {
   ensureArtifactStore,
   makeScopedArtifacts,
 } from "./Artifacts.ts";
+import { deepEqual } from "./Diff.ts";
+import { InstanceId } from "./InstanceId.ts";
+import type { Apply, Plan } from "./Plan.ts";
+import { findProviderByType, Provider } from "./Provider.ts";
+import { stampedMode } from "./ProviderMode.ts";
 import {
   noopSession,
   Progress,
   type PlanStatusSession,
   type ScopedPlanStatusSession,
 } from "./Report.ts";
-import { deepEqual } from "./Diff.ts";
-import { InstanceId } from "./InstanceId.ts";
-import type { Apply, Plan } from "./Plan.ts";
-import { findProviderByType, Provider } from "./Provider.ts";
-import { stampedMode } from "./ProviderMode.ts";
 import type { ResourceLike } from "./Resource.ts";
 import {
   isActionState,
@@ -172,9 +172,7 @@ const runDrift = (
           }),
       } satisfies ScopedPlanStatusSession;
 
-      const report = (
-        status: "updating" | "updated" | "creating" | "created" | "skipped",
-      ) =>
+      const report = (status: "updating" | "updated" | "creating" | "created" | "skipped") =>
         session.emit({
           _tag: "apply.resource.status",
           fqn,
@@ -207,14 +205,9 @@ const runDrift = (
       // Observe with the provider variant of the mode that created the row —
       // a local dev worker's state must be read by the local provider.
       // Legacy unstamped rows infer "local" from a `dev:` identity marker.
-      const provider = yield* findProviderByType(
-        resourceType,
-        stampedMode(old),
-      );
+      const provider = yield* findProviderByType(resourceType, stampedMode(old));
       if (!provider.read) {
-        return yield* skip(
-          `provider '${resourceType}' does not implement read`,
-        );
+        return yield* skip(`provider '${resourceType}' does not implement read`);
       }
 
       const commit = (value: Omit<ResourceState, "namespace">) =>
@@ -244,9 +237,7 @@ const runDrift = (
           olds: old.props as never,
           output: old.attr as never,
         })
-        .pipe(
-          instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
-        );
+        .pipe(instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId));
 
       // ── missing — recreate under the same instance id ──
       if (observed === undefined) {
@@ -265,15 +256,7 @@ const runDrift = (
             session: scopedSession,
             bindings: old.bindings as never,
           })
-          .pipe(
-            instrumentLifecycle(
-              "create",
-              fqn,
-              resourceType,
-              logicalId,
-              instanceId,
-            ),
-          );
+          .pipe(instrumentLifecycle("create", fqn, resourceType, logicalId, instanceId));
         yield* commit({
           status: "created",
           fqn,
@@ -321,15 +304,7 @@ const runDrift = (
           session: scopedSession,
           bindings: old.bindings as never,
         })
-        .pipe(
-          instrumentLifecycle(
-            "update",
-            fqn,
-            resourceType,
-            logicalId,
-            instanceId,
-          ),
-        );
+        .pipe(instrumentLifecycle("update", fqn, resourceType, logicalId, instanceId));
       yield* commit({
         status: "updated",
         fqn,
@@ -412,16 +387,12 @@ const runDrift = (
     yield* session.done(failures.length === 0 ? "success" : "failure");
 
     if (failures.length > 0) {
-      return yield* Effect.failCause(
-        failures.reduce(Cause.combine) as Cause.Cause<never>,
-      );
+      return yield* Effect.failCause(failures.reduce(Cause.combine) as Cause.Cause<never>);
     }
 
     return {
       resources: Object.fromEntries(
-        results
-          .filter((r): r is DriftResourceResult => r !== undefined)
-          .map((r) => [r.fqn, r]),
+        results.filter((r): r is DriftResourceResult => r !== undefined).map((r) => [r.fqn, r]),
       ),
     } satisfies DriftResult;
   }).pipe(
@@ -436,54 +407,40 @@ const runDrift = (
   );
 
 /** Detect drift without reconciling resources or updating state. */
-export const detect = (stack: { name: string; stage: string }) =>
-  runDrift(stack, { dryRun: true });
+export const detect = (stack: { name: string; stage: string }) => runDrift(stack, { dryRun: true });
 
 /** Reconcile resources back to their last-deployed desired state. */
-export const repair = (
-  stack: { name: string; stage: string },
-  options: DriftOptions = {},
-) => runDrift(stack, { ...options, dryRun: false });
+export const repair = (stack: { name: string; stage: string }, options: DriftOptions = {}) =>
+  runDrift(stack, { ...options, dryRun: false });
 
 /**
  * Same shape as Apply's lifecycle instrumentation: scoped artifacts +
  * instance id, the resource op metrics, and a `provider.<op>` span.
  */
 const instrumentLifecycle =
-  (
-    op: ResourceOp,
-    fqn: string,
-    resourceType: string,
-    logicalId: string,
-    instanceId: string,
-  ) =>
+  (op: ResourceOp, fqn: string, resourceType: string, logicalId: string, instanceId: string) =>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<
-    A,
-    E | DriftResourceError,
-    Exclude<R, InstanceId | Artifacts>
-  > =>
+  ): Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>> =>
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
           Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
           Effect.provideService(InstanceId, instanceId),
-          Effect.catchCause(
-            (cause): Effect.Effect<never, E | DriftResourceError> =>
-              Cause.hasInterruptsOnly(cause)
-                ? Effect.failCause(cause)
-                : Effect.fail(
-                    new DriftResourceError({
-                      message: `Resource '${fqn}' (${resourceType}) failed during ${op}`,
-                      fqn,
-                      logicalId,
-                      resourceType,
-                      operation: op,
-                      cause: Cause.squash(cause),
-                    }),
-                  ),
+          Effect.catchCause((cause): Effect.Effect<never, E | DriftResourceError> =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.failCause(cause)
+              : Effect.fail(
+                  new DriftResourceError({
+                    message: `Resource '${fqn}' (${resourceType}) failed during ${op}`,
+                    fqn,
+                    logicalId,
+                    resourceType,
+                    operation: op,
+                    cause: Cause.squash(cause),
+                  }),
+                ),
           ),
         ),
       ),
@@ -497,11 +454,7 @@ const instrumentLifecycle =
           "alchemy.resource.op": op,
         },
       }),
-    ) as Effect.Effect<
-      A,
-      E | DriftResourceError,
-      Exclude<R, InstanceId | Artifacts>
-    >;
+    ) as Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>>;
 
 export interface DriftPlan {
   /** Per-resource detection outcome (a dry-run {@link DriftResult}). */
@@ -539,10 +492,7 @@ export const plan = (stack: {
       if (!persisted || isActionState(persisted)) continue;
       // Repair the row with the provider mode that created it (drift never
       // switches modes — a local ⇄ live switch is a plan-time replacement).
-      const provider = yield* findProviderByType(
-        persisted.resourceType,
-        stampedMode(persisted),
-      );
+      const provider = yield* findProviderByType(persisted.resourceType, stampedMode(persisted));
       const action =
         r.action === "drifted"
           ? ("update" as const)

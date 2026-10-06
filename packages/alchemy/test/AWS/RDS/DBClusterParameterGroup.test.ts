@@ -1,9 +1,9 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DBClusterParameterGroup } from "@/AWS/RDS/DBClusterParameterGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -34,10 +34,7 @@ test.provider(
 
       expect(Array.isArray(all)).toBe(true);
       expect(
-        all.some(
-          (g) =>
-            g.dbClusterParameterGroupName === group.dbClusterParameterGroupName,
-        ),
+        all.some((g) => g.dbClusterParameterGroupName === group.dbClusterParameterGroupName),
       ).toBe(true);
 
       for (const g of all) {
@@ -47,4 +44,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );

@@ -1,16 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "list enumerates the deployed R2 bucket",
@@ -45,5 +42,8 @@ test.provider(
   // parallel suite is concurrently deleting, but a heavily-populated shared
   // account can still take a while — keep a modest margin over the 120s
   // default for the genuine enumeration cost.
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 180_000,
+  },
 );

@@ -25,10 +25,7 @@ export interface ListPagesByEngagement extends Binding.Service<
   () => Effect.Effect<
     (
       request: ssm.ListPagesByEngagementRequest,
-    ) => Effect.Effect<
-      ssm.ListPagesByEngagementResult,
-      ssm.ListPagesByEngagementError
-    >
+    ) => Effect.Effect<ssm.ListPagesByEngagementResult, ssm.ListPagesByEngagementError>
   >
 > {}
 export const ListPagesByEngagement = Binding.Service<ListPagesByEngagement>(

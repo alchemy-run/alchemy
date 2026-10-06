@@ -28,10 +28,6 @@ export interface StartDBCluster extends Binding.Service<
   "AWS.DocDB.StartDBCluster",
   (
     cluster: DBCluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<docdb.StartDBClusterResult, docdb.StartDBClusterError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<docdb.StartDBClusterResult, docdb.StartDBClusterError>>
 > {}
-export const StartDBCluster = Binding.Service<StartDBCluster>(
-  "AWS.DocDB.StartDBCluster",
-);
+export const StartDBCluster = Binding.Service<StartDBCluster>("AWS.DocDB.StartDBCluster");

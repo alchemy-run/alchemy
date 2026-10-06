@@ -47,9 +47,7 @@ export interface GatewayResponse extends Resource<
  * });
  * ```
  */
-const GatewayResponseResource = Resource<GatewayResponse>(
-  "AWS.ApiGateway.GatewayResponse",
-);
+const GatewayResponseResource = Resource<GatewayResponse>("AWS.ApiGateway.GatewayResponse");
 
 export { GatewayResponseResource as GatewayResponse };
 
@@ -62,10 +60,7 @@ export const GatewayResponseProvider = () =>
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
           const news = newsIn as Input.ResolveProps<GatewayResponseProps>;
-          if (
-            news.restApiId !== olds.restApiId ||
-            news.responseType !== olds.responseType
-          ) {
+          if (news.restApiId !== olds.restApiId || news.responseType !== olds.responseType) {
             return { action: "replace" } as const;
           }
         }),
@@ -76,11 +71,7 @@ export const GatewayResponseProvider = () =>
               restApiId: output.restApiId,
               responseType: output.responseType,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!g?.responseType) return undefined;
           return {
             restApiId: output.restApiId,
@@ -96,9 +87,7 @@ export const GatewayResponseProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.items ?? [])
-                    .map((a) => a.id)
-                    .filter((id): id is string => id != null),
+                  (page.items ?? []).map((a) => a.id).filter((id): id is string => id != null),
                 ),
               ),
             );
@@ -121,9 +110,7 @@ export const GatewayResponseProvider = () =>
                         statusCode: g.statusCode,
                       })),
                   ),
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("NotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
             );
@@ -151,9 +138,7 @@ export const GatewayResponseProvider = () =>
               responseTemplates: news.responseTemplates,
             }),
           );
-          yield* session.note(
-            `Reconciled gateway response ${responseType} on ${restApiId}`,
-          );
+          yield* session.note(`Reconciled gateway response ${responseType} on ${restApiId}`);
           return {
             restApiId,
             responseType,
@@ -169,9 +154,7 @@ export const GatewayResponseProvider = () =>
               })
               .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
           );
-          yield* session.note(
-            `Deleted gateway response ${output.responseType}`,
-          );
+          yield* session.note(`Deleted gateway response ${output.responseType}`);
         }),
       };
     }),

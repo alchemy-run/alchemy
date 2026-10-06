@@ -22,41 +22,39 @@ export const StartJobHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Location.StartJob(${executionRole}))`(
-            {
-              policyStatements: [
-                // Jobs are named at runtime, so their ARNs are unknowable at
-                // deploy time.
-                {
-                  Effect: "Allow",
-                  Action: ["geo:StartJob"],
-                  Resource: ["*"],
-                },
-                // CRITICAL: without iam:PassRole on the execution role,
-                // StartJob fails only at runtime with an AccessDenied.
-                {
-                  Effect: "Allow",
-                  Action: ["iam:PassRole"],
-                  Resource: [Output.interpolate`${executionRole.roleArn}`],
-                  Condition: {
-                    StringEquals: {
-                      "iam:PassedToService": "location.amazonaws.com",
-                    },
+          yield* host.bind`Allow(${host}, AWS.Location.StartJob(${executionRole}))`({
+            policyStatements: [
+              // Jobs are named at runtime, so their ARNs are unknowable at
+              // deploy time.
+              {
+                Effect: "Allow",
+                Action: ["geo:StartJob"],
+                Resource: ["*"],
+              },
+              // CRITICAL: without iam:PassRole on the execution role,
+              // StartJob fails only at runtime with an AccessDenied.
+              {
+                Effect: "Allow",
+                Action: ["iam:PassRole"],
+                Resource: [Output.interpolate`${executionRole.roleArn}`],
+                Condition: {
+                  StringEquals: {
+                    "iam:PassedToService": "location.amazonaws.com",
                   },
                 },
-              ],
-            },
-          );
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.Location.StartJob(${executionRole.LogicalId})`)(
-        function* (request: StartJobRequest) {
-          return yield* startJob({
-            ...request,
-            ExecutionRoleArn: yield* RoleArn,
-          });
-        },
-      );
+      return Effect.fn(`AWS.Location.StartJob(${executionRole.LogicalId})`)(function* (
+        request: StartJobRequest,
+      ) {
+        return yield* startJob({
+          ...request,
+          ExecutionRoleArn: yield* RoleArn,
+        });
+      });
     });
   }),
 );

@@ -1,9 +1,9 @@
-import { findAvailablePort, nodeLoaderArgs } from "@/Util/Node";
+import * as NodeNet from "node:net";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as NodeNet from "node:net";
+import { findAvailablePort, nodeLoaderArgs } from "@/Util/Node";
 
-describe("Node utilities", () => {
+describe("Node utilities", { tags: ["unit", "local"] }, () => {
   test("checkout .ts entries get the dev-mode hooks", () => {
     for (const entry of [
       "/repo/packages/alchemy/src/Cloudflare/Local.ts",

@@ -1,6 +1,3 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import {
   GetTaxRegistration,
   GetTaxSettings,
@@ -10,14 +7,14 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -42,9 +39,7 @@ const ensureHeadOffice = Effect.gen(function* () {
 const waitUntilExpired = (id: string) =>
   GetTaxRegistration({ id }).pipe(
     Effect.map((registration) =>
-      registration.status === "expired"
-        ? ("expired" as const)
-        : ("active" as const),
+      registration.status === "expired" ? ("expired" as const) : ("active" as const),
     ),
     Effect.catchIf(isMissing, () => Effect.succeed("expired" as const)),
     Effect.repeat({
@@ -113,7 +108,15 @@ test.provider(
       const deactivated = yield* GetTaxRegistration({ id: created.id });
       expect(deactivated.status).toEqual("expired");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:stripe",
+      "provider:stripe:taxregistration",
+      "provider:stripe:taxsettings",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -145,7 +148,15 @@ test.provider(
       const expired = yield* waitUntilExpired(deployed.id);
       expect(expired).toEqual("expired");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:stripe",
+      "provider:stripe:taxregistration",
+      "provider:stripe:taxsettings",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -191,5 +202,13 @@ test.provider(
       const gone = yield* waitUntilExpired(replaced.id);
       expect(gone).toEqual("expired");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:stripe",
+      "provider:stripe:taxregistration",
+      "provider:stripe:taxsettings",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

@@ -39,10 +39,7 @@ export interface MountSpec {
 // resolves the Output before reconcile.
 const volumeIdOf = (volume: Volume) => volume.volumeId ?? "";
 
-const RAILWAY_BIND_HOST_TYPES = new Set([
-  "Railway.Service",
-  "Railway.Function",
-]);
+const RAILWAY_BIND_HOST_TYPES = new Set(["Railway.Service", "Railway.Function"]);
 
 /**
  * True for a Railway compute host that accepts {@link ServiceBinding}
@@ -68,9 +65,7 @@ export interface ServiceBinding {
  * Railway allows one volume per service. Two `MountVolume`s, or a
  * second {@link Volume} attached via `service`, is this error.
  */
-export class MultipleVolumes extends Data.TaggedError(
-  "Railway.MultipleVolumes",
-)<{
+export class MultipleVolumes extends Data.TaggedError("Railway.MultipleVolumes")<{
   name: string;
   paths: readonly string[];
   volumeIds: readonly string[];
@@ -143,6 +138,7 @@ export const assertHostDisk = (input: {
  * :::
  *
  * @binding
+ * @product Volume
  */
 export interface MountVolume extends Binding.Service<
   MountVolume,

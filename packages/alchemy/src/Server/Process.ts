@@ -1,25 +1,18 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
+import * as Option from "effect/Option";
 import type { Path } from "effect/Path";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
-import {
-  packEnvValue,
-  unpackEnvValue,
-  type BaseRuntimeContext,
-} from "../RuntimeContext.ts";
+import { ManagedHttpShutdown } from "../Runtime/Bootstrap/ManagedHttpShutdown.ts";
+import { packEnvValue, unpackEnvValue, type BaseRuntimeContext } from "../RuntimeContext.ts";
 
-export type ProcessServices =
-  | ChildProcessSpawner
-  | FileSystem
-  | Path
-  | Stdio
-  | Terminal;
+export type ProcessServices = ChildProcessSpawner | FileSystem | Path | Stdio | Terminal;
 
 export interface ProcessContext extends BaseRuntimeContext {
   run: <Req = never, RunReq = never>(
@@ -36,10 +29,9 @@ export interface ProcessContext extends BaseRuntimeContext {
  * can `yield* ServerHost` and call `host.run(...)` during plan/deploy without
  * the caller providing the layer itself.
  */
-export class ServerHost extends Context.Service<
-  ServerHost,
-  Pick<ProcessContext, "run">
->()("Alchemy::ServerHost") {}
+export class ServerHost extends Context.Service<ServerHost, Pick<ProcessContext, "run">>()(
+  "Alchemy::ServerHost",
+) {}
 
 /**
  * Deploy-time / plan-time host context for platforms that bundle a long-lived
@@ -62,7 +54,12 @@ export interface HostRuntimeContext extends ProcessContext {
  * resource `type`. Both `run` (background loops) and `serve` (HTTP handlers)
  * append to a single list of runners; `exports.program` runs them all
  * concurrently. This is the shared host context used by `AWS.EC2.Instance` and
- * `AWS.ECS.Task`.
+ * `AWS.ECS.Task`. Managed Fly shutdown gives each runner a sequential resource
+ * scope; runner scopes close concurrently while HTTP and shared dependencies live.
+ * A shutdown signal starts an independent deadline, including for application-owned
+ * scopes. Without a signal, a nested `Effect.scoped` runner must finish its own
+ * finalizers before the host can observe completion or failure. Applications must
+ * bound that cleanup; the host cannot observe an opaque scope's earlier body exit.
  */
 export const createHostRuntimeContext =
   (type: string) =>
@@ -98,7 +95,28 @@ export const createHostRuntimeContext =
           runners.push(Http.serve(handler as HttpEffect<any>));
         })) as HostRuntimeContext["serve"],
       exports: Effect.sync(() => ({
-        program: Effect.all(runners, { concurrency: "unbounded" }),
+        program: Effect.serviceOption(ManagedHttpShutdown).pipe(
+          Effect.flatMap((managed) => {
+            let remaining = runners.length;
+            return Effect.all(
+              Option.isSome(managed)
+                ? runners.map((runner) =>
+                    runner.pipe(
+                      Effect.onExit((exit) =>
+                        Effect.sync(() => managed.value.runnerFinished(exit, --remaining === 0)),
+                      ),
+                      Effect.scoped,
+                      // Parent interruption may discard child finalizer defects.
+                      Effect.onExit((exit) =>
+                        Effect.sync(() => managed.value.runnerFinished(exit, false)),
+                      ),
+                    ),
+                  )
+                : runners,
+              { concurrency: "unbounded" },
+            );
+          }),
+        ),
       })),
     } satisfies HostRuntimeContext;
   };

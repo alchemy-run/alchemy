@@ -1,17 +1,17 @@
-import { consoleLogFloor, makeConsoleLogger } from "@/Cli/GlobalLog.ts";
-import { makePlainConsoleSink } from "@/Util/ConsoleSink.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
+import { consoleLogFloor, makeConsoleLogger } from "@/Cli/GlobalLog.ts";
+import { makePlainConsoleSink } from "@/Util/ConsoleSink.ts";
 
 /**
  * The console sink keeps an Info floor by default so `~/.alchemy/logs` stays
  * the place full Debug detail lives. `--log-level debug` has to lower that
  * floor for the run, or the flag produces zero terminal output (#1231).
  */
-describe("consoleLogFloor", () => {
+describe("consoleLogFloor", { tags: ["unit", "local"] }, () => {
   it("defaults to Info", () => {
     expect(consoleLogFloor(["profile", "list"])).toBe("Info");
   });
@@ -29,7 +29,7 @@ describe("consoleLogFloor", () => {
   });
 });
 
-describe("makeConsoleLogger", () => {
+describe("makeConsoleLogger", { tags: ["unit", "local"] }, () => {
   it.effect("forwards only records at or above the floor", () =>
     Effect.gen(function* () {
       const seen: Array<{ level: string; message: unknown }> = [];
@@ -41,15 +41,11 @@ describe("makeConsoleLogger", () => {
         yield* Effect.logInfo("info");
       }).pipe(Effect.provideService(MinimumLogLevel, "Debug"));
 
-      yield* emit.pipe(
-        Effect.provide(Logger.layer([makeConsoleLogger("Info", probe)])),
-      );
+      yield* emit.pipe(Effect.provide(Logger.layer([makeConsoleLogger("Info", probe)])));
       expect(seen.map((r) => r.level)).toEqual(["Info"]);
 
       seen.length = 0;
-      yield* emit.pipe(
-        Effect.provide(Logger.layer([makeConsoleLogger("Debug", probe)])),
-      );
+      yield* emit.pipe(Effect.provide(Logger.layer([makeConsoleLogger("Debug", probe)])));
       expect(seen.map((r) => r.level)).toEqual(["Debug", "Info"]);
     }),
   );
@@ -65,9 +61,7 @@ describe("makeConsoleLogger", () => {
       Effect.andThen(
         Effect.sync(() => {
           expect(lines).toHaveLength(1);
-          expect(lines[0]).toMatch(
-            /^\[\d{2}:\d{2}:\d{2}\.\d{3}\] INFO \(#\d+\): plain message$/,
-          );
+          expect(lines[0]).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] INFO \(#\d+\): plain message$/);
           expect(lines[0]).not.toContain("\x1b[");
         }),
       ),
@@ -80,9 +74,7 @@ describe("makeConsoleLogger", () => {
       log: (...args: unknown[]) => lines.push(args.join(" ")),
     });
     return Effect.logInfo("plain message").pipe(
-      Effect.provide(
-        Logger.layer([makeConsoleLogger("Info", makePlainConsoleSink(true))]),
-      ),
+      Effect.provide(Logger.layer([makeConsoleLogger("Info", makePlainConsoleSink(true))])),
       Effect.provideService(Console.Console, console),
       Effect.andThen(
         Effect.sync(() => {

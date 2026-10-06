@@ -1,3 +1,6 @@
+import { gunzipSync, gzipSync } from "node:zlib";
+import { exec } from "alchemy/Util/exec";
+import { sha256 } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
@@ -5,14 +8,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { exec } from "alchemy/Util/exec";
-import { sha256 } from "alchemy/Util/sha256";
 import { packTar, unpackTar, type TarHeader } from "modern-tar";
-import { gunzipSync, gzipSync } from "node:zlib";
 import {
   GroupName,
   MANIFEST_FILE,
@@ -48,8 +48,7 @@ export const Group = Schema.String.pipe(
           .split(",")
           .map((attribute) => attribute.trim())
           .filter((attribute) => attribute.length > 0);
-        return match &&
-          attributes.every((attribute) => attribute === "Collapsed")
+        return match && attributes.every((attribute) => attribute === "Collapsed")
           ? Effect.succeed({
               name: match[1]!,
               pattern: match[3]!,
@@ -64,9 +63,7 @@ export const Group = Schema.String.pipe(
             );
       },
       encode: (group) =>
-        Effect.succeed(
-          `${group.name}${group.collapsed ? "[Collapsed]" : ""}=${group.pattern}`,
-        ),
+        Effect.succeed(`${group.name}${group.collapsed ? "[Collapsed]" : ""}=${group.pattern}`),
     }),
   ),
 );
@@ -86,9 +83,7 @@ export const DEPENDENCY_SECTIONS = [
   "optionalDependencies",
 ] as const;
 
-const DependencyMap = Schema.optionalKey(
-  Schema.Record(Schema.String, Schema.String),
-);
+const DependencyMap = Schema.optionalKey(Schema.Record(Schema.String, Schema.String));
 
 export const DependencySections = Schema.Struct({
   dependencies: DependencyMap,
@@ -140,6 +135,70 @@ export interface WorkspacePackage {
   readonly group: string;
 }
 
+/** Shared inputs that invalidate every configured package. */
+export const REBUILD_ALL_PATHS = [
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "tsconfig.json",
+  "tsconfig.base.json",
+  "turbo.json",
+  ".github/workflows/pkg.yml",
+  ".github/workflows/pr-package.yml",
+];
+
+/** Select dependents first, then dependencies, without pulling in unrelated siblings. */
+export const selectPackages = (
+  packages: ReadonlyArray<WorkspacePackage>,
+  dependencies: ReadonlyMap<string, ReadonlySet<string>>,
+  changedFiles: ReadonlyArray<string>,
+  rebuildAllPaths: ReadonlyArray<string> = [],
+) => {
+  if (
+    changedFiles.some((file) =>
+      [...REBUILD_ALL_PATHS, ...rebuildAllPaths].some((pattern) =>
+        pattern.endsWith("/**")
+          ? file === pattern.slice(0, -3) || file.startsWith(pattern.slice(0, -2))
+          : file === pattern,
+      ),
+    )
+  )
+    return [...packages];
+
+  const selected = new Set(
+    packages
+      .filter((pkg) =>
+        changedFiles.some(
+          (file) =>
+            file === pkg.dir || file.startsWith(`${pkg.dir}/`) || pkg.dir.startsWith(`${file}/`),
+        ),
+      )
+      .map((pkg) => pkg.name),
+  );
+  // A changed gitlink selects the packages nested inside that submodule.
+  let size: number;
+  do {
+    size = selected.size;
+    for (const [name, deps] of dependencies) {
+      if ([...deps].some((dep) => selected.has(dep))) selected.add(name);
+    }
+  } while (selected.size !== size);
+  const pending = [...selected];
+  for (const name of pending) {
+    for (const dep of dependencies.get(name) ?? []) {
+      if (!selected.has(dep)) {
+        selected.add(dep);
+        pending.push(dep);
+      }
+    }
+  }
+  return packages.filter((pkg) => selected.has(pkg.name));
+};
+
 /**
  * Expand one level of `{a,b,c}` alternatives into plain patterns, so
  * `./packages/{alchemy,pkg}` lists exactly those two directories.
@@ -151,9 +210,7 @@ export const expandBraces = (pattern: string): string[] => {
     .split(",")
     .map((alternative) => alternative.trim())
     .filter((alternative) => alternative.length > 0)
-    .flatMap((alternative) =>
-      expandBraces(`${match[1]}${alternative}${match[3]}`),
-    );
+    .flatMap((alternative) => expandBraces(`${match[1]}${alternative}${match[3]}`));
 };
 
 /**
@@ -169,10 +226,7 @@ const expand = Effect.fn("expandGlob")(function* (cwd: string, glob: string) {
   return [...new Set(results)];
 });
 
-const expandPattern = Effect.fn("expandPattern")(function* (
-  cwd: string,
-  pattern: string,
-) {
+const expandPattern = Effect.fn("expandPattern")(function* (cwd: string, pattern: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   if (pattern.includes("**")) {
@@ -257,10 +311,7 @@ export class GitError extends Data.TaggedError("GitError")<{
 }
 
 /** Run `git` in `cwd` and return trimmed stdout. */
-export const git = Effect.fn("git")(function* (
-  cwd: string,
-  args: ReadonlyArray<string>,
-) {
+export const git = Effect.fn("git")(function* (cwd: string, args: ReadonlyArray<string>) {
   const { exitCode, stdout, stderr } = yield* exec(
     ChildProcess.make("git", [...args], { cwd, shell: false }),
   ).pipe(Effect.scoped);
@@ -271,8 +322,7 @@ export const git = Effect.fn("git")(function* (
 });
 
 /** Absolute path of the repository (or submodule) that owns `cwd`. */
-export const toplevel = (cwd: string) =>
-  git(cwd, ["rev-parse", "--show-toplevel"]);
+export const toplevel = (cwd: string) => git(cwd, ["rev-parse", "--show-toplevel"]);
 
 /** Full HEAD SHA of the repository that owns `cwd`. */
 const gitHead = (cwd: string) => git(cwd, ["rev-parse", "HEAD"]);
@@ -282,24 +332,17 @@ export class PackError extends Data.TaggedError("PackError")<{
   readonly message: string;
 }> {}
 
-const PnpmPackOutput = Schema.fromJsonString(
-  Schema.Struct({ filename: Schema.String }),
-);
+const PnpmPackOutput = Schema.fromJsonString(Schema.Struct({ filename: Schema.String }));
 
 /**
  * Rewrite every dependency on a package in `links` to that package's
  * tarball URL. Returns the rewritten manifest text and the rewrites made.
  */
-export const rewriteDependencies = (
-  manifestText: string,
-  links: ReadonlyMap<string, string>,
-) =>
+export const rewriteDependencies = (manifestText: string, links: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const manifest = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(
-        Schema.StructWithRest(DependencySections, [
-          Schema.Record(Schema.String, Schema.Unknown),
-        ]),
+        Schema.StructWithRest(DependencySections, [Schema.Record(Schema.String, Schema.Unknown)]),
       ),
     )(manifestText);
     // Preserve source key order after validation: it contributes to the tarball hash.
@@ -387,16 +430,12 @@ export const packPackage = Effect.fn("packPackage")(function* (options: {
 
   let rewrites: PackedTarball["rewrites"] = [];
   const normalized: Array<{ header: TarHeader; data: Uint8Array }> = [];
-  for (const entry of entries.sort((a, b) =>
-    a.header.name.localeCompare(b.header.name),
-  )) {
+  for (const entry of entries.sort((a, b) => a.header.name.localeCompare(b.header.name))) {
     let data = entry.data ?? new Uint8Array();
     if (entry.header.name === "package/package.json") {
       const text = yield* Effect.sync(() => new TextDecoder().decode(data));
       const result = yield* rewriteDependencies(text, options.links).pipe(
-        Effect.mapError(
-          (e) => new PackError({ dir: options.absDir, message: String(e) }),
-        ),
+        Effect.mapError((e) => new PackError({ dir: options.absDir, message: String(e) })),
       );
       rewrites = result.rewrites;
       data = yield* Effect.sync(() => new TextEncoder().encode(result.text));
@@ -418,31 +457,31 @@ export const packPackage = Effect.fn("packPackage")(function* (options: {
 const PullRequestEvent = Schema.fromJsonString(
   Schema.Struct({
     pull_request: Schema.optionalKey(
-      Schema.Struct({ head: Schema.Struct({ sha: Schema.String }) }),
+      Schema.Struct({
+        head: Schema.Struct({ sha: Schema.String }),
+        base: Schema.Struct({ sha: Schema.String }),
+      }),
     ),
   }),
 );
 
 /**
- * The pull request head commit when running under a GitHub Actions
- * `pull_request` event, read from the event payload. `undefined` elsewhere.
+ * Pull request metadata from the GitHub Actions event payload.
+ * `undefined` outside pull request events.
  * On that event the default checkout is a synthetic merge commit, which the
  * registry would reject because it does not match the run's head.
  */
-const pullRequestHead = Effect.gen(function* () {
+const pullRequest = Effect.gen(function* () {
   const event = yield* Config.option(Config.String("GITHUB_EVENT_NAME"));
   const eventPath = yield* Config.option(Config.String("GITHUB_EVENT_PATH"));
-  if (
-    Option.getOrUndefined(event) !== "pull_request" ||
-    Option.isNone(eventPath)
-  ) {
+  if (Option.getOrUndefined(event) !== "pull_request" || Option.isNone(eventPath)) {
     return undefined;
   }
   const fs = yield* FileSystem.FileSystem;
   const payload = yield* fs
     .readFileString(eventPath.value)
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PullRequestEvent)));
-  return payload.pull_request?.head.sha;
+  return payload.pull_request;
 });
 
 export interface PackOptions {
@@ -450,6 +489,9 @@ export interface PackOptions {
   readonly groups: ReadonlyArray<Group>;
   readonly registry: string;
   readonly out: string;
+  readonly since?: string;
+  readonly all?: boolean;
+  readonly rebuildAllPaths?: ReadonlyArray<string>;
 }
 
 /**
@@ -457,8 +499,7 @@ export interface PackOptions {
  * replaced by `+`, a character package names cannot contain, so `@a/b-c`
  * and `@a-b/c` get distinct files.
  */
-export const tarballFile = (name: string) =>
-  `${name.replace(/^@/, "").replace("/", "+")}.tgz`;
+export const tarballFile = (name: string) => `${name.replace(/^@/, "").replace("/", "+")}.tgz`;
 
 /**
  * Pack every discovered package into `out` with a manifest describing each
@@ -470,7 +511,8 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
 
   const root = yield* toplevel(options.cwd);
   const head = yield* gitHead(root);
-  const prHead = yield* pullRequestHead;
+  const pr = yield* pullRequest;
+  const prHead = pr?.head.sha;
   if (prHead !== undefined && prHead !== head) {
     return yield* new WorkspaceError({
       message:
@@ -478,11 +520,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
         "Check out github.event.pull_request.head.sha before packing so tarballs are addressed by a commit that exists on the pull request.",
     });
   }
-  const packages = yield* discover(options.cwd, options.groups);
-  if (packages.length === 0) {
-    yield* Console.log("No publishable packages matched.");
-    return undefined;
-  }
+  let packages = yield* discover(options.cwd, options.groups);
 
   // Dependencies between packed packages are rewritten to the dependency's
   // immutable tarball URL, so a package is packed only after everything it
@@ -492,18 +530,46 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   for (const pkg of packages) {
     const manifest = yield* fs
       .readFileString(path.join(pkg.absDir, "package.json"))
-      .pipe(
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(Schema.fromJsonString(DependencySections)),
-        ),
-      );
+      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(DependencySections))));
     dependencies.set(
       pkg.name,
       new Set(
-        DEPENDENCY_SECTIONS.flatMap((section) =>
-          Object.keys(manifest[section] ?? {}),
-        ).filter((name) => name !== pkg.name && byName.has(name)),
+        DEPENDENCY_SECTIONS.flatMap((section) => Object.keys(manifest[section] ?? {})).filter(
+          (name) => name !== pkg.name && byName.has(name),
+        ),
       ),
+    );
+  }
+  const since = options.all ? undefined : (options.since ?? pr?.base.sha);
+  if (since !== undefined) {
+    // Disable rename detection so moves affect both the old and new packages.
+    const changed = (yield* git(root, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "-z",
+      since,
+      head,
+      "--",
+    ]))
+      .split("\0")
+      .filter(Boolean);
+    const selected = selectPackages(
+      packages.map((pkg) => ({
+        ...pkg,
+        dir: path.relative(root, pkg.absDir).split(path.sep).join("/"),
+      })),
+      dependencies,
+      changed,
+      options.rebuildAllPaths,
+    );
+    const names = new Set(selected.map((pkg) => pkg.name));
+    packages = packages.filter((pkg) => names.has(pkg.name));
+    for (const name of dependencies.keys()) {
+      if (!names.has(name)) dependencies.delete(name);
+    }
+    yield* Console.log(
+      `Selected ${packages.length} package(s) changed since ${since}, including dependents and dependencies.`,
     );
   }
   const levels = yield* dependencyLevels(dependencies);
@@ -512,11 +578,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   // subdirectory of the workspace: `--out .` would otherwise delete it.
   const outDir = path.resolve(options.cwd, options.out);
   const relative = path.relative(options.cwd, outDir);
-  if (
-    relative === "" ||
-    relative.startsWith("..") ||
-    path.isAbsolute(relative)
-  ) {
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
     return yield* new WorkspaceError({
       message: `--out must be a subdirectory of ${options.cwd}, got ${outDir}`,
     });
@@ -555,10 +617,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
       { concurrency: 4 },
     );
     for (const entry of packedLevel) {
-      links.set(
-        entry.name,
-        tarballUrl(options.registry, entry.name, entry.sha256),
-      );
+      links.set(entry.name, tarballUrl(options.registry, entry.name, entry.sha256));
       packedByName.set(entry.name, entry);
     }
   }
@@ -568,10 +627,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   // One entry per distinct group name, in the order the groups were given.
   const groups = [
     ...new Map(
-      options.groups.map((group) => [
-        group.name,
-        { name: group.name, collapsed: group.collapsed },
-      ]),
+      options.groups.map((group) => [group.name, { name: group.name, collapsed: group.collapsed }]),
     ).values(),
   ];
   const manifest: Manifest = {
@@ -594,9 +650,13 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   const artifact = manifestArtifactName(yield* sha256(manifestText));
   const stepOutput = yield* Config.option(Config.String("GITHUB_OUTPUT"));
   if (Option.isSome(stepOutput)) {
-    yield* fs.writeFileString(stepOutput.value, `artifact-name=${artifact}\n`, {
-      flag: "a",
-    });
+    yield* fs.writeFileString(
+      stepOutput.value,
+      `artifact-name=${artifact}\npackage-count=${entries.length}\n`,
+      {
+        flag: "a",
+      },
+    );
   }
   yield* Console.log(`Manifest artifact name: ${artifact}`);
   return manifest;
