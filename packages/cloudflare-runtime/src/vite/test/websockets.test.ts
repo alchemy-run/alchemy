@@ -271,21 +271,10 @@ describe("handleWebSocket", () => {
     expect(response.ok).toBe(true);
   });
 
-  test("destroys client socket when worker does not upgrade", async () => {
-    // Upstream responds with a normal HTTP 200 instead of upgrading.
-    harness.upstreamServer.removeAllListeners("upgrade");
-
-    const fakeReq = makeFakeRequest({ host: "localhost" });
-    const fakeSocket = new NodeNet.Socket();
-    harness.clientServer.emit("upgrade", fakeReq, fakeSocket, Buffer.alloc(0));
-
-    await new Promise<void>((resolve) => fakeSocket.once("close", resolve));
-    expect(fakeSocket.destroyed).toBe(true);
-  });
-
-  test("relays the worker's response when it refuses the upgrade", async () => {
+  test("relays the worker's response and closes when it refuses the upgrade", async () => {
     // The worker rejects the handshake with a plain HTTP response instead of
-    // upgrading — the client must see that response, not a connection reset.
+    // upgrading — the client must see that response, not a connection reset,
+    // and the socket closes once it is relayed (the promise resolves on close).
     harness.upstreamServer.removeAllListeners("upgrade");
     harness.upstreamServer.on("upgrade", (_request, socket) => {
       socket.end(
