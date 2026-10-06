@@ -42,6 +42,7 @@ import {
   ContainerConfigurationError,
   ContainerImagePreparationError,
   isDurableObjectContainer,
+  durableObjectSettingsPatch,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
@@ -871,6 +872,7 @@ export const LiveContainerProvider = () =>
       const reconcileDurableObjectApplication = Effect.fn(function* ({
         id,
         news,
+        olds,
         name,
         durableObjects,
         output,
@@ -878,6 +880,7 @@ export const LiveContainerProvider = () =>
       }: {
         id: string;
         news: DurableObjectContainerProps;
+        olds: AnyContainerApplicationProps | undefined;
         name: string;
         durableObjects: { namespaceId: string } | undefined;
         output: ContainerApplication["Attributes"] | undefined;
@@ -939,26 +942,13 @@ export const LiveContainerProvider = () =>
           yield* assertMatchesDeclaration(application);
         }
 
-        // 4. Sync explicitly managed application-wide settings.
-        const observability = news.observability;
-        const observedConfiguration = application.configuration;
-        const configurationChanged = Object.entries(configuration).some(
-          ([key, value]) =>
-            !deepEqual(
-              value,
-              normalizeNulls(observedConfiguration[key as keyof typeof configuration]),
-            ),
-        );
-        if (
-          configurationChanged ||
-          (observability !== undefined &&
-            !deepEqual(observability, normalizeNulls(application.observability)))
-        ) {
+        // 4. Sync declared settings and reset settings removed from prior props.
+        const patch = durableObjectSettingsPatch(news, olds, application);
+        if (patch.configuration !== undefined || patch.observability !== undefined) {
           application = yield* Containers.updateContainerApplication({
             accountId,
             applicationId,
-            ...(configurationChanged ? { configuration } : {}),
-            observability,
+            ...patch,
           });
         }
 
@@ -1438,7 +1428,7 @@ export const LiveContainerProvider = () =>
             dev,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, olds, bindings, output, session }) {
           yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts.
@@ -1449,6 +1439,7 @@ export const LiveContainerProvider = () =>
             return yield* reconcileDurableObjectApplication({
               id,
               news,
+              olds,
               name,
               durableObjects,
               output,

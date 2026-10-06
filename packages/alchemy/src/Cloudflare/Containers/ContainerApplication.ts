@@ -415,11 +415,11 @@ export interface DurableObjectContainerProps extends PlatformProps {
    * Supports up to 100 images, with names between 1 and 128 characters.
    */
   images?: Record<string, ContainerImageProps>;
-  /** Application-wide SSH access configuration. */
+  /** Application-wide SSH access. Removing a previously declared value disables SSH. */
   wranglerSsh?: Containers.WranglerSSHConfiguration;
-  /** SSH public keys allowed to access instances of this application. */
+  /** SSH public keys allowed to access instances. Removing this property clears previously managed keys. */
   authorizedKeys?: Containers.UserSSHPublicKeyList;
-  /** Application-wide logging. Changes do not restart running containers. */
+  /** Application-wide logging. Removing a previously declared value disables logs. Changes do not restart running containers. */
   observability?: Containers.ContainerApplicationObservability;
 }
 

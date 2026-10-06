@@ -9,7 +9,10 @@ import type {
   DurableObjectContainerProps,
 } from "@/Cloudflare/Containers/ContainerApplication.ts";
 import { fromContainer } from "@/Cloudflare/Containers/ContainerClient.ts";
-import { validateContainerConfiguration } from "@/Cloudflare/Containers/ContainerConfiguration.ts";
+import {
+  durableObjectSettingsPatch,
+  validateContainerConfiguration,
+} from "@/Cloudflare/Containers/ContainerConfiguration.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const client = (native: Partial<cf.Container>) => fromContainer(() => native as cf.Container);
@@ -244,6 +247,33 @@ describe(
         }),
       );
     }
+    it.effect("allows fleet scheduling transitions in both directions", () =>
+      Effect.gen(function* () {
+        yield* validateContainerConfiguration(
+          { image: "alpine:3.21", schedulingPolicy: "regional" },
+          "default",
+        );
+        yield* validateContainerConfiguration({ image: "alpine:3.21" }, "regional");
+        yield* validateContainerConfiguration(
+          { image: "alpine:3.21", schedulingPolicy: "default" },
+          "regional",
+        );
+      }),
+    );
+    for (const policy of ["default", "regional"] as const) {
+      it.effect(`rejects switching between ${policy} and durable_object in both directions`, () =>
+        Effect.gen(function* () {
+          yield* validateContainerConfiguration(
+            { schedulingPolicy: "durable_object" },
+            policy,
+          ).pipe(Effect.flip);
+          yield* validateContainerConfiguration(
+            { image: "alpine:3.21", schedulingPolicy: policy },
+            "durable_object",
+          ).pipe(Effect.flip);
+        }),
+      );
+    }
     it.effect("requires a new namespace when changing scheduling policy", () =>
       Effect.gen(function* () {
         const failure = yield* validateContainerConfiguration(
@@ -267,3 +297,67 @@ const invalid: DurableObjectContainerProps = {
   instanceType: "lite",
 };
 void invalid;
+
+describe(
+  "Durable Object application settings",
+  { tags: ["unit", "local", "provider:cloudflare:container"] },
+  () => {
+    const news: DurableObjectContainerProps = { schedulingPolicy: "durable_object" };
+    const managed: DurableObjectContainerProps = {
+      ...news,
+      wranglerSsh: { enabled: true, port: 2222 },
+      authorizedKeys: [{ publicKey: "ssh-ed25519 test" }],
+      observability: { logs: { enabled: true } },
+    };
+    const observed = {
+      configuration: { wranglerSsh: managed.wranglerSsh, authorizedKeys: managed.authorizedKeys },
+      observability: managed.observability,
+    };
+    it("clears previously managed settings when removed", () => {
+      expect(durableObjectSettingsPatch(news, managed, observed)).toEqual({
+        configuration: { wranglerSsh: { enabled: false }, authorizedKeys: [] },
+        observability: { logs: { enabled: false } },
+      });
+    });
+    it("resets removed settings even when the API omits configuration fields", () => {
+      expect(durableObjectSettingsPatch(news, managed, { configuration: {} })).toEqual({
+        configuration: { wranglerSsh: { enabled: false }, authorizedKeys: [] },
+        observability: { logs: { enabled: false } },
+      });
+    });
+    it("leaves undeclared settings untouched on adoption", () => {
+      expect(durableObjectSettingsPatch(news, undefined, observed)).toEqual({});
+      expect(durableObjectSettingsPatch(news, news, observed)).toEqual({});
+    });
+    it("does not patch settings already converged", () => {
+      expect(durableObjectSettingsPatch(managed, managed, observed)).toEqual({});
+      expect(
+        durableObjectSettingsPatch(news, managed, {
+          configuration: { wranglerSsh: { enabled: false }, authorizedKeys: [] },
+          observability: { logs: { enabled: false } },
+        }),
+      ).toEqual({});
+    });
+    it("preserves declared settings while clearing removed settings", () => {
+      expect(
+        durableObjectSettingsPatch(
+          { ...news, wranglerSsh: managed.wranglerSsh },
+          managed,
+          observed,
+        ),
+      ).toEqual({
+        configuration: { wranglerSsh: managed.wranglerSsh, authorizedKeys: [] },
+        observability: { logs: { enabled: false } },
+      });
+    });
+    it("applies newly declared settings without taking ownership of omitted settings", () => {
+      expect(
+        durableObjectSettingsPatch({ ...news, authorizedKeys: managed.authorizedKeys }, undefined, {
+          configuration: {},
+        }),
+      ).toEqual({
+        configuration: { authorizedKeys: managed.authorizedKeys },
+      });
+    });
+  },
+);

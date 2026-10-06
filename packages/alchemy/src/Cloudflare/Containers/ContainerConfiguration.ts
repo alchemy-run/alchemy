@@ -1,6 +1,9 @@
+import type * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { deepEqual } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
+import { normalizeNulls } from "../../Util/stable.ts";
 import type {
   AnyContainerApplicationProps,
   ContainerApplication,
@@ -65,16 +68,19 @@ const invalid = (message: string) => Effect.fail(new ContainerConfigurationError
 
 /**
  * Validate container props before publishing images or touching the hosting
- * Worker. Pass the deployed scheduling policy to reject in-place switches.
+ * Worker. Reject switches between fleet scheduling and Durable Object scheduling.
  */
 export const validateContainerConfiguration = Effect.fn(function* (
   props: AnyContainerApplicationProps,
   deployedPolicy?: string,
 ) {
   const policy = props.schedulingPolicy ?? "default";
-  if (deployedPolicy !== undefined && deployedPolicy !== policy) {
+  if (
+    deployedPolicy !== undefined &&
+    (deployedPolicy === "durable_object") !== (policy === "durable_object")
+  ) {
     return yield* invalid(
-      "A container's scheduling policy cannot change in place. Declare a new container application and Durable Object class, then move traffic to the new namespace. Existing Durable Object storage is not transferred.",
+      "A container cannot switch between fleet and Durable Object scheduling in place. Declare a new container application and Durable Object class, then move traffic to the new namespace. Existing Durable Object storage is not transferred.",
     );
   }
 
@@ -126,3 +132,40 @@ export const workerContainerBinding = (className: string, application: Container
   dev: application.dev,
   hash: application.hash.pipe(Output.map((hash) => hash?.image)),
 });
+
+/**
+ * Converge declared settings and reset settings removed from a prior declaration.
+ * Omitted settings on new or adopted applications remain unmanaged.
+ */
+export const durableObjectSettingsPatch = (
+  news: DurableObjectContainerProps,
+  olds: AnyContainerApplicationProps | undefined,
+  observed: Pick<Containers.GetContainerApplicationResponse, "configuration" | "observability">,
+): Pick<Containers.UpdateContainerApplicationRequest, "configuration" | "observability"> => {
+  const configuration: Containers.DurableObjectContainerConfiguration = {
+    ...(news.wranglerSsh !== undefined
+      ? { wranglerSsh: news.wranglerSsh }
+      : olds?.wranglerSsh !== undefined
+        ? { wranglerSsh: { enabled: false } }
+        : {}),
+    ...(news.authorizedKeys !== undefined
+      ? { authorizedKeys: news.authorizedKeys }
+      : olds?.authorizedKeys !== undefined
+        ? { authorizedKeys: [] }
+        : {}),
+  };
+  const observability =
+    news.observability ??
+    (olds?.observability !== undefined ? { logs: { enabled: false } } : undefined);
+  const configurationChanged = Object.entries(configuration).some(
+    ([key, value]) =>
+      !deepEqual(value, normalizeNulls(observed.configuration[key as keyof typeof configuration])),
+  );
+  return {
+    ...(configurationChanged ? { configuration } : {}),
+    ...(observability !== undefined &&
+    !deepEqual(observability, normalizeNulls(observed.observability))
+      ? { observability }
+      : {}),
+  };
+};
