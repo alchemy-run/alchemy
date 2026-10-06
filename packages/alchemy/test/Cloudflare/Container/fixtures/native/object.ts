@@ -1,4 +1,6 @@
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
@@ -23,11 +25,15 @@ const READ_RELEASE_AND_SEED = [
 
 const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
 
+/** Only the owning object's `interceptOutboundHttp` answers this host. */
+const INTERCEPT_HOST = "intercept.internal";
+
 export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
   "NativeObject",
   Effect.gen(function* () {
     const container = yield* Cloudflare.Containers.bind(NativeImage);
     const state = yield* DurableObjectState;
+    const env = yield* Cloudflare.WorkerEnvironment;
     /** Changes whenever the runtime re-creates this object. */
     let incarnation: string | undefined;
 
@@ -89,7 +95,19 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
     });
 
     /** Process lifecycle against the real runtime (workerd + Docker or Cloudflare). */
-    const lifecycle = Effect.fn(function* (mode: "interrupt" | "stream" | "monitor") {
+    const lifecycle = Effect.fn(function* (mode: "interrupt" | "stream" | "monitor" | "intercept") {
+      if (mode === "intercept") {
+        // Started without internet: only this object's interception can answer.
+        yield* ensureShell;
+        const self = Cloudflare.fromCloudflareFetcher(env.NativeObject.get(state.id));
+        yield* container.interceptOutboundHttp(INTERCEPT_HOST, self);
+        const output = yield* run(["wget", "-qO-", `http://${INTERCEPT_HOST}/hello`]);
+        return {
+          exitCode: output.exitCode,
+          stdout: decode(output.stdout),
+          stderr: decode(output.stderr),
+        };
+      }
       if (mode === "interrupt") {
         yield* ensureShell;
         // Closing the exec scope (here via timeout) must SIGKILL the process.
@@ -129,6 +147,11 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
     });
 
     return Effect.succeed({
+      // Requests the container makes to INTERCEPT_HOST arrive here.
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        return HttpServerResponse.text(`intercepted ${request.headers.host}${request.url}`);
+      }),
       lifecycle,
       metadata: Effect.fn(function* () {
         incarnation ??= crypto.randomUUID();

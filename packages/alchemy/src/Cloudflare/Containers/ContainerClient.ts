@@ -4,7 +4,7 @@ import type * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { fromCloudflareFetcher, toCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
+import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { ContainerError, type ContainerStartupOptions } from "./Container.ts";
 import type { ContainerApplication } from "./ContainerApplication.ts";
@@ -227,18 +227,14 @@ export const fromContainer = <ImageName extends string = string>(
       call((container) => fromCloudflareFetcher(httpSchemePort(container.getTcpPort(port)))),
     setInactivityTimeout: (durationMs) =>
       callAsync((container) => container.setInactivityTimeout(durationMs)),
-    interceptOutboundHttp: Effect.fnUntraced(function* (addr, binding) {
-      const fetcher = yield* toCloudflareFetcher(binding);
-      yield* callAsync((container) => container.interceptOutboundHttp(addr, fetcher));
-    }),
-    interceptAllOutboundHttp: Effect.fnUntraced(function* (binding) {
-      const fetcher = yield* toCloudflareFetcher(binding);
-      yield* callAsync((container) => container.interceptAllOutboundHttp(fetcher));
-    }),
-    interceptOutboundHttps: Effect.fnUntraced(function* (addr, binding) {
-      const fetcher = yield* toCloudflareFetcher(binding);
-      yield* callAsync((container) => container.interceptOutboundHttps(addr, fetcher));
-    }),
+    // workerd forwards intercepted requests over RPC and accepts only a
+    // native Fetcher, which every Alchemy Fetcher carries as `raw`.
+    interceptOutboundHttp: (addr, binding) =>
+      callAsync((container) => container.interceptOutboundHttp(addr, binding.raw)),
+    interceptAllOutboundHttp: (binding) =>
+      callAsync((container) => container.interceptAllOutboundHttp(binding.raw)),
+    interceptOutboundHttps: (addr, binding) =>
+      callAsync((container) => container.interceptOutboundHttps(addr, binding.raw)),
   };
 };
 
