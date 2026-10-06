@@ -1,17 +1,15 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Ssh from "@/Ssh";
 import { writeScript } from "@/Ssh/Steps/internal.ts";
 import { sha256 } from "@/Util/sha256.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { fakeClient, ok } from "../FakeClient.ts";
 
 describe("Ssh.Steps.file", { tags: ["unit", "local"] }, () => {
   it.effect("converges when content and mode match", () =>
     Effect.gen(function* () {
       const checksum = yield* sha256("hello\n");
-      const fake = fakeClient(() =>
-        ok(`regular file|644 root root\n${checksum}\n`),
-      );
+      const fake = fakeClient(() => ok(`regular file|644 root root\n${checksum}\n`));
       const summary = yield* fake.run(
         () =>
           Ssh.Steps.file({
@@ -29,9 +27,7 @@ describe("Ssh.Steps.file", { tags: ["unit", "local"] }, () => {
   it.effect("reports only what differs", () =>
     Effect.gen(function* () {
       const checksum = yield* sha256("hello\n");
-      const fake = fakeClient(() =>
-        ok(`regular file|600 root root\n${checksum}\n`),
-      );
+      const fake = fakeClient(() => ok(`regular file|600 root root\n${checksum}\n`));
       const summary = yield* fake.run(
         () =>
           Ssh.Steps.file({
@@ -56,10 +52,7 @@ describe("Ssh.Steps.file", { tags: ["unit", "local"] }, () => {
         stderr: "stat: cannot statx '/root/secret': Permission denied",
       }));
       const error = yield* Effect.flip(
-        fake.run(
-          () => Ssh.Steps.file({ path: "/root/secret", state: "absent" }),
-          "check",
-        ),
+        fake.run(() => Ssh.Steps.file({ path: "/root/secret", state: "absent" }), "check"),
       );
 
       expect(error._tag).toBe("Ssh.StepFailed");

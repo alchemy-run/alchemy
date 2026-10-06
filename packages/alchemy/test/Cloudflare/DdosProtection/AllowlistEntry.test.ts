@@ -1,18 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ddos from "@distilled.cloud/cloudflare/ddos-protection";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Advanced TCP Protection is a Magic Transit (Enterprise add-on)
 // entitlement. The testing account does not have it, so the full lifecycle
@@ -61,9 +58,7 @@ test.provider.skipIf(!!magicTransit)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"] },
 );
 
 test.provider.skipIf(!magicTransit)(
@@ -126,17 +121,11 @@ test.provider.skipIf(!magicTransit)(
 
       // Gone — the typed AllowlistEntryNotFound error proves deletion.
       const error = yield* ddos
-        .getAdvancedTcpProtectionAllowlistItem({
-          accountId: acct,
-          prefixId: replaced.allowlistId,
-        })
+        .getAdvancedTcpProtectionAllowlistItem({ accountId: acct, prefixId: replaced.allowlistId })
         .pipe(Effect.flip);
       expect(error._tag).toEqual("AllowlistEntryNotFound");
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"], timeout: 120_000 },
 );
 
 // Account-scoped collection `list()` (pattern (b)): enumerate every allowlist
@@ -152,9 +141,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.DdosAllowlistEntry,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.DdosAllowlistEntry);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -162,9 +149,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"] },
 );
 
 // Entitled accounts (CLOUDFLARE_TEST_MAGIC_TRANSIT set): deploy an entry and
@@ -177,30 +162,20 @@ test.provider.skipIf(!magicTransit)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry(
-            "ListEntry",
-            {
-              prefix: "203.0.113.0/24",
-              comment: "alchemy ddos allowlist list test",
-              enabled: false,
-            },
-          );
+          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry("ListEntry", {
+            prefix: "203.0.113.0/24",
+            comment: "alchemy ddos allowlist list test",
+            enabled: false,
+          });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.DdosAllowlistEntry,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.DdosAllowlistEntry);
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.allowlistId === deployed.allowlistId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.allowlistId === deployed.allowlistId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ddosprotection", "live"], timeout: 120_000 },
 );

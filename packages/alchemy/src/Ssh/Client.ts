@@ -3,12 +3,12 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { makeCommandRedactor } from "../Command/Redaction.ts";
 import {
   AuthenticationFailed,
@@ -88,10 +88,7 @@ export interface ClientShape {
    * Run a command. A non-zero exit is returned in `code`, not failed: only a
    * lost session, a refused `sudo` or a timeout fail.
    */
-  readonly exec: (
-    command: string,
-    options?: ExecOptions,
-  ) => Effect.Effect<ExecResult, ExecError>;
+  readonly exec: (command: string, options?: ExecOptions) => Effect.Effect<ExecResult, ExecError>;
   /** Copy a local file, or bytes, to `remote`, creating its parent directory. */
   readonly upload: (
     local: string | Uint8Array,
@@ -103,9 +100,7 @@ export interface ClientShape {
   readonly redact: (value: string) => string;
 }
 
-export class Client extends Context.Service<Client, ClientShape>()(
-  "Ssh.Client",
-) {}
+export class Client extends Context.Service<Client, ClientShape>()("Ssh.Client") {}
 
 const RC_MARKER = "__alchemy_ssh_rc=";
 const SUDO_MARKER = "__alchemy_ssh_sudo";
@@ -191,9 +186,7 @@ const HOST_KEY_ARGS: Record<HostKeyPolicy, string[]> = {
  * Open a session against one host over the system `ssh`/`scp` binaries. The
  * key is written 0600 into a temp directory that lives as long as the scope.
  */
-export const connect = Effect.fn("Ssh.connect")(function* (
-  options: ConnectOptions,
-) {
+export const connect = Effect.fn("Ssh.connect")(function* (options: ConnectOptions) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -211,10 +204,7 @@ export const connect = Effect.fn("Ssh.connect")(function* (
   const learn = (values: ReadonlyArray<unknown>) => {
     let grew = false;
     for (const value of values) {
-      if (
-        Redacted.isRedacted(value) &&
-        typeof Redacted.value(value) === "string"
-      ) {
+      if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
         const plain = Redacted.value(value) as string;
         if (!secrets.has(plain)) {
           secrets.set(plain, value as Redacted.Redacted<string>);
@@ -229,10 +219,7 @@ export const connect = Effect.fn("Ssh.connect")(function* (
   const keyArgs: string[] = [];
   if (options.privateKey !== undefined) {
     const keyPath = path.join(dir, "id");
-    yield* fs.writeFileString(
-      keyPath,
-      `${Redacted.value(options.privateKey).trimEnd()}\n`,
-    );
+    yield* fs.writeFileString(keyPath, `${Redacted.value(options.privateKey).trimEnd()}\n`);
     yield* fs.chmod(keyPath, 0o600);
     keyArgs.push("-i", keyPath);
     if (options.identitiesOnly !== false) {
@@ -241,9 +228,7 @@ export const connect = Effect.fn("Ssh.connect")(function* (
   }
 
   const controlPath =
-    `${dir}/cm-%C`.length - 2 <= CONTROL_PATH_LIMIT
-      ? `${dir}/cm-%C`
-      : "/tmp/alchemy-ssh-%C";
+    `${dir}/cm-%C`.length - 2 <= CONTROL_PATH_LIMIT ? `${dir}/cm-%C` : "/tmp/alchemy-ssh-%C";
   const commonArgs = [
     "-o",
     "BatchMode=yes",
@@ -256,14 +241,7 @@ export const connect = Effect.fn("Ssh.connect")(function* (
     ...HOST_KEY_ARGS[options.hostKeyPolicy ?? "accept-new"],
     ...keyArgs,
     ...(options.multiplex
-      ? [
-          "-o",
-          "ControlMaster=auto",
-          "-o",
-          `ControlPath=${controlPath}`,
-          "-o",
-          "ControlPersist=60s",
-        ]
+      ? ["-o", "ControlMaster=auto", "-o", `ControlPath=${controlPath}`, "-o", "ControlPersist=60s"]
       : []),
   ];
   const port = String(options.port ?? 22);
@@ -304,9 +282,7 @@ export const connect = Effect.fn("Ssh.connect")(function* (
 
   const exec: ClientShape["exec"] = (command, execOptions = {}) =>
     Effect.gen(function* () {
-      const invalid = Object.keys(execOptions.env ?? {}).filter(
-        (name) => !ENV_NAME.test(name),
-      );
+      const invalid = Object.keys(execOptions.env ?? {}).filter((name) => !ENV_NAME.test(name));
       if (invalid.length > 0) {
         return yield* new InvalidEnvName({
           message: `invalid environment variable name: ${invalid.join(", ")}`,
@@ -339,9 +315,7 @@ export const connect = Effect.fn("Ssh.connect")(function* (
                     message: `remote command did not finish within ${Duration.format(Duration.fromInputUnsafe(execOptions.timeout!))}`,
                     host,
                     command: redact(command),
-                    timeout: Duration.format(
-                      Duration.fromInputUnsafe(execOptions.timeout!),
-                    ),
+                    timeout: Duration.format(Duration.fromInputUnsafe(execOptions.timeout!)),
                   }),
                 ),
             }),
@@ -377,16 +351,9 @@ export const connect = Effect.fn("Ssh.connect")(function* (
       }),
     );
 
-  const transferFailed = (input: {
-    local: string;
-    remote: string;
-    code: number;
-    stderr: string;
-  }) =>
+  const transferFailed = (input: { local: string; remote: string; code: number; stderr: string }) =>
     new TransferError({
-      message: redact(
-        `scp exited ${input.code}: ${input.stderr.trim() || "no output"}`,
-      ),
+      message: redact(`scp exited ${input.code}: ${input.stderr.trim() || "no output"}`),
       host,
       ...input,
       stderr: redact(input.stderr),
@@ -396,13 +363,9 @@ export const connect = Effect.fn("Ssh.connect")(function* (
     Effect.gen(function* () {
       let localPath = typeof local === "string" ? local : undefined;
       if (localPath === undefined) {
-        const staged = path.join(
-          dir,
-          `upload-${yield* Effect.sync(() => crypto.randomUUID())}`,
-        );
-        yield* Effect.acquireRelease(
-          fs.writeFile(staged, local as Uint8Array),
-          () => fs.remove(staged, { force: true }).pipe(Effect.ignore),
+        const staged = path.join(dir, `upload-${yield* Effect.sync(() => crypto.randomUUID())}`);
+        yield* Effect.acquireRelease(fs.writeFile(staged, local as Uint8Array), () =>
+          fs.remove(staged, { force: true }).pipe(Effect.ignore),
         ).pipe(
           Effect.mapError((error) =>
             transferFailed({
@@ -427,25 +390,13 @@ export const connect = Effect.fn("Ssh.connect")(function* (
           });
         }
       }
-      const result = yield* run("scp", [
-        ...scpArgs,
-        localPath,
-        `${scpDest}:${remote}`,
-      ]);
+      const result = yield* run("scp", [...scpArgs, localPath, `${scpDest}:${remote}`]);
       if (result.code !== 0) {
         return yield* transferFailed({ local: localPath, remote, ...result });
       }
-    }).pipe(
-      Effect.scoped,
-      Effect.withSpan("Ssh.upload", { attributes: { host, remote } }),
-    );
+    }).pipe(Effect.scoped, Effect.withSpan("Ssh.upload", { attributes: { host, remote } }));
 
-  const ping: ClientShape["ping"] = run("ssh", [
-    ...sshArgs,
-    dest,
-    "--",
-    "true",
-  ]).pipe(
+  const ping: ClientShape["ping"] = run("ssh", [...sshArgs, dest, "--", "true"]).pipe(
     Effect.flatMap((result) =>
       result.code === 0
         ? Effect.void

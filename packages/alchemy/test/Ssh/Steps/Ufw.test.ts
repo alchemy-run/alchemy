@@ -1,6 +1,6 @@
-import * as Ssh from "@/Ssh";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Ssh from "@/Ssh";
 import { fakeClient, ok } from "../FakeClient.ts";
 
 const rules = ["limit ssh", "allow from 10.0.0.0/8 to any port 5432 proto tcp"];
@@ -50,14 +50,10 @@ describe("Ssh.Steps.ufw", { tags: ["unit", "local"] }, () => {
         if (command === "ufw --force enable") enabled = true;
         return ok();
       });
-      yield* fake.run(() =>
-        Ssh.Steps.ufw({ defaults: { incoming: "deny" }, rules }),
-      );
+      yield* fake.run(() => Ssh.Steps.ufw({ defaults: { incoming: "deny" }, rules }));
 
       expect(
-        fake.issued
-          .map((call) => call.command)
-          .filter((command) => !command.includes("--dry-run")),
+        fake.issued.map((call) => call.command).filter((command) => !command.includes("--dry-run")),
       ).toEqual([
         "ufw 'allow' 'from' '10.0.0.0/8' 'to' 'any' 'port' '5432' 'proto' 'tcp'",
         "ufw --force enable",

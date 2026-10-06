@@ -1,12 +1,12 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
 import * as Drift from "@/Drift.ts";
 import * as Provider from "@/Provider";
 import * as Ssh from "@/Ssh";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { Sandbox } from "./fixtures/recipe/recipe.ts";
 
 const { test } = Test.make({ providers: Ssh.providers() });
@@ -17,13 +17,9 @@ const FIXTURES = `${import.meta.dirname}/fixtures`;
  * An sshd container for `distro` that accepts `publicKey` as user `alchemy`
  * (with passwordless sudo), removed with the scope. Returns its host port.
  */
-const sandbox = Effect.fn(function* (
-  distro: "ubuntu" | "fedora",
-  publicKey: string,
-) {
+const sandbox = Effect.fn(function* (distro: "ubuntu" | "fedora", publicKey: string) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const docker = (...args: string[]) =>
-    spawner.string(ChildProcess.make("docker", args));
+  const docker = (...args: string[]) => spawner.string(ChildProcess.make("docker", args));
   const image = `alchemy-test-sshd-${distro}`;
   yield* docker("build", "-q", "-t", image, `${FIXTURES}/${distro}`);
   const id = (yield* docker(

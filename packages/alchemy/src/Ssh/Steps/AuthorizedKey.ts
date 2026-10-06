@@ -1,13 +1,6 @@
 import * as Effect from "effect/Effect";
 import { Client, quote } from "../Client.ts";
-import {
-  applied,
-  converged,
-  diverged,
-  execute,
-  type Step,
-  type StepPolicy,
-} from "../Recipe.ts";
+import { applied, converged, diverged, execute, type Step, type StepPolicy } from "../Recipe.ts";
 import { runOrFail } from "./internal.ts";
 
 export interface AuthorizedKeyInput {
@@ -23,9 +16,7 @@ export interface AuthorizedKeyOutput {
   user: string | undefined;
 }
 
-export const makeAuthorizedKeyStep = (
-  input: AuthorizedKeyInput,
-): Step<AuthorizedKeyOutput> => {
+export const makeAuthorizedKeyStep = (input: AuthorizedKeyInput): Step<AuthorizedKeyOutput> => {
   const key = input.key.trim();
   const step = {
     kind: "authorizedKey",
@@ -35,9 +26,7 @@ export const makeAuthorizedKeyStep = (
   const output = { user: input.user };
   // Resolved from the account, not `$HOME`, which is root's under `sudo -H`.
   // An unknown user fails instead of resolving to `/.ssh`.
-  const account = Effect.map(Client, (client) =>
-    quote(input.user ?? client.user),
-  );
+  const account = Effect.map(Client, (client) => quote(input.user ?? client.user));
   const home = Effect.map(
     account,
     (user) =>
@@ -81,5 +70,4 @@ export const makeAuthorizedKeyStep = (
 };
 
 /** One public key in a user's `authorized_keys`, matched as a whole line. */
-export const authorizedKey = (input: AuthorizedKeyInput) =>
-  execute(makeAuthorizedKeyStep(input));
+export const authorizedKey = (input: AuthorizedKeyInput) => execute(makeAuthorizedKeyStep(input));

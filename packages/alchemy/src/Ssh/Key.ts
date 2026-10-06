@@ -16,11 +16,7 @@ const sshString = (data: Buffer | string) => {
  * Encode an ed25519 keypair as OpenSSH public + private key files.
  * `ssh -i` on macOS rejects PKCS8 ed25519 PEMs with exit 255.
  */
-const encodeOpenSshEd25519 = (
-  publicRaw: Buffer,
-  seed: Buffer,
-  comment: string,
-) => {
+const encodeOpenSshEd25519 = (publicRaw: Buffer, seed: Buffer, comment: string) => {
   const algo = Buffer.from("ssh-ed25519");
   const pubBlob = Buffer.concat([sshString(algo), sshString(publicRaw)]);
   const publicKey = `ssh-ed25519 ${pubBlob.toString("base64")} ${comment}`;

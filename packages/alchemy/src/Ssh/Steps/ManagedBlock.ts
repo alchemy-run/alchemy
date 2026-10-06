@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { sha256 } from "../../Util/sha256.ts";
 import { quote } from "../Client.ts";
 import {
   applied,
@@ -9,7 +10,6 @@ import {
   type Step,
   type StepPolicy,
 } from "../Recipe.ts";
-import { sha256 } from "../../Util/sha256.ts";
 import { clientExec, runOrFail, succeeded, writeScript } from "./internal.ts";
 
 export interface ManagedBlockInput {
@@ -51,16 +51,9 @@ export const rebuild = (
 ) => {
   const lines = current === "" ? [] : current.replace(/\n$/, "").split("\n");
   const begin = lines.indexOf(markers.begin);
-  const end =
-    begin === -1
-      ? lines.indexOf(markers.end)
-      : lines.indexOf(markers.end, begin);
+  const end = begin === -1 ? lines.indexOf(markers.end) : lines.indexOf(markers.end, begin);
   if ((begin === -1) !== (end === -1)) return undefined;
-  const body = [
-    markers.begin,
-    ...block.replace(/\n$/, "").split("\n"),
-    markers.end,
-  ];
+  const body = [markers.begin, ...block.replace(/\n$/, "").split("\n"), markers.end];
   const rebuilt =
     begin === -1
       ? [...lines, ...body]
@@ -68,9 +61,7 @@ export const rebuild = (
   return `${rebuilt.join("\n")}\n`;
 };
 
-export const makeManagedBlockStep = (
-  input: ManagedBlockInput,
-): Step<ManagedBlockOutput> => {
+export const makeManagedBlockStep = (input: ManagedBlockInput): Step<ManagedBlockOutput> => {
   const step = {
     kind: "managedBlock",
     name: `${input.path}#${input.name ?? "alchemy"}`,
@@ -81,10 +72,7 @@ export const makeManagedBlockStep = (
 
   const wanted = Effect.gen(function* () {
     const run = yield* clientExec;
-    const read = yield* run(
-      `if [ -e ${path} ]; then cat -- ${path}; else exit 66; fi`,
-      options,
-    );
+    const read = yield* run(`if [ -e ${path} ]; then cat -- ${path}; else exit 66; fi`, options);
     if (read.code === 66 && !input.create) {
       return yield* new StepFailed({
         message: `managedBlock[${step.name}]: ${input.path} does not exist`,
@@ -92,10 +80,7 @@ export const makeManagedBlockStep = (
         step: step.name,
       });
     }
-    const { stdout } =
-      read.code === 66
-        ? read
-        : yield* succeeded(step, `cat ${input.path}`, read);
+    const { stdout } = read.code === 66 ? read : yield* succeeded(step, `cat ${input.path}`, read);
     const rebuilt = rebuild(stdout, input.block, markers);
     if (rebuilt === undefined) {
       return yield* new StepFailed({
@@ -135,5 +120,4 @@ export const makeManagedBlockStep = (
  * is; a new one is appended. The file is rewritten in place, keeping its
  * inode, mode and owner.
  */
-export const managedBlock = (input: ManagedBlockInput) =>
-  execute(makeManagedBlockStep(input));
+export const managedBlock = (input: ManagedBlockInput) => execute(makeManagedBlockStep(input));

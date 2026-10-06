@@ -1,11 +1,11 @@
+import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
-import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
-import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
-import { fileURLToPath } from "node:url";
 import path from "pathe";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import type * as Bundle from "../../../Bundle/Bundle.ts";
+import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import type {
   DevContext,
   SourceContext,
@@ -63,11 +63,7 @@ export const bundleSource = (spec: {
   ) => Effect.Effect<Bundle.BundleOutput, SourceError, SourceServices>;
   readonly watch: (
     ctx: DevContext,
-  ) => Effect.Effect<
-    Stream.Stream<Bundle.BundleWatchEvent, SourceError, any>,
-    SourceError,
-    any
-  >;
+  ) => Effect.Effect<Stream.Stream<Bundle.BundleWatchEvent, SourceError, any>, SourceError, any>;
 }): SourceProvider => ({
   ownsAssets: false,
   build: (ctx) =>
@@ -78,16 +74,9 @@ export const bundleSource = (spec: {
         hash: { bundle: bundle.hash },
       })),
     ),
-  hash: (ctx) =>
-    spec.build(ctx).pipe(Effect.map((bundle) => ({ bundle: bundle.hash }))),
+  hash: (ctx) => spec.build(ctx).pipe(Effect.map((bundle) => ({ bundle: bundle.hash }))),
   dev: (ctx) =>
-    spec
-      .watch(ctx)
-      .pipe(
-        Effect.map(
-          (bundles) => ({ mode: "bundle", bundles }) as SourceDevHandle,
-        ),
-      ),
+    spec.watch(ctx).pipe(Effect.map((bundles) => ({ mode: "bundle", bundles }) as SourceDevHandle)),
 });
 
 /**
@@ -120,23 +109,15 @@ export const watchBundleDirectory = <R>(options: {
           _tag: "Success",
           output,
         })),
-        Effect.catch((error) =>
-          Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error }),
-        ),
+        Effect.catch((error) => Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error })),
       );
       const rebuilds = fs.watch(root).pipe(
         Stream.filter(
           (event) =>
             isPathWithin(dotAlchemy, root, runtimeBase) ||
-            !isPathWithin(
-              dotAlchemy,
-              path.resolve(root, event.path),
-              runtimeBase,
-            ),
+            !isPathWithin(dotAlchemy, path.resolve(root, event.path), runtimeBase),
         ),
-        options.ignore
-          ? Stream.filter((event) => !options.ignore!(event.path))
-          : (self) => self,
+        options.ignore ? Stream.filter((event) => !options.ignore!(event.path)) : (self) => self,
         Stream.debounce("200 millis"),
         Stream.flatMap(() =>
           Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent).pipe(

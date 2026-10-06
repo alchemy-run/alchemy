@@ -34,14 +34,8 @@ export interface DeleteSshPublicKey extends Binding.Service<
     user: User,
   ) => Effect.Effect<
     (
-      request: Omit<
-        transfer.DeleteSshPublicKeyRequest,
-        "ServerId" | "UserName"
-      >,
-    ) => Effect.Effect<
-      transfer.DeleteSshPublicKeyResponse,
-      transfer.DeleteSshPublicKeyError
-    >
+      request: Omit<transfer.DeleteSshPublicKeyRequest, "ServerId" | "UserName">,
+    ) => Effect.Effect<transfer.DeleteSshPublicKeyResponse, transfer.DeleteSshPublicKeyError>
   >
 > {}
 export const DeleteSshPublicKey = Binding.Service<DeleteSshPublicKey>(

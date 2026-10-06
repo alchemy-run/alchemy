@@ -10,10 +10,7 @@ import { recordCli } from "../../Telemetry/Metrics.ts";
  * off this wrapper and therefore never load `Alchemist/Session`.
  */
 export const instrumentCommand =
-  <AttrsArgs = unknown>(
-    command: string,
-    attrs?: (args: AttrsArgs) => Record<string, unknown>,
-  ) =>
+  <AttrsArgs = unknown>(command: string, attrs?: (args: AttrsArgs) => Record<string, unknown>) =>
   <Args extends AttrsArgs, A, E, R>(
     handler: (args: Args) => Effect.Effect<A, E, R>,
   ): ((args: Args) => Effect.Effect<A, E, R>) =>

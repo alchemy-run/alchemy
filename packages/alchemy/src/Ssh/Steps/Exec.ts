@@ -38,9 +38,7 @@ const NAME_LIMIT = 60;
 
 // `ls -d` exits 0 when at least one match exists.
 const exists = (path: string) =>
-  /[*?[]/.test(path)
-    ? `ls -d -- ${path} >/dev/null 2>&1`
-    : `test -e ${quote(path)}`;
+  /[*?[]/.test(path) ? `ls -d -- ${path} >/dev/null 2>&1` : `test -e ${quote(path)}`;
 
 /** Each guard as a shell test that exits 0 when the command should be skipped. */
 const skipConditions = (input: ExecInput) => [
@@ -50,9 +48,7 @@ const skipConditions = (input: ExecInput) => [
   ...(input.removes === undefined ? [] : [`! ${exists(input.removes)}`]),
 ];
 
-export const makeExecStep = (
-  input: ExecInput,
-): Step<ExecResult | undefined> => {
+export const makeExecStep = (input: ExecInput): Step<ExecResult | undefined> => {
   const name =
     input.name ??
     (input.command.length > NAME_LIMIT

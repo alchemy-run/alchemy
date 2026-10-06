@@ -1,14 +1,7 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { quote } from "../Client.ts";
-import {
-  applied,
-  converged,
-  diverged,
-  execute,
-  type Step,
-  type StepPolicy,
-} from "../Recipe.ts";
+import { applied, converged, diverged, execute, type Step, type StepPolicy } from "../Recipe.ts";
 import { runOrFail } from "./internal.ts";
 
 export interface AptInput {
@@ -74,8 +67,7 @@ export const parseAptCachePolicy = (stdout: string) => {
 };
 
 export const makeAptStep = (input: AptInput): Step<AptOutput> => {
-  const specs =
-    typeof input.packages === "string" ? [input.packages] : [...input.packages];
+  const specs = typeof input.packages === "string" ? [input.packages] : [...input.packages];
   const parsed = specs.map(parseAptSpec);
   const step = { kind: "apt", name: specs.join(" ") };
   const state = input.state ?? "present";
@@ -100,10 +92,7 @@ export const makeAptStep = (input: AptInput): Step<AptOutput> => {
       `if [ -n "$(find ${SOURCES} -newer ${LISTS_DIR} 2>/dev/null)" ]; then echo stale; else echo $(( $(date +%s) - $(stat -c %Y ${LISTS_DIR} 2>/dev/null || echo 0) )); fi`,
     );
     const age = Number.parseInt(stdout, 10);
-    return (
-      Number.isNaN(age) ||
-      age > Duration.toSeconds(input.cacheValidTime ?? "1 hour")
-    );
+    return Number.isNaN(age) || age > Duration.toSeconds(input.cacheValidTime ?? "1 hour");
   });
 
   return {
@@ -141,8 +130,7 @@ export const makeAptStep = (input: AptInput): Step<AptOutput> => {
         const policy = parseAptCachePolicy(stdout);
         const outdated = parsed.filter(
           ({ name }) =>
-            policy[name] !== undefined &&
-            policy[name].installed !== policy[name].candidate,
+            policy[name] !== undefined && policy[name].installed !== policy[name].candidate,
         );
         if (outdated.length > 0) {
           return diverged(

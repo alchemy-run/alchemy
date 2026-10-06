@@ -1,13 +1,6 @@
 import * as Effect from "effect/Effect";
 import { quote, type ExecOptions, type ExecResult } from "../Client.ts";
-import {
-  applied,
-  converged,
-  diverged,
-  execute,
-  type Step,
-  type StepPolicy,
-} from "../Recipe.ts";
+import { applied, converged, diverged, execute, type Step, type StepPolicy } from "../Recipe.ts";
 import { parentOf, runOrFail } from "./internal.ts";
 
 export interface StampInput extends Pick<
@@ -39,11 +32,9 @@ export const makeStampStep = (input: StampInput): Step<StampOutput> => {
     notify: input.notify,
     policy: input.policy,
     check: Effect.gen(function* () {
-      const { stdout } = yield* runOrFail(
-        step,
-        `if [ -e ${path} ]; then cat -- ${path}; fi`,
-        { sudo: input.sudo },
-      );
+      const { stdout } = yield* runOrFail(step, `if [ -e ${path} ]; then cat -- ${path}; fi`, {
+        sudo: input.sudo,
+      });
       const recorded = stdout.trim();
       return recorded === value
         ? converged({ value, result: undefined })

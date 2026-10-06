@@ -11,8 +11,7 @@ export class CatalogNotFound extends Data.TaggedError("Fly.CatalogNotFound")<{
   ref: string;
 }> {}
 
-const notFound = (kind: CatalogKind, ref: string) =>
-  new CatalogNotFound({ kind, ref });
+const notFound = (kind: CatalogKind, ref: string) => new CatalogNotFound({ kind, ref });
 
 /**
  * Current token organization slug (`getCurrentToken` → `tokens[0].org_slug`).

@@ -1,7 +1,6 @@
 import * as aiSecurity from "@distilled.cloud/cloudflare/ai-security";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -44,8 +43,7 @@ export type SecuritySettingsAttributes = {
  * Returns true if the given value is a SecuritySettings resource.
  */
 export const isSecuritySettings = (value: unknown): value is SecuritySettings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AiSecuritySettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === AiSecuritySettingsTypeId;
 
 export type SecuritySettings = Resource<
   AiSecuritySettingsTypeId,
@@ -93,12 +91,9 @@ export type SecuritySettings = Resource<
  * @product AI Security
  * @category Application Security
  */
-export const SecuritySettings = Resource<SecuritySettings>(
-  AiSecuritySettingsTypeId,
-  {
-    aliases: ["Cloudflare.AiSecurity.Settings"],
-  },
-);
+export const SecuritySettings = Resource<SecuritySettings>(AiSecuritySettingsTypeId, {
+  aliases: ["Cloudflare.AiSecurity.Settings"],
+});
 
 export const SecuritySettingsProvider = () =>
   Provider.succeed(SecuritySettings, {
@@ -121,31 +116,20 @@ export const SecuritySettingsProvider = () =>
             }),
             // Entitlement-gated or out-of-band-deleted zones reject the
             // route; skip them rather than failing the whole enumeration.
-            Effect.catchTag("AiSecurityNotEntitled", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("ZoneNotAuthorized", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
+            Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is SecuritySettingsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SecuritySettingsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as SecuritySettingsProps;
       const n = news as SecuritySettingsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -164,8 +148,7 @@ export const SecuritySettingsProvider = () =>
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialEnabled` restored on destroy.
       const enabled = observed.enabled ?? false;
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : enabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
       return { zoneId, enabled, initialEnabled };
     }),
 
@@ -182,8 +165,7 @@ export const SecuritySettingsProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : observedEnabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : observedEnabled;
 
       // 3. Sync — PUT only when the observed value differs.
       if (observedEnabled === desired) {
@@ -203,9 +185,7 @@ export const SecuritySettingsProvider = () =>
       // nothing we can restore.
       const observed = yield* aiSecurity.getAiSecurity({ zoneId }).pipe(
         Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
-        Effect.catchTag("AiSecurityNotEntitled", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already

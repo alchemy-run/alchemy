@@ -51,8 +51,7 @@ export const parseMode = (mode: string | number) =>
   typeof mode === "number" ? mode : Number.parseInt(mode, 8);
 
 /** As `chmod` takes it and `stat -c %a` prints it. */
-export const formatMode = (mode: string | number) =>
-  parseMode(mode).toString(8).padStart(3, "0");
+export const formatMode = (mode: string | number) => parseMode(mode).toString(8).padStart(3, "0");
 
 export interface Ownership {
   mode?: string | number;
@@ -83,9 +82,7 @@ export const inspectScript = (path: string, withChecksum = false) =>
     `fi`,
     `echo "$out"`,
     ...(withChecksum
-      ? [
-          `if [ -f "$p" ]; then sum=$(sha256sum -- "$p") || exit; echo "\${sum%% *}"; fi`,
-        ]
+      ? [`if [ -f "$p" ]; then sum=$(sha256sum -- "$p") || exit; echo "\${sum%% *}"; fi`]
       : []),
   ].join("\n");
 
@@ -147,9 +144,7 @@ export const declaredOwnership = (wanted: Ownership) => ({
 });
 
 export const ownershipCommands = (path: string, wanted: Ownership) => [
-  ...(wanted.mode === undefined
-    ? []
-    : [`chmod ${formatMode(wanted.mode)} ${quote(path)}`]),
+  ...(wanted.mode === undefined ? [] : [`chmod ${formatMode(wanted.mode)} ${quote(path)}`]),
   ...(wanted.owner === undefined && wanted.group === undefined
     ? []
     : [
@@ -157,8 +152,7 @@ export const ownershipCommands = (path: string, wanted: Ownership) => [
       ]),
 ];
 
-export const parentOf = (path: string) =>
-  path.slice(0, Math.max(path.lastIndexOf("/"), 0)) || "/";
+export const parentOf = (path: string) => path.slice(0, Math.max(path.lastIndexOf("/"), 0)) || "/";
 
 export interface WriteOptions extends Ownership {
   /**
@@ -189,9 +183,7 @@ export const writeScript = (path: string, options: WriteOptions) => {
     `t=$(mktemp ${quote(`${parentOf(path)}/.alchemy.XXXXXX`)})`,
     `trap 'rm -f "$t"' EXIT`,
     'cat > "$t"',
-    ...(options.validate === undefined
-      ? []
-      : [options.validate.replaceAll("%s", '"$t"')]),
+    ...(options.validate === undefined ? [] : [options.validate.replaceAll("%s", '"$t"')]),
     ...(options.atomic
       ? [
           `if [ -e ${dest} ]; then`,

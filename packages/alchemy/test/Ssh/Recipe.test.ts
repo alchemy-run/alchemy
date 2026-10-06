@@ -1,7 +1,7 @@
-import * as Ssh from "@/Ssh";
 import { assert, describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Ssh from "@/Ssh";
 import { fakeClient, lost, ok } from "./FakeClient.ts";
 
 /** A step over an in-memory flag: diverged until `apply` sets it. */
@@ -23,9 +23,7 @@ const flag = (
     check: Effect.gen(function* () {
       calls.check++;
       if (options.check) yield* options.check;
-      return state.set
-        ? Ssh.converged(true)
-        : Ssh.diverged({ set: false }, { set: true });
+      return state.set ? Ssh.converged(true) : Ssh.diverged({ set: false }, { set: true });
     }),
     apply: Effect.sync(() => {
       calls.apply++;
@@ -72,9 +70,7 @@ describe("Ssh.run", { tags: ["unit", "local"] }, () => {
       const summary = yield* fake.run(
         () =>
           Effect.gen(function* () {
-            yield* Ssh.execute(
-              flag("a", { notify: ["reload", "restart"] }).step,
-            );
+            yield* Ssh.execute(flag("a", { notify: ["reload", "restart"] }).step);
             yield* Ssh.execute(flag("b", { notify: ["restart"] }).step);
           }),
         "apply",
@@ -106,9 +102,7 @@ describe("Ssh.run", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       let drops = 1;
       const retried = flag("check", {
-        check: Effect.suspend(() =>
-          drops-- > 0 ? Effect.fail(lost()) : Effect.void,
-        ),
+        check: Effect.suspend(() => (drops-- > 0 ? Effect.fail(lost()) : Effect.void)),
       });
       const fake = fakeClient(() => ok());
       yield* fake.run(() => Ssh.execute(retried.step));
@@ -188,9 +182,7 @@ describe("Ssh.run", { tags: ["unit", "local"] }, () => {
 
       expect(managers).toEqual(["dnf", "dnf"]);
       expect(
-        fake.issued.filter((call) =>
-          call.command.startsWith(". /etc/os-release"),
-        ),
+        fake.issued.filter((call) => call.command.startsWith(". /etc/os-release")),
       ).toHaveLength(1);
     }),
   );

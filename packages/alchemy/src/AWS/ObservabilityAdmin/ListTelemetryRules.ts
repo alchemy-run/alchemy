@@ -30,10 +30,7 @@ export interface ListTelemetryRules extends Binding.Service<
   () => Effect.Effect<
     (
       request?: obs.ListTelemetryRulesInput,
-    ) => Effect.Effect<
-      obs.ListTelemetryRulesOutput,
-      obs.ListTelemetryRulesError
-    >
+    ) => Effect.Effect<obs.ListTelemetryRulesOutput, obs.ListTelemetryRulesError>
   >
 > {}
 

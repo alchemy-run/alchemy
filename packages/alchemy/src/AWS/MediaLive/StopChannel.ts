@@ -29,13 +29,6 @@ export interface StopChannel extends Binding.Service<
   "AWS.MediaLive.StopChannel",
   (
     channel: Channel,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      medialive.StopChannelResponse,
-      medialive.StopChannelError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<medialive.StopChannelResponse, medialive.StopChannelError>>
 > {}
-export const StopChannel = Binding.Service<StopChannel>(
-  "AWS.MediaLive.StopChannel",
-);
+export const StopChannel = Binding.Service<StopChannel>("AWS.MediaLive.StopChannel");

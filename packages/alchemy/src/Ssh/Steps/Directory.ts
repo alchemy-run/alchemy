@@ -31,9 +31,7 @@ export interface DirectoryOutput {
   path: string;
 }
 
-export const makeDirectoryStep = (
-  input: DirectoryInput,
-): Step<DirectoryOutput> => {
+export const makeDirectoryStep = (input: DirectoryInput): Step<DirectoryOutput> => {
   const step = { kind: "directory", name: input.path };
   const options = { sudo: input.sudo };
   const output = { path: input.path };
@@ -57,15 +55,10 @@ export const makeDirectoryStep = (
           : diverged({ state: "present" }, { state: "absent" });
       }
       if (actual === undefined) {
-        return diverged(
-          { state: "absent" },
-          { state: "present", ...declaredOwnership(input) },
-        );
+        return diverged({ state: "absent" }, { state: "present", ...declaredOwnership(input) });
       }
       const ownership = ownershipDiff(input, actual);
-      return ownership.differs
-        ? diverged(ownership.current, ownership.desired)
-        : converged(output);
+      return ownership.differs ? diverged(ownership.current, ownership.desired) : converged(output);
     }),
     apply: Effect.gen(function* () {
       yield* runOrFail(
@@ -85,5 +78,4 @@ export const makeDirectoryStep = (
 };
 
 /** A directory with this ownership. */
-export const directory = (input: DirectoryInput) =>
-  execute(makeDirectoryStep(input));
+export const directory = (input: DirectoryInput) => execute(makeDirectoryStep(input));

@@ -13,8 +13,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/self-url") {
       return Response.json({
-        inlined: (import.meta.env as { VITE_PUBLIC_URL?: string })
-          .VITE_PUBLIC_URL,
+        inlined: (import.meta.env as { VITE_PUBLIC_URL?: string }).VITE_PUBLIC_URL,
         env: env.VITE_PUBLIC_URL,
       });
     }

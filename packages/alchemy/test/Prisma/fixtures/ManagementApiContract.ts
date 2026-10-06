@@ -97,5 +97,6 @@ export const managementApiContract = {
 const deferredRouteSet = new Set<string>(managementApiContract.deferredRoutes);
 
 /** Canonical production routes that Alchemy must map. */
-export const productionManagementApiRoutes =
-  managementApiContract.routes.filter((route) => !deferredRouteSet.has(route));
+export const productionManagementApiRoutes = managementApiContract.routes.filter(
+  (route) => !deferredRouteSet.has(route),
+);

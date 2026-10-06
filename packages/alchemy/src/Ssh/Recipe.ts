@@ -148,13 +148,9 @@ export interface RunContextShape {
   readonly flush: Effect.Effect<void, StepError | HandlerUnknown>;
 }
 
-export class RunContext extends Context.Service<RunContext, RunContextShape>()(
-  "Ssh.RunContext",
-) {}
+export class RunContext extends Context.Service<RunContext, RunContextShape>()("Ssh.RunContext") {}
 
-const probeFacts = Effect.fn("Ssh.facts")(function* (
-  client: Pick<ClientShape, "exec">,
-) {
+const probeFacts = Effect.fn("Ssh.facts")(function* (client: Pick<ClientShape, "exec">) {
   const { stdout } = yield* client.exec(
     [
       ". /etc/os-release 2>/dev/null",
@@ -164,8 +160,9 @@ const probeFacts = Effect.fn("Ssh.facts")(function* (
       "if command -v apt-get >/dev/null 2>&1; then echo apt; elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then echo dnf; else echo -; fi",
     ].join("; "),
   );
-  const [distroId = "", distroVersion = "", arch = "", init = "", pkg = ""] =
-    stdout.trim().split("\n");
+  const [distroId = "", distroVersion = "", arch = "", init = "", pkg = ""] = stdout
+    .trim()
+    .split("\n");
   return {
     distroId,
     distroVersion,
@@ -207,10 +204,7 @@ const redactDeep = (redact: (value: string) => string, value: unknown): any =>
       ? value.map((entry) => redactDeep(redact, entry))
       : typeof value === "object" && value !== null
         ? Object.fromEntries(
-            Object.entries(value).map(([key, entry]) => [
-              key,
-              redactDeep(redact, entry),
-            ]),
+            Object.entries(value).map(([key, entry]) => [key, redactDeep(redact, entry)]),
           )
         : value;
 
@@ -238,21 +232,14 @@ const redactError = <E extends { readonly _tag: string }>(
  */
 export const execute = <Out>(
   step: Step<Out>,
-): Effect.Effect<
-  StepResult<Out>,
-  StepError | HandlerUnknown,
-  Client | RunContext
-> =>
+): Effect.Effect<StepResult<Out>, StepError | HandlerUnknown, Client | RunContext> =>
   Effect.gen(function* () {
     const ctx = yield* RunContext;
     const { redact } = yield* Client;
     const name = redact(step.name);
     const label = `${step.kind}[${name}]`;
     const started = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
-    const report = (
-      status: StepStatus,
-      diff?: Check<Out> & { converged: false },
-    ) =>
+    const report = (status: StepStatus, diff?: Check<Out> & { converged: false }) =>
       Effect.gen(function* () {
         const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
         yield* ctx.report({
@@ -323,16 +310,10 @@ export const execute = <Out>(
       } as const;
     });
 
-    return yield* run.pipe(
-      Effect.mapError((error) => redactError(redact, error)),
-    );
+    return yield* run.pipe(Effect.mapError((error) => redactError(redact, error)));
   }).pipe(Effect.withSpan(`Ssh.step.${step.kind}`));
 
-export type Handler = Effect.Effect<
-  unknown,
-  StepError | HandlerUnknown,
-  Client | RunContext
->;
+export type Handler = Effect.Effect<unknown, StepError | HandlerUnknown, Client | RunContext>;
 
 /** A vars schema that decodes without services. */
 export type VarsSchema = Schema.Top & { readonly DecodingServices: never };
@@ -347,9 +328,7 @@ export interface RecipeDefinition<S extends VarsSchema> {
    * Run once each, in declaration order, when notified by a changed step. A
    * function receives the decoded vars.
    */
-  readonly handlers?:
-    | Record<string, Handler>
-    | ((vars: S["Type"]) => Record<string, Handler>);
+  readonly handlers?: Record<string, Handler> | ((vars: S["Type"]) => Record<string, Handler>);
   readonly run: (
     vars: S["Type"],
   ) => Effect.Effect<void, StepError | HandlerUnknown, Client | RunContext>;
@@ -377,15 +356,11 @@ export class Recipe<S extends VarsSchema> {
  * @example
  * export const Web = Ssh.make({ main: import.meta.url, name: "web", vars, run });
  */
-export const make = <S extends VarsSchema>(
-  definition: RecipeDefinition<S>,
-): Recipe<S> => new Recipe(definition);
+export const make = <S extends VarsSchema>(definition: RecipeDefinition<S>): Recipe<S> =>
+  new Recipe(definition);
 
 export const isRecipe = (value: unknown): value is Recipe<VarsSchema> =>
-  typeof value === "object" &&
-  value !== null &&
-  "_tag" in value &&
-  value._tag === "Ssh.Recipe";
+  typeof value === "object" && value !== null && "_tag" in value && value._tag === "Ssh.Recipe";
 
 export interface RunSummary {
   readonly steps: ReadonlyArray<StepReport>;
@@ -415,9 +390,7 @@ export const run = <S extends VarsSchema>(
   options: RunOptions,
 ): Effect.Effect<RunSummary, RunError> =>
   Effect.gen(function* () {
-    const vars = yield* Schema.decodeUnknownEffect(recipe.vars)(
-      options.vars,
-    ).pipe(
+    const vars = yield* Schema.decodeUnknownEffect(recipe.vars)(options.vars).pipe(
       Effect.mapError(
         (error) =>
           new VarsInvalid({
@@ -429,9 +402,7 @@ export const run = <S extends VarsSchema>(
     const reports = yield* Ref.make<ReadonlyArray<StepReport>>([]);
     const queued = yield* Ref.make<ReadonlyArray<string>>([]);
     const handlers =
-      typeof recipe.handlers === "function"
-        ? recipe.handlers(vars)
-        : (recipe.handlers ?? {});
+      typeof recipe.handlers === "function" ? recipe.handlers(vars) : (recipe.handlers ?? {});
     const facts = yield* Effect.cached(probeFacts(options.client));
 
     const report = (entry: StepReport) =>
@@ -451,16 +422,12 @@ export const run = <S extends VarsSchema>(
             durationMs: 0,
           });
         } else {
-          yield* handler.pipe(
-            Effect.withSpan("Ssh.handler", { attributes: { handler: name } }),
-          );
+          yield* handler.pipe(Effect.withSpan("Ssh.handler", { attributes: { handler: name } }));
         }
       }
     });
 
-    const provide = <A, E>(
-      self: Effect.Effect<A, E, Client | RunContext>,
-    ): Effect.Effect<A, E> =>
+    const provide = <A, E>(self: Effect.Effect<A, E, Client | RunContext>): Effect.Effect<A, E> =>
       self.pipe(
         Effect.provideService(Client, options.client),
         Effect.provideService(RunContext, context),
@@ -473,9 +440,7 @@ export const run = <S extends VarsSchema>(
       notify: (names, step) =>
         Effect.forEach(names, (name) =>
           name in handlers
-            ? Ref.update(queued, (all) =>
-                all.includes(name) ? all : [...all, name],
-              )
+            ? Ref.update(queued, (all) => (all.includes(name) ? all : [...all, name]))
             : Effect.fail(
                 new HandlerUnknown({
                   message: `${step} notifies handler "${name}", which recipe ${recipe.name} does not declare`,
@@ -505,12 +470,11 @@ export const run = <S extends VarsSchema>(
   );
 
 /** Run the handlers notified so far, now. Ansible's `flush_handlers`. */
-export const flushHandlers: Effect.Effect<
-  void,
-  StepError | HandlerUnknown,
-  RunContext
-> = Effect.flatMap(RunContext, (ctx) => ctx.flush);
+export const flushHandlers: Effect.Effect<void, StepError | HandlerUnknown, RunContext> =
+  Effect.flatMap(RunContext, (ctx) => ctx.flush);
 
 /** The host's facts, probed once per run. */
-export const facts: Effect.Effect<Facts, ExecError, RunContext> =
-  Effect.flatMap(RunContext, (ctx) => ctx.facts);
+export const facts: Effect.Effect<Facts, ExecError, RunContext> = Effect.flatMap(
+  RunContext,
+  (ctx) => ctx.facts,
+);

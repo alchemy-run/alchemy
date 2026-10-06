@@ -18,9 +18,7 @@ export class ConnectionLost extends Data.TaggedError("Ssh.ConnectionLost")<{
 }> {}
 
 /** The server refused every offered key. Not retried. */
-export class AuthenticationFailed extends Data.TaggedError(
-  "Ssh.AuthenticationFailed",
-)<{
+export class AuthenticationFailed extends Data.TaggedError("Ssh.AuthenticationFailed")<{
   message: string;
   host: string;
   user: string;
@@ -67,14 +65,6 @@ export class TransferError extends Data.TaggedError("Ssh.TransferError")<{
 }> {}
 
 /** Failures that stop a session from reaching the remote shell. */
-export type SessionError =
-  | SpawnError
-  | ConnectionLost
-  | AuthenticationFailed
-  | HostKeyMismatch;
+export type SessionError = SpawnError | ConnectionLost | AuthenticationFailed | HostKeyMismatch;
 
-export type ExecError =
-  | SessionError
-  | SudoRefused
-  | ExecTimeout
-  | InvalidEnvName;
+export type ExecError = SessionError | SudoRefused | ExecTimeout | InvalidEnvName;

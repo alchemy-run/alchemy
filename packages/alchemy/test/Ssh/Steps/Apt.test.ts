@@ -1,6 +1,6 @@
-import * as Ssh from "@/Ssh";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Ssh from "@/Ssh";
 import { fakeClient, ok } from "../FakeClient.ts";
 
 describe("Ssh.Steps.apt", { tags: ["unit", "local"] }, () => {
@@ -39,9 +39,7 @@ describe("Ssh.Steps.apt", { tags: ["unit", "local"] }, () => {
 
   it.effect("diverges when a pinned version is not the installed one", () =>
     Effect.gen(function* () {
-      const fake = fakeClient(() =>
-        ok("nginx\tinstall ok installed\t1.24.0-2ubuntu7\n"),
-      );
+      const fake = fakeClient(() => ok("nginx\tinstall ok installed\t1.24.0-2ubuntu7\n"));
       const summary = yield* fake.run(
         () => Ssh.Steps.apt({ packages: ["nginx=1.26.0-1"] }),
         "check",

@@ -1,13 +1,6 @@
 import * as Effect from "effect/Effect";
 import { quote } from "../Client.ts";
-import {
-  applied,
-  converged,
-  diverged,
-  execute,
-  type Step,
-  type StepPolicy,
-} from "../Recipe.ts";
+import { applied, converged, diverged, execute, type Step, type StepPolicy } from "../Recipe.ts";
 import { runOrFail } from "./internal.ts";
 
 export interface GitInput {
@@ -56,10 +49,7 @@ export const makeGitStep = (input: GitInput): Step<GitOutput> => {
     check: Effect.gen(function* () {
       const current = yield* state;
       if (current === undefined) {
-        return diverged(
-          { state: "absent" },
-          { repo: input.repo, version: input.version },
-        );
+        return diverged({ state: "absent" }, { repo: input.repo, version: input.version });
       }
       if (current.origin !== input.repo) {
         return diverged({ repo: current.origin }, { repo: input.repo });

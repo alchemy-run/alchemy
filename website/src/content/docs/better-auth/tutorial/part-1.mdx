@@ -72,7 +72,7 @@ Handlers and middleware can now request the same typed service with `yield* Auth
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
   "AuthApi",

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface PutItemRequest extends Omit<
-  DynamoDB.PutItemInput,
-  "TableName"
-> {}
+export interface PutItemRequest extends Omit<DynamoDB.PutItemInput, "TableName"> {}
 
 /**
  * Runtime binding for `dynamodb:PutItem`.
@@ -38,9 +35,7 @@ export interface PutItem extends Binding.Service<
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
-    (
-      request: PutItemRequest,
-    ) => Effect.Effect<DynamoDB.PutItemOutput, DynamoDB.PutItemError>
+    (request: PutItemRequest) => Effect.Effect<DynamoDB.PutItemOutput, DynamoDB.PutItemError>
   >
 > {}
 

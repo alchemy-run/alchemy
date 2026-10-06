@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { EventBus } from "./EventBus.ts";
 
-export interface ListRulesRequest extends Omit<
-  eventbridge.ListRulesRequest,
-  "EventBusName"
-> {}
+export interface ListRulesRequest extends Omit<eventbridge.ListRulesRequest, "EventBusName"> {}
 
 /**
  * Lists the rules on an EventBridge event bus (`events:ListRules`).
@@ -35,12 +32,7 @@ export interface ListRules extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListRulesRequest,
-    ) => Effect.Effect<
-      eventbridge.ListRulesResponse,
-      eventbridge.ListRulesError
-    >
+    ) => Effect.Effect<eventbridge.ListRulesResponse, eventbridge.ListRulesError>
   >
 > {}
-export const ListRules = Binding.Service<ListRules>(
-  "AWS.EventBridge.ListRules",
-);
+export const ListRules = Binding.Service<ListRules>("AWS.EventBridge.ListRules");

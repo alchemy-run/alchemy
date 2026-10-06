@@ -1,17 +1,14 @@
+import { pathToFileURL } from "node:url";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { pathToFileURL } from "node:url";
 import {
   loadProjectModule,
   resolveProjectPackageDirectory,
   type ModuleLoadError,
 } from "../core/Loader.ts";
-import {
-  loadVinextBuildConfig,
-  type VinextBuildConfig,
-} from "./BuildConfig.ts";
+import { loadVinextBuildConfig, type VinextBuildConfig } from "./BuildConfig.ts";
 
 export type VinextPrerenderResult = {
   readonly ran: boolean;
@@ -34,13 +31,10 @@ const exists = (fs: FileSystem.FileSystem, filePath: string) =>
 const isWranglerKvHint = (text: string) =>
   text.includes("failed to initialize the configured data cache adapter") ||
   text.includes("Add it to wrangler.jsonc") ||
-  (text.includes("KV data cache adapter requires") &&
-    text.includes("KV namespace binding")) ||
+  (text.includes("KV data cache adapter requires") && text.includes("KV namespace binding")) ||
   text.includes('"kv_namespaces"');
 
-const withLocalPrerenderLogs = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const withLocalPrerenderLogs = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
       const original = {
@@ -92,25 +86,17 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   const vinextRoot = yield* resolveVinextRoot(root);
 
   const importVinextDist = (rel: string) =>
-    Effect.promise(
-      () => import(pathToFileURL(path.join(vinextRoot, rel)).href),
-    );
+    Effect.promise(() => import(pathToFileURL(path.join(vinextRoot, rel)).href));
 
-  const { resolveVinextPrerenderDecision, formatVinextPrerenderLabel } =
-    yield* importVinextDist("dist/config/prerender.js");
+  const { resolveVinextPrerenderDecision, formatVinextPrerenderLabel } = yield* importVinextDist(
+    "dist/config/prerender.js",
+  );
   const config =
     buildConfig ??
     (yield* Effect.gen(function* () {
-      const vite = yield* loadProjectModule<typeof import("vite")>(
-        root,
-        "vite",
-      );
+      const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
       const loaded = yield* Effect.tryPromise(() =>
-        vite.loadConfigFromFile(
-          { command: "build", mode: "production" },
-          undefined,
-          root,
-        ),
+        vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
       );
       return yield* loadVinextBuildConfig(root, loaded?.config.plugins);
     }));
@@ -129,15 +115,16 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
     );
   }
 
-  const { runPrerender, assertNoFatalPrerenderRoutes } =
-    (yield* importVinextDist("dist/build/run-prerender.js")) as {
-      runPrerender: (options: {
-        root: string;
-        nextConfig: unknown;
-        routeRootConfig: unknown;
-      }) => Promise<{ routes?: readonly unknown[] } | null>;
-      assertNoFatalPrerenderRoutes: (routes: readonly unknown[]) => void;
-    };
+  const { runPrerender, assertNoFatalPrerenderRoutes } = (yield* importVinextDist(
+    "dist/build/run-prerender.js",
+  )) as {
+    runPrerender: (options: {
+      root: string;
+      nextConfig: unknown;
+      routeRootConfig: unknown;
+    }) => Promise<{ routes?: readonly unknown[] } | null>;
+    assertNoFatalPrerenderRoutes: (routes: readonly unknown[]) => void;
+  };
   const prerenderResult = yield* withLocalPrerenderLogs(
     Effect.promise(() =>
       runPrerender({
@@ -151,9 +138,7 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
     assertNoFatalPrerenderRoutes(prerenderResult.routes);
   }
 
-  const { emitPrerenderPathManifest } = yield* importVinextDist(
-    "dist/build/prerender-paths.js",
-  );
+  const { emitPrerenderPathManifest } = yield* importVinextDist("dist/build/prerender-paths.js");
   yield* Effect.promise(() =>
     emitPrerenderPathManifest({
       root,
@@ -176,9 +161,7 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
 });
 
 /** Absolute path to the project's `vinext` package root. */
-export const resolveVinextRoot = (
-  root: string,
-): Effect.Effect<string, ModuleLoadError> =>
+export const resolveVinextRoot = (root: string): Effect.Effect<string, ModuleLoadError> =>
   resolveProjectPackageDirectory(root, "vinext");
 
 const injectPregeneratedConcretePaths = (root: string) =>
@@ -190,20 +173,12 @@ const injectPregeneratedConcretePaths = (root: string) =>
       return;
     }
 
-    const escapedStart = PATH_TABLE_START.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      "\\$&",
-    );
+    const escapedStart = PATH_TABLE_START.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const escapedEnd = PATH_TABLE_END.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`${escapedStart}[\\s\\S]*?${escapedEnd}\\n?`, "g");
 
     let code = (yield* fs.readFileString(workerEntry)).replace(re, "");
-    const manifestPath = path.join(
-      root,
-      "dist",
-      "server",
-      "vinext-prerender.json",
-    );
+    const manifestPath = path.join(root, "dist", "server", "vinext-prerender.json");
     if (!(yield* exists(fs, manifestPath))) {
       yield* fs.writeFileString(workerEntry, code);
       return;

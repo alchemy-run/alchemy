@@ -1,12 +1,12 @@
-import * as Ssh from "@/Ssh";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as Ssh from "@/Ssh";
 
 const describe = layer(NodeServices.layer);
 
@@ -35,18 +35,14 @@ const fakeSsh = (respond: (call: Call) => Answer = () => ({})) => {
       assert(command._tag === "StandardCommand");
       const input = command.options.stdin;
       const stdin = Stream.isStream(input)
-        ? new TextDecoder().decode(
-            Buffer.concat(yield* Stream.runCollect(input)),
-          )
+        ? new TextDecoder().decode(Buffer.concat(yield* Stream.runCollect(input)))
         : undefined;
       const call = { bin: command.command, args: command.args, stdin };
       calls.push(call);
       const answer = respond(call);
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(1),
-        exitCode: Effect.succeed(
-          ChildProcessSpawner.ExitCode(answer.code ?? 0),
-        ),
+        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(answer.code ?? 0)),
         isRunning: Effect.succeed(false),
         kill: () => Effect.void,
         stdin: Sink.drain,
@@ -105,18 +101,13 @@ describe("Ssh.Client", (it) => {
           }).pipe(Effect.scoped, Effect.provide(fake.layer));
         };
 
-        expect(
-          (yield* failure("ubuntu@203.0.113.5: Permission denied (publickey)."))
-            ._tag,
-        ).toBe("Ssh.AuthenticationFailed");
-        expect((yield* failure("Host key verification failed."))._tag).toBe(
-          "Ssh.HostKeyMismatch",
+        expect((yield* failure("ubuntu@203.0.113.5: Permission denied (publickey)."))._tag).toBe(
+          "Ssh.AuthenticationFailed",
         );
-        expect(
-          (yield* failure(
-            "ssh: connect to host 203.0.113.5: Connection refused",
-          ))._tag,
-        ).toBe("Ssh.ConnectionLost");
+        expect((yield* failure("Host key verification failed."))._tag).toBe("Ssh.HostKeyMismatch");
+        expect((yield* failure("ssh: connect to host 203.0.113.5: Connection refused"))._tag).toBe(
+          "Ssh.ConnectionLost",
+        );
       }),
     { tags: ["unit", "local"] },
   );
@@ -185,10 +176,7 @@ describe("Ssh.Client", (it) => {
         const args = fake.calls[0]!.args;
         expect(args[args.indexOf("-i") + 1]).toMatch(/alchemy-ssh-.*\/id$/);
         expect(args).toContain("IdentitiesOnly=yes");
-        expect(args.slice(args.indexOf("-p"), args.indexOf("-p") + 2)).toEqual([
-          "-p",
-          "2222",
-        ]);
+        expect(args.slice(args.indexOf("-p"), args.indexOf("-p") + 2)).toEqual(["-p", "2222"]);
       }),
     { tags: ["unit", "local"] },
   );
@@ -197,21 +185,15 @@ describe("Ssh.Client", (it) => {
     "uploads bytes after creating the remote directory",
     () =>
       Effect.gen(function* () {
-        const fake = fakeSsh(({ bin }) =>
-          bin === "ssh" ? { stdout: reported(0) } : {},
-        );
+        const fake = fakeSsh(({ bin }) => (bin === "ssh" ? { stdout: reported(0) } : {}));
         yield* Effect.gen(function* () {
           const client = yield* connect();
           yield* client.upload(new TextEncoder().encode("hi"), "/opt/app/env");
         }).pipe(Effect.scoped, Effect.provide(fake.layer));
 
         expect(fake.calls.map((call) => call.bin)).toEqual(["ssh", "scp"]);
-        expect(fake.calls[0]!.args.at(-1)).toBe(
-          Ssh.remoteScript("mkdir -p '/opt/app'"),
-        );
-        expect(fake.calls[1]!.args.at(-1)).toBe(
-          "ubuntu@203.0.113.5:/opt/app/env",
-        );
+        expect(fake.calls[0]!.args.at(-1)).toBe(Ssh.remoteScript("mkdir -p '/opt/app'"));
+        expect(fake.calls[1]!.args.at(-1)).toBe("ubuntu@203.0.113.5:/opt/app/env");
         expect(fake.calls[1]!.args).toContain("-P");
       }),
     { tags: ["unit", "local"] },

@@ -1,15 +1,15 @@
-import * as Ssh from "@/Ssh";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Ssh from "@/Ssh";
 import { fakeClient } from "../FakeClient.ts";
 
 const markers = { begin: "# BEGIN", end: "# END" };
 
 describe("Ssh.Steps.managedBlock", { tags: ["unit", "local"] }, () => {
   it("replaces an existing block where it is", () => {
-    expect(
-      Ssh.Steps.rebuild("a\n# BEGIN\nold\n# END\nb\n", "new", markers),
-    ).toBe("a\n# BEGIN\nnew\n# END\nb\n");
+    expect(Ssh.Steps.rebuild("a\n# BEGIN\nold\n# END\nb\n", "new", markers)).toBe(
+      "a\n# BEGIN\nnew\n# END\nb\n",
+    );
   });
 
   it("appends a new block and is stable on a second run", () => {
@@ -19,9 +19,7 @@ describe("Ssh.Steps.managedBlock", { tags: ["unit", "local"] }, () => {
   });
 
   it("refuses a file with one marker and not the other", () => {
-    expect(
-      Ssh.Steps.rebuild("a\n# BEGIN\nrest of the file\n", "x", markers),
-    ).toBeUndefined();
+    expect(Ssh.Steps.rebuild("a\n# BEGIN\nrest of the file\n", "x", markers)).toBeUndefined();
   });
 
   it.effect("fails on a missing file unless create is set", () =>

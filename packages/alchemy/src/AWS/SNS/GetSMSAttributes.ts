@@ -29,6 +29,4 @@ export interface GetSMSAttributes extends Binding.Service<
   >
 > {}
 
-export const GetSMSAttributes = Binding.Service<GetSMSAttributes>(
-  "AWS.SNS.GetSMSAttributes",
-);
+export const GetSMSAttributes = Binding.Service<GetSMSAttributes>("AWS.SNS.GetSMSAttributes");

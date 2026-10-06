@@ -41,8 +41,7 @@ const POLICIES: Record<string, UfwPolicy> = {
   REJECT: "reject",
 };
 
-const ruleArgs = (rule: string) =>
-  rule.trim().split(/\s+/).map(quote).join(" ");
+const ruleArgs = (rule: string) => rule.trim().split(/\s+/).map(quote).join(" ");
 
 /**
  * Print the defaults, enablement and whether `ufw` already has each rule,
@@ -73,10 +72,7 @@ export const parseUfwStatus = (
     stdout
       .trim()
       .split("\n")
-      .map((line) => [
-        line.slice(0, line.indexOf("=")),
-        line.slice(line.indexOf("=") + 1),
-      ]),
+      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
   );
   return {
     enabled: values.enabled === "yes",
@@ -92,18 +88,15 @@ export const makeUfwStep = (input: UfwInput): Step<UfwStatus> => {
   const rules = input.rules ?? [];
   const enabled = input.enabled !== false;
 
-  const status = Effect.map(
-    runOrFail(step, ufwStatusScript(rules), root),
-    (result) => parseUfwStatus(result.stdout, rules),
+  const status = Effect.map(runOrFail(step, ufwStatusScript(rules), root), (result) =>
+    parseUfwStatus(result.stdout, rules),
   );
 
   const plan = (current: UfwStatus) => [
-    ...(input.defaults?.incoming !== undefined &&
-    current.incoming !== input.defaults.incoming
+    ...(input.defaults?.incoming !== undefined && current.incoming !== input.defaults.incoming
       ? [`ufw default ${input.defaults.incoming} incoming`]
       : []),
-    ...(input.defaults?.outgoing !== undefined &&
-    current.outgoing !== input.defaults.outgoing
+    ...(input.defaults?.outgoing !== undefined && current.outgoing !== input.defaults.outgoing
       ? [`ufw default ${input.defaults.outgoing} outgoing`]
       : []),
     ...current.missing.map((rule) => `ufw ${ruleArgs(rule)}`),

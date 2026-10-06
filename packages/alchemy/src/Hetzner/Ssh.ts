@@ -5,15 +5,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as Binding from "../Binding.ts";
 import { connect } from "../Ssh/Client.ts";
-import type {
-  ExecError as SshTransportError,
-  TransferError,
-} from "../Ssh/Errors.ts";
+import type { ExecError as SshTransportError, TransferError } from "../Ssh/Errors.ts";
 import type { Server } from "./Server.ts";
 
 export class SshError extends Data.TaggedError("Hetzner.SshError")<{
@@ -44,9 +41,7 @@ export type SshServices =
   | Scope.Scope;
 
 export interface SshClient {
-  exec: (
-    command: string,
-  ) => Effect.Effect<SshExecResult, SshError, SshServices>;
+  exec: (command: string) => Effect.Effect<SshExecResult, SshError, SshServices>;
   scp: (
     local: string | Uint8Array<ArrayBufferLike>,
     remote: string,
@@ -76,10 +71,7 @@ export interface SshClient {
 export interface Ssh extends Binding.Service<
   Ssh,
   "Hetzner.Ssh",
-  (
-    server: Server,
-    options?: SshOptions,
-  ) => Effect.Effect<SshClient, SshError, SshServices>
+  (server: Server, options?: SshOptions) => Effect.Effect<SshClient, SshError, SshServices>
 > {}
 
 export const Ssh = Binding.Service<Ssh>("Hetzner.Ssh");
@@ -99,15 +91,13 @@ const ipv4Of = (server: Server): string | undefined => {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 };
 
-const toSshError =
-  (host: string) =>
-  (error: SshTransportError | TransferError | PlatformError) =>
-    new SshError({
-      message: error.message,
-      host,
-      command: "command" in error ? error.command : undefined,
-      stderr: "stderr" in error ? error.stderr : undefined,
-    });
+const toSshError = (host: string) => (error: SshTransportError | TransferError | PlatformError) =>
+  new SshError({
+    message: error.message,
+    host,
+    command: "command" in error ? error.command : undefined,
+    stderr: "stderr" in error ? error.stderr : undefined,
+  });
 
 /**
  * Open an SSH session against `host` with the given private key, over
@@ -163,10 +153,7 @@ export const openSshClient = Effect.fn(function* (input: {
   } satisfies SshClient & { close: Effect.Effect<void> };
 });
 
-export const sshClientForServer = Effect.fn(function* (
-  server: Server,
-  options?: SshOptions,
-) {
+export const sshClientForServer = Effect.fn(function* (server: Server, options?: SshOptions) {
   const host = ipv4Of(server);
   if (host === undefined) {
     return yield* new SshError({
@@ -174,8 +161,7 @@ export const sshClientForServer = Effect.fn(function* (
     });
   }
   const privateKey =
-    unwrapKey(options?.privateKey) ??
-    unwrapKey((server as { privateKey?: unknown }).privateKey);
+    unwrapKey(options?.privateKey) ?? unwrapKey((server as { privateKey?: unknown }).privateKey);
   if (privateKey === undefined) {
     return yield* new SshError({
       message: `Server '${server.LogicalId}' has no deploy SSH private key`,

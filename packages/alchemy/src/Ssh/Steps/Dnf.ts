@@ -1,13 +1,6 @@
 import * as Effect from "effect/Effect";
 import { quote } from "../Client.ts";
-import {
-  applied,
-  converged,
-  diverged,
-  execute,
-  type Step,
-  type StepPolicy,
-} from "../Recipe.ts";
+import { applied, converged, diverged, execute, type Step, type StepPolicy } from "../Recipe.ts";
 import { clientExec, runOrFail, succeeded } from "./internal.ts";
 
 export interface DnfInput {
@@ -43,17 +36,13 @@ export const parseCheckUpdate = (stdout: string) =>
     .map(([nameArch = ""]) => nameArch.slice(0, nameArch.lastIndexOf(".")));
 
 export const makeDnfStep = (input: DnfInput): Step<DnfOutput> => {
-  const packages =
-    typeof input.packages === "string" ? [input.packages] : [...input.packages];
+  const packages = typeof input.packages === "string" ? [input.packages] : [...input.packages];
   const step = { kind: "dnf", name: packages.join(" ") };
   const state = input.state ?? "present";
   const names = packages.map(quote).join(" ");
 
   const query = Effect.map(
-    runOrFail(
-      step,
-      `rpm -q --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\n' ${names} 2>/dev/null; true`,
-    ),
+    runOrFail(step, `rpm -q --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\n' ${names} 2>/dev/null; true`),
     (result) => parseRpmQuery(result.stdout),
   );
 
@@ -79,10 +68,7 @@ export const makeDnfStep = (input: DnfInput): Step<DnfOutput> => {
         const result = yield* run(command);
         // Exit 100 means updates are available; anything else non-zero failed.
         if (result.code === 100) {
-          return diverged(
-            { outdated: parseCheckUpdate(result.stdout) },
-            { latest: packages },
-          );
+          return diverged({ outdated: parseCheckUpdate(result.stdout) }, { latest: packages });
         }
         yield* succeeded(step, command, result);
       }

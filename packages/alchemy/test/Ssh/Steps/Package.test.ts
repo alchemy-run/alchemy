@@ -1,6 +1,6 @@
-import * as Ssh from "@/Ssh";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Ssh from "@/Ssh";
 import { fakeClient, ok } from "../FakeClient.ts";
 
 describe("Ssh.Steps.package", { tags: ["unit", "local"] }, () => {
@@ -11,10 +11,7 @@ describe("Ssh.Steps.package", { tags: ["unit", "local"] }, () => {
         ["dnf", "dnf"],
       ] as const) {
         const fake = fakeClient(() => ok(), { facts: { pkgManager } });
-        const summary = yield* fake.run(
-          () => Ssh.Steps.package({ packages: "git" }),
-          "check",
-        );
+        const summary = yield* fake.run(() => Ssh.Steps.package({ packages: "git" }), "check");
         expect(summary.pending).toEqual([`${kind}[git]`]);
       }
     }),
@@ -29,9 +26,7 @@ describe("Ssh.Steps.package", { tags: ["unit", "local"] }, () => {
         fake.run(() => Ssh.Steps.package({ packages: "git" }), "check"),
       );
 
-      expect(error.message).toContain(
-        "no supported package manager (apt or dnf) on alpine",
-      );
+      expect(error.message).toContain("no supported package manager (apt or dnf) on alpine");
     }),
   );
 });

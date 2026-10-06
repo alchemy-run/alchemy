@@ -1,6 +1,6 @@
-import * as Ssh from "@/Ssh";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Ssh from "@/Ssh";
 import { fakeClient, ok } from "../FakeClient.ts";
 
 const show = (props: Record<string, string>) =>
@@ -21,8 +21,7 @@ describe("Ssh.Steps.service", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const fake = fakeClient(() => show({ UnitFileState: "static" }));
       const summary = yield* fake.run(
-        () =>
-          Ssh.Steps.service({ name: "nginx", enabled: true, state: "started" }),
+        () => Ssh.Steps.service({ name: "nginx", enabled: true, state: "started" }),
         "check",
       );
 
@@ -33,9 +32,7 @@ describe("Ssh.Steps.service", { tags: ["unit", "local"] }, () => {
   it.effect("leaves a static unit alone when asked to disable it", () =>
     Effect.gen(function* () {
       const fake = fakeClient(() => show({ UnitFileState: "static" }));
-      const summary = yield* fake.run(() =>
-        Ssh.Steps.service({ name: "nginx", enabled: false }),
-      );
+      const summary = yield* fake.run(() => Ssh.Steps.service({ name: "nginx", enabled: false }));
 
       expect(summary.changed).toBe(0);
     }),
@@ -69,9 +66,7 @@ describe("Ssh.Steps.service", { tags: ["unit", "local"] }, () => {
       );
 
       expect(summary.changed).toBe(1);
-      expect(fake.issued.map((call) => call.command)).toContain(
-        "systemctl restart 'nginx'",
-      );
+      expect(fake.issued.map((call) => call.command)).toContain("systemctl restart 'nginx'");
     }),
   );
 });

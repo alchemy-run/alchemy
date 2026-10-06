@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { sha256 } from "../../Util/sha256.ts";
 import { quote } from "../Client.ts";
 import {
   applied,
@@ -9,7 +10,6 @@ import {
   type Step,
   type StepPolicy,
 } from "../Recipe.ts";
-import { sha256 } from "../../Util/sha256.ts";
 import {
   declaredOwnership,
   inspect,
@@ -40,9 +40,7 @@ export const makeFileStep = (input: FileInput): Step<FileOutput> => {
   const step = { kind: "file", name: input.path };
   const options = { sudo: input.sudo };
   const content =
-    typeof input.content === "string"
-      ? new TextEncoder().encode(input.content)
-      : input.content;
+    typeof input.content === "string" ? new TextEncoder().encode(input.content) : input.content;
   const absent = { path: input.path, checksum: "" };
 
   return {

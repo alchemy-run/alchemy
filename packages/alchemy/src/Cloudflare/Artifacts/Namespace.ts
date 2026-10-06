@@ -122,9 +122,7 @@ export const Namespace: (
   name: string,
   props?: NamespaceProps,
 ) {
-  const namespace = props?.namespace
-    ? props.namespace
-    : name.toLocaleLowerCase();
+  const namespace = props?.namespace ? props.namespace : name.toLocaleLowerCase();
   if (!ARTIFACTS_NAMESPACE_REGEX.test(namespace)) {
     return yield* Effect.die(new InvalidNamespaceError(namespace));
   }

@@ -193,19 +193,13 @@ export const ProvisionProvider = () =>
         return { name: recipe.name, path: path.relative(initialCwd, file) };
       });
 
-      const hashOf = (
-        location: { path: string },
-        memo: MemoOptions | undefined,
-      ) =>
+      const hashOf = (location: { path: string }, memo: MemoOptions | undefined) =>
         hashDirectory({
           cwd: path.dirname(path.resolve(initialCwd, location.path)),
           memo: memo ?? {},
         });
 
-      const load = Effect.fn(function* (location: {
-        name: string;
-        path: string;
-      }) {
+      const load = Effect.fn(function* (location: { name: string; path: string }) {
         const file = path.resolve(initialCwd, location.path);
         const module = yield* Effect.tryPromise({
           try: () => import(file) as Promise<Record<string, unknown>>,
@@ -280,10 +274,7 @@ export const ProvisionProvider = () =>
           if (!output || !isResolved(news)) return undefined;
           if (havePropsChanged(olds, news)) return { action: "update" };
           const location = yield* locate(news.recipe);
-          if (
-            location.name !== output.recipe.name ||
-            location.path !== output.recipe.path
-          ) {
+          if (location.name !== output.recipe.name || location.path !== output.recipe.path) {
             return { action: "update" };
           }
           const hash = yield* hashOf(location, news.memo);
@@ -294,9 +285,7 @@ export const ProvisionProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           if (!output) return undefined;
           const recipe = yield* resolveRecipe(olds.recipe, output);
-          const summary = yield* provision(olds, recipe, "check").pipe(
-            Effect.scoped,
-          );
+          const summary = yield* provision(olds, recipe, "check").pipe(Effect.scoped);
           return { ...output, pending: [...summary.pending] };
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {

@@ -120,9 +120,7 @@ export const consumeFindings = <StreamReq = never, Req = never>(
         ? {
             detail: {
               ...(props.types !== undefined ? { type: [...props.types] } : {}),
-              ...(props.categories !== undefined
-                ? { category: [...props.categories] }
-                : {}),
+              ...(props.categories !== undefined ? { category: [...props.categories] } : {}),
               ...(props.severities !== undefined
                 ? { severity: { description: [...props.severities] } }
                 : {}),

@@ -27,12 +27,7 @@ export interface ListAlerts extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.ListAlertsRequest,
-    ) => Effect.Effect<
-      mediatailor.ListAlertsResponse,
-      mediatailor.ListAlertsError
-    >
+    ) => Effect.Effect<mediatailor.ListAlertsResponse, mediatailor.ListAlertsError>
   >
 > {}
-export const ListAlerts = Binding.Service<ListAlerts>(
-  "AWS.MediaTailor.ListAlerts",
-);
+export const ListAlerts = Binding.Service<ListAlerts>("AWS.MediaTailor.ListAlerts");

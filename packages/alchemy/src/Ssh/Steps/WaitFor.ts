@@ -14,10 +14,7 @@ import {
 } from "../Recipe.ts";
 import { clientExec } from "./internal.ts";
 
-export interface WaitForInput extends Pick<
-  ExecOptions,
-  "sudo" | "cwd" | "env" | "shell"
-> {
+export interface WaitForInput extends Pick<ExecOptions, "sudo" | "cwd" | "env" | "shell"> {
   name: string;
   /** The probe. It runs repeatedly, so it must be safe to repeat. */
   command: string;
@@ -79,11 +76,8 @@ export const makeWaitForStep = (input: WaitForInput): Step<ExecResult> => {
       });
       const result = yield* attempt.pipe(
         Effect.retry({
-          while: (error) =>
-            error._tag === "NotYet" || error._tag === "Ssh.ExecTimeout",
-          schedule: Schedule.spaced(interval).pipe(
-            Schedule.upTo({ duration: input.timeout }),
-          ),
+          while: (error) => error._tag === "NotYet" || error._tag === "Ssh.ExecTimeout",
+          schedule: Schedule.spaced(interval).pipe(Schedule.upTo({ duration: input.timeout })),
         }),
         Effect.catchTag("NotYet", (error) =>
           Effect.fail(

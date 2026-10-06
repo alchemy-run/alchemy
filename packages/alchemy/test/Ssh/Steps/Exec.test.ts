@@ -1,6 +1,6 @@
-import * as Ssh from "@/Ssh";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Ssh from "@/Ssh";
 import { fakeClient, ok } from "../FakeClient.ts";
 
 describe("Ssh.Steps.exec", { tags: ["unit", "local"] }, () => {
@@ -15,23 +15,16 @@ describe("Ssh.Steps.exec", { tags: ["unit", "local"] }, () => {
       );
 
       expect(summary.changed).toBe(0);
-      expect(fake.issued.map((call) => call.command)).toEqual([
-        "test -e '/usr/local/bin/app'",
-      ]);
+      expect(fake.issued.map((call) => call.command)).toEqual(["test -e '/usr/local/bin/app'"]);
     }),
   );
 
   it.effect("matches `creates` globs", () =>
     Effect.gen(function* () {
       const fake = fakeClient(() => ({ code: 2 }));
-      yield* fake.run(
-        () => Ssh.Steps.exec({ command: "unpack", creates: "/opt/app-*" }),
-        "check",
-      );
+      yield* fake.run(() => Ssh.Steps.exec({ command: "unpack", creates: "/opt/app-*" }), "check");
 
-      expect(fake.issued[0]!.command).toBe(
-        "ls -d -- /opt/app-* >/dev/null 2>&1",
-      );
+      expect(fake.issued[0]!.command).toBe("ls -d -- /opt/app-* >/dev/null 2>&1");
     }),
   );
 
@@ -52,9 +45,7 @@ describe("Ssh.Steps.exec", { tags: ["unit", "local"] }, () => {
   it.effect("fails on a non-zero exit", () =>
     Effect.gen(function* () {
       const fake = fakeClient(() => ({ code: 2, stderr: "boom" }));
-      const error = yield* Effect.flip(
-        fake.run(() => Ssh.Steps.exec({ command: "false" })),
-      );
+      const error = yield* Effect.flip(fake.run(() => Ssh.Steps.exec({ command: "false" })));
 
       expect(error.message).toBe("exec[false]: command exited 2: boom");
     }),

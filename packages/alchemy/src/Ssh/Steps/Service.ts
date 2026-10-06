@@ -1,13 +1,6 @@
 import * as Effect from "effect/Effect";
 import { quote } from "../Client.ts";
-import {
-  applied,
-  converged,
-  diverged,
-  execute,
-  type Step,
-  type StepPolicy,
-} from "../Recipe.ts";
+import { applied, converged, diverged, execute, type Step, type StepPolicy } from "../Recipe.ts";
 import { runOrFail } from "./internal.ts";
 
 export interface ServiceInput {
@@ -31,8 +24,7 @@ export interface ServiceOutput {
 // state (`static`, `indirect`, `generated`, …) is left as it is.
 const TOGGLEABLE = new Set(["enabled", "disabled"]);
 
-const isActive = (state: string) =>
-  state === "active" || state === "activating";
+const isActive = (state: string) => state === "active" || state === "activating";
 
 /** `systemctl show -p …` output (`Key=value` lines) as a record. */
 export const parseSystemctlShow = (stdout: string): Record<string, string> =>
@@ -40,10 +32,7 @@ export const parseSystemctlShow = (stdout: string): Record<string, string> =>
     stdout
       .split("\n")
       .filter((line) => line.includes("="))
-      .map((line) => [
-        line.slice(0, line.indexOf("=")),
-        line.slice(line.indexOf("=") + 1),
-      ]),
+      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
   );
 
 export const makeServiceStep = (input: ServiceInput): Step<ServiceOutput> => {
@@ -110,9 +99,7 @@ export const makeServiceStep = (input: ServiceInput): Step<ServiceOutput> => {
       const todo = plan(yield* show);
       const commands = [
         ...(todo.daemonReload ? ["systemctl daemon-reload"] : []),
-        ...(todo.enable
-          ? [`systemctl ${input.enabled ? "enable" : "disable"} ${unit}`]
-          : []),
+        ...(todo.enable ? [`systemctl ${input.enabled ? "enable" : "disable"} ${unit}`] : []),
         ...(todo.start ? [`systemctl start ${unit}`] : []),
         ...(todo.stop ? [`systemctl stop ${unit}`] : []),
         ...(todo.restart ? [`systemctl restart ${unit}`] : []),

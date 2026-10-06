@@ -55,7 +55,6 @@ export interface GetAssetPropertyValueHistory extends Binding.Service<
     >
   >
 > {}
-export const GetAssetPropertyValueHistory =
-  Binding.Service<GetAssetPropertyValueHistory>(
-    "AWS.IoTSiteWise.GetAssetPropertyValueHistory",
-  );
+export const GetAssetPropertyValueHistory = Binding.Service<GetAssetPropertyValueHistory>(
+  "AWS.IoTSiteWise.GetAssetPropertyValueHistory",
+);

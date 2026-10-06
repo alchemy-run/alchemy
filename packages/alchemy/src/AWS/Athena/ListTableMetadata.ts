@@ -31,13 +31,8 @@ export interface ListTableMetadata extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<athena.ListTableMetadataInput, "CatalogName">,
-    ) => Effect.Effect<
-      athena.ListTableMetadataOutput,
-      athena.ListTableMetadataError
-    >
+    ) => Effect.Effect<athena.ListTableMetadataOutput, athena.ListTableMetadataError>
   >
 > {}
 
-export const ListTableMetadata = Binding.Service<ListTableMetadata>(
-  "AWS.Athena.ListTableMetadata",
-);
+export const ListTableMetadata = Binding.Service<ListTableMetadata>("AWS.Athena.ListTableMetadata");
