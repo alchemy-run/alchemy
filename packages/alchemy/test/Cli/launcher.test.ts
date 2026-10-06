@@ -54,7 +54,9 @@ const runPublishedLauncher = (nodeEnv: string | undefined, jsx?: string, runtime
         env: {
           NODE_ENV: nodeEnv,
           CI: "true",
-          npm_execpath: "",
+          // Mirror `bun run`, which starts node-shebang bins under Node but
+          // points npm_execpath at bun.
+          npm_execpath: process.execPath,
           npm_config_user_agent: `bun/${process.versions.bun}`,
           BUN_OPTIONS: "",
           BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
