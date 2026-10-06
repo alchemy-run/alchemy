@@ -1,5 +1,4 @@
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -473,64 +472,51 @@ const normalizeImageRef = (image: Container.Image): string =>
 
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
-    Effect.flatMap((name) =>
-      Effect.try({
-        try: (): Parameters<Docker["Service"]["container"]["create"]>[0] => {
-          validateContainerOptions(news);
-          return {
-            name,
-            image: normalizeImageRef(news.image),
-            command: news.command,
-            env: normalizeEnvironment(news.environment),
-            volume: news.volumes?.map(
-              (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
-            ),
-            p: news.ports?.map((port) => {
-              const target = `${port.internal}/${port.protocol ?? "tcp"}`;
-              // `external: 0` means "any free host port". Docker spells that as a
-              // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
-              // host port 0 literally, which the daemon accepts and then reports
-              // back as 0.
-              return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
-            }),
-            "add-host": news.extraHosts,
-            network: normalizeNetworkMode(news.networkMode),
-            "cap-add": normalizeCapabilities(news.capAdd),
-            device: normalizeDevices(news.devices),
-            restart: news.restart ?? "no",
-            label: news.labels,
-            "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
-            rm: news.removeOnExit ?? false,
-            ...(news.healthcheck
-              ? {
-                  "health-cmd": Array.isArray(news.healthcheck.cmd)
-                    ? news.healthcheck.cmd.join(" ")
-                    : news.healthcheck.cmd,
-                  "health-interval": normalizeDuration(news.healthcheck.interval),
-                  "health-timeout": normalizeDuration(news.healthcheck.timeout),
-                  "health-retries": news.healthcheck.retries ?? 0,
-                  "health-start-period": normalizeDuration(news.healthcheck.startPeriod),
-                  "health-start-interval": normalizeDuration(news.healthcheck.startInterval),
-                }
-              : {
-                  "health-cmd": undefined,
-                  "health-interval": undefined,
-                  "health-timeout": undefined,
-                  "health-retries": undefined,
-                  "health-start-period": undefined,
-                  "health-start-interval": undefined,
-                }),
-          };
-        },
-        catch: (cause) =>
-          new Config.ConfigError(
-            new ConfigProvider.SourceError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-          ),
+    Effect.tap(() => validateContainerOptions(news)),
+    Effect.map((name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
+      name,
+      image: normalizeImageRef(news.image),
+      command: news.command,
+      env: normalizeEnvironment(news.environment),
+      volume: news.volumes?.map(
+        (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+      ),
+      p: news.ports?.map((port) => {
+        const target = `${port.internal}/${port.protocol ?? "tcp"}`;
+        // `external: 0` means "any free host port". Docker spells that as a
+        // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
+        // host port 0 literally, which the daemon accepts and then reports
+        // back as 0.
+        return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
       }),
-    ),
+      "add-host": news.extraHosts,
+      network: normalizeNetworkMode(news.networkMode),
+      "cap-add": normalizeCapabilities(news.capAdd),
+      device: normalizeDevices(news.devices),
+      restart: news.restart ?? "no",
+      label: news.labels,
+      "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
+      rm: news.removeOnExit ?? false,
+      ...(news.healthcheck
+        ? {
+            "health-cmd": Array.isArray(news.healthcheck.cmd)
+              ? news.healthcheck.cmd.join(" ")
+              : news.healthcheck.cmd,
+            "health-interval": normalizeDuration(news.healthcheck.interval),
+            "health-timeout": normalizeDuration(news.healthcheck.timeout),
+            "health-retries": news.healthcheck.retries ?? 0,
+            "health-start-period": normalizeDuration(news.healthcheck.startPeriod),
+            "health-start-interval": normalizeDuration(news.healthcheck.startInterval),
+          }
+        : {
+            "health-cmd": undefined,
+            "health-interval": undefined,
+            "health-timeout": undefined,
+            "health-retries": undefined,
+            "health-start-period": undefined,
+            "health-start-interval": undefined,
+          }),
+    })),
   );
 
 const toContainerAttributes = (
@@ -568,25 +554,38 @@ const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): strin
   return [...new Set(normalized)].sort();
 };
 
-const validateContainerOptions = (news: ContainerProps): void => {
+/**
+ * Raised before Docker is called when a container's options cannot be
+ * combined, e.g. sharing another container's network namespace while
+ * publishing ports.
+ */
+export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerOptions")<{
+  readonly message: string;
+}> {}
+
+const validateContainerOptions = (news: ContainerProps) => {
   if (
     isContainerNetworkMode(news.networkMode) &&
     ((news.ports?.length ?? 0) > 0 || (news.networks?.length ?? 0) > 0)
   ) {
-    throw new Error(
-      "Docker.Container networkMode.container cannot be combined with ports or networks",
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container networkMode.container cannot be combined with ports or networks",
+      }),
     );
   }
-  const devices = news.devices ?? [];
   const targets = new Set<string>();
-  for (const device of devices) {
+  for (const device of news.devices ?? []) {
     if (targets.has(device.containerPath)) {
-      throw new Error(
-        `Docker.Container devices contain conflicting target path ${device.containerPath}`,
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container devices contain conflicting target path ${device.containerPath}`,
+        }),
       );
     }
     targets.add(device.containerPath);
   }
+  return Effect.void;
 };
 
 const isContainerNetworkMode = (mode: Container.NetworkMode | undefined): boolean =>

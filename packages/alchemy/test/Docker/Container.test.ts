@@ -1,6 +1,7 @@
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
@@ -47,45 +48,6 @@ test.provider(
         instanceId: "instance",
         olds: { name: "web", image: "nginx:alpine", context: "default" },
         news: { name: "web", image: "nginx:alpine", context: "remote-build" },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "web",
-          name: "web",
-          status: "created",
-          createdAt: 0,
-          imageRef: "nginx:alpine",
-          ports: {},
-        },
-      });
-      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
-    }),
-  { tags: ["provider:docker", "provider:docker:container", "local"] },
-);
-
-test.provider(
-  "diff replaces a container when runtime options change",
-  () =>
-    Effect.gen(function* () {
-      const containerProvider = yield* Provider.findProvider(Docker.Container);
-      const containerDiff = yield* containerProvider.diff!({
-        id: "web",
-        fqn: "web",
-        instanceId: "instance",
-        olds: {
-          name: "web",
-          image: "nginx:alpine",
-          networkMode: "bridge",
-          capAdd: ["NET_ADMIN"],
-          devices: [{ hostPath: "/dev/video0", containerPath: "/dev/video0" }],
-        },
-        news: {
-          name: "web",
-          image: "nginx:alpine",
-          networkMode: { container: "donor-id" },
-          capAdd: ["SYS_ADMIN"],
-          devices: [{ hostPath: "/dev/video1", containerPath: "/dev/video1" }],
-        },
         oldBindings: [],
         newBindings: [],
         output: {
@@ -381,6 +343,124 @@ describe(
         );
       }),
     );
+
+    // Runtime options are checked inside the running container, not on the
+    // `docker container create` arguments.
+    const sleeper = { image: "alpine:3.19", command: ["sleep", "300"], start: true };
+    const exec = (name: string, ...command: string[]) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        return (yield* docker.run(["exec", name, ...command])).stdout.trim();
+      });
+
+    test.provider("shares a donor container's network namespace", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const { donor, sidecar } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const donor = yield* Docker.Container("namespace-donor", {
+              image: "nginx:alpine",
+              start: true,
+            });
+            const sidecar = yield* Docker.Container("namespace-sidecar", {
+              ...sleeper,
+              networkMode: { container: donor.id },
+            });
+            return { donor, sidecar };
+          }),
+        );
+
+        const info = yield* docker.container.inspect(sidecar.name);
+        expect(info.HostConfig.NetworkMode).toBe(`container:${donor.id}`);
+        // The sidecar reaches the donor's nginx on its own loopback.
+        const page = yield* exec(sidecar.name, "wget", "-qO-", "http://127.0.0.1").pipe(
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 20 }),
+        );
+        expect(page).toContain("nginx");
+      }),
+    );
+
+    test.provider("adds capabilities and exposes host devices", (stack) =>
+      Effect.gen(function* () {
+        const deploy = (capAdd: string[]) =>
+          stack.deploy(
+            Docker.Container("runtime-options-container", {
+              ...sleeper,
+              capAdd,
+              devices: [{ hostPath: "/dev/zero", containerPath: "/dev/alchemy-zero" }],
+            }),
+          );
+
+        // `ip link add` needs NET_ADMIN, which Docker does not grant by default.
+        const first = yield* deploy(["NET_ADMIN"]);
+        yield* exec(first.name, "ip", "link", "add", "alchemy0", "type", "dummy");
+        expect(yield* exec(first.name, "sh", "-c", "head -c 4 /dev/alchemy-zero | wc -c")).toBe(
+          "4",
+        );
+
+        // Duplicates and order normalize away: same container.
+        const same = yield* deploy([" NET_ADMIN", "NET_ADMIN"]);
+        expect(same.id).toBe(first.id);
+
+        // A different capability set replaces the container.
+        const replaced = yield* deploy(["SYS_TIME"]);
+        expect(replaced.id).not.toBe(first.id);
+        const denied = yield* exec(
+          replaced.name,
+          "ip",
+          "link",
+          "add",
+          "alchemy0",
+          "type",
+          "dummy",
+        ).pipe(Effect.flip);
+        expect(denied._tag).toBe("PlatformError");
+      }),
+    );
+
+    const invalidOptions: Array<[string, Partial<Docker.ContainerProps>]> = [
+      [
+        "ports",
+        {
+          networkMode: { container: "alchemy-missing-donor" },
+          ports: [{ external: 0, internal: 80 }],
+        },
+      ],
+      [
+        "networks",
+        { networkMode: "container:alchemy-missing-donor", networks: [{ name: "bridge" }] },
+      ],
+      [
+        "conflicting device targets",
+        {
+          devices: [
+            { hostPath: "/dev/zero", containerPath: "/dev/alchemy" },
+            { hostPath: "/dev/null", containerPath: "/dev/alchemy" },
+          ],
+        },
+      ],
+    ];
+    for (const [name, props] of invalidOptions) {
+      test.provider(`rejects ${name} that cannot be combined before calling Docker`, (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const error = yield* stack
+            .deploy(Docker.Container("invalid-runtime-options", { ...sleeper, ...props }))
+            .pipe(Effect.flip);
+          const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
+          expect(report).toContain("InvalidContainerOptions");
+          const listed = yield* docker.run([
+            "ps",
+            "--all",
+            "--filter",
+            "name=invalid-runtime-options",
+            "--format",
+            "{{.Names}}",
+          ]);
+          expect(listed.stdout.trim()).toBe("");
+        }),
+      );
+    }
 
     test.provider("applies a healthcheck with unit-suffixed durations", (stack) =>
       Effect.gen(function* () {
