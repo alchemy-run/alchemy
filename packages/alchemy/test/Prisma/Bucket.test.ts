@@ -1,834 +1,27 @@
-import { getBucket, updateBucket } from "@distilled.cloud/prisma/management";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext";
-import * as Prisma from "@/Prisma";
-import { Bucket, BucketProvider, type BucketProps } from "@/Prisma/Bucket";
 import {
-  BucketAccessKey,
-  BucketAccessKeyProvider,
-  type BucketAccessKeyProps,
-} from "@/Prisma/BucketAccessKey";
-import { PrismaApiError, PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
-import type {
-  Bucket as ApiBucket,
-  BucketKey as ApiBucketKey,
-  BucketKeyWithSecret,
-} from "@/Prisma/Types";
+  createBucketKey,
+  deleteBucket,
+  deleteBucketKey,
+  getBucket,
+  getBucketKeys,
+  updateBucket,
+} from "@distilled.cloud/prisma/management";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Prisma from "@/Prisma";
+import { AmbiguousBucketAccessKeyError } from "@/Prisma/BucketAccessKey";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { dispatchTo, makeFakeManagementApi, unhandled } from "./fixtures/FakeManagementApi.ts";
 import {
   expectGone,
   expectProjectGone,
   failureOf,
   forgetState,
+  markCreating,
   patchStateAttr,
 } from "./fixtures/Live.ts";
-
-const createdAt = "2026-01-01T00:00:00.000Z";
-const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-// physicalBucketAccessKeyName(logical id "BucketAccessKey", instanceId above)
-const expectedKeyName = "BucketAccessKey-aaaaaaaaaaaa";
-
-const apiBucket = (id: string, name: string): ApiBucket & { logicalId: string | null } => ({
-  id,
-  type: "bucket",
-  url: `https://api.prisma.test/v1/buckets/${id}`,
-  name,
-  providerName: "aws",
-  status: "ready",
-  createdAt,
-  project: { id: "project-1", url: "https://api.prisma.test/v1/projects/project-1", name: "app" },
-  branchId: null,
-  // Stamped with the resource's fqn, as the provider leaves it.
-  logicalId: "Bucket",
-});
-
-const bucketAttrs = (id: string, name: string): Bucket["Attributes"] => ({
-  bucketId: id,
-  name,
-  projectId: "project-1",
-  createdAt,
-  logicalId: "Bucket",
-});
-
-const apiBucketKey = (id: string, name = expectedKeyName): ApiBucketKey => ({
-  id,
-  type: "bucketKey",
-  name,
-  valueHint: "AKIA...",
-  role: "read_write",
-  createdAt,
-});
-
-const apiBucketKeyWithSecret = (id: string): BucketKeyWithSecret => ({
-  ...apiBucketKey(id),
-  accessKeyId: "AKIAEXAMPLE",
-  secretAccessKey: "one-time-secret",
-  endpoint: "https://s3.prisma.test",
-  bucketName: "user-bucket-1",
-});
-
-const persistedKeyAttrs = (id: string): BucketAccessKey["Attributes"] => ({
-  bucketAccessKeyId: id,
-  bucketId: "bucket-1",
-  accessKeyId: "AKIAEXAMPLE",
-  secretAccessKey: Redacted.make("one-time-secret"),
-  endpoint: "https://s3.prisma.test",
-  bucketName: "user-bucket-1",
-});
-
-const apiNotFound = (path: string) =>
-  new PrismaApiError({ method: "GET", path, status: 404, message: "HTTP 404" });
-
-const liveProviderContext = Layer.succeed(AlchemyContext, {
-  dotAlchemy: ".alchemy-test",
-  dev: false,
-  adopt: false,
-});
-
-/**
- * Serve the Management API's bucket routes from the same hermetic
- * client-shaped handlers this suite already declares. `dispatchTo` maps each
- * handler's result onto the wire (see the fixture).
- */
-const bucketApi = (client: any) =>
-  makeFakeManagementApi((request) => {
-    // segments[0] is the "v1" prefix.
-    const [head, bucketId, tail, keyId] = request.pathname
-      .split("/")
-      .filter((segment) => segment.length > 0)
-      .slice(1);
-    const body = request.bodyJson as any;
-    const { call, callVoid, list } = dispatchTo(request);
-
-    if (head === "projects" && tail === "branches" && request.method === "GET") {
-      // Without branches the logical-ID lookup resolves no default branch.
-      return call(client.listBranches ?? (() => Effect.succeed([])), [], list);
-    }
-    if (head !== "buckets") return unhandled(request);
-    if (bucketId === undefined) {
-      return request.method === "GET"
-        ? call(client.listBuckets, [Object.fromEntries(new URLSearchParams(request.search))], list)
-        : call(client.createBucket, [body]);
-    }
-    if (tail === "keys") {
-      if (keyId !== undefined) {
-        return callVoid(client.deleteBucketKey, [bucketId, keyId]);
-      }
-      return request.method === "GET"
-        ? call(client.listBucketKeys, [bucketId, { limit: 100 }], list)
-        : call(client.createBucketKey, [bucketId, body]);
-    }
-    if (request.method === "GET") return call(client.getBucket, [bucketId]);
-    if (request.method === "PATCH") {
-      return call(client.updateBucket, [bucketId, body]);
-    }
-    if (request.method === "DELETE") {
-      return callVoid(client.deleteBucket, [bucketId]);
-    }
-    return unhandled(request);
-  });
-
-const bucketLayer = (client: PrismaManagementClient) =>
-  BucketProvider().pipe(
-    Layer.provide(Layer.succeed(PrismaClient, client)),
-    Layer.provide(liveProviderContext),
-    Layer.provideMerge(bucketApi(client).layer),
-  );
-
-const bucketKeyLayer = (client: PrismaManagementClient) =>
-  BucketAccessKeyProvider().pipe(
-    Layer.provide(Layer.succeed(PrismaClient, client)),
-    Layer.provide(liveProviderContext),
-    Layer.provideMerge(bucketApi(client).layer),
-  );
-
-const reconcileInput = <Props, Attributes>(
-  id: string,
-  news: Props,
-  output?: Attributes,
-  olds?: Props,
-) => ({ id, fqn: id, instanceId, news, olds, output, session: undefined as never, bindings: [] });
-
-const diffInput = <Props, Attributes>(id: string, olds: Props, news: Props, output?: Attributes) =>
-  ({ id, fqn: id, instanceId, olds, news, output }) as never;
-
-describe(
-  "Prisma Bucket provider",
-  { tags: ["unit", "provider:prisma", "provider:prisma:bucket", "local"] },
-  () => {
-    it.effect("creates a bucket when none is persisted", () => {
-      let creates = 0;
-      const client = {
-        createBucket: (input: { projectId: string; name?: string; branchId?: string }) =>
-          Effect.sync(() => {
-            creates += 1;
-            expect(input.projectId).toBe("project-1");
-            expect(input.name).toBe("uploads");
-            expect(input.branchId).toBeUndefined();
-            return apiBucket("bucket-1", "uploads");
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        const attrs = yield* provider.reconcile(
-          reconcileInput("Bucket", { project: "project-1", name: "uploads" }),
-        );
-
-        expect(creates).toBe(1);
-        expect(attrs).toEqual(bucketAttrs("bucket-1", "uploads"));
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect("returns the observed bucket without creating again", () => {
-      let creates = 0;
-      const client = {
-        getBucket: (id: string) => Effect.succeed(apiBucket(id, "uploads")),
-        createBucket: () =>
-          Effect.sync(() => {
-            creates += 1;
-            return apiBucket("bucket-2", "uploads");
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        const attrs = yield* provider.reconcile(
-          reconcileInput(
-            "Bucket",
-            { project: "project-1", name: "uploads" },
-            bucketAttrs("bucket-1", "uploads"),
-          ),
-        );
-
-        expect(creates).toBe(0);
-        expect(attrs.bucketId).toBe("bucket-1");
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect("refuses convergence when the bucket moved projects", () => {
-      const client = {
-        getBucket: (id: string) =>
-          Effect.succeed({
-            ...apiBucket(id, "uploads"),
-            project: {
-              id: "project-other",
-              url: "https://api.prisma.test/v1/projects/project-other",
-              name: "other",
-            },
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        const result = yield* provider
-          .reconcile(
-            reconcileInput(
-              "Bucket",
-              { project: "project-1", name: "uploads" },
-              bucketAttrs("bucket-1", "uploads"),
-            ),
-          )
-          .pipe(Effect.flip);
-
-        expect(String(result)).toContain("Refusing to claim convergence");
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect("recreates the bucket when the persisted one is gone", () => {
-      let creates = 0;
-      const client = {
-        getBucket: (id: string) => Effect.fail(apiNotFound(`/v1/buckets/${id}`)),
-        createBucket: () =>
-          Effect.sync(() => {
-            creates += 1;
-            return apiBucket("bucket-2", "uploads");
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        const attrs = yield* provider.reconcile(
-          reconcileInput(
-            "Bucket",
-            { project: "project-1", name: "uploads" },
-            bucketAttrs("bucket-1", "uploads"),
-          ),
-        );
-
-        expect(creates).toBe(1);
-        expect(attrs.bucketId).toBe("bucket-2");
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect("read refreshes from the API and reports a gone bucket", () => {
-      const client = {
-        getBucket: (id: string) =>
-          id === "bucket-1"
-            ? Effect.succeed(apiBucket(id, "uploads"))
-            : Effect.fail(apiNotFound(`/v1/buckets/${id}`)),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(Bucket);
-        const observed = yield* provider.read!({
-          id: "Bucket",
-          fqn: "Bucket",
-          instanceId,
-          olds: { project: "project-1", name: "uploads" },
-          output: bucketAttrs("bucket-1", "uploads"),
-        });
-        expect(observed).toEqual(bucketAttrs("bucket-1", "uploads"));
-
-        const gone = yield* provider.read!({
-          id: "Bucket",
-          fqn: "Bucket",
-          instanceId,
-          olds: { project: "project-1", name: "uploads" },
-          output: bucketAttrs("bucket-2", "uploads"),
-        });
-        expect(gone).toBeUndefined();
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect(
-      "replaces on a project change and updates name, branch, or logical ID in place",
-      () => {
-        const client = {} as unknown as PrismaManagementClient;
-        const olds: BucketProps = { project: "project-1", name: "uploads" };
-        const output = bucketAttrs("bucket-1", "uploads");
-
-        return Effect.gen(function* () {
-          const provider = yield* Bucket.Provider;
-
-          expect(
-            yield* provider.diff!(
-              diffInput("Bucket", olds, { project: "project-2", name: "uploads" }, output),
-            ),
-          ).toEqual({ action: "replace" });
-          expect(
-            yield* provider.diff!(
-              diffInput("Bucket", olds, { project: "project-1", name: "renamed" }, output),
-            ),
-          ).toEqual({ action: "update" });
-          expect(
-            yield* provider.diff!(
-              diffInput(
-                "Bucket",
-                olds,
-                { project: "project-1", name: "uploads", branchId: "branch-1" },
-                output,
-              ),
-            ),
-          ).toEqual({ action: "update" });
-          expect(
-            yield* provider.diff!(
-              diffInput(
-                "Bucket",
-                olds,
-                { project: "project-1", name: "uploads", logicalId: "uploads" },
-                output,
-              ),
-            ),
-          ).toEqual({ action: "update" });
-          expect(yield* provider.diff!(diffInput("Bucket", olds, olds, output))).toBeUndefined();
-        }).pipe(Effect.provide(bucketLayer(client)));
-      },
-    );
-
-    it.effect("creates a bucket with its logical ID", () => {
-      const inputs: unknown[] = [];
-      const client = {
-        listBuckets: () => Effect.succeed([]),
-        createBucket: (input: { logicalId?: string }) =>
-          Effect.sync(() => {
-            inputs.push(input);
-            return {
-              ...apiBucket("bucket-1", "uploads"),
-              branchId: "branch-1",
-              logicalId: input.logicalId,
-            };
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        const attrs = yield* provider.reconcile(
-          reconcileInput("Bucket", {
-            project: "project-1",
-            name: "uploads",
-            branchId: "branch-1",
-            logicalId: "uploads",
-          }),
-        );
-
-        expect(inputs).toEqual([
-          {
-            projectId: "project-1",
-            name: "uploads",
-            branchId: "branch-1",
-            logicalId: "uploads",
-          },
-        ]);
-        expect(attrs.logicalId).toBe("uploads");
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect(
-      "cold read finds the bucket by its logical ID as unowned and ignores a same-named one",
-      () => {
-        const listed: unknown[] = [];
-        const buckets = [
-          { ...apiBucket("bucket-named", "uploads"), branchId: "branch-1", logicalId: null },
-          {
-            ...apiBucket("bucket-declared", "renamed-in-console"),
-            branchId: "branch-1",
-            logicalId: "uploads",
-          },
-        ];
-        const client = {
-          listBuckets: (query: { logicalId?: string }) =>
-            Effect.sync(() => {
-              listed.push(query);
-              return buckets.filter(
-                (bucket) =>
-                  query.logicalId === undefined ||
-                  ("logicalId" in bucket && bucket.logicalId === query.logicalId),
-              );
-            }),
-        } as unknown as PrismaManagementClient;
-        const read = (logicalId?: string) =>
-          Effect.gen(function* () {
-            const provider = yield* Provider.findProvider(Bucket);
-            return yield* provider.read!({
-              id: "Bucket",
-              fqn: "Bucket",
-              instanceId,
-              olds: {
-                project: "project-1",
-                name: "uploads",
-                branchId: "branch-1",
-                ...(logicalId === undefined ? {} : { logicalId }),
-              },
-              output: undefined,
-            });
-          });
-
-        return Effect.gen(function* () {
-          // A logical ID does not prove ownership; adoption is required.
-          const found = yield* read("uploads");
-          expect(Unowned.is(found)).toBe(true);
-          expect({ ...found }).toEqual({
-            ...bucketAttrs("bucket-declared", "renamed-in-console"),
-            logicalId: "uploads",
-          });
-          expect(listed).toEqual([
-            {
-              projectId: "project-1",
-              logicalId: "uploads",
-              branchId: "branch-1",
-            },
-          ]);
-
-          expect(yield* read("other")).toBeUndefined();
-          // Without an explicit logical ID the lookup uses the fqn, never the name.
-          expect(yield* read()).toBeUndefined();
-          expect(listed).toHaveLength(3);
-          expect(listed[2]).toEqual({
-            projectId: "project-1",
-            logicalId: "Bucket",
-            branchId: "branch-1",
-          });
-        }).pipe(Effect.provide(bucketLayer(client)));
-      },
-    );
-
-    it.effect("moves and renames in place, then sets the logical ID in a second call", () => {
-      const patches: unknown[] = [];
-      let observed: Record<string, unknown> = {
-        ...apiBucket("bucket-1", "uploads"),
-        branchId: "branch-1",
-        logicalId: null,
-      };
-      const client = {
-        getBucket: () => Effect.sync(() => observed),
-        updateBucket: (_id: string, body: Record<string, unknown>) =>
-          Effect.sync(() => {
-            patches.push(body);
-            const { displayName, ...rest } = body;
-            observed = {
-              ...observed,
-              ...rest,
-              ...(displayName === undefined ? {} : { name: displayName }),
-            };
-            return observed;
-          }),
-        createBucket: () => Effect.die("must converge in place"),
-        deleteBucket: () => Effect.die("must converge in place"),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        const attrs = yield* provider.reconcile(
-          reconcileInput(
-            "Bucket",
-            {
-              project: "project-1",
-              name: "renamed",
-              branchId: "branch-2",
-              logicalId: "uploads",
-            },
-            bucketAttrs("bucket-1", "uploads"),
-            { project: "project-1", name: "uploads", branchId: "branch-1" },
-          ),
-        );
-
-        expect(patches).toEqual([
-          { displayName: "renamed", branchId: "branch-2" },
-          { logicalId: "uploads" },
-        ]);
-        expect(attrs).toEqual({
-          ...bucketAttrs("bucket-1", "renamed"),
-          logicalId: "uploads",
-        });
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect("names the logical ID and branch on a duplicate", () => {
-      const client = {
-        listBuckets: () => Effect.succeed([]),
-        createBucket: () =>
-          Effect.fail(
-            new PrismaApiError({
-              method: "POST",
-              path: "/v1/buckets",
-              status: 409,
-              message: "HTTP 409",
-            }),
-          ),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        const error = yield* provider
-          .reconcile(
-            reconcileInput("Bucket", {
-              project: "project-1",
-              branchId: "branch-1",
-              logicalId: "uploads",
-            }),
-          )
-          .pipe(Effect.flip);
-
-        expect(String(error)).toContain("logical ID 'uploads'");
-        expect(String(error)).toContain("branch 'branch-1'");
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-
-    it.effect("delete verifies identity and tolerates a gone bucket", () => {
-      let deletes = 0;
-      const client = {
-        getBucket: (id: string) =>
-          id === "bucket-1"
-            ? Effect.succeed(apiBucket(id, "uploads"))
-            : Effect.fail(apiNotFound(`/v1/buckets/${id}`)),
-        deleteBucket: (id: string) =>
-          Effect.sync(() => {
-            deletes += 1;
-          }).pipe(Effect.andThen(Effect.fail(apiNotFound(`/v1/buckets/${id}`)))),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Bucket.Provider;
-        yield* provider.delete({
-          id: "Bucket",
-          fqn: "Bucket",
-          instanceId,
-          olds: { project: "project-1", name: "uploads" },
-          output: bucketAttrs("bucket-1", "uploads"),
-          session: undefined as never,
-        } as never);
-        expect(deletes).toBe(1);
-
-        // Already gone: delete is a no-op.
-        yield* provider.delete({
-          id: "Bucket",
-          fqn: "Bucket",
-          instanceId,
-          olds: { project: "project-1", name: "uploads" },
-          output: bucketAttrs("bucket-2", "uploads"),
-          session: undefined as never,
-        } as never);
-        expect(deletes).toBe(1);
-
-        // Drifted to another project: refuse to delete.
-        const drifted = yield* provider
-          .delete({
-            id: "Bucket",
-            fqn: "Bucket",
-            instanceId,
-            olds: { project: "project-1", name: "uploads" },
-            output: { ...bucketAttrs("bucket-1", "uploads"), projectId: "p2" },
-            session: undefined as never,
-          } as never)
-          .pipe(Effect.flip);
-        expect(String(drifted)).toContain("Refusing to delete");
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
-  },
-);
-
-describe(
-  "Prisma BucketAccessKey provider",
-  {
-    tags: [
-      "unit",
-      "provider:prisma",
-      "provider:prisma:bucket",
-      "provider:prisma:bucketaccesskey",
-      "local",
-    ],
-  },
-  () => {
-    it.effect("creates a key under its deterministic name and redacts the secret", () => {
-      let creates = 0;
-      const client = {
-        listBucketKeys: () => Effect.succeed([]),
-        createBucketKey: (bucketId: string, input: { name?: string; role: string }) =>
-          Effect.sync(() => {
-            creates += 1;
-            expect(bucketId).toBe("bucket-1");
-            expect(input.name).toBe(expectedKeyName);
-            expect(input.role).toBe("read_write");
-            return apiBucketKeyWithSecret("key-1");
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* BucketAccessKey.Provider;
-        const attrs = yield* provider.reconcile(
-          reconcileInput("BucketAccessKey", { bucket: "bucket-1", role: "read_write" as const }),
-        );
-
-        expect(creates).toBe(1);
-        expect(attrs.bucketAccessKeyId).toBe("key-1");
-        expect(attrs.bucketId).toBe("bucket-1");
-        expect(attrs.accessKeyId).toBe("AKIAEXAMPLE");
-        expect(Redacted.value(attrs.secretAccessKey)).toBe("one-time-secret");
-        expect(attrs.endpoint).toBe("https://s3.prisma.test");
-        // The provider-side S3 bucket name, not the friendly display name.
-        expect(attrs.bucketName).toBe("user-bucket-1");
-      }).pipe(Effect.provide(bucketKeyLayer(client)));
-    });
-
-    it.effect("revokes an orphaned key from a lost create response before recreating", () => {
-      // Simulates a crash after POST /keys but before state persist: the
-      // retry sees no output, finds the deterministic name already taken,
-      // revokes it (its secret is unrecoverable), and mints a fresh key.
-      let deletes = 0;
-      let creates = 0;
-      const client = {
-        listBucketKeys: () => Effect.succeed([apiBucketKey("key-orphan")]),
-        deleteBucketKey: (bucketId: string, keyId: string) =>
-          Effect.sync(() => {
-            deletes += 1;
-            expect(bucketId).toBe("bucket-1");
-            expect(keyId).toBe("key-orphan");
-          }),
-        createBucketKey: () =>
-          Effect.sync(() => {
-            creates += 1;
-            return apiBucketKeyWithSecret("key-2");
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* BucketAccessKey.Provider;
-        const attrs = yield* provider.reconcile(
-          reconcileInput("BucketAccessKey", { bucket: "bucket-1", role: "read_write" as const }),
-        );
-
-        expect(deletes).toBe(1);
-        expect(creates).toBe(1);
-        expect(attrs.bucketAccessKeyId).toBe("key-2");
-      }).pipe(Effect.provide(bucketKeyLayer(client)));
-    });
-
-    it.effect("fails with a tagged error when two keys share the recovery name", () => {
-      // Two keys under the deterministic name leave nothing to recover:
-      // picking either could revoke a key another deploy is using.
-      const client = {
-        listBucketKeys: () => Effect.succeed([apiBucketKey("key-a"), apiBucketKey("key-b")]),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* BucketAccessKey.Provider;
-        const error = yield* provider
-          .reconcile(
-            reconcileInput("BucketAccessKey", { bucket: "bucket-1", role: "read_write" as const }),
-          )
-          .pipe(Effect.flip);
-
-        expect(error._tag).toBe("AmbiguousBucketAccessKeyError");
-        expect(error.message).toContain("refusing to select one arbitrarily");
-      }).pipe(Effect.provide(bucketKeyLayer(client)));
-    });
-
-    it.effect("returns persisted attributes while the key exists, without re-creating", () => {
-      let creates = 0;
-      const client = {
-        listBucketKeys: () => Effect.succeed([apiBucketKey("key-1")]),
-        createBucketKey: () =>
-          Effect.sync(() => {
-            creates += 1;
-            return apiBucketKeyWithSecret("key-2");
-          }),
-      } as unknown as PrismaManagementClient;
-
-      const persisted = persistedKeyAttrs("key-1");
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(BucketAccessKey);
-        const attrs = yield* provider.reconcile(
-          reconcileInput(
-            "BucketAccessKey",
-            { bucket: "bucket-1", role: "read_write" as const },
-            persisted,
-            { bucket: "bucket-1", role: "read_write" as const },
-          ),
-        );
-
-        // The secret is returned exactly once at creation; persisted state
-        // stays authoritative while the key exists.
-        expect(creates).toBe(0);
-        expect(attrs).toBe(persisted);
-
-        const observed = yield* provider.read!({
-          id: "BucketAccessKey",
-          fqn: "BucketAccessKey",
-          instanceId,
-          olds: { bucket: "bucket-1", role: "read_write" as const },
-          output: persisted,
-        });
-        expect(observed).toBe(persisted);
-      }).pipe(Effect.provide(bucketKeyLayer(client)));
-    });
-
-    it.effect("mints fresh credentials when the key was revoked", () => {
-      let creates = 0;
-      const client = {
-        listBucketKeys: () => Effect.succeed([]),
-        createBucketKey: () =>
-          Effect.sync(() => {
-            creates += 1;
-            return apiBucketKeyWithSecret("key-2");
-          }),
-      } as unknown as PrismaManagementClient;
-
-      const persisted = persistedKeyAttrs("key-1");
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(BucketAccessKey);
-
-        const observed = yield* provider.read!({
-          id: "BucketAccessKey",
-          fqn: "BucketAccessKey",
-          instanceId,
-          olds: { bucket: "bucket-1", role: "read_write" as const },
-          output: persisted,
-        });
-        expect(observed).toBeUndefined();
-
-        const attrs = yield* provider.reconcile(
-          reconcileInput(
-            "BucketAccessKey",
-            { bucket: "bucket-1", role: "read_write" as const },
-            persisted,
-            { bucket: "bucket-1", role: "read_write" as const },
-          ),
-        );
-        expect(creates).toBe(1);
-        expect(attrs.bucketAccessKeyId).toBe("key-2");
-      }).pipe(Effect.provide(bucketKeyLayer(client)));
-    });
-
-    it.effect("replaces on bucket, role, or name changes", () => {
-      const client = {} as unknown as PrismaManagementClient;
-      const olds: BucketAccessKeyProps = { bucket: "bucket-1", role: "read_write" };
-      const output = persistedKeyAttrs("key-1");
-
-      return Effect.gen(function* () {
-        const provider = yield* BucketAccessKey.Provider;
-
-        expect(
-          yield* provider.diff!(
-            diffInput(
-              "BucketAccessKey",
-              olds,
-              { bucket: "bucket-2", role: "read_write" as const },
-              output,
-            ),
-          ),
-        ).toEqual({ action: "replace" });
-        expect(
-          yield* provider.diff!(
-            diffInput(
-              "BucketAccessKey",
-              olds,
-              { bucket: "bucket-1", role: "read" as const },
-              output,
-            ),
-          ),
-        ).toEqual({ action: "replace" });
-        expect(
-          yield* provider.diff!(
-            diffInput(
-              "BucketAccessKey",
-              olds,
-              { bucket: "bucket-1", role: "read_write" as const, name: "next" },
-              output,
-            ),
-          ),
-        ).toEqual({ action: "replace" });
-        expect(
-          yield* provider.diff!(diffInput("BucketAccessKey", olds, olds, output)),
-        ).toBeUndefined();
-      }).pipe(Effect.provide(bucketKeyLayer(client)));
-    });
-
-    it.effect("delete tolerates keys already revoked by bucket cascade", () => {
-      let deletes = 0;
-      const client = {
-        deleteBucketKey: (bucketId: string, keyId: string) =>
-          Effect.sync(() => {
-            deletes += 1;
-            expect(bucketId).toBe("bucket-1");
-            expect(keyId).toBe("key-1");
-          }).pipe(Effect.andThen(Effect.fail(apiNotFound("/v1/buckets/bucket-1/keys/key-1")))),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* BucketAccessKey.Provider;
-        yield* provider.delete({
-          id: "BucketAccessKey",
-          fqn: "BucketAccessKey",
-          instanceId,
-          olds: { bucket: "bucket-1", role: "read_write" },
-          output: persistedKeyAttrs("key-1"),
-          session: undefined as never,
-        } as never);
-
-        expect(deletes).toBe(1);
-      }).pipe(Effect.provide(bucketKeyLayer(client)));
-    });
-  },
-);
 
 const live = Test.make({ providers: Prisma.providers() });
 
@@ -839,6 +32,8 @@ const liveTags = [
   "provider:prisma:project",
   "live",
 ];
+
+const keyTags = [...liveTags, "provider:prisma:bucketaccesskey"];
 
 const observeBucket = (bucketId: string) =>
   getBucket({ bucketId }).pipe(Effect.map((response) => response.data));
@@ -864,6 +59,24 @@ const bucketStack = (props: { name?: string; logicalId?: string; onBranch?: bool
     return { project, branch, bucket };
   });
 
+const listKeys = (bucketId: string) =>
+  getBucketKeys({ bucketId, limit: 100 }).pipe(Effect.map((page) => page.data));
+
+const keyStack = (
+  props: { role?: "read" | "read_write"; name?: string; bucket?: "first" | "second" } = {},
+) =>
+  Effect.gen(function* () {
+    const project = yield* Prisma.Project("Project", { createDatabase: false });
+    const first = yield* Prisma.Bucket("First", { project });
+    const second = yield* Prisma.Bucket("Second", { project });
+    const key = yield* Prisma.BucketAccessKey("Key", {
+      bucket: props.bucket === "second" ? second : first,
+      role: props.role ?? "read_write",
+      ...(props.name === undefined ? {} : { name: props.name }),
+    });
+    return { project, first, second, key };
+  });
+
 live.test.provider(
   "creates a bucket under its fqn logical ID and renames, moves, and rebinds it in place",
   Effect.fn(function* (stack: Test.ScratchStack) {
@@ -880,22 +93,33 @@ live.test.provider(
     expect(renamed.bucket.bucketId).toBe(initial.bucket.bucketId);
     expect((yield* observeBucket(initial.bucket.bucketId)).name).toBe("uploads-renamed");
 
-    // A branch move keeps the bucket and its logical ID.
-    const moved = yield* stack.deploy(bucketStack({ name: "uploads-renamed", onBranch: true }));
-    expect(moved.bucket.bucketId).toBe(initial.bucket.bucketId);
-    const onBranch = yield* observeBucket(initial.bucket.bucketId);
-    expect(onBranch.branchId).toBe(initial.branch.branchId);
-    expect(onBranch.logicalId).toBe("Uploads");
-
-    const overridden = yield* stack.deploy(
-      bucketStack({ name: "uploads-renamed", onBranch: true, logicalId: "media" }),
+    // Move, rename, and rebind in one deploy. The API refuses logicalId with a
+    // branch move, so the provider sets it in a second call.
+    const together = yield* stack.deploy(
+      bucketStack({ name: "uploads", onBranch: true, logicalId: "media" }),
     );
-    expect(overridden.bucket.bucketId).toBe(initial.bucket.bucketId);
-    expect((yield* observeBucket(initial.bucket.bucketId)).logicalId).toBe("media");
+    expect(together.bucket.bucketId).toBe(initial.bucket.bucketId);
+    const moved = yield* observeBucket(initial.bucket.bucketId);
+    expect(moved.name).toBe("uploads");
+    expect(moved.branchId).toBe(initial.branch.branchId);
+    expect(moved.logicalId).toBe("media");
 
-    const reverted = yield* stack.deploy(bucketStack({ name: "uploads-renamed", onBranch: true }));
+    // Removing the override returns to the fqn.
+    const reverted = yield* stack.deploy(bucketStack({ name: "uploads", onBranch: true }));
     expect(reverted.bucket.bucketId).toBe(initial.bucket.bucketId);
     expect((yield* observeBucket(initial.bucket.bucketId)).logicalId).toBe("Uploads");
+
+    // Omitting branchId leaves the bucket on the branch it has.
+    const omitted = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    expect(omitted.bucket.bucketId).toBe(initial.bucket.bucketId);
+    expect((yield* observeBucket(initial.bucket.bucketId)).branchId).toBe(initial.branch.branchId);
+
+    const repeated = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    expect(repeated.bucket.bucketId).toBe(initial.bucket.bucketId);
+
+    // Nuke enumerates buckets through the provider's list.
+    const listed = yield* (yield* Provider.findProvider(Prisma.Bucket)).list!();
+    expect(listed.map((bucket) => bucket.bucketId)).toContain(initial.bucket.bucketId);
 
     yield* stack.destroy();
     yield* expectBucketGone(initial.bucket.bucketId);
@@ -1019,4 +243,159 @@ live.test.provider(
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "recreates a bucket deleted out of band on the next update and destroys one already gone",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    yield* deleteBucket({ bucketId: initial.bucket.bucketId });
+    yield* expectBucketGone(initial.bucket.bucketId);
+
+    const recreated = yield* stack.deploy(bucketStack({ name: "uploads-recreated" }));
+    expect(recreated.bucket.bucketId).not.toBe(initial.bucket.bucketId);
+    const observed = yield* observeBucket(recreated.bucket.bucketId);
+    expect(observed.name).toBe("uploads-recreated");
+    expect(observed.logicalId).toBe("Uploads");
+
+    yield* deleteBucket({ bucketId: recreated.bucket.bucketId });
+    yield* stack.destroy();
+    yield* expectBucketGone(recreated.bucket.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "creates a key under its deterministic name and keeps its one-time secret",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(keyStack());
+    expect(initial.key.bucketId).toBe(initial.first.bucketId);
+    expect(Redacted.isRedacted(initial.key.secretAccessKey)).toBe(true);
+    expect(Redacted.value(initial.key.secretAccessKey).length).toBeGreaterThan(0);
+    expect(initial.key.accessKeyId.length).toBeGreaterThan(0);
+    const keys = yield* listKeys(initial.first.bucketId);
+    const observed = keys.find((key) => key.id === initial.key.bucketAccessKeyId);
+    expect(observed?.name).toMatch(/^Key-[a-zA-Z0-9]{12}$/);
+    expect(observed?.role).toBe("read_write");
+
+    // The secret is revealed once; later deploys keep the persisted one.
+    const repeated = yield* stack.deploy(keyStack());
+    expect(repeated.key.bucketAccessKeyId).toBe(initial.key.bucketAccessKeyId);
+    expect(Redacted.value(repeated.key.secretAccessKey)).toBe(
+      Redacted.value(initial.key.secretAccessKey),
+    );
+
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.first.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: keyTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "replaces a key when its role, name, or bucket changes",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(keyStack());
+    const keyGone = (bucketId: string, keyId: string) =>
+      expectGone(listKeys(bucketId).pipe(Effect.map((keys) => !keys.some((k) => k.id === keyId))));
+
+    const byRole = yield* stack.deploy(keyStack({ role: "read" }));
+    expect(byRole.key.bucketAccessKeyId).not.toBe(initial.key.bucketAccessKeyId);
+    yield* keyGone(initial.first.bucketId, initial.key.bucketAccessKeyId);
+    const readKey = (yield* listKeys(initial.first.bucketId)).find(
+      (key) => key.id === byRole.key.bucketAccessKeyId,
+    );
+    expect(readKey?.role).toBe("read");
+
+    const byName = yield* stack.deploy(keyStack({ role: "read", name: "reader" }));
+    expect(byName.key.bucketAccessKeyId).not.toBe(byRole.key.bucketAccessKeyId);
+    yield* keyGone(initial.first.bucketId, byRole.key.bucketAccessKeyId);
+    const named = (yield* listKeys(initial.first.bucketId)).find(
+      (key) => key.id === byName.key.bucketAccessKeyId,
+    );
+    expect(named?.name).toMatch(/^reader-[a-zA-Z0-9]{12}$/);
+
+    const byBucket = yield* stack.deploy(
+      keyStack({ role: "read", name: "reader", bucket: "second" }),
+    );
+    expect(byBucket.key.bucketId).toBe(initial.second.bucketId);
+    yield* keyGone(initial.first.bucketId, byName.key.bucketAccessKeyId);
+    expect(
+      (yield* listKeys(initial.second.bucketId)).some(
+        (key) => key.id === byBucket.key.bucketAccessKeyId,
+      ),
+    ).toBe(true);
+
+    // A key revoked out of band does not block destroy.
+    yield* deleteBucketKey({
+      bucketId: initial.second.bucketId,
+      keyId: byBucket.key.bucketAccessKeyId,
+    });
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.first.bucketId);
+    yield* expectBucketGone(initial.second.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: keyTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "revokes the orphaned key of an interrupted create before minting a fresh one",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(keyStack());
+    // The key exists, but its one-time secret never reached state.
+    yield* markCreating(stack, "Key");
+
+    const recovered = yield* stack.deploy(keyStack());
+    expect(recovered.key.bucketAccessKeyId).not.toBe(initial.key.bucketAccessKeyId);
+    const keys = yield* listKeys(initial.first.bucketId);
+    expect(keys.map((key) => key.id)).toEqual([recovered.key.bucketAccessKeyId]);
+
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.first.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: keyTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "refuses to recover a key when two keys share its deterministic name",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(keyStack());
+    const name = (yield* listKeys(initial.first.bucketId)).find(
+      (key) => key.id === initial.key.bucketAccessKeyId,
+    )!.name;
+    const duplicate = yield* createBucketKey({
+      bucketId: initial.first.bucketId,
+      name,
+      role: "read",
+    });
+    yield* markCreating(stack, "Key");
+
+    const failure = yield* failureOf(stack.deploy(keyStack()));
+    expect(failure.errors.some((error) => error instanceof AmbiguousBucketAccessKeyError)).toBe(
+      true,
+    );
+    // Neither key was revoked.
+    const ids = (yield* listKeys(initial.first.bucketId)).map((key) => key.id);
+    expect(ids).toContain(initial.key.bucketAccessKeyId);
+    expect(ids).toContain(duplicate.data.id);
+
+    yield* deleteBucketKey({ bucketId: initial.first.bucketId, keyId: duplicate.data.id });
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.first.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: keyTags, timeout: 180_000 },
 );
