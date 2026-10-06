@@ -172,15 +172,12 @@ export const Router = Effect.fn("AWS.Website.Router")(
 
         if (typeof route === "string" || "url" in (route as any)) {
           const url = typeof route === "string" ? route : (route as any).url;
-          const host = typeof url === "string" ? new URL(url).host : url;
-          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
-            host,
-            (resolvedHost) =>
-              JSON.stringify({
-                host: resolvedHost,
-                origin: (route as any).origin,
-                rewrite: (route as any).rewrite,
-              }),
+          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(url, (resolvedUrl) =>
+            JSON.stringify({
+              host: new URL(resolvedUrl).host,
+              origin: (route as any).origin,
+              rewrite: (route as any).rewrite,
+            }),
           );
           yield* KvRoutesUpdate(`Route${routeIndex}`, {
             store: kvStore.keyValueStoreArn as any,

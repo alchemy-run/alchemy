@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as AWS from "@/AWS";
 import { flociServices } from "@/AWS/Local/FlociServices.ts";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
@@ -162,28 +163,19 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
         yield* stack.destroy();
 
         const cwd = yield* makeSiteFixture("api", "router-inline-url");
-        const origin = AWS.Website.StaticSite("Origin", {
-          path: cwd,
-          dev: { command: "bun serve.mjs" },
-        });
-        // Resolve the origin first so the inline URL is a literal string.
-        const { url } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const site = yield* origin;
-            return { url: site.url };
-          }),
-        );
-        assert(typeof url === "string");
-
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            yield* origin;
+            const origin = yield* AWS.Website.StaticSite("Origin", {
+              path: cwd,
+              dev: { command: "bun serve.mjs" },
+            });
             const bucket = yield* AWS.S3.Bucket("Assets", {
               forceDestroy: true,
             });
             const router = yield* AWS.Website.Router("InlineRouter", {
               routes: {
-                "/api/*": { url, origin: { protocol: "http" } },
+                // An Output url, as in the Router JSDoc (`api.functionUrl`).
+                "/api/*": { url: Output.interpolate`${origin.url}`, origin: { protocol: "http" } },
                 "/assets/*": { bucket },
               },
             });
