@@ -1,26 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Flex commitments are end of sale (create fails with BadRequest, asserted
 // by the probe below) and any commitment bills slot-hours. Set
 // GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT=1 on a project that can still buy
 // flex slots.
-const runLifecycle =
-  !process.env.FAST &&
-  process.env.GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT === "1";
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT === "1";
 
 const waitUntilGone = (name: string) =>
   bigqueryreservation.getProjectsLocationsCapacityCommitments({ name }).pipe(
@@ -47,15 +42,12 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page =
-        yield* bigqueryreservation.listProjectsLocationsCapacityCommitments({
-          parent: `projects/${project}/locations/us-central1`,
-          pageSize: 10,
-        });
+      const page = yield* bigqueryreservation.listProjectsLocationsCapacityCommitments({
+        parent: `projects/${project}/locations/us-central1`,
+        pageSize: 10,
+      });
       expect(
-        (page.capacityCommitments ?? []).map((item) =>
-          item.name?.split("/").pop(),
-        ),
+        (page.capacityCommitments ?? []).map((item) => item.name?.split("/").pop()),
       ).not.toContain("alchemy-bq-capacity-missing");
 
       yield* stack.destroy();
@@ -119,23 +111,19 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.plan).toEqual("FLEX_FLAT_RATE");
       expect(created.edition).toEqual("ENTERPRISE");
 
-      const fetched =
-        yield* bigqueryreservation.getProjectsLocationsCapacityCommitments({
-          name: created.name,
-        });
+      const fetched = yield* bigqueryreservation.getProjectsLocationsCapacityCommitments({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.slotCount).toEqual("50");
       expect(fetched.plan).toEqual("FLEX_FLAT_RATE");
 
-      const listed =
-        yield* bigqueryreservation.listProjectsLocationsCapacityCommitments({
-          parent: `projects/${created.project}/locations/${created.location}`,
-        });
-      expect(
-        (listed.capacityCommitments ?? []).some(
-          (item) => item.name === created.name,
-        ),
-      ).toEqual(true);
+      const listed = yield* bigqueryreservation.listProjectsLocationsCapacityCommitments({
+        parent: `projects/${created.project}/locations/${created.location}`,
+      });
+      expect((listed.capacityCommitments ?? []).some((item) => item.name === created.name)).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -152,10 +140,9 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(updated.name).toEqual(created.name);
       expect(updated.plan).toEqual("FLEX_FLAT_RATE");
-      expect(
-        updated.renewalPlan === "FLEX_FLAT_RATE" ||
-          updated.renewalPlan === undefined,
-      ).toEqual(true);
+      expect(updated.renewalPlan === "FLEX_FLAT_RATE" || updated.renewalPlan === undefined).toEqual(
+        true,
+      );
 
       yield* stack.destroy();
 

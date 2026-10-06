@@ -20,14 +20,7 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(2)),
 ]);
 
-export type HttpMethod =
-  | "POST"
-  | "GET"
-  | "HEAD"
-  | "PUT"
-  | "DELETE"
-  | "PATCH"
-  | "OPTIONS";
+export type HttpMethod = "POST" | "GET" | "HEAD" | "PUT" | "DELETE" | "PATCH" | "OPTIONS";
 
 export type OidcToken = {
   /**
@@ -328,30 +321,22 @@ export type Job = Resource<
  */
 export const Job = Resource<Job>("GCP.CloudScheduler.Job");
 
-export class JobNotResolved extends Data.TaggedError(
-  "GCP.CloudScheduler.JobNotResolved",
-)<{
+export class JobNotResolved extends Data.TaggedError("GCP.CloudScheduler.JobNotResolved")<{
   name: string;
 }> {}
 
-export class SchedulerJobNotReady extends Data.TaggedError(
-  "GCP.CloudScheduler.JobNotReady",
-)<{
+export class SchedulerJobNotReady extends Data.TaggedError("GCP.CloudScheduler.JobNotReady")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class JobStateFailed extends Data.TaggedError(
-  "GCP.CloudScheduler.JobStateFailed",
-)<{
+export class JobStateFailed extends Data.TaggedError("GCP.CloudScheduler.JobStateFailed")<{
   name: string;
   state: string;
   message: string;
 }> {}
 
-export class JobTargetMissing extends Data.TaggedError(
-  "GCP.CloudScheduler.JobTargetMissing",
-)<{
+export class JobTargetMissing extends Data.TaggedError("GCP.CloudScheduler.JobTargetMissing")<{
   name: string;
   message: string;
 }> {}
@@ -368,8 +353,7 @@ const normalizeLocation = (location: string | undefined, fallback: string) =>
 const resourceName = (project: string, location: string, jobId: string) =>
   `projects/${project}/locations/${location}/jobs/${jobId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -377,14 +361,10 @@ const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    jobId:
-      jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    jobId: jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -413,9 +393,7 @@ const timeZoneOf = (value: string | undefined) =>
   value && value.length > 0 ? value : DEFAULT_TIME_ZONE;
 
 const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const toAttrs = (job: scheduler.Job, project: string, region: string) => {
   const name = job.name ?? "";
@@ -451,29 +429,20 @@ const getByName = (name: string) =>
 /** Poll until Cloud Scheduler reports the job in the desired ENABLED/PAUSED state. */
 const waitForJobState = (name: string, paused: boolean) =>
   getByName(name).pipe(
-    Effect.flatMap(
-      (
-        job,
-      ): Effect.Effect<
-        scheduler.Job,
-        JobStateFailed | SchedulerJobNotReady
-      > => {
-        const desired = paused ? "PAUSED" : "ENABLED";
-        if (job?.state === desired) return Effect.succeed(job);
-        if (job?.state === "UPDATE_FAILED" || job?.state === "DISABLED") {
-          return Effect.fail(
-            new JobStateFailed({
-              name,
-              state: job.state,
-              message: job.status?.message ?? `job is ${job.state}`,
-            }),
-          );
-        }
+    Effect.flatMap((job): Effect.Effect<scheduler.Job, JobStateFailed | SchedulerJobNotReady> => {
+      const desired = paused ? "PAUSED" : "ENABLED";
+      if (job?.state === desired) return Effect.succeed(job);
+      if (job?.state === "UPDATE_FAILED" || job?.state === "DISABLED") {
         return Effect.fail(
-          new SchedulerJobNotReady({ name, state: job?.state }),
+          new JobStateFailed({
+            name,
+            state: job.state,
+            message: job.status?.message ?? `job is ${job.state}`,
+          }),
         );
-      },
-    ),
+      }
+      return Effect.fail(new SchedulerJobNotReady({ name, state: job?.state }));
+    }),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudScheduler.JobNotReady",
       times: 30,
@@ -497,17 +466,12 @@ const headersMatch = (
 };
 
 const tokenEqual = (
-  observed:
-    | { serviceAccountEmail?: string; audience?: string; scope?: string }
-    | undefined,
-  desired:
-    | { serviceAccountEmail?: string; audience?: string; scope?: string }
-    | undefined,
+  observed: { serviceAccountEmail?: string; audience?: string; scope?: string } | undefined,
+  desired: { serviceAccountEmail?: string; audience?: string; scope?: string } | undefined,
 ) => {
   if (desired === undefined) return true;
   return (
-    (observed?.serviceAccountEmail ?? "") ===
-      (desired.serviceAccountEmail ?? "") &&
+    (observed?.serviceAccountEmail ?? "") === (desired.serviceAccountEmail ?? "") &&
     (observed?.audience ?? "") === (desired.audience ?? "") &&
     (observed?.scope ?? "") === (desired.scope ?? "")
   );
@@ -545,9 +509,7 @@ const toApiPubsubTarget = Effect.fn(function* (target: PubsubTarget) {
   }) as scheduler.PubsubTarget;
 });
 
-const toApiAppEngineHttpTarget = Effect.fn(function* (
-  target: AppEngineHttpTarget,
-) {
+const toApiAppEngineHttpTarget = Effect.fn(function* (target: AppEngineHttpTarget) {
   return compact({
     relativeUri: target.relativeUri,
     httpMethod: target.httpMethod,
@@ -609,9 +571,7 @@ const hasTarget = (news: JobProps) =>
   news.pubsubTarget !== undefined ||
   news.appEngineHttpTarget !== undefined;
 
-const retryTransient = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryTransient = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "NotFound" || error._tag === "Conflict",
@@ -620,11 +580,7 @@ const retryTransient = <A, E extends { _tag: string }, R>(
     }),
   );
 
-const syncPaused = Effect.fn(function* (
-  name: string,
-  current: scheduler.Job,
-  paused: boolean,
-) {
+const syncPaused = Effect.fn(function* (name: string, current: scheduler.Job, paused: boolean) {
   if (paused && current.state === "ENABLED") {
     const pausedJob = yield* retryTransient(
       scheduler.pauseProjectsLocationsJobs({ name, body: {} }),
@@ -669,19 +625,10 @@ export const JobProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.jobId ?? output?.jobId;
       const nextId = news.jobId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const locationChanged = previousLocation !== nextLocation;
 
       if (idChanged || locationChanged) {
@@ -693,10 +640,7 @@ export const JobProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -708,17 +652,13 @@ export const JobProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, news.jobId, output?.jobId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, jobId);
       const parent = parentOf(env.project, location);
       if (!hasTarget(news)) {
         return yield* new JobTargetMissing({
           name,
-          message:
-            "Cloud Scheduler jobs require httpTarget, pubsubTarget, or appEngineHttpTarget",
+          message: "Cloud Scheduler jobs require httpTarget, pubsubTarget, or appEngineHttpTarget",
         });
       }
 
@@ -731,13 +671,9 @@ export const JobProvider = () =>
       const desiredTimeZone = timeZoneOf(news.timeZone);
       const desiredPaused = news.paused === true;
       const httpTarget =
-        news.httpTarget !== undefined
-          ? yield* toApiHttpTarget(news.httpTarget)
-          : undefined;
+        news.httpTarget !== undefined ? yield* toApiHttpTarget(news.httpTarget) : undefined;
       const pubsubTarget =
-        news.pubsubTarget !== undefined
-          ? yield* toApiPubsubTarget(news.pubsubTarget)
-          : undefined;
+        news.pubsubTarget !== undefined ? yield* toApiPubsubTarget(news.pubsubTarget) : undefined;
       const appEngineHttpTarget =
         news.appEngineHttpTarget !== undefined
           ? yield* toApiAppEngineHttpTarget(news.appEngineHttpTarget)

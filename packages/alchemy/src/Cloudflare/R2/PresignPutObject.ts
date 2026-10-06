@@ -95,12 +95,8 @@ export interface PresignPutObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: PresignPutObjectRequest,
-    ) => Effect.Effect<string, PresignError, RuntimeContext>
+    (request: PresignPutObjectRequest) => Effect.Effect<string, PresignError, RuntimeContext>
   >
 > {}
 
-export const PresignPutObject = Binding.Service<PresignPutObject>(
-  "Cloudflare.R2.PresignPutObject",
-);
+export const PresignPutObject = Binding.Service<PresignPutObject>("Cloudflare.R2.PresignPutObject");

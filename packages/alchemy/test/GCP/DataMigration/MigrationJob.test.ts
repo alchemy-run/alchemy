@@ -1,14 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  logLevel,
-  currentProject,
-  runSlowLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, currentProject, runSlowLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -45,19 +40,16 @@ test.provider.skipIf(!runSlowLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const source = yield* GCP.DataMigration.ConnectionProfile(
-            "MysqlSrc",
-            {
-              location: "us-central1",
-              displayName: "job-src",
-              mysql: {
-                host: "10.0.0.8",
-                port: 3306,
-                username: "alchemy",
-                password: "AlchemyTestPass1",
-              },
+          const source = yield* GCP.DataMigration.ConnectionProfile("MysqlSrc", {
+            location: "us-central1",
+            displayName: "job-src",
+            mysql: {
+              host: "10.0.0.8",
+              port: 3306,
+              username: "alchemy",
+              password: "AlchemyTestPass1",
             },
-          );
+          });
           const dest = yield* GCP.DataMigration.ConnectionProfile("MysqlDest", {
             location: "us-central1",
             displayName: "job-dest",
@@ -102,19 +94,16 @@ test.provider.skipIf(!runSlowLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const source = yield* GCP.DataMigration.ConnectionProfile(
-            "MysqlSrc",
-            {
-              connectionProfileId: created.source.connectionProfileId,
-              location: "us-central1",
-              displayName: "job-src",
-              mysql: {
-                host: "10.0.0.8",
-                port: 3306,
-                username: "alchemy",
-              },
+          const source = yield* GCP.DataMigration.ConnectionProfile("MysqlSrc", {
+            connectionProfileId: created.source.connectionProfileId,
+            location: "us-central1",
+            displayName: "job-src",
+            mysql: {
+              host: "10.0.0.8",
+              port: 3306,
+              username: "alchemy",
             },
-          );
+          });
           const dest = yield* GCP.DataMigration.ConnectionProfile("MysqlDest", {
             connectionProfileId: created.dest.connectionProfileId,
             location: "us-central1",
@@ -146,10 +135,9 @@ test.provider.skipIf(!runSlowLifecycle)(
       expect(updated.job.displayName).toEqual("mysql-replica-v2");
       expect(updated.job.labels).toMatchObject({ env: "prod", team: "dms" });
 
-      const fetchedUpdate =
-        yield* datamigration.getProjectsLocationsMigrationJobs({
-          name: updated.job.name,
-        });
+      const fetchedUpdate = yield* datamigration.getProjectsLocationsMigrationJobs({
+        name: updated.job.name,
+      });
       expect(fetchedUpdate.displayName).toEqual("mysql-replica-v2");
       expect(fetchedUpdate.labels?.team).toEqual("dms");
 

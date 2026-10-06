@@ -14,8 +14,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeResourceName = (value: string) =>
-  value.replace(/\/+$/, "").trim();
+export const normalizeResourceName = (value: string) => value.replace(/\/+$/, "").trim();
 
 export const expandParent = (value: string) => {
   const trimmed = normalizeResourceName(value);
@@ -43,8 +42,7 @@ export const userIdOf = (name: string) => lastSegment(name);
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const normalizeEmail = (email: string | undefined) =>
-  (email ?? "").trim().toLowerCase();
+export const normalizeEmail = (email: string | undefined) => (email ?? "").trim().toLowerCase();
 
 export const replaceOnIdentity = (input: {
   previousParent?: string;
@@ -78,11 +76,7 @@ export const replaceOnIdentity = (input: {
   return undefined;
 };
 
-export const toEmail = (
-  id: string,
-  requested: string | undefined,
-  existing: string | undefined,
-) =>
+export const toEmail = (id: string, requested: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (requested !== undefined && requested.length > 0) return requested;
     if (existing !== undefined && existing.length > 0) return existing;
@@ -121,10 +115,8 @@ export const toAttrs = (
 };
 
 /** Email is unique per client, so it identifies the user. */
-export const findUserByEmail = (
-  users: readonly marketplace.ClientUser[],
-  email: string,
-) => users.find((user) => normalizeEmail(user.email) === normalizeEmail(email));
+export const findUserByEmail = (users: readonly marketplace.ClientUser[], email: string) =>
+  users.find((user) => normalizeEmail(user.email) === normalizeEmail(email));
 
 export const listUsers = (parent: string) =>
   marketplace.listBuyersClientsUsers.pages({ parent, pageSize: 200 }).pipe(

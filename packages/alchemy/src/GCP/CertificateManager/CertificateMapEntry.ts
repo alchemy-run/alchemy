@@ -193,9 +193,7 @@ export class CertificateMapEntryStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-type Match =
-  | { kind: "hostname"; hostname: string }
-  | { kind: "matcher"; matcher: string };
+type Match = { kind: "hostname"; hostname: string } | { kind: "matcher"; matcher: string };
 
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -246,30 +244,19 @@ const parseName = (name: string) => {
   const mapsAt = parts.lastIndexOf("certificateMaps");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const certificateMap =
-    mapsAt >= 0 ? parts.slice(0, mapsAt + 2).join("/") : "";
+  const certificateMap = mapsAt >= 0 ? parts.slice(0, mapsAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     certificateMap,
-    certificateMapId:
-      mapsAt >= 0 && parts[mapsAt + 1] ? parts[mapsAt + 1]! : "",
+    certificateMapId: mapsAt >= 0 && parts[mapsAt + 1] ? parts[mapsAt + 1]! : "",
     certificateMapEntryId:
-      entriesAt >= 0 && parts[entriesAt + 1]
-        ? parts[entriesAt + 1]!
-        : lastSegment(name),
+      entriesAt >= 0 && parts[entriesAt + 1] ? parts[entriesAt + 1]! : lastSegment(name),
   };
 };
 
-const resolveParent = (
-  project: string,
-  certificateMap: string,
-  location: string | undefined,
-) => {
+const resolveParent = (project: string, certificateMap: string, location: string | undefined) => {
   if (certificateMap.includes("/")) {
     const parsed = parseName(
       certificateMap.includes("/certificateMapEntries/")
@@ -292,10 +279,7 @@ const resolveParent = (
   };
 };
 
-const parentKey = (
-  certificateMap: string | undefined,
-  location: string | undefined,
-) => {
+const parentKey = (certificateMap: string | undefined, location: string | undefined) => {
   if (certificateMap === undefined || certificateMap === "") return undefined;
   const parsed = resolveParent("", certificateMap, location);
   return `${parsed.location}/${parsed.certificateMapId}`;
@@ -308,11 +292,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateMapEntryId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateMapEntryId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (certificateMapEntryId !== undefined) return certificateMapEntryId;
     if (existing !== undefined) return existing;
@@ -325,19 +305,12 @@ const toId = (
     );
   });
 
-const normalizeCertificateName = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+const normalizeCertificateName = (value: string, project: string, location: string) => {
   if (value.includes("/certificates/")) {
     const parts = value.split("/").filter((part) => part.length > 0);
     const certificatesAt = parts.lastIndexOf("certificates");
     const locationsAt = parts.lastIndexOf("locations");
-    const loc =
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : location;
+    const loc = locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : location;
     const certificateId =
       certificatesAt >= 0 && parts[certificatesAt + 1]
         ? parts[certificatesAt + 1]!
@@ -351,10 +324,7 @@ const normalizeCertificates = (
   values: readonly string[] | undefined,
   project: string,
   location: string,
-) =>
-  (values ?? []).map((value) =>
-    normalizeCertificateName(value, project, location),
-  );
+) => (values ?? []).map((value) => normalizeCertificateName(value, project, location));
 
 const sameCertificates = (
   left: readonly string[] | undefined,
@@ -365,10 +335,7 @@ const sameCertificates = (
   [...normalizeCertificates(left, project, location)].sort().join("\0") ===
   [...normalizeCertificates(right, project, location)].sort().join("\0");
 
-const toAttrs = (
-  entry: certificatemanager.CertificateMapEntry,
-  project: string,
-) => {
+const toAttrs = (entry: certificatemanager.CertificateMapEntry, project: string) => {
   const name = entry.name ?? "";
   const parsed = parseName(name);
   const matcher = normalizeMatcher(entry.matcher);
@@ -381,15 +348,8 @@ const toAttrs = (
     location: parsed.location,
     description: entry.description,
     labels: userLabels(entry.labels),
-    certificates: normalizeCertificates(
-      entry.certificates,
-      project,
-      parsed.location,
-    ),
-    hostname:
-      entry.hostname !== undefined && entry.hostname !== ""
-        ? entry.hostname
-        : undefined,
+    certificates: normalizeCertificates(entry.certificates, project, parsed.location),
+    hostname: entry.hostname !== undefined && entry.hostname !== "" ? entry.hostname : undefined,
     matcher,
     state: entry.state,
     createTime: entry.createTime,
@@ -412,13 +372,10 @@ const getByName = (name: string) => {
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry
-        ? Effect.succeed(entry)
-        : Effect.fail(new CertificateMapEntryNotResolved({ name })),
+      entry ? Effect.succeed(entry) : Effect.fail(new CertificateMapEntryNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateMapEntryNotResolved",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -427,13 +384,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry === undefined
-        ? Effect.void
-        : Effect.fail(new CertificateMapEntryStillExists({ name })),
+      entry === undefined ? Effect.void : Effect.fail(new CertificateMapEntryStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateMapEntryStillExists",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -446,13 +400,9 @@ const listEntriesAt = (parent: string, project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.certificateMapEntries ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.certificateMapEntries ?? [])),
       Stream.filter((entry) =>
-        Object.keys(entry.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(entry.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((entry) => toAttrs(entry, project)),
       Stream.runCollect,
@@ -468,9 +418,7 @@ const listOwnedEntries = (project: string) =>
         pageSize: 1000,
       })
       .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.certificateMaps ?? []),
-        ),
+        Stream.flatMap((page) => Stream.fromIterable(page.certificateMaps ?? [])),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () =>
@@ -527,11 +475,7 @@ const matchChanged = (
   ) {
     return true;
   }
-  if (
-    previous.kind === "matcher" &&
-    next.kind === "matcher" &&
-    previous.matcher !== next.matcher
-  ) {
+  if (previous.kind === "matcher" && next.kind === "matcher" && previous.matcher !== next.matcher) {
     return true;
   }
   return false;
@@ -554,31 +498,21 @@ export const CertificateMapEntryProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      const previousId =
-        olds?.certificateMapEntryId ?? output?.certificateMapEntryId;
+      const previousId = olds?.certificateMapEntryId ?? output?.certificateMapEntryId;
       const nextId = news.certificateMapEntryId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousParent = parentKey(
         olds?.certificateMap ?? output?.certificateMap,
         olds?.location ?? output?.location,
       );
       const nextParent =
         news.certificateMap !== undefined
-          ? parentKey(
-              news.certificateMap,
-              news.location ?? olds?.location ?? output?.location,
-            )
+          ? parentKey(news.certificateMap, news.location ?? olds?.location ?? output?.location)
           : previousParent;
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousParent !== undefined &&
           nextParent !== undefined &&
@@ -611,19 +545,13 @@ export const CertificateMapEntryProvider = () =>
           olds?.certificateMapEntryId,
           output?.certificateMapEntryId,
         );
-        const parent = resolveParent(
-          env.project,
-          mapRef,
-          olds?.location ?? output?.location,
-        );
+        const parent = resolveParent(env.project, mapRef, olds?.location ?? output?.location);
         name = resourceName(parent.parent, certificateMapEntryId);
       }
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -667,8 +595,7 @@ export const CertificateMapEntryProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (error) =>
-                error._tag === "Conflict" || error._tag === "NotFound",
+              while: (error) => error._tag === "Conflict" || error._tag === "NotFound",
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
@@ -687,16 +614,10 @@ export const CertificateMapEntryProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const certificatesChanged =
         news.certificates !== undefined &&
-        !sameCertificates(
-          current.certificates,
-          certificates,
-          parent.project,
-          parent.location,
-        );
+        !sameCertificates(current.certificates, certificates, parent.project, parent.location);
 
       if (labelsChanged || descriptionChanged || certificatesChanged) {
         const updateMask = [
@@ -706,18 +627,16 @@ export const CertificateMapEntryProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation =
-          yield* certificatemanager.patchProjectsLocationsCertificateMapsCertificateMapEntries(
-            {
+          yield* certificatemanager.patchProjectsLocationsCertificateMapsCertificateMapEntries({
+            name,
+            updateMask: updateMask.join(","),
+            body: {
               name,
-              updateMask: updateMask.join(","),
-              body: {
-                name,
-                labels: desiredLabels,
-                description: news.description,
-                certificates,
-              },
+              labels: desiredLabels,
+              description: news.description,
+              certificates,
             },
-          );
+          });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

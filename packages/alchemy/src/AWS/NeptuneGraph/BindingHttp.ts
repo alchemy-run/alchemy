@@ -19,22 +19,19 @@ import type { Graph } from "./Graph.ts";
  * Graph snapshot ARNs embed a server-generated id that is only known at
  * runtime, so snapshot-scoped grants use this wildcard.
  */
-export const SNAPSHOT_ARN_WILDCARD =
-  "arn:aws:neptune-graph:*:*:graph-snapshot/*";
+export const SNAPSHOT_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:graph-snapshot/*";
 
 /**
  * Import-task ARNs embed a server-generated task id that is only known at
  * runtime, so import-task-scoped grants use this wildcard.
  */
-export const IMPORT_TASK_ARN_WILDCARD =
-  "arn:aws:neptune-graph:*:*:import-task/*";
+export const IMPORT_TASK_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:import-task/*";
 
 /**
  * Export-task ARNs embed a server-generated task id that is only known at
  * runtime, so export-task-scoped grants use this wildcard.
  */
-export const EXPORT_TASK_ARN_WILDCARD =
-  "arn:aws:neptune-graph:*:*:export-task/*";
+export const EXPORT_TASK_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:export-task/*";
 
 /**
  * `iam:PassRole` restricted to Neptune Analytics — required by the

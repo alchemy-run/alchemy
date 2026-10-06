@@ -38,5 +38,5 @@ export const NeonStorage = Layer.unwrap(
 )
   // #region bind
   .pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding));
-  // #endregion bind
+// #endregion bind
 // #endregion neon

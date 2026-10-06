@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudasset from "@distilled.cloud/gcp/cloudasset_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const projectNumber = Effect.gen(function* () {
   const { project } = yield* GcpEnvironment.current;
@@ -90,9 +87,7 @@ test.provider(
 
       const fetched = yield* cloudasset.getFeeds({ name: created.feed.name });
       expect(fetched.name).toEqual(created.feed.name);
-      expect(fetched.feedOutputConfig?.pubsubDestination?.topic).toEqual(
-        created.topic.name,
-      );
+      expect(fetched.feedOutputConfig?.pubsubDestination?.topic).toEqual(created.topic.name);
       expect(fetched.condition?.description).toContain("alchemy-id=");
       expect(fetched.condition?.description).toContain("watch buckets");
 
@@ -105,10 +100,7 @@ test.provider(
           const feed = yield* GCP.CloudAsset.Feed("Buckets", {
             feedId: created.feed.feedId,
             pubsubTopic: topic.name,
-            assetTypes: [
-              "storage.googleapis.com/Bucket",
-              "pubsub.googleapis.com/Topic",
-            ],
+            assetTypes: ["storage.googleapis.com/Bucket", "pubsub.googleapis.com/Topic"],
             contentType: "RESOURCE",
             condition: { description: "watch buckets and topics" },
           });
@@ -119,24 +111,15 @@ test.provider(
       expect(updated.feed.name).toEqual(created.feed.name);
       expect(updated.feed.feedId).toEqual(created.feed.feedId);
       expect(updated.feed.assetTypes).toEqual(
-        expect.arrayContaining([
-          "storage.googleapis.com/Bucket",
-          "pubsub.googleapis.com/Topic",
-        ]),
+        expect.arrayContaining(["storage.googleapis.com/Bucket", "pubsub.googleapis.com/Topic"]),
       );
-      expect(updated.feed.condition?.description).toEqual(
-        "watch buckets and topics",
-      );
+      expect(updated.feed.condition?.description).toEqual("watch buckets and topics");
 
       const refetched = yield* cloudasset.getFeeds({
         name: created.feed.name,
       });
-      expect(refetched.assetTypes).toEqual(
-        expect.arrayContaining(["pubsub.googleapis.com/Topic"]),
-      );
-      expect(refetched.condition?.description).toContain(
-        "watch buckets and topics",
-      );
+      expect(refetched.assetTypes).toEqual(expect.arrayContaining(["pubsub.googleapis.com/Topic"]));
+      expect(refetched.condition?.description).toContain("watch buckets and topics");
 
       yield* stack.destroy();
 

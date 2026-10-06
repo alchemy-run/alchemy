@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Enrollment depends on a Pipeline, whose create/update/delete LROs take
 // over 15 minutes end to end.
@@ -111,8 +108,7 @@ test.provider.skipIf(!runLifecycle)(
             location: LOCATION,
             messageBus: bus.name,
             destination: pipeline.name,
-            celMatch:
-              "message.type == 'google.cloud.pubsub.topic.v1.messagePublished'",
+            celMatch: "message.type == 'google.cloud.pubsub.topic.v1.messagePublished'",
             displayName: "pubsub only",
             labels: { env: "prod", role: "enrollment" },
           });

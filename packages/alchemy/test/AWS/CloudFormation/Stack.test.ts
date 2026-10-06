@@ -1,20 +1,17 @@
-import * as AWS from "@/AWS";
-import { Stack as CfnStack } from "@/AWS/CloudFormation";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as CloudFormation from "@distilled.cloud/aws/cloudformation";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Stack as CfnStack } from "@/AWS/CloudFormation";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class StackStillExists extends Data.TaggedError("StackStillExists") {}
 
@@ -71,11 +68,9 @@ test.provider(
       });
       const live = described.Stacks?.[0];
       expect(live?.StackStatus).toBe("CREATE_COMPLETE");
-      expect(
-        live?.Tags?.some(
-          (t) => t.Key === "alchemy::id" && t.Value === "CfnTestStack",
-        ),
-      ).toBe(true);
+      expect(live?.Tags?.some((t) => t.Key === "alchemy::id" && t.Value === "CfnTestStack")).toBe(
+        true,
+      );
 
       // No-op update (same template + params) — must not error.
       const { stack: noop } = yield* stack.deploy(stackDef("v1"));
@@ -84,9 +79,7 @@ test.provider(
 
       // Update the template parameter — stack id is stable, status becomes
       // UPDATE_COMPLETE.
-      const { stack: updated } = yield* stack.deploy(
-        stackDef("v2", { env: "prod" }),
-      );
+      const { stack: updated } = yield* stack.deploy(stackDef("v2", { env: "prod" }));
       expect(updated.stackId).toBe(created.stackId);
       expect(updated.stackStatus).toBe("UPDATE_COMPLETE");
 
@@ -95,9 +88,7 @@ test.provider(
       });
       expect(reDescribed.Stacks?.[0]?.StackStatus).toBe("UPDATE_COMPLETE");
       expect(
-        reDescribed.Stacks?.[0]?.Tags?.some(
-          (t) => t.Key === "env" && t.Value === "prod",
-        ),
+        reDescribed.Stacks?.[0]?.Tags?.some((t) => t.Key === "env" && t.Value === "prod"),
       ).toBe(true);
 
       // Delete + wait gone.

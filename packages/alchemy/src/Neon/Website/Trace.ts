@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Schema from "effect/Schema";
 
 export interface TraceInput {
   readonly seeds: string[];
@@ -33,17 +33,12 @@ export const traceWebsiteFiles = Effect.fn(function* (input: TraceInput) {
     { stdin: "ignore", stdout: "ignore", stderr: "inherit" },
   );
   const code = yield* child.exitCode;
-  if (code !== 0)
-    return yield* Effect.fail(
-      new Error(`Website dependency trace exited ${code}`),
-    );
+  if (code !== 0) return yield* Effect.fail(new Error(`Website dependency trace exited ${code}`));
   return yield* fs
     .readFileString(outputPath)
     .pipe(
       Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.fromJsonString(Schema.Array(Schema.String)),
-        ),
+        Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.String))),
       ),
     );
 }, Effect.scoped);

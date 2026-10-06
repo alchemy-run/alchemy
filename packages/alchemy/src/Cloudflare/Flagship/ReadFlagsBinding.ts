@@ -24,8 +24,9 @@ export const ReadFlagsBinding = Layer.effect(
           ],
         });
       }
-      const raw: Effect.Effect<cf.Flagship, never, RuntimeContext> =
-        Effect.sync(() => (env as Record<string, cf.Flagship>)[app.LogicalId]!);
+      const raw: Effect.Effect<cf.Flagship, never, RuntimeContext> = Effect.sync(
+        () => (env as Record<string, cf.Flagship>)[app.LogicalId]!,
+      );
       return makeFlagshipClient(raw);
     });
   }),
@@ -39,8 +40,7 @@ const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, FlagshipError> =>
     try: fn,
     catch: (error) =>
       new FlagshipError({
-        message:
-          error instanceof Error ? error.message : "Unknown Flagship error",
+        message: error instanceof Error ? error.message : "Unknown Flagship error",
         cause: error,
       }),
   });
@@ -49,15 +49,12 @@ const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, FlagshipError> =>
 export const makeFlagshipClient = (
   raw: Effect.Effect<cf.Flagship, never, RuntimeContext>,
 ): ReadFlagsClient => {
-  const call = <T>(
-    fn: (binding: cf.Flagship) => Promise<T>,
-  ): FlagshipEffect<T> =>
+  const call = <T>(fn: (binding: cf.Flagship) => Promise<T>): FlagshipEffect<T> =>
     raw.pipe(Effect.flatMap((binding) => tryPromise(() => fn(binding))));
 
   return {
     raw,
-    get: (flagKey, defaultValue, context) =>
-      call((b) => b.get(flagKey, defaultValue, context)),
+    get: (flagKey, defaultValue, context) => call((b) => b.get(flagKey, defaultValue, context)),
     getBooleanValue: (flagKey, defaultValue, context) =>
       call((b) => b.getBooleanValue(flagKey, defaultValue, context)),
     getStringValue: (flagKey, defaultValue, context) =>

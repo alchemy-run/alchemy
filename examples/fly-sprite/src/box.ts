@@ -2,9 +2,9 @@ import * as Fly from "alchemy/Fly";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
 
 /**
  * HTTP Sprite. Yield FileSystem in init, not inside fetch.

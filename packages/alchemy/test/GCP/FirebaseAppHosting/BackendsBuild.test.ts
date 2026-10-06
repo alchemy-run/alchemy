@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firebaseapphosting from "@distilled.cloud/gcp/firebaseapphosting_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -43,11 +43,10 @@ test.provider(
       );
       expect(error._tag).toEqual("NotFound");
 
-      const page =
-        yield* firebaseapphosting.listProjectsLocationsBackendsBuilds({
-          parent: `projects/${project}/locations/-/backends/-`,
-          pageSize: 10,
-        });
+      const page = yield* firebaseapphosting.listProjectsLocationsBackendsBuilds({
+        parent: `projects/${project}/locations/-/backends/-`,
+        pageSize: 10,
+      });
       expect((page.builds ?? []).map((item) => item.name)).not.toContain(
         `${missingBackend()}/builds/alchemy-missing-build`,
       );
@@ -126,10 +125,9 @@ test.provider.skipIf(!process.env.GCP_TEST_FIREBASE_APP_HOSTING_BUILD)(
       expect(created.build.source?.container?.image).toEqual(helloImage);
       expect(created.build.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* firebaseapphosting.getProjectsLocationsBackendsBuilds({
-          name: created.build.name,
-        });
+      const fetched = yield* firebaseapphosting.getProjectsLocationsBackendsBuilds({
+        name: created.build.name,
+      });
       expect(fetched.name).toEqual(created.build.name);
       expect(fetched.source?.container?.image).toEqual(helloImage);
       expect(fetched.labels?.env).toEqual("test");

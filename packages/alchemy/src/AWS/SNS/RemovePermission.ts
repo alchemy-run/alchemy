@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface RemovePermissionRequest extends Omit<
-  sns.RemovePermissionInput,
-  "TopicArn"
-> {}
+export interface RemovePermissionRequest extends Omit<sns.RemovePermissionInput, "TopicArn"> {}
 
 /**
  * Runtime binding for `sns:RemovePermission`.
@@ -40,6 +37,4 @@ export interface RemovePermission extends Binding.Service<
   >
 > {}
 
-export const RemovePermission = Binding.Service<RemovePermission>(
-  "AWS.SNS.RemovePermission",
-);
+export const RemovePermission = Binding.Service<RemovePermission>("AWS.SNS.RemovePermission");

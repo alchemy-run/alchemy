@@ -8,10 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  findSfdcInstanceByDescription,
-  listSfdcInstances,
-} from "./internal.ts";
+import { findSfdcInstanceByDescription, listSfdcInstances } from "./internal.ts";
 import {
   encodeOwnership,
   hasOwnershipMarker,
@@ -137,9 +134,7 @@ export type SfdcInstance = Resource<
  * @resource
  * @category Integrations
  */
-export const SfdcInstance = Resource<SfdcInstance>(
-  "GCP.Integrations.SfdcInstance",
-);
+export const SfdcInstance = Resource<SfdcInstance>("GCP.Integrations.SfdcInstance");
 
 export class SfdcInstanceNotResolved extends Data.TaggedError(
   "GCP.Integrations.SfdcInstanceNotResolved",
@@ -147,11 +142,8 @@ export class SfdcInstanceNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  sfdcInstanceId: string,
-) => `${locationParent(project, location)}/sfdcInstances/${sfdcInstanceId}`;
+const resourceName = (project: string, location: string, sfdcInstanceId: string) =>
+  `${locationParent(project, location)}/sfdcInstances/${sfdcInstanceId}`;
 
 const toAttrs = (
   instance: integrations.GoogleCloudIntegrationsV1alphaSfdcInstance,
@@ -205,17 +197,9 @@ export const SfdcInstanceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sfdcInstanceId = yield* toResourceId(
-        id,
-        olds?.sfdcInstanceId,
-        output?.sfdcInstanceId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, sfdcInstanceId);
+      const sfdcInstanceId = yield* toResourceId(id, olds?.sfdcInstanceId, output?.sfdcInstanceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, sfdcInstanceId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
         const ownership = yield* createInternalLabels(id);
@@ -226,17 +210,13 @@ export const SfdcInstanceProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listSfdcInstances(
-          locationParent(env.project, env.region),
-        );
+        const items = yield* listSfdcInstances(locationParent(env.project, env.region));
         return items
           .filter((instance) => hasOwnershipMarker(instance.description))
           .map((instance) => toAttrs(instance, env.project, env.region));
@@ -244,18 +224,10 @@ export const SfdcInstanceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
-      const sfdcInstanceId = yield* toResourceId(
-        id,
-        news.sfdcInstanceId,
-        output?.sfdcInstanceId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, sfdcInstanceId);
+      const sfdcInstanceId = yield* toResourceId(id, news.sfdcInstanceId, output?.sfdcInstanceId);
+      const name = output?.name ?? resourceName(env.project, location, sfdcInstanceId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? sfdcInstanceId;
@@ -280,9 +252,7 @@ export const SfdcInstanceProvider = () =>
             body,
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              findSfdcInstanceByDescription(parent, description),
-            ),
+            Effect.catchTag("Conflict", () => findSfdcInstanceByDescription(parent, description)),
           );
         current = created ?? undefined;
       }
@@ -296,18 +266,9 @@ export const SfdcInstanceProvider = () =>
       const descriptionChanged = (current.description ?? "") !== description;
       const orgChanged = !sameText(current.sfdcOrgId, news.sfdcOrgId);
       const authChanged = !sameStringList(current.authConfigId, authConfigId);
-      const authorityChanged = !sameText(
-        current.serviceAuthority,
-        news.serviceAuthority,
-      );
+      const authorityChanged = !sameText(current.serviceAuthority, news.serviceAuthority);
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        orgChanged ||
-        authChanged ||
-        authorityChanged
-      ) {
+      if (displayChanged || descriptionChanged || orgChanged || authChanged || authorityChanged) {
         current = yield* integrations.patchProjectsLocationsSfdcInstances({
           name: currentName,
           updateMask: updateMaskOf(

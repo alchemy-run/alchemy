@@ -45,12 +45,7 @@ export interface BatchPutGeofence extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchPutGeofenceRequest,
-    ) => Effect.Effect<
-      location.BatchPutGeofenceResponse,
-      location.BatchPutGeofenceError
-    >
+    ) => Effect.Effect<location.BatchPutGeofenceResponse, location.BatchPutGeofenceError>
   >
 > {}
-export const BatchPutGeofence = Binding.Service<BatchPutGeofence>(
-  "AWS.Location.BatchPutGeofence",
-);
+export const BatchPutGeofence = Binding.Service<BatchPutGeofence>("AWS.Location.BatchPutGeofence");

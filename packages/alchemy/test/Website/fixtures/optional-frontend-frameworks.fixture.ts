@@ -1,8 +1,8 @@
-import * as Effect from "effect/Effect";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import { FrameworkServerError } from "alchemy/Website/Server";
 import { registerHooks } from "node:module";
+import { FrameworkServerError } from "alchemy/Website/Server";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 
 // Simulate an absent optional peer without changing the workspace install.
 let attempts = 0;
@@ -33,17 +33,14 @@ console.log(
     providers,
     providerImportAttempts,
     loaderImportAttempts: attempts - providerImportAttempts,
-    defect:
-      Exit.isFailure(exit) &&
-      exit.cause.reasons.some((reason) => reason._tag === "Die"),
+    defect: Exit.isFailure(exit) && exit.cause.reasons.some((reason) => reason._tag === "Die"),
     error:
       error instanceof FrameworkServerError
         ? {
             _tag: error._tag,
             framework: error.framework,
             message: error.message,
-            cause:
-              error.cause instanceof Error ? error.cause.message : error.cause,
+            cause: error.cause instanceof Error ? error.cause.message : error.cause,
           }
         : null,
   }),

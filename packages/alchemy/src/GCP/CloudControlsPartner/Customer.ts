@@ -32,8 +32,7 @@ import {
   tryResolveOrganization,
 } from "./internal.ts";
 
-export type CustomerOnboardingState =
-  cloudcontrolspartner.CustomerOnboardingState;
+export type CustomerOnboardingState = cloudcontrolspartner.CustomerOnboardingState;
 
 export type CustomerProps = {
   /**
@@ -189,9 +188,7 @@ export const CustomerProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location ?? env.region,
       );
@@ -203,9 +200,7 @@ export const CustomerProvider = () =>
           toCustomerId(news.customerId),
         ) ??
         replaceOn(
-          previousOrg !== undefined
-            ? organizationParent(previousOrg)
-            : undefined,
+          previousOrg !== undefined ? organizationParent(previousOrg) : undefined,
           nextOrg !== undefined ? organizationParent(nextOrg) : undefined,
         ) ??
         replaceOn(previousLocation, nextLocation)
@@ -218,28 +213,20 @@ export const CustomerProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const customerId = yield* toCustomerResourceId(
         id,
         olds?.customerId ?? output?.customerId,
         output?.name,
       );
-      const name =
-        output?.name ?? customerName(organization, location, customerId);
+      const name = output?.name ?? customerName(organization, location, customerId);
       let existing = yield* getCustomer(name);
       if (existing === undefined) {
-        existing = yield* findOwnedCustomer(
-          id,
-          locationParent(organization, location),
-        );
+        existing = yield* findOwnedCustomer(id, locationParent(organization, location));
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -263,13 +250,8 @@ export const CustomerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const customerId = yield* toCustomerResourceId(
         id,
         news.customerId,
@@ -299,9 +281,7 @@ export const CustomerProvider = () =>
             Effect.catchTag("Conflict", () =>
               getCustomer(name).pipe(
                 Effect.flatMap((existing) =>
-                  existing !== undefined
-                    ? Effect.succeed(existing)
-                    : findOwnedCustomer(id, parent),
+                  existing !== undefined ? Effect.succeed(existing) : findOwnedCustomer(id, parent),
                 ),
               ),
             ),
@@ -314,20 +294,15 @@ export const CustomerProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      if (
-        !sameText(current.displayName, displayName) &&
-        currentName.length > 0
-      ) {
-        current =
-          yield* cloudcontrolspartner.patchOrganizationsLocationsCustomers({
-            name: currentName,
-            updateMask: "display_name",
-            body: { displayName },
-          });
+      if (!sameText(current.displayName, displayName) && currentName.length > 0) {
+        current = yield* cloudcontrolspartner.patchOrganizationsLocationsCustomers({
+          name: currentName,
+          updateMask: "display_name",
+          body: { displayName },
+        });
       }
 
-      const latest =
-        (yield* getCustomer(current.name ?? currentName)) ?? current;
+      const latest = (yield* getCustomer(current.name ?? currentName)) ?? current;
       return toAttrs(latest, organization, env.project);
     }),
 

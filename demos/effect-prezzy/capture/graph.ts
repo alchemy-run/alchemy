@@ -88,7 +88,11 @@ export const readGraph = async (stateDir: string, stage: string): Promise<Graph>
     const isWebsite = row.resourceType === "Cloudflare.Worker" && row.logicalId === "Web";
     const meta = isWebsite
       ? KINDS["Cloudflare.Website"]!
-      : (known ?? { kind: row.resourceType.split(".").pop()!, provider: "other" as const, tier: 2 });
+      : (known ?? {
+          kind: row.resourceType.split(".").pop()!,
+          provider: "other" as const,
+          tier: 2,
+        });
     nodes.set(idOf(row), {
       id: idOf(row),
       kind: meta.kind,
@@ -117,8 +121,11 @@ export const readGraph = async (stateDir: string, stage: string): Promise<Graph>
         });
       }
       if (types.includes("plain_text") && binding.sid.startsWith("VITE_")) {
-        const target = rows.find((r) => r.downstream?.includes(host) && r.resourceType === "Cloudflare.Worker");
-        if (target) addEdge({ from: host, to: idOf(target), kind: "reference", label: binding.sid, grant });
+        const target = rows.find(
+          (r) => r.downstream?.includes(host) && r.resourceType === "Cloudflare.Worker",
+        );
+        if (target)
+          addEdge({ from: host, to: idOf(target), kind: "reference", label: binding.sid, grant });
         continue;
       }
       if (nodes.has(binding.sid)) {
@@ -127,9 +134,18 @@ export const readGraph = async (stateDir: string, stage: string): Promise<Graph>
     }
     if (row.resourceType === "Cloudflare.Queues.Consumer") {
       const worker = row.fqn?.split("/")[0];
-      const queue = rows.find((r) => r.resourceType === "Cloudflare.Queues.Queue" && r.downstream?.includes(row.fqn ?? ""));
+      const queue = rows.find(
+        (r) =>
+          r.resourceType === "Cloudflare.Queues.Queue" && r.downstream?.includes(row.fqn ?? ""),
+      );
       if (worker && queue) {
-        addEdge({ from: idOf(queue), to: worker, kind: "consumer", label: "consumer", grant: "delivers message batches" });
+        addEdge({
+          from: idOf(queue),
+          to: worker,
+          kind: "consumer",
+          label: "consumer",
+          grant: "delivers message batches",
+        });
       }
     }
   }
@@ -156,8 +172,11 @@ export const readGraph = async (stateDir: string, stage: string): Promise<Graph>
 
   // Dashboards query the trace dataset.
   for (const dashboard of rows.filter((r) => r.resourceType === "Axiom.Dashboard")) {
-    const traces = rows.find((r) => r.resourceType === "Axiom.Dataset" && String(r.attr?.kind ?? "").includes("traces"));
-    if (traces) addEdge({ from: idOf(dashboard), to: idOf(traces), kind: "reference", label: "queries" });
+    const traces = rows.find(
+      (r) => r.resourceType === "Axiom.Dataset" && String(r.attr?.kind ?? "").includes("traces"),
+    );
+    if (traces)
+      addEdge({ from: idOf(dashboard), to: idOf(traces), kind: "reference", label: "queries" });
   }
 
   return { stage, nodes: [...nodes.values()], edges: [...edges.values()] };

@@ -3,21 +3,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   hasAlchemyLabelMap,
   normalizeLocation,
@@ -26,6 +19,8 @@ import {
   toPhysicalSnake,
   userLabels,
 } from "./helpers.ts";
+import { listLocations } from "./names.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 60;
 
@@ -130,9 +125,7 @@ export type Featurestore = Resource<
  * @resource
  * @category AIPlatform
  */
-export const Featurestore = Resource<Featurestore>(
-  "GCP.AIPlatform.Featurestore",
-);
+export const Featurestore = Resource<Featurestore>("GCP.AIPlatform.Featurestore");
 
 export class FeaturestoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoreNotResolved",
@@ -168,10 +161,7 @@ const toServing = (
   };
 };
 
-const toAttrs = (
-  store: aiplatform.GoogleCloudAiplatformV1Featurestore,
-  project: string,
-) => {
+const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1Featurestore, project: string) => {
   const name = store.name ?? "";
   const parsed = parseResourceName(name, "featurestores");
   return {
@@ -200,9 +190,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store
-        ? Effect.succeed(store)
-        : Effect.fail(new FeaturestoreNotResolved({ name })),
+      store ? Effect.succeed(store) : Effect.fail(new FeaturestoreNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreNotResolved",
@@ -214,9 +202,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined
-        ? Effect.void
-        : Effect.fail(new FeaturestoreStillExists({ name })),
+      store === undefined ? Effect.void : Effect.fail(new FeaturestoreStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreStillExists",
@@ -233,8 +219,7 @@ const isReady = (state: string | undefined) => {
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (store): store is aiplatform.GoogleCloudAiplatformV1Featurestore =>
-        store !== undefined,
+      (store): store is aiplatform.GoogleCloudAiplatformV1Featurestore => store !== undefined,
       () => new FeaturestoreNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -257,32 +242,20 @@ export const FeaturestoreProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.featurestoreId ?? output?.featurestoreId;
       const nextId = news.featurestoreId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const previousKey =
-        olds?.encryptionSpec?.kmsKeyName ??
-        output?.encryptionSpec?.kmsKeyName ??
-        "";
+        olds?.encryptionSpec?.kmsKeyName ?? output?.encryptionSpec?.kmsKeyName ?? "";
       const nextKey = news.encryptionSpec?.kmsKeyName ?? previousKey;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousKey !== nextKey;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -294,17 +267,12 @@ export const FeaturestoreProvider = () =>
         output?.featurestoreId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, storeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -320,9 +288,7 @@ export const FeaturestoreProvider = () =>
             ),
           )
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.featurestores ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.featurestores ?? [])),
             Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
             Stream.map((store) => toAttrs(store, env.project)),
             Stream.runCollect,
@@ -339,10 +305,7 @@ export const FeaturestoreProvider = () =>
         output?.featurestoreId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, storeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -383,10 +346,7 @@ export const FeaturestoreProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const servingChanged =
         news.onlineServingConfig !== undefined &&
-        !specifiedEquals(
-          news.onlineServingConfig,
-          toServing(current.onlineServingConfig),
-        );
+        !specifiedEquals(news.onlineServingConfig, toServing(current.onlineServingConfig));
       const ttlChanged =
         news.onlineStorageTtlDays !== undefined &&
         (current.onlineStorageTtlDays ?? 0) !== news.onlineStorageTtlDays;

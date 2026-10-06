@@ -8,11 +8,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Binding from "../Binding.ts";
 import type { Input } from "../Input.ts";
-import {
-  Resource,
-  type ResourceBinding,
-  type ResourceLike,
-} from "../Resource.ts";
+import { Resource, type ResourceBinding, type ResourceLike } from "../Resource.ts";
 import {
   hasIamMembership,
   projectRolesOf,
@@ -164,10 +160,7 @@ const fnv1a64 = (input: string): string => {
  * stages, not a Service and a Job with the same id, and not the two
  * generations of a create-before-delete replacement.
  */
-export const hostServiceAccountId = (
-  hostType: string,
-  resourceName: string,
-): string => {
+export const hostServiceAccountId = (hostType: string, resourceName: string): string => {
   const slug = lastSegment(resourceName)
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -200,18 +193,12 @@ const grantActAs = (project: string, email: string) =>
       `serviceAccount:service-${number}@serverless-robot-prod.iam.gserviceaccount.com`,
       `serviceAccount:service-${number}@gcf-admin-robot.iam.gserviceaccount.com`,
     ];
-    const keyFile = yield* Config.option(
-      Config.String("GOOGLE_APPLICATION_CREDENTIALS"),
-    );
+    const keyFile = yield* Config.option(Config.String("GOOGLE_APPLICATION_CREDENTIALS"));
     if (Option.isSome(keyFile)) {
       const fs = yield* FileSystem.FileSystem;
       const raw = yield* fs
         .readFileString(keyFile.value)
-        .pipe(
-          Effect.catchReason("PlatformError", "NotFound", () =>
-            Effect.succeed(""),
-          ),
-        );
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("")));
       if (raw.length > 0) {
         const parsed = yield* parseServiceAccountKey(raw).pipe(
           Effect.catchTag("AuthError", () => Effect.succeed(undefined)),
@@ -241,10 +228,7 @@ export const ensureHostServiceAccount = (options: {
   hostType: string;
   resourceName: string;
 }) => {
-  const accountId = hostServiceAccountId(
-    options.hostType,
-    options.resourceName,
-  );
+  const accountId = hostServiceAccountId(options.hostType, options.resourceName);
   const email = hostServiceAccountEmail(options.project, accountId);
   return Effect.gen(function* () {
     const existing = yield* iam
@@ -278,9 +262,7 @@ export const ensureHostServiceAccount = (options: {
 };
 
 /** Retry Cloud Run / Functions create while IAM `actAs` is propagating. */
-export const retryActAs = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+export const retryActAs = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "Forbidden",
@@ -290,9 +272,7 @@ export const retryActAs = <A, E extends { _tag: string }, R>(
   );
 
 const conditionKey = (condition: IamCondition | undefined) =>
-  condition === undefined
-    ? ""
-    : `${condition.title ?? ""}\u0001${condition.expression ?? ""}`;
+  condition === undefined ? "" : `${condition.title ?? ""}\u0001${condition.expression ?? ""}`;
 
 const grantKey = (grant: AppliedIamGrant) =>
   `${grant.kind}\u0000${grant.name}\u0000${grant.role}\u0000${conditionKey(grant.condition)}`;
@@ -359,9 +339,7 @@ export const desiredHostGrants = (
           };
     unique.set(grantKey(applied), applied);
   }
-  return [...unique.values()].sort((left, right) =>
-    grantKey(left).localeCompare(grantKey(right)),
-  );
+  return [...unique.values()].sort((left, right) => grantKey(left).localeCompare(grantKey(right)));
 };
 
 /**
@@ -382,15 +360,9 @@ export const syncHostIam = Effect.fn(function* (options: {
   previous: readonly AppliedIamGrant[] | undefined;
 }) {
   const collected = collectHostBindings(options.bindings);
-  const desired = desiredHostGrants(
-    options.project,
-    collected.iam,
-    options.serviceAccount,
-  );
+  const desired = desiredHostGrants(options.project, collected.iam, options.serviceAccount);
   const desiredKeys = new Set(desired.map(grantKey));
-  const stale = (options.previous ?? []).filter(
-    (grant) => !desiredKeys.has(grantKey(grant)),
-  );
+  const stale = (options.previous ?? []).filter((grant) => !desiredKeys.has(grantKey(grant)));
 
   // A principal Alchemy doesn't own (user-supplied service account, GKE
   // Workload Identity principal) may already hold a role for other
@@ -425,19 +397,11 @@ export const syncHostIam = Effect.fn(function* (options: {
 
   // Unconditional project grants of a minted account are synced against
   // the observed policy below; conditional ones only via the record.
-  const isHostProject = (grant: {
-    kind: string;
-    name: string;
-    condition?: IamCondition;
-  }) =>
-    grant.kind === "project" &&
-    grant.name === options.project &&
-    grant.condition === undefined;
+  const isHostProject = (grant: { kind: string; name: string; condition?: IamCondition }) =>
+    grant.kind === "project" && grant.name === options.project && grant.condition === undefined;
 
   if (options.managed) {
-    const wanted = new Set(
-      desired.filter(isHostProject).map((grant) => grant.role),
-    );
+    const wanted = new Set(desired.filter(isHostProject).map((grant) => grant.role));
     const held = yield* projectRolesOf(options.project, options.serviceAccount);
     const extra = held.filter((role) => !wanted.has(role));
     if (extra.length > 0) {
@@ -512,9 +476,7 @@ export const deleteHostServiceAccount = Effect.fn(function* (options: {
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
   // Block until IAM stops serving the account.
   yield* iam.getProjectsServiceAccounts({ name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new HostServiceAccountStillExists({ email: options.email })),
-    ),
+    Effect.flatMap(() => Effect.fail(new HostServiceAccountStillExists({ email: options.email }))),
     Effect.catchTag("NotFound", () => Effect.void),
     Effect.retry({
       while: (error) => error._tag === "GCP.HostServiceAccountStillExists",
@@ -546,8 +508,6 @@ export const bindGcpHost = (options: {
     yield* host.bind`Allow(${host}, ${options.tag}(${options.resource}))`({
       iam: options.iam,
       env: options.env,
-      ...(options.cloudSqlInstances
-        ? { cloudSqlInstances: options.cloudSqlInstances }
-        : {}),
+      ...(options.cloudSqlInstances ? { cloudSqlInstances: options.cloudSqlInstances } : {}),
     });
   });

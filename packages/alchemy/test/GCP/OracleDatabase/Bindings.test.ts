@@ -1,12 +1,12 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import OracleBindingsHost, {
   AppDb,
@@ -80,9 +80,7 @@ const expectProjectGrant = (role: string) =>
     const grants = (policy.bindings ?? []).filter((binding) =>
       (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
     );
-    expect(grants.every((binding) => binding.condition === undefined)).toBe(
-      true,
-    );
+    expect(grants.every((binding) => binding.condition === undefined)).toBe(true);
     const roles = grants.map((binding) => binding.role ?? "").sort();
     expect(roles).toContain(role);
     expect(roles).toEqual(expectedRoles);
@@ -128,12 +126,7 @@ const describeGet = <A extends { name?: string }>(options: {
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "OracleDatabase Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:oracledatabase",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -181,24 +174,21 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
       route: "getOdbNetworksOdbSubnet",
       role: "roles/oracledatabase.odbSubnetViewer",
       name: () => names.subnet,
-      direct: (name) =>
-        oracle.getProjectsLocationsOdbNetworksOdbSubnets({ name }),
+      direct: (name) => oracle.getProjectsLocationsOdbNetworksOdbSubnets({ name }),
     });
     describeGet({
       binding: "GetAutonomousDatabase",
       route: "getAutonomousDatabase",
       role: "roles/oracledatabase.autonomousDatabaseViewer",
       name: () => names.database,
-      direct: (name) =>
-        oracle.getProjectsLocationsAutonomousDatabases({ name }),
+      direct: (name) => oracle.getProjectsLocationsAutonomousDatabases({ name }),
     });
     describeGet({
       binding: "GetCloudExadataInfrastructure",
       route: "getCloudExadataInfrastructure",
       role: "roles/oracledatabase.cloudExadataInfrastructureViewer",
       name: () => names.infra,
-      direct: (name) =>
-        oracle.getProjectsLocationsCloudExadataInfrastructures({ name }),
+      direct: (name) => oracle.getProjectsLocationsCloudExadataInfrastructures({ name }),
     });
     describeGet({
       binding: "GetCloudVmCluster",
@@ -219,8 +209,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
       route: "getExascaleDbStorageVault",
       role: "roles/oracledatabase.exascaleDbStorageVaultViewer",
       name: () => names.vault,
-      direct: (name) =>
-        oracle.getProjectsLocationsExascaleDbStorageVaults({ name }),
+      direct: (name) => oracle.getProjectsLocationsExascaleDbStorageVaults({ name }),
     });
     describeGet({
       binding: "GetExadbVmCluster",
@@ -234,24 +223,21 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
       route: "getGoldengateConnection",
       role: "roles/oracledatabase.goldenGateConnectionViewer",
       name: () => names.connection,
-      direct: (name) =>
-        oracle.getProjectsLocationsGoldengateConnections({ name }),
+      direct: (name) => oracle.getProjectsLocationsGoldengateConnections({ name }),
     });
     describeGet({
       binding: "GetGoldengateDeployment",
       route: "getGoldengateDeployment",
       role: "roles/oracledatabase.goldenGateDeploymentViewer",
       name: () => names.deployment,
-      direct: (name) =>
-        oracle.getProjectsLocationsGoldengateDeployments({ name }),
+      direct: (name) => oracle.getProjectsLocationsGoldengateDeployments({ name }),
     });
     describeGet({
       binding: "GetGoldengateConnectionAssignment",
       route: "getGoldengateConnectionAssignment",
       role: "roles/oracledatabase.goldenGateConnectionAssignmentViewer",
       name: () => names.assignment,
-      direct: (name) =>
-        oracle.getProjectsLocationsGoldengateConnectionAssignments({ name }),
+      direct: (name) => oracle.getProjectsLocationsGoldengateConnectionAssignments({ name }),
     });
 
     // Wallet → Stop → Start → Restart act on one database: run in order.
@@ -261,11 +247,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
           "generates the database wallet as the host's service account",
           (_stack) =>
             Effect.gen(function* () {
-              const out =
-                yield* expectProbe<oracle.GenerateAutonomousDatabaseWalletResponse>(
-                  baseUrl,
-                  "generateWallet",
-                );
+              const out = yield* expectProbe<oracle.GenerateAutonomousDatabaseWalletResponse>(
+                baseUrl,
+                "generateWallet",
+              );
               // The wallet is a base64 zip archive ("PK" magic).
               const archive = Buffer.from(out.archiveContent ?? "", "base64");
               expect(archive.subarray(0, 2).toString("latin1")).toEqual("PK");
@@ -300,9 +285,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
           (_stack) =>
             Effect.gen(function* () {
               yield* expectProbe(baseUrl, "startAutonomousDatabase");
-              expect(yield* waitForDatabaseState("AVAILABLE")).toEqual(
-                "AVAILABLE",
-              );
+              expect(yield* waitForDatabaseState("AVAILABLE")).toEqual("AVAILABLE");
               yield* expectProjectGrant(ADB_ADMIN);
             }),
           {
@@ -318,9 +301,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
           (_stack) =>
             Effect.gen(function* () {
               yield* expectProbe(baseUrl, "restartAutonomousDatabase");
-              expect(yield* waitForDatabaseState("AVAILABLE")).toEqual(
-                "AVAILABLE",
-              );
+              expect(yield* waitForDatabaseState("AVAILABLE")).toEqual("AVAILABLE");
               yield* expectProjectGrant(ADB_ADMIN);
             }),
           {

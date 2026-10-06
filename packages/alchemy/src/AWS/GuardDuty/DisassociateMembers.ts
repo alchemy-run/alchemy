@@ -30,10 +30,7 @@ export interface DisassociateMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.DisassociateMembersRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.DisassociateMembersResponse,
-      guardduty.DisassociateMembersError
-    >
+    ) => Effect.Effect<guardduty.DisassociateMembersResponse, guardduty.DisassociateMembersError>
   >
 > {}
 export const DisassociateMembers = Binding.Service<DisassociateMembers>(

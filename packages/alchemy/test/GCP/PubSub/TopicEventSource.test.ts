@@ -1,12 +1,12 @@
-import * as GCP from "@/GCP";
-import { makeObjectMedia } from "@/GCP/Storage/ObjectMedia.ts";
-import * as Test from "@/Test/Alchemy";
+import { spawnSync } from "node:child_process";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { spawnSync } from "node:child_process";
+import * as GCP from "@/GCP";
+import { makeObjectMedia } from "@/GCP/Storage/ObjectMedia.ts";
+import * as Test from "@/Test/Alchemy";
 import {
   Markers,
   markerFor,
@@ -18,17 +18,11 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -58,15 +52,13 @@ const publishAndAwaitMarker = (topic: string, bucket: string, data: string) =>
     });
     expect(messageIds.length).toEqual(1);
     const media = yield* makeObjectMedia;
-    const marker = yield* media
-      .download({ bucket, object: markerFor(messageIds[0]!) })
-      .pipe(
-        Effect.retry({
-          while: (error) => error._tag === "GCP.Storage.ObjectNotFound",
-          schedule: Schedule.spaced("5 seconds"),
-          times: 36,
-        }),
-      );
+    const marker = yield* media.download({ bucket, object: markerFor(messageIds[0]!) }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "GCP.Storage.ObjectNotFound",
+        schedule: Schedule.spaced("5 seconds"),
+        times: 36,
+      }),
+    );
     return JSON.parse(new TextDecoder().decode(marker.body)) as {
       data: string;
       attributes: Record<string, string>;
@@ -93,15 +85,14 @@ test.provider.skipIf(!dockerAvailable)(
         }),
       );
 
-      const { subscriptions = [] } =
-        yield* pubsub.listProjectsTopicsSubscriptions({ topic: out.topic });
+      const { subscriptions = [] } = yield* pubsub.listProjectsTopicsSubscriptions({
+        topic: out.topic,
+      });
       expect(subscriptions.length).toEqual(1);
       const subscription = yield* readSubscription(subscriptions[0]!);
       const pushEndpoint = `${out.uri}/__alchemy/pubsub/pushorders`;
       expect(subscription.pushConfig?.pushEndpoint).toEqual(pushEndpoint);
-      expect(subscription.pushConfig?.oidcToken?.audience).toEqual(
-        pushEndpoint,
-      );
+      expect(subscription.pushConfig?.oidcToken?.audience).toEqual(pushEndpoint);
 
       const event = yield* publishAndAwaitMarker(out.topic, out.bucket, "push");
       expect(event).toEqual({
@@ -132,8 +123,9 @@ test.provider.skipIf(!dockerAvailable)(
         }),
       );
 
-      const { subscriptions = [] } =
-        yield* pubsub.listProjectsTopicsSubscriptions({ topic: out.topic });
+      const { subscriptions = [] } = yield* pubsub.listProjectsTopicsSubscriptions({
+        topic: out.topic,
+      });
       expect(subscriptions.length).toEqual(1);
       const subscription = yield* readSubscription(subscriptions[0]!);
       expect(subscription.pushConfig?.pushEndpoint).toBeUndefined();

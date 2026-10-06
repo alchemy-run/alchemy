@@ -32,12 +32,7 @@ export interface StartExportTask extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<neptunegraph.StartExportTaskInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.StartExportTaskOutput,
-      neptunegraph.StartExportTaskError
-    >
+    ) => Effect.Effect<neptunegraph.StartExportTaskOutput, neptunegraph.StartExportTaskError>
   >
 > {}
-export const StartExportTask = Binding.Service<StartExportTask>(
-  "AWS.NeptuneGraph.StartExportTask",
-);
+export const StartExportTask = Binding.Service<StartExportTask>("AWS.NeptuneGraph.StartExportTask");

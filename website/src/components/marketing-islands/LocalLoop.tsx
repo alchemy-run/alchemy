@@ -48,11 +48,9 @@ const RED = "var(--alc-danger)";
 
 const PROMPT = "add photo uploads to the API";
 const LINE_A = "    const photos = yield* Photos;";
-const LINE_B =
-  "        yield* photos.upload(request.url, yield* request.text);";
+const LINE_B = "        yield* photos.upload(request.url, yield* request.text);";
 const PROVIDE = ".pipe(Effect.provide([PhotosR2]))";
-const ERROR =
-  "Type 'Photos' is not assignable to type 'PlatformServices | WorkerServices'.";
+const ERROR = "Type 'Photos' is not assignable to type 'PlatformServices | WorkerServices'.";
 
 const TEST_FILE = [
   "const { test, beforeAll, afterAll, deploy, destroy } = Test.make({",
@@ -71,12 +69,8 @@ const TEST_FILE = [
 ];
 
 const typed = (text: string, [a, b]: readonly [number, number], t: number) =>
-  text.slice(
-    0,
-    Math.round(Math.min(1, Math.max(0, (t - a) / (b - a))) * text.length),
-  );
-const typing = ([a, b]: readonly [number, number], t: number) =>
-  t >= a && t < b;
+  text.slice(0, Math.round(Math.min(1, Math.max(0, (t - a) / (b - a))) * text.length));
+const typing = ([a, b]: readonly [number, number], t: number) => t >= a && t < b;
 /** Live seconds, scaled back up to real time. */
 const liveSecs = (t: number, from: number) =>
   `${((Math.max(0, t - from) * LIVE_SPEED) / 1000).toFixed(1)}s`;
@@ -101,24 +95,11 @@ function Chrome({
   return (
     <div className="prf-win">
       <div className="prf-win__bar">
-        <span
-          className="prf-dot"
-          style={{ background: "var(--alc-dot-red)" }}
-        />
-        <span
-          className="prf-dot"
-          style={{ background: "var(--alc-dot-yellow)" }}
-        />
-        <span
-          className="prf-dot"
-          style={{ background: "var(--alc-dot-green)" }}
-        />
+        <span className="prf-dot" style={{ background: "var(--alc-dot-red)" }} />
+        <span className="prf-dot" style={{ background: "var(--alc-dot-yellow)" }} />
+        <span className="prf-dot" style={{ background: "var(--alc-dot-green)" }} />
         <span className="prf-win__title">{title}</span>
-        {badge && (
-          <span className={`prf-badge prf-badge--${badge.tone}`}>
-            {badge.text}
-          </span>
-        )}
+        {badge && <span className={`prf-badge prf-badge--${badge.tone}`}>{badge.text}</span>}
       </div>
       <div className="prf-win__body">{children}</div>
     </div>
@@ -186,19 +167,13 @@ export function EditorPane({ id, t }: { id: LocalStepId; t: number }) {
   return (
     <Chrome title={<>my-app — {file}</>}>
       <div className="prf-edtabs" aria-hidden>
-        <span className={`prf-edtab ${id === "edit" ? "is-active" : ""}`}>
-          api.ts
-        </span>
-        <span className={`prf-edtab ${id === "local" ? "is-active" : ""}`}>
-          api.test.ts
-        </span>
+        <span className={`prf-edtab ${id === "edit" ? "is-active" : ""}`}>api.ts</span>
+        <span className={`prf-edtab ${id === "local" ? "is-active" : ""}`}>api.test.ts</span>
       </div>
       <div className="prf-code">
         {lines.map((l, i) => (
           <div key={`${file}-${i}`}>
-            <div
-              className={`prf-code__line ${l.added ? "is-added" : ""} ${l.lit ? "is-lit" : ""}`}
-            >
+            <div className={`prf-code__line ${l.added ? "is-added" : ""} ${l.lit ? "is-lit" : ""}`}>
               <span className="prf-code__n">{i + 1}</span>
               <span
                 className={`prf-code__t ${l.error ? "is-error" : ""}`}
@@ -266,15 +241,7 @@ function Row({
   );
 }
 
-export function AgentPane({
-  id,
-  t,
-  paused,
-}: {
-  id: LocalStepId;
-  t: number;
-  paused: boolean;
-}) {
+export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; paused: boolean }) {
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = listRef.current;
@@ -288,10 +255,7 @@ export function AgentPane({
 
   const prompt =
     id === "edit"
-      ? PROMPT.slice(
-          0,
-          Math.round(Math.min(1, t / T_PROMPT_DONE) * PROMPT.length),
-        )
+      ? PROMPT.slice(0, Math.round(Math.min(1, t / T_PROMPT_DONE) * PROMPT.length))
       : PROMPT;
 
   const items: ReactNode[] = [
@@ -302,10 +266,7 @@ export function AgentPane({
   ];
 
   if (id === "edit") {
-    if (t >= T_EDIT1)
-      items.push(
-        <Action key="e1" title="Edit" detail="src/api.ts · +2 lines" />,
-      );
+    if (t >= T_EDIT1) items.push(<Action key="e1" title="Edit" detail="src/api.ts · +2 lines" />);
     if (t >= T_CHECK1)
       items.push(
         <Action key="c1" title="Type-check">
@@ -328,9 +289,7 @@ export function AgentPane({
         </Action>,
       );
     if (t >= T_EDIT2)
-      items.push(
-        <Action key="e2" title="Edit" detail="src/api.ts · provide PhotosR2" />,
-      );
+      items.push(<Action key="e2" title="Edit" detail="src/api.ts · provide PhotosR2" />);
     if (t >= T_CHECK2)
       items.push(
         <Action key="c2" title="Type-check">
@@ -340,16 +299,12 @@ export function AgentPane({
         </Action>,
       );
   } else {
-    items.push(
-      <Action key="done-edit" title="Edit" detail="src/api.ts · type-checks" />,
-    );
+    items.push(<Action key="done-edit" title="Edit" detail="src/api.ts · type-checks" />);
     if (t >= T_RUN1)
       items.push(
         <Action key="r1" title="Run" detail="LOCAL=1 pnpm test">
           <Row done={t >= T_EMU_UP} spin={spin}>
-            {t >= T_EMU_UP
-              ? "stack running on emulated services"
-              : "starting emulated services"}
+            {t >= T_EMU_UP ? "stack running on emulated services" : "starting emulated services"}
           </Row>
           {t >= T_EMU_TEST[0] && (
             <Row done={t >= T_EMU_TEST[1]} spin={spin}>
@@ -404,22 +359,14 @@ export function AgentPane({
       );
     if (t >= T_PUSH)
       items.push(
-        <Action
-          key="push"
-          title="Push"
-          detail="feature/photo-upload · open a pull request"
-        />,
+        <Action key="push" title="Push" detail="feature/photo-upload · open a pull request" />,
       );
   }
 
   return (
     <Chrome
       title="agent · my-app"
-      badge={
-        id === "edit"
-          ? { text: "TYPE-CHECK", tone: "sky" }
-          : { text: "TEST", tone: "green" }
-      }
+      badge={id === "edit" ? { text: "TYPE-CHECK", tone: "sky" } : { text: "TEST", tone: "green" }}
     >
       <div className="prf-agent" ref={listRef}>
         {items}

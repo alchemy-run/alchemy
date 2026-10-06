@@ -130,9 +130,7 @@ export type FolderContact = Resource<
  * @resource
  * @category EssentialContacts
  */
-export const FolderContact = Resource<FolderContact>(
-  "GCP.EssentialContacts.FolderContact",
-);
+export const FolderContact = Resource<FolderContact>("GCP.EssentialContacts.FolderContact");
 
 export class FolderContactNotResolved extends Data.TaggedError(
   "GCP.EssentialContacts.FolderContactNotResolved",
@@ -196,10 +194,7 @@ export const FolderContactProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = yield* resolveFolder(
-        olds?.folderId ?? output?.folderId,
-        output?.parent,
-      );
+      const parent = yield* resolveFolder(olds?.folderId ?? output?.folderId, output?.parent);
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) {
         existing = yield* findOwnedContact(
@@ -211,9 +206,7 @@ export const FolderContactProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, parent, env.project);
-      return (yield* ownedByAlchemy(id, existing.email))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.email)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -226,25 +219,18 @@ export const FolderContactProvider = () =>
         return pages.flatMap((contacts, index) =>
           contacts
             .filter((contact) => hasOwnershipMarker(contact.email))
-            .map((contact) =>
-              toAttrs(contact, parents[index] ?? "", env.project),
-            ),
+            .map((contact) => toAttrs(contact, parents[index] ?? "", env.project)),
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = yield* resolveFolder(
-        news.folderId ?? output?.folderId,
-        output?.parent,
-      );
+      const parent = yield* resolveFolder(news.folderId ?? output?.folderId, output?.parent);
       const ownership = yield* ownershipLabels(id);
       const userEmail = yield* toEmail(id, news.email, output?.email);
       const stampedEmail = encodeEmail(ownership, userEmail);
       const languageTag = desiredLanguage(news.languageTag);
-      const categories = desiredCategories(
-        news.notificationCategorySubscriptions,
-      );
+      const categories = desiredCategories(news.notificationCategorySubscriptions);
       const body = toCreateBody({
         email: stampedEmail,
         languageTag,
@@ -253,12 +239,7 @@ export const FolderContactProvider = () =>
 
       let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
-        current = yield* findOwnedContact(
-          yield* listAt(parent),
-          id,
-          output?.name,
-          userEmail,
-        );
+        current = yield* findOwnedContact(yield* listAt(parent), id, output?.name, userEmail);
       }
 
       if (current === undefined) {
@@ -267,9 +248,7 @@ export const FolderContactProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               listAt(parent).pipe(
-                Effect.flatMap((contacts) =>
-                  findOwnedContact(contacts, id, undefined, userEmail),
-                ),
+                Effect.flatMap((contacts) => findOwnedContact(contacts, id, undefined, userEmail)),
               ),
             ),
           );

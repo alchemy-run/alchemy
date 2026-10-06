@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gkeonprem from "@distilled.cloud/gcp/gkeonprem_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   bareMetalControlPlane,
   bareMetalLoadBalancer,
@@ -18,10 +18,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   gkeonprem.getProjectsLocationsBareMetalClusters({ name }).pipe(
@@ -96,8 +93,7 @@ test.provider.skipIf(!runBareMetalLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.GKEOnPrem.BareMetalCluster("Workload", {
-            adminClusterMembership:
-              bareMetalAdminMembership ?? missingMembership(project),
+            adminClusterMembership: bareMetalAdminMembership ?? missingMembership(project),
             bareMetalVersion: "1.28.0-gke.1",
             controlPlane: bareMetalControlPlane,
             storage: bareMetalStorage,

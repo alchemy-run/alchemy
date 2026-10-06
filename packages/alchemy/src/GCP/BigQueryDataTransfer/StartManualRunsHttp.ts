@@ -1,12 +1,9 @@
 import * as bqdt from "@distilled.cloud/gcp/bigquerydatatransfer_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  StartManualRuns,
-  type StartManualRunsRequest,
-} from "./StartManualRuns.ts";
-import type { TransferConfig } from "./TransferConfig.ts";
 import { bindGcpHost } from "../Host.ts";
+import { StartManualRuns, type StartManualRunsRequest } from "./StartManualRuns.ts";
+import type { TransferConfig } from "./TransferConfig.ts";
 
 /**
  * HTTP implementation of {@link StartManualRuns}.
@@ -29,9 +26,9 @@ export const StartManualRunsHttp = Layer.effect(
         iam: [{ role: "roles/bigquery.admin" }],
       });
       const name = yield* config.name;
-      return Effect.fn(
-        `GCP.BigQueryDataTransfer.StartManualRuns(${config.LogicalId})`,
-      )(function* (request?: StartManualRunsRequest) {
+      return Effect.fn(`GCP.BigQueryDataTransfer.StartManualRuns(${config.LogicalId})`)(function* (
+        request?: StartManualRunsRequest,
+      ) {
         return yield* startManualRunsProjectsLocationsTransferConfigs({
           ...request,
           parent: yield* name,

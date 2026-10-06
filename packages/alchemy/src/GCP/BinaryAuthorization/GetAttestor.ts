@@ -41,6 +41,4 @@ export interface GetAttestor extends Binding.Service<
   >
 > {}
 
-export const GetAttestor = Binding.Service<GetAttestor>(
-  "GCP.BinaryAuthorization.GetAttestor",
-);
+export const GetAttestor = Binding.Service<GetAttestor>("GCP.BinaryAuthorization.GetAttestor");

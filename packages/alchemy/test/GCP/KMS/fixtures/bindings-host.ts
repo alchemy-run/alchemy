@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 import { KEY_RING_ID, kmsTestId } from "../common.ts";
 
@@ -42,8 +42,5 @@ export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
         }),
       }),
     };
-  }).pipe(
-    Effect.provide(GCP.KMS.EncryptHttp),
-    Effect.provide(GCP.KMS.DecryptHttp),
-  ),
+  }).pipe(Effect.provide(GCP.KMS.EncryptHttp), Effect.provide(GCP.KMS.DecryptHttp)),
 ) {}

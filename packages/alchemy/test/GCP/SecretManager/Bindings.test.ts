@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import SecretManagerBindingsHost, {
   OpsSecret,
@@ -30,17 +30,13 @@ let secrets: {
 
 const hostRoles = (policy: secretmanager.Policy) =>
   (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role)
     .sort();
 
 /** Roles the host's service account holds on a global secret. */
 const secretRoles = (name: string) =>
-  secretmanager
-    .getIamPolicyProjectsSecrets({ resource: name })
-    .pipe(Effect.map(hostRoles));
+  secretmanager.getIamPolicyProjectsSecrets({ resource: name }).pipe(Effect.map(hostRoles));
 
 /** Roles the host's service account holds on a regional secret. */
 const regionalSecretRoles = (name: string) =>
@@ -69,12 +65,7 @@ const versionStates = (parent: string) =>
 describe.skipIf(!dockerAvailable)(
   "SecretManager Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:secretmanager",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:secretmanager", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -120,9 +111,7 @@ describe.skipIf(!dockerAvailable)(
               data: string;
               payload: string;
             }>(baseUrl, "ops");
-            expect(out.version.startsWith(`${secrets.ops}/versions/`)).toBe(
-              true,
-            );
+            expect(out.version.startsWith(`${secrets.ops}/versions/`)).toBe(true);
             expect(out.accessedName).toEqual(out.version);
             expect(out.data).toEqual(out.payload);
 
@@ -150,9 +139,7 @@ describe.skipIf(!dockerAvailable)(
               data: string;
               payload: string;
             }>(baseUrl, "opsRegional");
-            expect(
-              out.version.startsWith(`${secrets.regional}/versions/`),
-            ).toBe(true);
+            expect(out.version.startsWith(`${secrets.regional}/versions/`)).toBe(true);
             expect(out.version).toContain("/locations/us-central1/secrets/");
             expect(out.accessedName).toEqual(out.version);
             expect(out.data).toEqual(out.payload);
@@ -207,16 +194,9 @@ describe.skipIf(!dockerAvailable)(
         "adds, disables and destroys versions as the host's service account, granted secretVersionManager on the secret only",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ v1: string; v2: string }>(
-              baseUrl,
-              "write",
-            );
-            expect(out.v1.startsWith(`${secrets.writeOnly}/versions/`)).toBe(
-              true,
-            );
-            expect(out.v2.startsWith(`${secrets.writeOnly}/versions/`)).toBe(
-              true,
-            );
+            const out = yield* expectProbe<{ v1: string; v2: string }>(baseUrl, "write");
+            expect(out.v1.startsWith(`${secrets.writeOnly}/versions/`)).toBe(true);
+            expect(out.v2.startsWith(`${secrets.writeOnly}/versions/`)).toBe(true);
 
             const states = yield* versionStates(secrets.writeOnly);
             expect(states[out.v1]).toEqual("DESTROYED");

@@ -123,9 +123,7 @@ export type AnnotationSpecSet = Resource<
  * @resource
  * @category DataLabeling
  */
-export const AnnotationSpecSet = Resource<AnnotationSpecSet>(
-  "GCP.DataLabeling.AnnotationSpecSet",
-);
+export const AnnotationSpecSet = Resource<AnnotationSpecSet>("GCP.DataLabeling.AnnotationSpecSet");
 
 export class AnnotationSpecSetNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.AnnotationSpecSetNotResolved",
@@ -189,10 +187,8 @@ export const AnnotationSpecSetProvider = () =>
         (news.displayName !== undefined &&
           output?.displayName !== undefined &&
           !sameText(news.displayName, output.displayName)) ||
-        (olds !== undefined &&
-          !sameText(news.description, output?.description)) ||
-        (output !== undefined &&
-          !sameJson(specsOf(news.annotationSpecs), output.annotationSpecs));
+        (olds !== undefined && !sameText(news.description, output?.description)) ||
+        (output !== undefined && !sameJson(specsOf(news.annotationSpecs), output.annotationSpecs));
       return replaceOnIdentity({
         previousId: olds?.annotationSpecSetId ?? output?.annotationSpecSetId,
         nextId: news.annotationSpecSetId,
@@ -205,21 +201,14 @@ export const AnnotationSpecSetProvider = () =>
       const annotationSpecSetId =
         olds?.annotationSpecSetId ??
         output?.annotationSpecSetId ??
-        (output?.name
-          ? parseResourceName(output.name, "annotationSpecSets").id
-          : "");
+        (output?.name ? parseResourceName(output.name, "annotationSpecSets").id : "");
       const name =
         output?.name ??
-        (annotationSpecSetId.length > 0
-          ? resourceName(env.project, annotationSpecSetId)
-          : "");
-      const existing =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+        (annotationSpecSetId.length > 0 ? resourceName(env.project, annotationSpecSetId) : "");
+      const existing = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -233,24 +222,16 @@ export const AnnotationSpecSetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const annotationSpecSetId =
-        news.annotationSpecSetId ?? output?.annotationSpecSetId;
+      const annotationSpecSetId = news.annotationSpecSetId ?? output?.annotationSpecSetId;
       const name =
         output?.name ??
-        (annotationSpecSetId !== undefined
-          ? resourceName(env.project, annotationSpecSetId)
-          : "");
+        (annotationSpecSetId !== undefined ? resourceName(env.project, annotationSpecSetId) : "");
       const ownership = yield* createInternalLabels(id);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const description = encodeOwnership(ownership, news.description);
       const annotationSpecs = specsOf(news.annotationSpecs);
 
-      let current =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+      let current = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
 
       if (current === undefined) {
         const created = yield* retryTransient(
@@ -264,9 +245,7 @@ export const AnnotationSpecSetProvider = () =>
               },
             },
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () => findByOwnership(id, env.project)),
-        );
+        ).pipe(Effect.catchTag("Conflict", () => findByOwnership(id, env.project)));
         current = created ?? undefined;
       }
 
@@ -282,9 +261,7 @@ export const AnnotationSpecSetProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* ignoreGone(
-        retryDelete(
-          datalabeling.deleteProjectsAnnotationSpecSets({ name: output.name }),
-        ),
+        retryDelete(datalabeling.deleteProjectsAnnotationSpecSets({ name: output.name })),
       );
       yield* waitUntilGone(getByName(output.name));
     }),

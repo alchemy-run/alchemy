@@ -41,6 +41,4 @@ export interface GetEnvironment extends Binding.Service<
   >
 > {}
 
-export const GetEnvironment = Binding.Service<GetEnvironment>(
-  "GCP.Composer.GetEnvironment",
-);
+export const GetEnvironment = Binding.Service<GetEnvironment>("GCP.Composer.GetEnvironment");

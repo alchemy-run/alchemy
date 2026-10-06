@@ -22,9 +22,9 @@ export default Alchemy.Stack(
     const appName = yield* Config.String("PRISMA_TANSTACK_APP").pipe(
       Effect.orElseSucceed(() => `alchemy-prisma-tanstack-start-${stage}`),
     );
-    const customDomainHostname = yield* Config.String(
-      "PRISMA_TANSTACK_DOMAIN",
-    ).pipe(Effect.orElseSucceed(() => undefined));
+    const customDomainHostname = yield* Config.String("PRISMA_TANSTACK_DOMAIN").pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
     const devPort = yield* Config.Number("PRISMA_TANSTACK_DEV_PORT").pipe(
       Effect.orElseSucceed(() => 3000),
     );
@@ -34,9 +34,7 @@ export default Alchemy.Stack(
     // `createDatabase: false` keeps the example explicit so the database below
     // is visible as its own Alchemy resource.
     const project = yield* Prisma.Project("Project", {
-      name: yield* Config.String("PRISMA_PROJECT").pipe(
-        Effect.orElseSucceed(() => undefined),
-      ),
+      name: yield* Config.String("PRISMA_PROJECT").pipe(Effect.orElseSucceed(() => undefined)),
       createDatabase: false,
       region: "eu-west-3",
     });
@@ -74,8 +72,7 @@ export default Alchemy.Stack(
       command: "bun run db:migrate",
       cwd: ".",
       env: {
-        DATABASE_URL:
-          connection.directConnectionString.as<Redacted.Redacted<string>>(),
+        DATABASE_URL: connection.directConnectionString.as<Redacted.Redacted<string>>(),
         // Bound server-side lock waits and statement execution independently
         // from the release-process deadline below.
         PGOPTIONS: "-c lock_timeout=30s -c statement_timeout=5min",
@@ -128,9 +125,7 @@ export default Alchemy.Stack(
         command: "bun run dev:start",
         port: devPort,
         env: {
-          TANSTACK_MESSAGE: yield* tanstackMessageConfig(
-            "hello from local alchemy dev",
-          ),
+          TANSTACK_MESSAGE: yield* tanstackMessageConfig("hello from local alchemy dev"),
           TANSTACK_SHARED_FLAG: "local-project-level",
           PRISMA_TANSTACK_PG_POOL_MAX: "1",
         },

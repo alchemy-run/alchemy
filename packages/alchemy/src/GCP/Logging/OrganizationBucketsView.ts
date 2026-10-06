@@ -162,9 +162,7 @@ const parseViewName = (name: string) => {
 };
 
 const parseBucketName = (name: string) => {
-  const match = name.match(
-    /^(organizations\/[^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/,
-  );
+  const match = name.match(/^(organizations\/[^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/);
   if (!match) return undefined;
   return {
     organization: match[1]!,
@@ -173,21 +171,12 @@ const parseBucketName = (name: string) => {
   };
 };
 
-const parentBucket = (
-  organization: string,
-  location: string,
-  bucketId: string,
-  bucket?: string,
-) => bucket ?? `${organization}/locations/${location}/buckets/${bucketId}`;
+const parentBucket = (organization: string, location: string, bucketId: string, bucket?: string) =>
+  bucket ?? `${organization}/locations/${location}/buckets/${bucketId}`;
 
-const resourceName = (bucket: string, viewId: string) =>
-  `${bucket}/views/${viewId}`;
+const resourceName = (bucket: string, viewId: string) => `${bucket}/views/${viewId}`;
 
-const toAttrs = (
-  view: logging.LogView,
-  fallbackBucket: string,
-  project: string,
-) => {
+const toAttrs = (view: logging.LogView, fallbackBucket: string, project: string) => {
   const name = view.name ?? "";
   const parsed = parseViewName(name);
   const bucket =
@@ -225,12 +214,7 @@ const resolveParent = (
 ) => {
   const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
   const bucketId = news.bucketId ?? output?.bucketId ?? DEFAULT_BUCKET_ID;
-  return parentBucket(
-    organization,
-    location,
-    bucketId,
-    news.bucket ?? output?.bucket,
-  );
+  return parentBucket(organization, location, bucketId, news.bucket ?? output?.bucket);
 };
 
 export const OrganizationBucketsViewProvider = () =>
@@ -251,14 +235,10 @@ export const OrganizationBucketsViewProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.viewId ?? output?.viewId;
       const idChanged =
-        previousId !== undefined &&
-        news.viewId !== undefined &&
-        news.viewId !== previousId;
+        previousId !== undefined && news.viewId !== undefined && news.viewId !== previousId;
       const previousBucket = olds?.bucket ?? output?.bucket;
       const bucketChanged =
-        news.bucket !== undefined &&
-        previousBucket !== undefined &&
-        news.bucket !== previousBucket;
+        news.bucket !== undefined && previousBucket !== undefined && news.bucket !== previousBucket;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -274,13 +254,7 @@ export const OrganizationBucketsViewProvider = () =>
         previousOrg !== undefined &&
         news.organization !== undefined &&
         news.organization !== previousOrg;
-      if (
-        !idChanged &&
-        !bucketChanged &&
-        !locationChanged &&
-        !bucketIdChanged &&
-        !orgChanged
-      ) {
+      if (!idChanged && !bucketChanged && !locationChanged && !bucketIdChanged && !orgChanged) {
         return undefined;
       }
       return { action: "replace" as const, deleteFirst: false };
@@ -323,15 +297,9 @@ export const OrganizationBucketsViewProvider = () =>
                         pageSize: 1000,
                       })
                       .pipe(
-                        Stream.flatMap((page) =>
-                          Stream.fromIterable(page.views ?? []),
-                        ),
-                        Stream.filter((view) =>
-                          hasOwnershipMarker(view.description),
-                        ),
-                        Stream.map((view) =>
-                          toAttrs(view, bucket.name ?? "", env.project),
-                        ),
+                        Stream.flatMap((page) => Stream.fromIterable(page.views ?? [])),
+                        Stream.filter((view) => hasOwnershipMarker(view.description)),
+                        Stream.map((view) => toAttrs(view, bucket.name ?? "", env.project)),
                         Stream.catchTag("NotFound", () => Stream.empty),
                       )
                   : Stream.empty,
@@ -345,10 +313,7 @@ export const OrganizationBucketsViewProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const viewId = yield* toPhysicalId(id, news.viewId, output?.viewId, "v");
       const bucket = resolveParent(organization, news, output);
       const name = resourceName(bucket, viewId);
@@ -376,8 +341,7 @@ export const OrganizationBucketsViewProvider = () =>
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const updateMask = [
         filterChanged ? "filter" : undefined,
         descriptionChanged ? "description" : undefined,

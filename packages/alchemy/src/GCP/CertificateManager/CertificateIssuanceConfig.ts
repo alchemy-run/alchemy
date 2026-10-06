@@ -26,10 +26,7 @@ const DEFAULT_ROTATION = 66;
 const DEFAULT_KEY_ALGORITHM: CertificateIssuanceConfigKeyAlgorithm = "RSA_2048";
 const MAX_NAME_LENGTH = 63;
 
-export type CertificateIssuanceConfigKeyAlgorithm =
-  | "RSA_2048"
-  | "ECDSA_P256"
-  | (string & {});
+export type CertificateIssuanceConfigKeyAlgorithm = "RSA_2048" | "ECDSA_P256" | (string & {});
 
 export type CertificateAuthorityServiceConfig = {
   /**
@@ -243,11 +240,7 @@ const rfc1035 = (name: string): string => {
 const normalizeLocation = (location: string | undefined) =>
   lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
 
-const resourceName = (
-  project: string,
-  location: string,
-  certificateIssuanceConfigId: string,
-) =>
+const resourceName = (project: string, location: string, certificateIssuanceConfigId: string) =>
   `projects/${project}/locations/${location}/certificateIssuanceConfigs/${certificateIssuanceConfigId}`;
 
 const parseName = (name: string) => {
@@ -256,16 +249,11 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     certificateIssuanceConfigId:
-      configsAt >= 0 && parts[configsAt + 1]
-        ? parts[configsAt + 1]!
-        : lastSegment(name),
+      configsAt >= 0 && parts[configsAt + 1] ? parts[configsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -273,11 +261,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateIssuanceConfigId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateIssuanceConfigId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (certificateIssuanceConfigId !== undefined) {
       return certificateIssuanceConfigId;
@@ -292,9 +276,7 @@ const toId = (
     );
   });
 
-const parseDurationSeconds = (
-  value: string | undefined,
-): number | undefined => {
+const parseDurationSeconds = (value: string | undefined): number | undefined => {
   if (value === undefined || value.trim() === "") return undefined;
   const trimmed = value.trim();
   const seconds = /^(-?\d+(?:\.\d+)?)s$/i.exec(trimmed);
@@ -305,12 +287,9 @@ const parseDurationSeconds = (
 };
 
 const normalizeLifetime = (value: string | undefined): string => {
-  const raw =
-    value === undefined || value.trim() === "" ? DEFAULT_LIFETIME : value;
+  const raw = value === undefined || value.trim() === "" ? DEFAULT_LIFETIME : value;
   const seconds = parseDurationSeconds(raw);
-  return seconds !== undefined && Number.isFinite(seconds)
-    ? `${Math.trunc(seconds)}s`
-    : raw;
+  return seconds !== undefined && Number.isFinite(seconds) ? `${Math.trunc(seconds)}s` : raw;
 };
 
 const lifetimeEquals = (left: string | undefined, right: string | undefined) =>
@@ -318,11 +297,7 @@ const lifetimeEquals = (left: string | undefined, right: string | undefined) =>
 
 const normalizeKeyAlgorithm = (value: string | undefined): string => {
   const compact = (value ?? "").trim().toUpperCase().replace(/-/g, "_");
-  if (
-    compact === "" ||
-    compact === "KEY_ALGORITHM_UNSPECIFIED" ||
-    compact === "UNSPECIFIED"
-  ) {
+  if (compact === "" || compact === "KEY_ALGORITHM_UNSPECIFIED" || compact === "UNSPECIFIED") {
     return DEFAULT_KEY_ALGORITHM;
   }
   if (
@@ -339,14 +314,9 @@ const normalizeKeyAlgorithm = (value: string | undefined): string => {
   return compact;
 };
 
-const normalizeRotation = (value: number | undefined): number =>
-  value ?? DEFAULT_ROTATION;
+const normalizeRotation = (value: number | undefined): number => value ?? DEFAULT_ROTATION;
 
-const normalizeCaPool = (
-  value: string | undefined,
-  project: string,
-  location: string,
-): string => {
+const normalizeCaPool = (value: string | undefined, project: string, location: string): string => {
   if (value === undefined) return "";
   const trimmed = value.replace(/\/+$/, "").trim();
   if (trimmed.length === 0) return "";
@@ -355,16 +325,10 @@ const normalizeCaPool = (
 };
 
 const caPoolOf = (
-  config:
-    | CertificateAuthorityConfig
-    | certificatemanager.CertificateAuthorityConfig
-    | undefined,
+  config: CertificateAuthorityConfig | certificatemanager.CertificateAuthorityConfig | undefined,
 ) => config?.certificateAuthorityServiceConfig?.caPool;
 
-const toAttrs = (
-  config: certificatemanager.CertificateIssuanceConfig,
-  project: string,
-) => {
+const toAttrs = (config: certificatemanager.CertificateIssuanceConfig, project: string) => {
   const name = config.name ?? "";
   const parsed = parseName(name);
   const location = parsed.location;
@@ -377,15 +341,9 @@ const toAttrs = (
     description: config.description,
     labels: userLabels(config.labels),
     lifetime: normalizeLifetime(config.lifetime),
-    rotationWindowPercentage: normalizeRotation(
-      config.rotationWindowPercentage,
-    ),
+    rotationWindowPercentage: normalizeRotation(config.rotationWindowPercentage),
     keyAlgorithm: normalizeKeyAlgorithm(config.keyAlgorithm),
-    caPool: normalizeCaPool(
-      caPoolOf(config.certificateAuthorityConfig),
-      resolvedProject,
-      location,
-    ),
+    caPool: normalizeCaPool(caPoolOf(config.certificateAuthorityConfig), resolvedProject, location),
     createTime: config.createTime,
     updateTime: config.updateTime,
   };
@@ -405,8 +363,7 @@ const waitUntilExists = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.CertificateManager.CertificateIssuanceConfigNotResolved",
+        error._tag === "GCP.CertificateManager.CertificateIssuanceConfigNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -421,8 +378,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.CertificateManager.CertificateIssuanceConfigStillExists",
+        error._tag === "GCP.CertificateManager.CertificateIssuanceConfigStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -435,13 +391,9 @@ const listOwnedIssuanceConfigs = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.certificateIssuanceConfigs ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.certificateIssuanceConfigs ?? [])),
       Stream.filter((config) =>
-        Object.keys(config.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(config.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((config) => toAttrs(config, project)),
       Stream.runCollect,
@@ -449,11 +401,7 @@ const listOwnedIssuanceConfigs = (project: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
-const desiredCaPool = (
-  news: CertificateIssuanceConfigProps,
-  project: string,
-  location: string,
-) =>
+const desiredCaPool = (news: CertificateIssuanceConfigProps, project: string, location: string) =>
   normalizeCaPool(caPoolOf(news.certificateAuthorityConfig), project, location);
 
 const toCreateBody = (
@@ -488,24 +436,16 @@ export const CertificateIssuanceConfigProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      const previousId =
-        olds?.certificateIssuanceConfigId ??
-        output?.certificateIssuanceConfigId;
+      const previousId = olds?.certificateIssuanceConfigId ?? output?.certificateIssuanceConfigId;
       const nextId = news.certificateIssuanceConfigId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousLifetime = olds?.lifetime ?? output?.lifetime;
       const previousRotation = normalizeRotation(
         olds?.rotationWindowPercentage ?? output?.rotationWindowPercentage,
       );
       const nextRotation = normalizeRotation(news.rotationWindowPercentage);
-      const previousAlgorithm = normalizeKeyAlgorithm(
-        olds?.keyAlgorithm ?? output?.keyAlgorithm,
-      );
+      const previousAlgorithm = normalizeKeyAlgorithm(olds?.keyAlgorithm ?? output?.keyAlgorithm);
       const nextAlgorithm = normalizeKeyAlgorithm(news.keyAlgorithm);
       const previousCaPool = normalizeCaPool(
         olds?.certificateAuthorityConfig
@@ -521,28 +461,19 @@ export const CertificateIssuanceConfigProvider = () =>
       );
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousLifetime !== undefined &&
-          !lifetimeEquals(
-            news.lifetime ?? previousLifetime,
-            previousLifetime,
-          )) ||
+          !lifetimeEquals(news.lifetime ?? previousLifetime, previousLifetime)) ||
         previousRotation !== nextRotation ||
         previousAlgorithm !== nextAlgorithm ||
-        (previousCaPool !== "" &&
-          nextCaPool !== "" &&
-          previousCaPool !== nextCaPool);
+        (previousCaPool !== "" && nextCaPool !== "" && previousCaPool !== nextCaPool);
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -554,15 +485,11 @@ export const CertificateIssuanceConfigProvider = () =>
         output?.certificateIssuanceConfigId,
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, certificateIssuanceConfigId);
+      const name = output?.name ?? resourceName(env.project, location, certificateIssuanceConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -579,11 +506,7 @@ export const CertificateIssuanceConfigProvider = () =>
         output?.certificateIssuanceConfigId,
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        certificateIssuanceConfigId,
-      );
+      const name = resourceName(env.project, location, certificateIssuanceConfigId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -615,8 +538,7 @@ export const CertificateIssuanceConfigProvider = () =>
           Effect.retry({
             // "config validation failed" (INVALID_ARGUMENT) while the CA
             // pool grant for the Certificate Manager agent propagates.
-            while: (error) =>
-              error._tag === "GCP.OperationFailed" && error.code === 3,
+            while: (error) => error._tag === "GCP.OperationFailed" && error.code === 3,
             times: 8,
             schedule: Schedule.spaced("3 seconds"),
           }),
@@ -631,8 +553,7 @@ export const CertificateIssuanceConfigProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
@@ -641,17 +562,15 @@ export const CertificateIssuanceConfigProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation =
-          yield* certificatemanager.patchProjectsLocationsCertificateIssuanceConfigs(
-            {
+          yield* certificatemanager.patchProjectsLocationsCertificateIssuanceConfigs({
+            name,
+            updateMask: updateMask.join(","),
+            body: {
               name,
-              updateMask: updateMask.join(","),
-              body: {
-                name,
-                labels: desiredLabels,
-                description: news.description,
-              },
+              labels: desiredLabels,
+              description: news.description,
             },
-          );
+          });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

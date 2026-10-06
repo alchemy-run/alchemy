@@ -4,12 +4,10 @@ import { Credentials, GraphQLLive, Railway } from "@distilled.cloud/railway";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 
-export class RailwayWorkspaceNotFound extends Data.TaggedError(
-  "Railway.WorkspaceNotFound",
-)<{
+export class RailwayWorkspaceNotFound extends Data.TaggedError("Railway.WorkspaceNotFound")<{
   message: string;
 }> {}
 
@@ -18,10 +16,7 @@ export class RailwayWorkspaceNotFound extends Data.TaggedError(
  * (`me.workspace ?? me.workspaces[0]`). Not a resource — the Environment
  * *resource* is a project-scoped deploy environment.
  */
-export type RailwayWorkspace = {
-  readonly id: string;
-  readonly name: string;
-};
+export type RailwayWorkspace = { readonly id: string; readonly name: string };
 
 /**
  * Fully-resolved Railway environment for a stack.
@@ -31,9 +26,7 @@ export type RailwayWorkspace = {
  * (`me.workspace ?? me.workspaces[0]`), cached for the process. Resolve
  * it inside lifecycle operations with `RailwayEnvironment.current`.
  */
-export type RailwayEnvironmentShape = Config & {
-  readonly workspaceId: string;
-};
+export type RailwayEnvironmentShape = Config & { readonly workspaceId: string };
 
 export class RailwayEnvironment extends Context.Service<
   RailwayEnvironment,
@@ -68,18 +61,13 @@ const tokenWorkspaces = Query.fn(() =>
 
 export const resolveWorkspace = Effect.fn(function* () {
   const fromMe = yield* meWorkspaces().pipe(
-    Effect.map((me) =>
-      me.workspace.id !== null ? me.workspace : me.workspaces[0],
-    ),
+    Effect.map((me) => (me.workspace.id !== null ? me.workspace : me.workspaces[0])),
     Effect.catchTag(["RailwayForbidden", "RailwayUnauthenticated"], () =>
       Effect.succeed(undefined),
     ),
   );
   if (fromMe?.id != null && fromMe.id.length > 0) {
-    return {
-      id: fromMe.id,
-      name: fromMe.name ?? "",
-    } satisfies RailwayWorkspace;
+    return { id: fromMe.id, name: fromMe.name ?? "" } satisfies RailwayWorkspace;
   }
 
   const workspace = (yield* tokenWorkspaces())[0];
@@ -89,10 +77,7 @@ export const resolveWorkspace = Effect.fn(function* () {
         "Railway current token did not include a workspace. Check RAILWAY_API_TOKEN is an account or workspace token.",
     });
   }
-  return {
-    id: workspace.id,
-    name: workspace.name,
-  } satisfies RailwayWorkspace;
+  return { id: workspace.id, name: workspace.name } satisfies RailwayWorkspace;
 });
 
 /**
@@ -126,10 +111,7 @@ export const fromCredentials = () =>
                 Layer.succeed(HttpClient.HttpClient, http),
               ),
             ),
-            Effect.map((workspaceId) => ({
-              ...resolved,
-              workspaceId,
-            })),
+            Effect.map((workspaceId) => ({ ...resolved, workspaceId })),
           ),
         ),
         Effect.orDie,

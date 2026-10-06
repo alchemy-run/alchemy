@@ -7,8 +7,8 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
-import { stripInternalLabels } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { stripInternalLabels } from "../Labels.ts";
 
 const noRetryLayer = Layer.succeed(GcpRetry, { while: () => false });
 
@@ -52,16 +52,10 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const rfc1035 = (
-  name: string,
-  maxLength: number,
-  fallback: string,
-): string => {
+export const rfc1035 = (name: string, maxLength: number, fallback: string): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -125,16 +119,10 @@ export const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -142,9 +130,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -167,24 +154,18 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBool = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left === true) === (right === true);
+export const sameBool = (left: boolean | undefined, right: boolean | undefined) =>
+  (left === true) === (right === true);
 
 export const updateMaskOf = (...fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId?: string;
@@ -234,8 +215,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
       () => new ContactCenterNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ContactCenterAIPlatform.ContactCenterNotResolved",
+      while: (error) => error._tag === "GCP.ContactCenterAIPlatform.ContactCenterNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -252,8 +232,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ContactCenterAIPlatform.ContactCenterStillExists",
+      while: (error) => error._tag === "GCP.ContactCenterAIPlatform.ContactCenterStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -261,11 +240,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 
 const FAILED_STATES = new Set(["STATE_FAILED", "STATE_TERMINATING_FAILED"]);
 
-const READY_STATES = new Set([
-  "STATE_DEPLOYED",
-  "STATE_IN_GRACE_PERIOD",
-  "STATE_DEGRADED",
-]);
+const READY_STATES = new Set(["STATE_DEPLOYED", "STATE_IN_GRACE_PERIOD", "STATE_DEGRADED"]);
 
 export const isTerminated = (state: string | undefined) =>
   (state ?? "").toUpperCase() === "STATE_TERMINATED";
@@ -325,46 +300,31 @@ const emptyContactCenters = Effect.succeed<ccaip.ContactCenter[]>([]);
 export const listContactCenters = (parent: string) =>
   parent.length === 0
     ? emptyContactCenters
-    : ccaip.listProjectsLocationsContactCenters
-        .pages({ parent, pageSize: 1000 })
-        .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.contactCenters ?? []),
-          ),
-          Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.provide(noRetryLayer),
-          Effect.catchTag("NotFound", () => emptyContactCenters),
-        );
+    : ccaip.listProjectsLocationsContactCenters.pages({ parent, pageSize: 1000 }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.contactCenters ?? [])),
+        Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.provide(noRetryLayer),
+        Effect.catchTag("NotFound", () => emptyContactCenters),
+      );
 
-const FALLBACK_LOCATIONS = [
-  "us-central1",
-  "us-east1",
-  "europe-west1",
-  "asia-southeast1",
-] as const;
+const FALLBACK_LOCATIONS = ["us-central1", "us-east1", "europe-west1", "asia-southeast1"] as const;
 
 const listLocationIds = (project: string) =>
-  ccaip.listProjectsLocations
-    .pages({ name: `projects/${project}`, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
-      Stream.map(
-        (location) => location.locationId || lastSegment(location.name ?? ""),
-      ),
-      Stream.filter((id) => id.length > 0 && id !== "-"),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(new Set(chunk))),
-    );
+  ccaip.listProjectsLocations.pages({ name: `projects/${project}`, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
+    Stream.map((location) => location.locationId || lastSegment(location.name ?? "")),
+    Stream.filter((id) => id.length > 0 && id !== "-"),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(new Set(chunk))),
+  );
 
 const listAcrossLocations = (project: string, region: string) =>
   Effect.gen(function* () {
     const discovered = yield* listLocationIds(project);
     const locations =
-      discovered.length > 0
-        ? discovered
-        : [...new Set([region, ...FALLBACK_LOCATIONS])];
+      discovered.length > 0 ? discovered : [...new Set([region, ...FALLBACK_LOCATIONS])];
     const pages = yield* Effect.forEach(
       locations,
       (location) => listContactCenters(locationParent(project, location)),

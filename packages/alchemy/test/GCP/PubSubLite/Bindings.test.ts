@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import { currentProject, runLifecycle } from "./common.ts";
 import PubSubLiteBindingsHost, {
@@ -52,12 +52,7 @@ const expectedGrants = [
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "PubSubLite Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:pubsublite",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:pubsublite", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -89,10 +84,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the topic",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<pubsublite.Topic>(
-              baseUrl,
-              "getTopic",
-            );
+            const live = yield* expectProbe<pubsublite.Topic>(baseUrl, "getTopic");
             expect(live.name).toEqual(names.topic);
             expect(yield* hostProjectGrants).toEqual(expectedGrants);
           }),
@@ -105,10 +97,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the partition count",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<pubsublite.TopicPartitions>(
-              baseUrl,
-              "getPartitions",
-            );
+            const live = yield* expectProbe<pubsublite.TopicPartitions>(baseUrl, "getPartitions");
             expect(live.partitionCount).toEqual("1");
             expect(yield* hostProjectGrants).toEqual(expectedGrants);
           }),
@@ -121,11 +110,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "computes the head cursor of partition 0",
         (_stack) =>
           Effect.gen(function* () {
-            const head =
-              yield* expectProbe<pubsublite.ComputeHeadCursorResponse>(
-                baseUrl,
-                "computeHeadCursor",
-              );
+            const head = yield* expectProbe<pubsublite.ComputeHeadCursorResponse>(
+              baseUrl,
+              "computeHeadCursor",
+            );
             expect(head.headCursor?.offset ?? "0").toEqual("0");
             expect(yield* hostProjectGrants).toEqual(expectedGrants);
           }),
@@ -138,10 +126,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the subscription",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<pubsublite.Subscription>(
-              baseUrl,
-              "getSubscription",
-            );
+            const live = yield* expectProbe<pubsublite.Subscription>(baseUrl, "getSubscription");
             expect(live.name).toEqual(names.subscription);
             expect(live.topic).toEqual(names.topic);
             expect(yield* hostProjectGrants).toEqual(expectedGrants);
@@ -156,12 +141,9 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         (_stack) =>
           Effect.gen(function* () {
             yield* expectProbe(baseUrl, "commitCursor");
-            const cursors =
-              yield* pubsublite.listCursorProjectsLocationsSubscriptionsCursors(
-                {
-                  parent: names.subscription,
-                },
-              );
+            const cursors = yield* pubsublite.listCursorProjectsLocationsSubscriptionsCursors({
+              parent: names.subscription,
+            });
             expect(
               (cursors.partitionCursors ?? []).map((cursor) => ({
                 partition: cursor.partition,
@@ -179,10 +161,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the reservation",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<pubsublite.Reservation>(
-              baseUrl,
-              "getReservation",
-            );
+            const live = yield* expectProbe<pubsublite.Reservation>(baseUrl, "getReservation");
             expect(live.name).toEqual(names.reservation);
             expect(live.throughputCapacity).toEqual("4");
             expect(yield* hostProjectGrants).toEqual(expectedGrants);

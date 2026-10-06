@@ -2,7 +2,6 @@ import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -56,13 +55,7 @@ export interface ReserveAttributes {
   initialValue: string;
 }
 
-export type Reserve = Resource<
-  TypeId,
-  ReserveProps,
-  ReserveAttributes,
-  never,
-  Providers
->;
+export type Reserve = Resource<TypeId, ReserveProps, ReserveAttributes, never, Providers>;
 
 /**
  * The Cache Reserve setting of a Cloudflare zone
@@ -140,14 +133,10 @@ export const ReserveProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           cache.getCacheReserve({ zoneId }).pipe(
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, observed.value),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, observed.value)),
             // Plan-gated zones (no Cache Reserve subscription) and
             // partial/deleted zones reject the route; skip them.
-            Effect.catchTag("SettingUnavailableForPlan", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
@@ -159,13 +148,8 @@ export const ReserveProvider = () =>
       const o = olds as ReserveProps;
       const n = news as ReserveProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -183,8 +167,7 @@ export const ReserveProvider = () =>
       // default — there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialValue` restored on destroy.
-      const initialValue =
-        output !== undefined ? output.initialValue : observed.value;
+      const initialValue = output !== undefined ? output.initialValue : observed.value;
       return toAttributes(zoneId, observed, initialValue);
     }),
 
@@ -201,8 +184,7 @@ export const ReserveProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialValue =
-        output !== undefined ? output.initialValue : observed.value;
+      const initialValue = output !== undefined ? output.initialValue : observed.value;
 
       // 3. Sync — patch only when the observed value differs.
       const desired = desiredValue(news);
@@ -222,9 +204,7 @@ export const ReserveProvider = () =>
       // dropped so the setting no longer exists), nothing to restore.
       const observed = yield* cache.getCacheReserve({ zoneId }).pipe(
         Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-        Effect.catchTag("SettingUnavailableForPlan", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already

@@ -28,16 +28,8 @@ export interface CancelIngestion extends Binding.Service<
     dataSet: DataSet,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.CancelIngestionRequest,
-        "AwsAccountId" | "DataSetId"
-      >,
-    ) => Effect.Effect<
-      quicksight.CancelIngestionResponse,
-      quicksight.CancelIngestionError
-    >
+      request: Omit<quicksight.CancelIngestionRequest, "AwsAccountId" | "DataSetId">,
+    ) => Effect.Effect<quicksight.CancelIngestionResponse, quicksight.CancelIngestionError>
   >
 > {}
-export const CancelIngestion = Binding.Service<CancelIngestion>(
-  "AWS.QuickSight.CancelIngestion",
-);
+export const CancelIngestion = Binding.Service<CancelIngestion>("AWS.QuickSight.CancelIngestion");

@@ -41,6 +41,4 @@ export interface GetCluster extends Binding.Service<
   >
 > {}
 
-export const GetCluster = Binding.Service<GetCluster>(
-  "GCP.Container.GetCluster",
-);
+export const GetCluster = Binding.Service<GetCluster>("GCP.Container.GetCluster");

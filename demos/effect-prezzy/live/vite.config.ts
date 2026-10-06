@@ -1,5 +1,5 @@
-import react from "@vitejs/plugin-react";
 import path from "node:path";
+import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
 const captureDir = path.resolve(import.meta.dirname, "..", "out", "capture");
@@ -10,7 +10,11 @@ const captureData = (): Plugin => ({
   configureServer(server) {
     server.watcher.add(captureDir);
     server.watcher.on("change", (file) => {
-      if (file.startsWith(captureDir) && file.endsWith(".json") && !file.endsWith("diagnostics.json")) {
+      if (
+        file.startsWith(captureDir) &&
+        file.endsWith(".json") &&
+        !file.endsWith("diagnostics.json")
+      ) {
         server.ws.send({ type: "custom", event: "prezzy:data", data: { file } });
       }
     });

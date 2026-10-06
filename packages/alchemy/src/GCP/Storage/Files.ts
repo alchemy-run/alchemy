@@ -69,18 +69,14 @@ export const Files = (id: string, props: FilesProps) =>
           key,
           file: path.join(root, relative),
           cacheControl:
-            typeof props.cacheControl === "function"
-              ? props.cacheControl(key)
-              : props.cacheControl,
+            typeof props.cacheControl === "function" ? props.cacheControl(key) : props.cacheControl,
         });
       });
     }).pipe(
       // An unreadable site directory is a stack authoring error.
       Effect.catchTag("PlatformError", (error) =>
         Effect.die(
-          new Error(
-            `GCP.Storage.Files(${id}): cannot read ${props.path}: ${error.message}`,
-          ),
+          new Error(`GCP.Storage.Files(${id}): cannot read ${props.path}: ${error.message}`),
         ),
       ),
     ),

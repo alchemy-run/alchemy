@@ -36,9 +36,7 @@ export class OperationFailed extends Data.TaggedError("GCP.OperationFailed")<{
 }> {}
 
 /** The operation did not finish within the service's time budget. */
-export class OperationTimedOut extends Data.TaggedError(
-  "GCP.OperationTimedOut",
-)<{
+export class OperationTimedOut extends Data.TaggedError("GCP.OperationTimedOut")<{
   operation: string;
   budget: string;
 }> {}
@@ -86,11 +84,7 @@ export const waitForOperation = <E extends { readonly _tag: string }, R>(
   operation: LongRunningOperation,
   get: (name: string) => Effect.Effect<LongRunningOperation, E, R>,
   options: WaitOptions = {},
-): Effect.Effect<
-  LongRunningOperation,
-  E | OperationFailed | OperationTimedOut,
-  R
-> => {
+): Effect.Effect<LongRunningOperation, E | OperationFailed | OperationTimedOut, R> => {
   const budget = Duration.fromInputUnsafe(options.budget ?? "10 minutes");
   const interval = Duration.fromInputUnsafe(options.interval ?? "5 seconds");
   const name = operation.name ?? "";
@@ -99,10 +93,7 @@ export const waitForOperation = <E extends { readonly _tag: string }, R>(
     return failed ? Effect.fail(failed) : Effect.succeed(current);
   };
   if (isDone(operation) || name.length === 0) return settle(operation);
-  const times = Math.max(
-    1,
-    Math.ceil(Duration.toMillis(budget) / Duration.toMillis(interval)),
-  );
+  const times = Math.max(1, Math.ceil(Duration.toMillis(budget) / Duration.toMillis(interval)));
   return get(name).pipe(
     Effect.flatMap((current) =>
       isDone(current)

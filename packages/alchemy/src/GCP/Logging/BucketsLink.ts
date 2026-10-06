@@ -11,11 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  listProjectBuckets,
-  waitForDeleteOperation,
-  waitForOperation,
-} from "./operations.ts";
+import { listProjectBuckets, waitForDeleteOperation, waitForOperation } from "./operations.ts";
 import {
   encodeDescription,
   hasOwnershipMarker,
@@ -123,22 +119,16 @@ export type BucketsLink = Resource<
  */
 export const BucketsLink = Resource<BucketsLink>("GCP.Logging.BucketsLink");
 
-export class BucketsLinkNotResolved extends Data.TaggedError(
-  "GCP.Logging.BucketsLinkNotResolved",
-)<{
+export class BucketsLinkNotResolved extends Data.TaggedError("GCP.Logging.BucketsLinkNotResolved")<{
   name: string;
 }> {}
 
-export class BucketsLinkFailed extends Data.TaggedError(
-  "GCP.Logging.BucketsLinkFailed",
-)<{
+export class BucketsLinkFailed extends Data.TaggedError("GCP.Logging.BucketsLinkFailed")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class BucketsLinkStillExists extends Data.TaggedError(
-  "GCP.Logging.BucketsLinkStillExists",
-)<{
+export class BucketsLinkStillExists extends Data.TaggedError("GCP.Logging.BucketsLinkStillExists")<{
   name: string;
 }> {}
 
@@ -156,9 +146,7 @@ const parseLinkName = (name: string) => {
 };
 
 const parseBucket = (bucket: string, project: string, location: string) => {
-  const match = bucket.match(
-    /^(projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+))$/,
-  );
+  const match = bucket.match(/^(projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+))$/);
   if (match) {
     return {
       name: match[1]!,
@@ -175,12 +163,7 @@ const parseBucket = (bucket: string, project: string, location: string) => {
   };
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  bucketId: string,
-  linkId: string,
-) =>
+const resourceName = (project: string, location: string, bucketId: string, linkId: string) =>
   `projects/${project}/locations/${location}/buckets/${bucketId}/links/${linkId}`;
 
 const linkIdOf = (link: logging.Link, fallback?: string) => {
@@ -199,23 +182,15 @@ const toId = (id: string, linkId: string | undefined, existing?: string) =>
       delimiter: "_",
     });
     const cleaned = generated.replace(/-/g, "_").replace(/[^a-z0-9_]/g, "_");
-    return /^[a-z]/.test(cleaned)
-      ? cleaned
-      : `l${cleaned}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(cleaned) ? cleaned : `l${cleaned}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const isDeleted = (link: logging.Link | undefined): link is undefined =>
   link === undefined || link.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
-const toAttrs = (
-  link: logging.Link,
-  project: string,
-  location: string,
-  bucketId: string,
-) => {
+const toAttrs = (link: logging.Link, project: string, location: string, bucketId: string) => {
   const linkId = linkIdOf(link);
   const parsed = parseDescription(link.description);
   const parsedName = parseLinkName(link.name ?? "");
@@ -225,14 +200,7 @@ const toAttrs = (
   return {
     name:
       link.name ??
-      (linkId
-        ? resourceName(
-            resolvedProject,
-            resolvedLocation,
-            resolvedBucketId,
-            linkId,
-          )
-        : ""),
+      (linkId ? resourceName(resolvedProject, resolvedLocation, resolvedBucketId, linkId) : ""),
     linkId,
     bucket: `projects/${resolvedProject}/locations/${resolvedLocation}/buckets/${resolvedBucketId}`,
     bucketId: resolvedBucketId,
@@ -246,9 +214,7 @@ const toAttrs = (
 };
 
 const isValidLinkName = (name: string) =>
-  /^projects\/[^/]+\/locations\/[^/]+\/buckets\/[^/]+\/links\/[^/]+$/.test(
-    name,
-  );
+  /^projects\/[^/]+\/locations\/[^/]+\/buckets\/[^/]+\/links\/[^/]+$/.test(name);
 
 const getByName = (name: string) =>
   !isValidLinkName(name)
@@ -292,9 +258,7 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link)
-        ? Effect.void
-        : Effect.fail(new BucketsLinkStillExists({ name })),
+      isDeleted(link) ? Effect.void : Effect.fail(new BucketsLinkStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BucketsLinkStillExists",
@@ -309,23 +273,13 @@ export const BucketsLinkProvider = () =>
     nuke: {
       dependsOn: ["GCP.Logging.LogBucket"],
     },
-    stables: [
-      "name",
-      "linkId",
-      "bucket",
-      "bucketId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "linkId", "bucket", "bucketId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.linkId ?? output?.linkId;
       const idChanged =
-        previousId !== undefined &&
-        news.linkId !== undefined &&
-        news.linkId !== previousId;
+        previousId !== undefined && news.linkId !== undefined && news.linkId !== previousId;
       const previousBucket = olds?.bucket ?? output?.bucket;
       const bucketChanged =
         previousBucket !== undefined &&
@@ -338,23 +292,13 @@ export const BucketsLinkProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const parent = parseBucket(
-        olds?.bucket ?? output?.bucket ?? "",
-        env.project,
-        location,
-      );
+      const parent = parseBucket(olds?.bucket ?? output?.bucket ?? "", env.project, location);
       const linkId = yield* toId(id, olds?.linkId, output?.linkId);
       const name =
-        output?.name ??
-        resourceName(parent.project, parent.location, parent.bucketId, linkId);
+        output?.name ?? resourceName(parent.project, parent.location, parent.bucketId, linkId);
       const existing = yield* getByName(name);
       if (isDeleted(existing)) return undefined;
-      const attrs = toAttrs(
-        existing,
-        parent.project,
-        parent.location,
-        parent.bucketId,
-      );
+      const attrs = toAttrs(existing, parent.project, parent.location, parent.bucketId);
       const { labels } = parseDescription(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -373,10 +317,7 @@ export const BucketsLinkProvider = () =>
               })
               .pipe(
                 Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
-                Stream.filter(
-                  (link) =>
-                    !isDeleted(link) && hasOwnershipMarker(link.description),
-                ),
+                Stream.filter((link) => !isDeleted(link) && hasOwnershipMarker(link.description)),
                 Stream.map((link) => {
                   const parsed = parseLinkName(link.name ?? "");
                   return toAttrs(
@@ -407,21 +348,13 @@ export const BucketsLinkProvider = () =>
         });
       }
       const linkId = yield* toId(id, news.linkId, output?.linkId);
-      const name = resourceName(
-        parent.project,
-        parent.location,
-        parent.bucketId,
-        linkId,
-      );
+      const name = resourceName(parent.project, parent.location, parent.bucketId, linkId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        current.lifecycleState === "DELETE_REQUESTED"
-      ) {
+      if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
         yield* waitUntilDeleted(current.name ?? name);
         current = undefined;
       }

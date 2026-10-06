@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as apikeys from "@distilled.cloud/gcp/apikeys_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import ApiKeysBindingsHost, { Maps } from "./fixtures/bindings-host.ts";
 
@@ -26,9 +26,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -69,10 +67,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the key string as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ keyString?: string }>(
-              baseUrl,
-              "getKeyString",
-            );
+            const out = yield* expectProbe<{ keyString?: string }>(baseUrl, "getKeyString");
             const expected = yield* apikeys.getKeyStringProjectsLocationsKeys({
               name: keyName,
             });

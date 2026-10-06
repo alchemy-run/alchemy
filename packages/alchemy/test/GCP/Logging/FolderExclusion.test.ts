@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -12,10 +12,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 // folder (the testing project sits directly under the organization).
 const folderId = process.env.GOOGLE_FOLDER_ID?.trim().replace(/^folders\//, "");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getFoldersExclusions({ name }).pipe(
@@ -64,9 +61,7 @@ test.provider.skipIf(!folderId)(
 
       expect(created.exclusionId).toEqual(expect.any(String));
       expect(created.folderId).toEqual(folderId);
-      expect(created.name).toEqual(
-        `folders/${folderId}/exclusions/${created.exclusionId}`,
-      );
+      expect(created.name).toEqual(`folders/${folderId}/exclusions/${created.exclusionId}`);
       expect(created.filter).toEqual("severity=DEBUG");
       expect(created.description).toEqual("drop debug entries");
 

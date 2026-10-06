@@ -27,10 +27,7 @@ export interface GetCisScanReport extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetCisScanReportRequest,
-    ) => Effect.Effect<
-      inspector2.GetCisScanReportResponse,
-      inspector2.GetCisScanReportError
-    >
+    ) => Effect.Effect<inspector2.GetCisScanReportResponse, inspector2.GetCisScanReportError>
   >
 > {}
 export const GetCisScanReport = Binding.Service<GetCisScanReport>(

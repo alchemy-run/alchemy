@@ -47,6 +47,4 @@ export interface RegisterTargets extends Binding.Service<
   >
 > {}
 
-export const RegisterTargets = Binding.Service<RegisterTargets>(
-  "AWS.ELBv2.RegisterTargets",
-);
+export const RegisterTargets = Binding.Service<RegisterTargets>("AWS.ELBv2.RegisterTargets");

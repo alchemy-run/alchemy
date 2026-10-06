@@ -1,20 +1,17 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import { defaultComputeServiceAccount } from "@/GCP/Host";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import { defaultComputeServiceAccount } from "@/GCP/Host";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The job provisions a Colab runtime and runs the notebook (2-4 minutes).
 const runLifecycle = !process.env.FAST;
@@ -47,15 +44,13 @@ test.provider(
         }),
       );
       expect(error._tag).toEqual("NotFound");
-      const page = yield* aiplatform.listProjectsLocationsNotebookExecutionJobs(
-        {
-          parent,
-          pageSize: 10,
-        },
+      const page = yield* aiplatform.listProjectsLocationsNotebookExecutionJobs({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.notebookExecutionJobs ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/notebookExecutionJobs/alchemy-missing`,
       );
-      expect(
-        (page.notebookExecutionJobs ?? []).map((item) => item.name),
-      ).not.toContain(`${parent}/notebookExecutionJobs/alchemy-missing`);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -75,21 +70,18 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const template = yield* GCP.AIPlatform.NotebookRuntimeTemplate(
-            "Runtime",
-            {
-              location: "us-central1",
-              displayName: "alchemy-notebook-runtime",
-              machineSpec: { machineType: "e2-standard-4" },
-              networkSpec: { enableInternetAccess: true },
-              // Standard disk keeps the run clear of the regional SSD quota.
-              dataPersistentDiskSpec: {
-                diskType: "pd-standard",
-                diskSizeGb: "100",
-              },
-              labels: { env: "test" },
+          const template = yield* GCP.AIPlatform.NotebookRuntimeTemplate("Runtime", {
+            location: "us-central1",
+            displayName: "alchemy-notebook-runtime",
+            machineSpec: { machineType: "e2-standard-4" },
+            networkSpec: { enableInternetAccess: true },
+            // Standard disk keeps the run clear of the regional SSD quota.
+            dataPersistentDiskSpec: {
+              diskType: "pd-standard",
+              diskSizeGb: "100",
             },
-          );
+            labels: { env: "test" },
+          });
           const bucket = yield* GCP.Storage.Bucket("NotebookOut", {
             location: "US-CENTRAL1",
             forceDestroy: true,
@@ -110,10 +102,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.location).toEqual("us-central1");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsNotebookExecutionJobs({
-          name: created.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsNotebookExecutionJobs({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       yield* stack.destroy();

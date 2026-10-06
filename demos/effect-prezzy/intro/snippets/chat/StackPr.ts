@@ -5,8 +5,8 @@ import * as Neon from "alchemy/Neon";
 import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import Chat from "./ChatModules.ts";
 
 // #region show

@@ -1,10 +1,10 @@
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
-import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import { currentProject, runLifecycle } from "./common.ts";
 import AppCheckBindingsHost, { Local } from "./fixtures/bindings-host.ts";
@@ -19,21 +19,17 @@ let debugTokenName: string;
 let appName: string;
 
 const jwtClaims = (token: string) =>
-  JSON.parse(
-    Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
-  ) as { sub?: string; aud?: string[] };
+  JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as {
+    sub?: string;
+    aud?: string[];
+  };
 
 // App Check needs a Firebase project with the App Check API enabled (see
 // ./common.ts); set GCP_TEST_FIREBASE_APP_ID to run.
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "FirebaseAppCheck Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:firebaseappcheck",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -66,11 +62,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "mints an App Check token for the app, with no IAM grant",
         (_stack) =>
           Effect.gen(function* () {
-            const out =
-              yield* expectProbe<firebaseappcheck.GoogleFirebaseAppcheckV1AppCheckToken>(
-                baseUrl,
-                "exchangeDebugToken",
-              );
+            const out = yield* expectProbe<firebaseappcheck.GoogleFirebaseAppcheckV1AppCheckToken>(
+              baseUrl,
+              "exchangeDebugToken",
+            );
             expect(out.ttl).toEqual(expect.any(String));
             const claims = jwtClaims(out.token ?? "");
             // `sub` is the app id: the last segment of `projects/p/apps/{id}`.

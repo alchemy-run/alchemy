@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type GlobalPublicDelegatedPrefixProps = {
   /**
@@ -114,10 +110,9 @@ export type GlobalPublicDelegatedPrefix = Resource<
  * @resource
  * @category Compute
  */
-export const GlobalPublicDelegatedPrefix =
-  Resource<GlobalPublicDelegatedPrefix>(
-    "GCP.Compute.GlobalPublicDelegatedPrefix",
-  );
+export const GlobalPublicDelegatedPrefix = Resource<GlobalPublicDelegatedPrefix>(
+  "GCP.Compute.GlobalPublicDelegatedPrefix",
+);
 
 export class GlobalPublicDelegatedPrefixNotResolved extends Data.TaggedError(
   "GCP.Compute.GlobalPublicDelegatedPrefixNotResolved",
@@ -241,32 +236,22 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousName = olds?.prefixName ?? output?.prefixName;
       const nextName = news.prefixName;
-      const previousParent = lastSegment(
-        olds?.parentPrefix ?? output?.parentPrefix,
-      );
+      const previousParent = lastSegment(olds?.parentPrefix ?? output?.parentPrefix);
       const nextParent = lastSegment(news.parentPrefix);
       const previousRange = olds?.ipCidrRange ?? output?.ipCidrRange ?? "";
       const nextRange = news.ipCidrRange;
       const previousMode = olds?.mode ?? output?.mode ?? "";
       const nextMode = news.mode ?? previousMode;
       if (
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
-        (nextParent.length > 0 &&
-          previousParent.length > 0 &&
-          previousParent !== nextParent) ||
-        (nextRange.length > 0 &&
-          previousRange.length > 0 &&
-          previousRange !== nextRange) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
+        (nextParent.length > 0 && previousParent.length > 0 && previousParent !== nextParent) ||
+        (nextRange.length > 0 && previousRange.length > 0 && previousRange !== nextRange) ||
         (news.mode !== undefined && previousMode !== nextMode)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            nextName !== undefined &&
-            previousName === nextName,
+            previousName !== undefined && nextName !== undefined && previousName === nextName,
         };
       }
       return undefined;
@@ -274,11 +259,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const prefixName = yield* toName(
-        id,
-        olds?.prefixName,
-        output?.prefixName,
-      );
+      const prefixName = yield* toName(id, olds?.prefixName, output?.prefixName);
       const existing = yield* getByName(env.project, prefixName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -294,9 +275,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
           .pipe(
             Stream.filter((prefix) => {
               const { labels } = parseDescription(prefix.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((prefix) => toAttrs(prefix, env.project)),
             Stream.runCollect,
@@ -353,11 +332,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
               fingerprint: current.fingerprint,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, prefixName);
         if (current === undefined) {
           return yield* new GlobalPublicDelegatedPrefixNotResolved({

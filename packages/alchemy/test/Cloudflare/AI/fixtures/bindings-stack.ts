@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index";
 import * as Effect from "effect/Effect";
 import * as path from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index";
 import AiSearchEffectBindingsWorker from "./effect-bindings-worker.ts";
 
 /**
@@ -31,10 +31,7 @@ export default Alchemy.Stack(
     const bucket = yield* Cloudflare.R2.Bucket("AiSearchBindingBucket", {
       forceDestroy: true,
     });
-    const namespace = yield* Cloudflare.AI.SearchNamespace(
-      "AiSearchBindingNs",
-      {},
-    );
+    const namespace = yield* Cloudflare.AI.SearchNamespace("AiSearchBindingNs", {});
     const search = yield* Cloudflare.AI.Search("AiSearchBindingInstance", {
       source: bucket,
     });

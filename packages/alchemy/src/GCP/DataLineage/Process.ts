@@ -31,9 +31,7 @@ export type ProcessOrigin = {
    * Google system. Non-`CUSTOM` sources may be restricted and billed.
    * @default "CUSTOM"
    */
-  sourceType?:
-    | datalineage.GoogleCloudDatacatalogLineageV1OriginSourceTypeEnum
-    | (string & {});
+  sourceType?: datalineage.GoogleCloudDatacatalogLineageV1OriginSourceTypeEnum | (string & {});
   /**
    * Origin name. For `CUSTOM`, any identifier. For Google systems, a
    * resource name in the same project and location.
@@ -130,9 +128,7 @@ export type Process = Resource<
  */
 export const Process = Resource<Process>("GCP.DataLineage.Process");
 
-export class ProcessNotResolved extends Data.TaggedError(
-  "GCP.DataLineage.ProcessNotResolved",
-)<{
+export class ProcessNotResolved extends Data.TaggedError("GCP.DataLineage.ProcessNotResolved")<{
   name: string;
 }> {}
 
@@ -183,10 +179,7 @@ export const ProcessProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -200,25 +193,14 @@ export const ProcessProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const processId = yield* toPhysicalId(
-        id,
-        olds?.processId,
-        output?.processId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, processId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const processId = yield* toPhysicalId(id, olds?.processId, output?.processId);
+      const name = output?.name ?? resourceName(env.project, location, processId);
       const existing =
-        (yield* getByName(name)) ??
-        (yield* findOwnedProcess(id, env.project, location));
+        (yield* getByName(name)) ?? (yield* findOwnedProcess(id, env.project, location));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.attributes))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.attributes)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -230,23 +212,14 @@ export const ProcessProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const processId = yield* toPhysicalId(
-        id,
-        news.processId,
-        output?.processId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, processId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const processId = yield* toPhysicalId(id, news.processId, output?.processId);
+      const name = output?.name ?? resourceName(env.project, location, processId);
       const ownership = yield* createOwnership(id);
       const attributes = desiredAttributes(news.attributes, ownership);
 
       let current =
-        (yield* getByName(name)) ??
-        (yield* findOwnedProcess(id, env.project, location));
+        (yield* getByName(name)) ?? (yield* findOwnedProcess(id, env.project, location));
 
       if (current === undefined) {
         const created = yield* datalineage
@@ -263,9 +236,7 @@ export const ProcessProvider = () =>
             Effect.catchTag("Conflict", () =>
               getByName(name).pipe(
                 Effect.flatMap((row) =>
-                  row
-                    ? Effect.succeed(row)
-                    : findOwnedProcess(id, env.project, location),
+                  row ? Effect.succeed(row) : findOwnedProcess(id, env.project, location),
                 ),
               ),
             ),

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   clusterName,
@@ -305,15 +300,10 @@ export type BackupPlan = Resource<
  */
 export const BackupPlan = Resource<BackupPlan>("GCP.GKEBackup.BackupPlan");
 
-const resourceName = (
-  project: string,
-  location: string,
-  backupPlanId: string,
-) => `projects/${project}/locations/${location}/backupPlans/${backupPlanId}`;
+const resourceName = (project: string, location: string, backupPlanId: string) =>
+  `projects/${project}/locations/${location}/backupPlans/${backupPlanId}`;
 
-const toRetention = (
-  policy: gkebackup.RetentionPolicy | undefined,
-): RetentionPolicy | undefined =>
+const toRetention = (policy: gkebackup.RetentionPolicy | undefined): RetentionPolicy | undefined =>
   policy === undefined
     ? undefined
     : {
@@ -322,9 +312,7 @@ const toRetention = (
         backupDeleteLockDays: policy.backupDeleteLockDays,
       };
 
-const toSchedule = (
-  schedule: gkebackup.Schedule | undefined,
-): BackupSchedule | undefined =>
+const toSchedule = (schedule: gkebackup.Schedule | undefined): BackupSchedule | undefined =>
   schedule === undefined
     ? undefined
     : {
@@ -333,9 +321,7 @@ const toSchedule = (
         rpoConfig: schedule.rpoConfig,
       };
 
-const toBackupConfig = (
-  config: gkebackup.BackupConfig | undefined,
-): BackupConfig | undefined =>
+const toBackupConfig = (config: gkebackup.BackupConfig | undefined): BackupConfig | undefined =>
   config === undefined
     ? undefined
     : {
@@ -358,11 +344,7 @@ const desiredSchedule = (schedule: BackupSchedule | undefined) =>
         rpoConfig: schedule.rpoConfig,
       };
 
-const toAttrs = (
-  item: gkebackup.BackupPlan,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: gkebackup.BackupPlan, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "backupPlans", region);
   return {
@@ -406,14 +388,7 @@ const listOwned = (project: string) =>
 
 export const BackupPlanProvider = () =>
   Provider.succeed(BackupPlan, {
-    stables: [
-      "name",
-      "backupPlanId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "backupPlanId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -422,10 +397,7 @@ export const BackupPlanProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.backupPlanId ?? output?.backupPlanId,
         nextId: news.backupPlanId ?? olds?.backupPlanId ?? output?.backupPlanId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -446,18 +418,12 @@ export const BackupPlanProvider = () =>
         output?.backupPlanId,
         "backupplan",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, backupPlanId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, backupPlanId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -475,10 +441,7 @@ export const BackupPlanProvider = () =>
         output?.backupPlanId,
         "backupplan",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, backupPlanId);
       const cluster = clusterName(news.cluster, env.project, location);
       const desiredLabels = {
@@ -529,14 +492,13 @@ export const BackupPlanProvider = () =>
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.description, news.description) && "description",
-        fingerprint(toRetention(current.retentionPolicy)) !==
-          fingerprint(news.retentionPolicy) && "retentionPolicy",
+        fingerprint(toRetention(current.retentionPolicy)) !== fingerprint(news.retentionPolicy) &&
+          "retentionPolicy",
         fingerprint(desiredSchedule(toSchedule(current.backupSchedule))) !==
           fingerprint(desiredSchedule(news.backupSchedule)) && "backupSchedule",
-        fingerprint(toBackupConfig(current.backupConfig)) !==
-          fingerprint(news.backupConfig) && "backupConfig",
-        (current.deactivated === true) !== (news.deactivated === true) &&
-          "deactivated",
+        fingerprint(toBackupConfig(current.backupConfig)) !== fingerprint(news.backupConfig) &&
+          "backupConfig",
+        (current.deactivated === true) !== (news.deactivated === true) && "deactivated",
       ]);
 
       if (mask.length > 0) {

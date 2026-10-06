@@ -34,12 +34,9 @@ import {
 
 const COLLECTION = "privateConnections";
 const VEN_COLLECTION = "vmwareEngineNetworks";
-const DEFAULT_ROUTING_MODE =
-  "GLOBAL" satisfies vmwareengine.PrivateConnectionRoutingModeEnum;
+const DEFAULT_ROUTING_MODE = "GLOBAL" satisfies vmwareengine.PrivateConnectionRoutingModeEnum;
 
-export type PrivateConnectionType =
-  | vmwareengine.PrivateConnectionTypeEnum
-  | (string & {});
+export type PrivateConnectionType = vmwareengine.PrivateConnectionTypeEnum | (string & {});
 
 export type PrivateConnectionRoutingMode =
   | vmwareengine.PrivateConnectionRoutingModeEnum
@@ -187,15 +184,10 @@ export type PrivateConnection = Resource<
  * @resource
  * @category VMwareEngine
  */
-export const PrivateConnection = Resource<PrivateConnection>(
-  "GCP.VMwareEngine.PrivateConnection",
-);
+export const PrivateConnection = Resource<PrivateConnection>("GCP.VMwareEngine.PrivateConnection");
 
-const resourceName = (
-  project: string,
-  location: string,
-  connectionId: string,
-) => `${parentOf(project, location)}/${COLLECTION}/${connectionId}`;
+const resourceName = (project: string, location: string, connectionId: string) =>
+  `${parentOf(project, location)}/${COLLECTION}/${connectionId}`;
 
 const expandVen = (project: string, value: string) =>
   expandName(value, project, DEFAULT_GLOBAL, VEN_COLLECTION);
@@ -206,14 +198,9 @@ const expandVpc = (project: string, value: string) => {
   return `projects/${project}/global/networks/${rfc1035(canonical, "network")}`;
 };
 
-const routingOf = (value: string | undefined) =>
-  (value ?? DEFAULT_ROUTING_MODE).toUpperCase();
+const routingOf = (value: string | undefined) => (value ?? DEFAULT_ROUTING_MODE).toUpperCase();
 
-const toAttrs = (
-  connection: vmwareengine.PrivateConnection,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (connection: vmwareengine.PrivateConnection, project: string, region: string) => {
   const name = connection.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(connection.description);
@@ -246,15 +233,7 @@ const getByName = (name: string) =>
 
 export const PrivateConnectionProvider = () =>
   Provider.succeed(PrivateConnection, {
-    stables: [
-      "name",
-      "privateConnectionId",
-      "project",
-      "location",
-      "type",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "privateConnectionId", "project", "location", "type", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -263,9 +242,7 @@ export const PrivateConnectionProvider = () =>
         olds?.vmwareEngineNetwork ?? output?.vmwareEngineNetwork,
       );
       const nextVen = canonicalizeLink(news.vmwareEngineNetwork);
-      const previousService = canonicalizeLink(
-        olds?.serviceNetwork ?? output?.serviceNetwork,
-      );
+      const previousService = canonicalizeLink(olds?.serviceNetwork ?? output?.serviceNetwork);
       const nextService = canonicalizeLink(news.serviceNetwork);
       const previousType = (olds?.type ?? output?.type ?? "").toUpperCase();
       const nextType = news.type.toUpperCase();
@@ -274,10 +251,7 @@ export const PrivateConnectionProvider = () =>
         nextId: news.privateConnectionId
           ? rfc1035(news.privateConnectionId, "connection")
           : (olds?.privateConnectionId ?? output?.privateConnectionId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -291,18 +265,14 @@ export const PrivateConnectionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const connectionId = yield* toPhysicalId(
         id,
         olds?.privateConnectionId,
         output?.privateConnectionId,
         "connection",
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, connectionId);
+      const name = output?.name ?? resourceName(env.project, location, connectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -313,17 +283,14 @@ export const PrivateConnectionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsPrivateConnections.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.privateConnections,
-            ),
+        const items = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsPrivateConnections.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.privateConnections,
+          ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
@@ -332,10 +299,7 @@ export const PrivateConnectionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const connectionId = yield* toPhysicalId(
         id,
         news.privateConnectionId,
@@ -347,10 +311,7 @@ export const PrivateConnectionProvider = () =>
       const desiredDescription = encodeOwnership(ownership, news.description);
       const type = news.type.toUpperCase();
       const routingMode = routingOf(news.routingMode);
-      const vmwareEngineNetwork = expandVen(
-        env.project,
-        news.vmwareEngineNetwork,
-      );
+      const vmwareEngineNetwork = expandVen(env.project, news.vmwareEngineNetwork);
       const serviceNetwork = expandVpc(env.project, news.serviceNetwork);
 
       let current = yield* getByName(output?.name ?? name);
@@ -397,16 +358,15 @@ export const PrivateConnectionProvider = () =>
         ["routingMode", routingOf(current.routingMode) !== routingMode],
       ]);
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsPrivateConnections({
+        const operation = yield* vmwareengine.patchProjectsLocationsPrivateConnections({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              routingMode,
-            },
-          });
+            description: desiredDescription,
+            routingMode,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

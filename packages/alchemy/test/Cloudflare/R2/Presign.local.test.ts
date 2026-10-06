@@ -1,18 +1,14 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
-import PresignLocalWorker, {
-  PresignLocalBucket,
-} from "./fixtures/presign/local-worker.ts";
-import PresignRemoteWorker, {
-  PresignRemoteBucket,
-} from "./fixtures/presign/remote-worker.ts";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
+import PresignLocalWorker, { PresignLocalBucket } from "./fixtures/presign/local-worker.ts";
+import PresignRemoteWorker, { PresignRemoteBucket } from "./fixtures/presign/remote-worker.ts";
 import { presignRoundTrip } from "./fixtures/presign/roundtrip.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -22,10 +18,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * Under `alchemy dev` a locally-emulated bucket is served on the Worker's
@@ -63,12 +56,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "local",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "local"],
     timeout: 120_000,
   },
 );
@@ -92,10 +80,7 @@ test.provider(
             forceDestroy: true,
           });
           const worker = yield* Cloudflare.Worker("PresignAsyncWorker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/presign/async-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/presign/async-worker.ts"),
             env: {
               BUCKET: Bucket,
               BUCKET_S3: Cloudflare.R2.S3Credentials(Bucket, {
@@ -111,23 +96,13 @@ test.provider(
       expect(deployed.bucket.bucketName).toMatch(/^dev:/);
       expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const { putUrl } = yield* presignRoundTrip(
-        deployed.worker.url!,
-        "uploads/async.txt",
-      );
-      expect(
-        putUrl.startsWith(`${deployed.worker.url}/cdn-cgi/local/r2/s3/`),
-      ).toBe(true);
+      const { putUrl } = yield* presignRoundTrip(deployed.worker.url!, "uploads/async.txt");
+      expect(putUrl.startsWith(`${deployed.worker.url}/cdn-cgi/local/r2/s3/`)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "local",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "local"],
     timeout: 120_000,
   },
 );
@@ -154,10 +129,7 @@ test.provider(
 
       expect(deployed.bucket.bucketName).not.toMatch(/^dev:/);
 
-      const { putUrl } = yield* presignRoundTrip(
-        deployed.worker.url!,
-        "uploads/remote.txt",
-      );
+      const { putUrl } = yield* presignRoundTrip(deployed.worker.url!, "uploads/remote.txt");
       expect(new URL(putUrl).hostname).toMatch(/\.r2\.cloudflarestorage\.com$/);
 
       // Out-of-band: the upload is in the real bucket
@@ -172,21 +144,14 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* r2
-        .getBucket({ accountId, bucketName: deployed.bucket.bucketName })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
-        );
+      const gone = yield* r2.getBucket({ accountId, bucketName: deployed.bucket.bucketName }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );

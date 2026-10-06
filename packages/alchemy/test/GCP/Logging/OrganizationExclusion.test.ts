@@ -1,25 +1,19 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 // Organization-scoped: set GOOGLE_ORGANIZATION_ID when the credentials
 // administer the organization (the testing service account does not).
-const organizationId = process.env.GOOGLE_ORGANIZATION_ID?.trim().replace(
-  /^organizations\//,
-  "",
-);
+const organizationId = process.env.GOOGLE_ORGANIZATION_ID?.trim().replace(/^organizations\//, "");
 const organization = `organizations/${organizationId}`;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getOrganizationsExclusions({ name }).pipe(
@@ -68,9 +62,7 @@ test.provider.skipIf(!organizationId)(
 
       expect(created.exclusionId).toEqual(expect.any(String));
       expect(created.organization).toEqual(organization);
-      expect(created.name).toEqual(
-        `${organization}/exclusions/${created.exclusionId}`,
-      );
+      expect(created.name).toEqual(`${organization}/exclusions/${created.exclusionId}`);
       expect(created.filter).toEqual("severity=DEBUG");
       expect(created.description).toEqual("drop debug entries");
 

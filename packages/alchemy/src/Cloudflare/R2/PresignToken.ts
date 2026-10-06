@@ -34,15 +34,8 @@ export const makePresignBinding = <Request>(options: {
     const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (bucket: Bucket) {
-      const credentials = yield* makeS3Credentials(
-        host,
-        env,
-        bucket,
-        options.access,
-      );
-      return Effect.fn(`${options.name}(${bucket.LogicalId})`)(function* (
-        request: Request,
-      ) {
+      const credentials = yield* makeS3Credentials(host, env, bucket, options.access);
+      return Effect.fn(`${options.name}(${bucket.LogicalId})`)(function* (request: Request) {
         return yield* options.presign(yield* credentials, request);
       });
     });

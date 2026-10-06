@@ -62,9 +62,7 @@ describe("applyEdit", () => {
       before: H1,
       after: ["Reach for better primitives."],
     });
-    expect(out).toContain(
-      '<h1 data-copy class="hero">Reach for better primitives.</h1>',
-    );
+    expect(out).toContain('<h1 data-copy class="hero">Reach for better primitives.</h1>');
   });
 
   test("keeps line wrapping, spacers, entities, and tags outside the changed words", () => {
@@ -104,9 +102,7 @@ describe("applyEdit", () => {
       before: H1,
       after: ["Reach for the very best better primitives."],
     });
-    expect(inserted).toContain(
-      ">Reach for the very best better primitives.</h1>",
-    );
+    expect(inserted).toContain(">Reach for the very best better primitives.</h1>");
   });
 
   test("returns the source unchanged for whitespace-only edits", () => {
@@ -119,20 +115,18 @@ describe("applyEdit", () => {
   });
 
   test("rejects stale text", () => {
-    expect(() =>
-      applyEdit(PAGE, { index: 0, before: ["Something else"], after: ["x"] }),
-    ).toThrow(/doesn't match the source/);
+    expect(() => applyEdit(PAGE, { index: 0, before: ["Something else"], after: ["x"] })).toThrow(
+      /doesn't match the source/,
+    );
   });
 
   test("rejects edits that change markup", () => {
-    expect(() =>
-      applyEdit(PAGE, { index: 1, before: LEDE, after: ["only one node"] }),
-    ).toThrow(/removed or added markup/);
+    expect(() => applyEdit(PAGE, { index: 1, before: LEDE, after: ["only one node"] })).toThrow(
+      /removed or added markup/,
+    );
   });
 
   test("rejects elements containing expressions", () => {
-    expect(() =>
-      applyEdit(PAGE, { index: 2, before: ["x"], after: ["y"] }),
-    ).toThrow(/expressions/);
+    expect(() => applyEdit(PAGE, { index: 2, before: ["x"], after: ["y"] })).toThrow(/expressions/);
   });
 });

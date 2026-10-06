@@ -5,10 +5,7 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
 import type { Input } from "./Input.ts";
 import * as Plan from "./Plan.ts";
-import type {
-  ResourceSelection,
-  SelectionOutput,
-} from "./ResourceSelection.ts";
+import type { ResourceSelection, SelectionOutput } from "./ResourceSelection.ts";
 import { evalStack, type CompiledStack, type StackEffect } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 
@@ -34,10 +31,7 @@ export interface FilteredDeployOptions<A>
  * not declaration evaluation: the whole stack program still runs. Filtered
  * deployments return void and leave persisted full-stack outputs unchanged.
  */
-export function deploy<
-  A,
-  Options extends FilteredDeployOptions<A> = DeployOptions<A>,
->(
+export function deploy<A, Options extends FilteredDeployOptions<A> = DeployOptions<A>>(
   options: FilteredDeployOptions<A> & Options,
 ): DeployResult<SelectionOutput<A, Options>>;
 export function deploy<A>(options: FilteredDeployOptions<A>) {

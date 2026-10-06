@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Table } from "./Table.ts";
 
-export interface GetTableRequest extends Omit<
-  bigtable.GetProjectsInstancesTablesRequest,
-  "name"
-> {}
+export interface GetTableRequest extends Omit<bigtable.GetProjectsInstancesTablesRequest, "name"> {}
 
 /**
  * Runtime binding for Bigtable Admin `tables.get`.
@@ -33,11 +30,7 @@ export interface GetTable extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetTableRequest,
-    ) => Effect.Effect<
-      bigtable.Table,
-      bigtable.GetProjectsInstancesTablesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<bigtable.Table, bigtable.GetProjectsInstancesTablesError, RuntimeContext>
   >
 > {}
 

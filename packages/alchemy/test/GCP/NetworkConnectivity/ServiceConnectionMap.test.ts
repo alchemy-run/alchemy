@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A service connection map publishes a producer service class, which must be
 // registered for the project first (BadRequest "serviceClass gcp-cloud-sql
@@ -75,18 +72,15 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.description).toEqual("map a");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networkconnectivity.getProjectsLocationsServiceConnectionMaps({
-          name: created.name,
-        });
+      const fetched = yield* networkconnectivity.getProjectsLocationsServiceConnectionMaps({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.serviceClass).toEqual("gcp-cloud-sql");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

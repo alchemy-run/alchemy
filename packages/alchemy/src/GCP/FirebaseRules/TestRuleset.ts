@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Ruleset } from "./Ruleset.ts";
 
-export interface TestRulesetRequest extends Omit<
-  firebaserules.TestProjectsRequest,
-  "name"
-> {}
+export interface TestRulesetRequest extends Omit<firebaserules.TestProjectsRequest, "name"> {}
 
 /**
  * Runtime binding for Firebase Rules `projects.test` against a
@@ -49,6 +46,4 @@ export interface TestRuleset extends Binding.Service<
   >
 > {}
 
-export const TestRuleset = Binding.Service<TestRuleset>(
-  "GCP.FirebaseRules.TestRuleset",
-);
+export const TestRuleset = Binding.Service<TestRuleset>("GCP.FirebaseRules.TestRuleset");

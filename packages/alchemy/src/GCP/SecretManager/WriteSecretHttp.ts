@@ -1,6 +1,6 @@
 import * as Layer from "effect/Layer";
-import { WriteSecret } from "./WriteSecret.ts";
 import { makeSecretAccessBinding, writeSecretGrants } from "./SecretHttp.ts";
+import { WriteSecret } from "./WriteSecret.ts";
 
 /**
  * HTTP implementation of {@link WriteSecret} over the Secret Manager REST API.

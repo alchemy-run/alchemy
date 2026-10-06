@@ -122,9 +122,7 @@ export type ResourceRecordSet = Resource<
  * @resource
  * @category DNS
  */
-export const ResourceRecordSet = Resource<ResourceRecordSet>(
-  "GCP.DNS.ResourceRecordSet",
-);
+export const ResourceRecordSet = Resource<ResourceRecordSet>("GCP.DNS.ResourceRecordSet");
 
 export class ResourceRecordSetNotResolved extends Data.TaggedError(
   "GCP.DNS.ResourceRecordSetNotResolved",
@@ -140,8 +138,7 @@ export class ResourceRecordSetZoneNotFound extends Data.TaggedError(
   managedZone: string;
 }> {}
 
-const withTrailingDot = (name: string) =>
-  name.endsWith(".") ? name : `${name}.`;
+const withTrailingDot = (name: string) => (name.endsWith(".") ? name : `${name}.`);
 
 const normalizeFqdn = (name: string) => withTrailingDot(name).toLowerCase();
 
@@ -177,10 +174,7 @@ const sameRoutingPolicy = (
   right: ResourceRecordSetRoutingPolicy | undefined,
 ) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
-const nameIdentityChanged = (
-  newsName: string | undefined,
-  previousName: string | undefined,
-) => {
+const nameIdentityChanged = (newsName: string | undefined, previousName: string | undefined) => {
   if (newsName === undefined || previousName === undefined) return false;
   const previous = normalizeFqdn(previousName);
   if (isRelativeName(newsName)) {
@@ -190,10 +184,7 @@ const nameIdentityChanged = (
   return normalizeFqdn(newsName) !== previous;
 };
 
-const isApexSystemRecord = (
-  record: dns.ResourceRecordSet,
-  dnsName: string | undefined,
-) => {
+const isApexSystemRecord = (record: dns.ResourceRecordSet, dnsName: string | undefined) => {
   const type = normalizeType(record.type ?? "");
   if (!SYSTEM_TYPES.has(type)) return false;
   if (dnsName === undefined || record.name === undefined) {
@@ -202,9 +193,7 @@ const isApexSystemRecord = (
   return normalizeFqdn(record.name) === normalizeFqdn(dnsName);
 };
 
-const hasAlchemyZoneLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyZoneLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const toBody = (props: {
@@ -228,11 +217,7 @@ const toBody = (props: {
         rrdatas: props.rrdatas ?? [],
       };
 
-const toAttrs = (
-  record: dns.ResourceRecordSet,
-  project: string,
-  managedZone: string,
-) => ({
+const toAttrs = (record: dns.ResourceRecordSet, project: string, managedZone: string) => ({
   project,
   managedZone,
   name: record.name ? normalizeFqdn(record.name) : "",
@@ -249,12 +234,7 @@ const getZone = (project: string, managedZone: string) =>
     .getManagedZones({ project, managedZone })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const getByName = (
-  project: string,
-  managedZone: string,
-  name: string,
-  type: string,
-) =>
+const getByName = (project: string, managedZone: string, name: string, type: string) =>
   dns
     .getResourceRecordSets({ project, managedZone, name, type })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -292,11 +272,7 @@ const listRrsets = (project: string, zoneName: string) =>
       if (pageToken === undefined || pageToken === "") break;
     }
     return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as dns.ResourceRecordSet[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as dns.ResourceRecordSet[])));
 
 const listAlchemyZones = (project: string) =>
   Effect.gen(function* () {
@@ -327,10 +303,8 @@ export const ResourceRecordSetProvider = () =>
       const previousName = olds?.name ?? output?.name;
       const previousType = olds?.type ?? output?.type;
       const nextType = normalizeType(news.type);
-      const zoneChanged =
-        previousZone !== undefined && news.managedZone !== previousZone;
-      const typeChanged =
-        previousType !== undefined && nextType !== normalizeType(previousType);
+      const zoneChanged = previousZone !== undefined && news.managedZone !== previousZone;
+      const typeChanged = previousType !== undefined && nextType !== normalizeType(previousType);
       const nameChanged = nameIdentityChanged(news.name, previousName);
       if (zoneChanged || typeChanged || nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -348,12 +322,7 @@ export const ResourceRecordSetProvider = () =>
       const type = normalizeType(typeRaw);
       const zone = yield* getZone(env.project, managedZone);
       if (zone === undefined || zone.name === undefined) return undefined;
-      const name = yield* toRecordName(
-        id,
-        olds?.name,
-        output?.name,
-        zone.dnsName ?? zone.name,
-      );
+      const name = yield* toRecordName(id, olds?.name, output?.name, zone.dnsName ?? zone.name);
       const existing = yield* getByName(env.project, zone.name, name, type);
       if (existing === undefined) return undefined;
       // Record sets have no labels. Identity (zone + name + type) is
@@ -372,12 +341,8 @@ export const ResourceRecordSetProvider = () =>
               ? listRrsets(env.project, zone.name).pipe(
                   Effect.map((records) =>
                     records
-                      .filter(
-                        (record) => !isApexSystemRecord(record, zone.dnsName),
-                      )
-                      .map((record) =>
-                        toAttrs(record, env.project, zone.name ?? ""),
-                      ),
+                      .filter((record) => !isApexSystemRecord(record, zone.dnsName))
+                      .map((record) => toAttrs(record, env.project, zone.name ?? "")),
                   ),
                 )
               : Effect.succeed([] as ReturnType<typeof toAttrs>[]),
@@ -396,12 +361,7 @@ export const ResourceRecordSetProvider = () =>
       }
       const managedZone = zone.name;
       const type = normalizeType(news.type);
-      const name = yield* toRecordName(
-        id,
-        news.name,
-        output?.name,
-        zone.dnsName ?? managedZone,
-      );
+      const name = yield* toRecordName(id, news.name, output?.name, zone.dnsName ?? managedZone);
       const ttl = news.ttl ?? DEFAULT_TTL;
       const desired = toBody({
         name,
@@ -420,11 +380,7 @@ export const ResourceRecordSetProvider = () =>
             managedZone,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, managedZone, name, type),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(env.project, managedZone, name, type)));
         current = created ?? undefined;
       }
 
@@ -438,10 +394,7 @@ export const ResourceRecordSetProvider = () =>
 
       const ttlChanged = (current.ttl ?? DEFAULT_TTL) !== ttl;
       const rrdatasChanged = !sameRrdatas(current.rrdatas, desired.rrdatas);
-      const routingChanged = !sameRoutingPolicy(
-        current.routingPolicy,
-        desired.routingPolicy,
-      );
+      const routingChanged = !sameRoutingPolicy(current.routingPolicy, desired.routingPolicy);
 
       if (ttlChanged || rrdatasChanged || routingChanged) {
         current = yield* dns.patchResourceRecordSets({

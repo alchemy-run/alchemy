@@ -34,7 +34,6 @@ export interface GetEnvironmentCredentials extends Binding.Service<
     >
   >
 > {}
-export const GetEnvironmentCredentials =
-  Binding.Service<GetEnvironmentCredentials>(
-    "AWS.DataZone.GetEnvironmentCredentials",
-  );
+export const GetEnvironmentCredentials = Binding.Service<GetEnvironmentCredentials>(
+  "AWS.DataZone.GetEnvironmentCredentials",
+);

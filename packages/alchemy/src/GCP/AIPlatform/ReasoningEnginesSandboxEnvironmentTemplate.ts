@@ -133,11 +133,7 @@ export class ReasoningEnginesSandboxEnvironmentTemplateStillExists extends Data.
   name: string;
 }> {}
 
-const engineNameOf = (
-  project: string,
-  location: string,
-  reasoningEngine: string,
-) =>
+const engineNameOf = (project: string, location: string, reasoningEngine: string) =>
   reasoningEngine.includes("/")
     ? reasoningEngine
     : `${parentOf(project, location)}/reasoningEngines/${reasoningEngine}`;
@@ -177,18 +173,14 @@ const getByName = (name: string) =>
         })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("SandboxEnvironmentsNotEnabled", () => Effect.succeed(undefined)),
         );
 
 const listAt = (parent: string) =>
   aiplatform.listProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates
     .pages({ parent, pageSize: 100 })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.sandboxEnvironmentTemplates ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.sandboxEnvironmentTemplates ?? [])),
       Stream.take(500),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -220,25 +212,20 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplateStillExists",
+        error._tag === "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplateStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
 const listEngines = (parent: string) =>
-  aiplatform.listProjectsLocationsReasoningEngines
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.reasoningEngines ?? []),
-      ),
-      Stream.take(200),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsReasoningEngines.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.reasoningEngines ?? [])),
+    Stream.take(200),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
   Provider.succeed(ReasoningEnginesSandboxEnvironmentTemplate, {
@@ -254,18 +241,10 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousParent = lastSegment(
-        olds?.reasoningEngine ?? output?.reasoningEngine ?? "",
-      );
+      const previousParent = lastSegment(olds?.reasoningEngine ?? output?.reasoningEngine ?? "");
       const nextParent = lastSegment(news.reasoningEngine);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       if (
         (previousParent.length > 0 && previousParent !== nextParent) ||
         previousLocation !== nextLocation
@@ -277,10 +256,7 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parentRef = olds?.reasoningEngine ?? output?.reasoningEngine;
       // A create interrupted before its parent resolved has nothing to find.
       if (output?.name === undefined && typeof parentRef !== "string") {
@@ -288,23 +264,19 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
       }
       const parent = engineNameOf(env.project, location, parentRef ?? "");
       const existing =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(id, parent));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(id, parent));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDisplayName(existing.displayName);
-      return (yield* ownsDisplayName(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownsDisplayName(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listEngines(parentOf(env.project, location)),
+        const engines = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listEngines(parentOf(env.project, location)),
         )).flat();
         const templates = yield* Effect.forEach(
           engines,
@@ -319,21 +291,14 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = engineNameOf(env.project, location, news.reasoningEngine);
       const internal = yield* createInternalLabels(id);
-      const displayName = encodeDisplayName(
-        internal,
-        news.displayName ?? "sandbox-template",
-      );
+      const displayName = encodeDisplayName(internal, news.displayName ?? "sandbox-template");
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(id, parent));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(id, parent));
 
       if (current === undefined) {
         const created = yield* aiplatform
@@ -351,18 +316,15 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
           created !== undefined
             ? yield* waitForOperation(created, { alreadyExistsOk: true })
             : undefined;
-        const createdName =
-          done !== undefined ? resourceNameFromOperation(done) : undefined;
+        const createdName = done !== undefined ? resourceNameFromOperation(done) : undefined;
         current =
-          createdName !== undefined
-            ? yield* getByName(createdName)
-            : yield* findOwned(id, parent);
+          createdName !== undefined ? yield* getByName(createdName) : yield* findOwned(id, parent);
       }
 
       if (current === undefined || current.name === undefined) {
-        return yield* new ReasoningEnginesSandboxEnvironmentTemplateNotResolved(
-          { name: output?.name ?? parent },
-        );
+        return yield* new ReasoningEnginesSandboxEnvironmentTemplateNotResolved({
+          name: output?.name ?? parent,
+        });
       }
       return toAttrs(current, env.project);
     }),

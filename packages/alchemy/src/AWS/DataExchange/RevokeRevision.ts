@@ -32,16 +32,8 @@ export interface RevokeRevision extends Binding.Service<
     revision: Revision,
   ) => Effect.Effect<
     (
-      request: Omit<
-        dataexchange.RevokeRevisionRequest,
-        "DataSetId" | "RevisionId"
-      >,
-    ) => Effect.Effect<
-      dataexchange.RevokeRevisionResponse,
-      dataexchange.RevokeRevisionError
-    >
+      request: Omit<dataexchange.RevokeRevisionRequest, "DataSetId" | "RevisionId">,
+    ) => Effect.Effect<dataexchange.RevokeRevisionResponse, dataexchange.RevokeRevisionError>
   >
 > {}
-export const RevokeRevision = Binding.Service<RevokeRevision>(
-  "AWS.DataExchange.RevokeRevision",
-);
+export const RevokeRevision = Binding.Service<RevokeRevision>("AWS.DataExchange.RevokeRevision");

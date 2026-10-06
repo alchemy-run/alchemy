@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as appengine from "@distilled.cloud/gcp/appengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { CERT_A, CERT_B, KEY_A, KEY_B } from "./fixtures/cert.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { CERT_A, CERT_B, KEY_A, KEY_B } from "./fixtures/cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs an App Engine application in the project, which is permanent once
 // created (it can never be deleted). The testing project has none and the
@@ -106,14 +103,11 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AppEngine.ApplicationsAuthorizedCertificate(
-            "FrontendTls",
-            {
-              displayName: "frontend",
-              publicCertificate: CERT_A,
-              privateKey: KEY_A,
-            },
-          );
+          return yield* GCP.AppEngine.ApplicationsAuthorizedCertificate("FrontendTls", {
+            displayName: "frontend",
+            publicCertificate: CERT_A,
+            privateKey: KEY_A,
+          });
         }),
       );
 
@@ -121,30 +115,24 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.displayName).toEqual("frontend");
       expect(created.applicationsId).toEqual(project);
 
-      const fetched =
-        yield* appengine.getProjectsLocationsApplicationsAuthorizedCertificates(
-          {
-            projectsId: created.project,
-            locationsId: created.location,
-            applicationsId: created.applicationsId,
-            authorizedCertificatesId: created.certificateId,
-          },
-        );
+      const fetched = yield* appengine.getProjectsLocationsApplicationsAuthorizedCertificates({
+        projectsId: created.project,
+        locationsId: created.location,
+        applicationsId: created.applicationsId,
+        authorizedCertificatesId: created.certificateId,
+      });
       expect(fetched.id).toEqual(created.certificateId);
       expect(fetched.displayName).toContain("[alchemy ");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AppEngine.ApplicationsAuthorizedCertificate(
-            "FrontendTls",
-            {
-              certificateId: created.certificateId,
-              location: created.location,
-              displayName: "frontend-prod",
-              publicCertificate: CERT_B,
-              privateKey: KEY_B,
-            },
-          );
+          return yield* GCP.AppEngine.ApplicationsAuthorizedCertificate("FrontendTls", {
+            certificateId: created.certificateId,
+            location: created.location,
+            displayName: "frontend-prod",
+            publicCertificate: CERT_B,
+            privateKey: KEY_B,
+          });
         }),
       );
 

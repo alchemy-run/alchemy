@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_SNAPSHOT_TYPE = "STANDARD";
 
@@ -148,9 +148,7 @@ export type RegionSnapshot = Resource<
  * @resource
  * @category Compute
  */
-export const RegionSnapshot = Resource<RegionSnapshot>(
-  "GCP.Compute.RegionSnapshot",
-);
+export const RegionSnapshot = Resource<RegionSnapshot>("GCP.Compute.RegionSnapshot");
 
 export class RegionSnapshotNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionSnapshotNotResolved",
@@ -159,16 +157,12 @@ export class RegionSnapshotNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionSnapshotNotReady extends Data.TaggedError(
-  "GCP.Compute.RegionSnapshotNotReady",
-)<{
+export class RegionSnapshotNotReady extends Data.TaggedError("GCP.Compute.RegionSnapshotNotReady")<{
   snapshotName: string;
   status: string;
 }> {}
 
-export class RegionSnapshotFailed extends Data.TaggedError(
-  "GCP.Compute.RegionSnapshotFailed",
-)<{
+export class RegionSnapshotFailed extends Data.TaggedError("GCP.Compute.RegionSnapshotFailed")<{
   snapshotName: string;
   status: string;
 }> {}
@@ -196,9 +190,7 @@ const canonicalizeSource = (source: string | undefined): string => {
   if (zonal?.[1] !== undefined) return zonal[1];
   const regional = cleaned.match(/(regions\/[^/]+\/disks\/[^/]+)$/);
   if (regional?.[1] !== undefined) return regional[1];
-  const instant = cleaned.match(
-    /((?:zones|regions)\/[^/]+\/instantSnapshots\/[^/]+)$/,
-  );
+  const instant = cleaned.match(/((?:zones|regions)\/[^/]+\/instantSnapshots\/[^/]+)$/);
   if (instant?.[1] !== undefined) return instant[1];
   return cleaned.replace(/^https?:\/\/[^/]+\//, "");
 };
@@ -253,17 +245,11 @@ const getByName = (project: string, region: string, snapshot: string) =>
     .getRegionSnapshots({ project, region, snapshot })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitSnapshotReady = (
-  project: string,
-  region: string,
-  snapshotName: string,
-) =>
+const waitSnapshotReady = (project: string, region: string, snapshotName: string) =>
   getByName(project, region, snapshotName).pipe(
     Effect.flatMap((snapshot) =>
       snapshot?.status === "FAILED"
-        ? Effect.fail(
-            new RegionSnapshotFailed({ snapshotName, status: "FAILED" }),
-          )
+        ? Effect.fail(new RegionSnapshotFailed({ snapshotName, status: "FAILED" }))
         : Effect.succeed(snapshot),
     ),
     Effect.filterOrFail(
@@ -283,11 +269,7 @@ const waitSnapshotReady = (
     }),
   );
 
-const waitSnapshotGone = (
-  project: string,
-  region: string,
-  snapshotName: string,
-) =>
+const waitSnapshotGone = (project: string, region: string, snapshotName: string) =>
   getByName(project, region, snapshotName).pipe(
     Effect.flatMap((snapshot) =>
       snapshot === undefined
@@ -329,46 +311,29 @@ export const RegionSnapshotProvider = () =>
 
       const previousName = olds?.snapshotName ?? output?.snapshotName;
       const nextName = news.snapshotName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
-      const previousSource = canonicalizeSource(
-        olds?.sourceDisk ?? output?.sourceDisk,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
+      const previousSource = canonicalizeSource(olds?.sourceDisk ?? output?.sourceDisk);
       const nextSource = canonicalizeSource(news.sourceDisk);
       const previousInstant = canonicalizeSource(
         olds?.sourceInstantSnapshot ?? output?.sourceInstantSnapshot,
       );
       const nextInstant = canonicalizeSource(news.sourceInstantSnapshot);
-      const previousType =
-        olds?.snapshotType ?? output?.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
+      const previousType = olds?.snapshotType ?? output?.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
       const nextType = news.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
       const previousChain = olds?.chainName ?? output?.chainName ?? "";
       const nextChain = news.chainName ?? "";
       const locationsSpecified = news.storageLocations !== undefined;
       const locationsChanged =
         locationsSpecified &&
-        !sameLocations(
-          news.storageLocations,
-          olds?.storageLocations ?? output?.storageLocations,
-        );
+        !sameLocations(news.storageLocations, olds?.storageLocations ?? output?.storageLocations);
 
       const replace =
         previousRegion !== nextRegion ||
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
-        (nextSource.length > 0 &&
-          previousSource.length > 0 &&
-          previousSource !== nextSource) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
+        (nextSource.length > 0 && previousSource.length > 0 && previousSource !== nextSource) ||
         previousInstant !== nextInstant ||
         previousType !== nextType ||
         previousDescription !== nextDescription ||
@@ -388,21 +353,12 @@ export const RegionSnapshotProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const snapshotName = yield* toName(
-        id,
-        olds?.snapshotName,
-        output?.snapshotName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const snapshotName = yield* toName(id, olds?.snapshotName, output?.snapshotName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, snapshotName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -418,9 +374,7 @@ export const RegionSnapshotProvider = () =>
           })
           .pipe(
             Stream.filter((snapshot) =>
-              Object.keys(snapshot.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(snapshot.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((snapshot) => toAttrs(snapshot, env.project)),
             Stream.runCollect,
@@ -430,11 +384,7 @@ export const RegionSnapshotProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const snapshotName = yield* toName(
-        id,
-        news.snapshotName,
-        output?.snapshotName,
-      );
+      const snapshotName = yield* toName(id, news.snapshotName, output?.snapshotName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),

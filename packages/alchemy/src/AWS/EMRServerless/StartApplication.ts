@@ -27,9 +27,7 @@ export interface StartApplication extends Binding.Service<
   "AWS.EMRServerless.StartApplication",
   (
     application: Application,
-  ) => Effect.Effect<
-    () => Effect.Effect<emr.StartApplicationResponse, emr.StartApplicationError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<emr.StartApplicationResponse, emr.StartApplicationError>>
 > {}
 export const StartApplication = Binding.Service<StartApplication>(
   "AWS.EMRServerless.StartApplication",

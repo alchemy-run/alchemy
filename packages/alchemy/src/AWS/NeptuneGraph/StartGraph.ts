@@ -26,12 +26,7 @@ export interface StartGraph extends Binding.Service<
   (
     graph: Graph,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      neptunegraph.StartGraphOutput,
-      neptunegraph.StartGraphError
-    >
+    () => Effect.Effect<neptunegraph.StartGraphOutput, neptunegraph.StartGraphError>
   >
 > {}
-export const StartGraph = Binding.Service<StartGraph>(
-  "AWS.NeptuneGraph.StartGraph",
-);
+export const StartGraph = Binding.Service<StartGraph>("AWS.NeptuneGraph.StartGraph");

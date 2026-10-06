@@ -33,10 +33,7 @@ export interface GetHealthCheckStatus extends Binding.Service<
   (
     healthCheck: HealthCheck,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      route53.GetHealthCheckStatusResponse,
-      route53.GetHealthCheckStatusError
-    >
+    () => Effect.Effect<route53.GetHealthCheckStatusResponse, route53.GetHealthCheckStatusError>
   >
 > {}
 export const GetHealthCheckStatus = Binding.Service<GetHealthCheckStatus>(

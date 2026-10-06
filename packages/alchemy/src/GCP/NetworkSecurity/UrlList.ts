@@ -9,13 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  normalizeLocation,
-  parentOf,
-  parseResourceName,
-  resourceName,
-  toId,
-} from "./names.ts";
+import { normalizeLocation, parentOf, parseResourceName, resourceName, toId } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 import {
   createInternalLabels,
@@ -123,23 +117,15 @@ export type UrlList = Resource<
  */
 export const UrlList = Resource<UrlList>("GCP.NetworkSecurity.UrlList");
 
-export class UrlListNotResolved extends Data.TaggedError(
-  "GCP.NetworkSecurity.UrlListNotResolved",
-)<{
+export class UrlListNotResolved extends Data.TaggedError("GCP.NetworkSecurity.UrlListNotResolved")<{
   name: string;
 }> {}
 
-export class UrlListStillExists extends Data.TaggedError(
-  "GCP.NetworkSecurity.UrlListStillExists",
-)<{
+export class UrlListStillExists extends Data.TaggedError("GCP.NetworkSecurity.UrlListStillExists")<{
   name: string;
 }> {}
 
-const toAttrs = (
-  list: networksecurity.UrlList,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (list: networksecurity.UrlList, project: string, region: string) => {
   const name = list.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   const owned = parseDescription(list.description);
@@ -163,9 +149,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((list) =>
-      list
-        ? Effect.succeed(list)
-        : Effect.fail(new UrlListNotResolved({ name })),
+      list ? Effect.succeed(list) : Effect.fail(new UrlListNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.UrlListNotResolved",
@@ -177,9 +161,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((list) =>
-      list === undefined
-        ? Effect.void
-        : Effect.fail(new UrlListStillExists({ name })),
+      list === undefined ? Effect.void : Effect.fail(new UrlListStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.UrlListStillExists",
@@ -212,18 +194,13 @@ export const UrlListProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.urlListId ?? output?.urlListId;
       const nextId = news.urlListId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -233,19 +210,9 @@ export const UrlListProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const urlListId = yield* toId(
-        id,
-        olds?.urlListId,
-        output?.urlListId,
-        "urllist",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, urlListId);
+      const urlListId = yield* toId(id, olds?.urlListId, output?.urlListId, "urllist");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, urlListId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -261,16 +228,8 @@ export const UrlListProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const urlListId = yield* toId(
-        id,
-        news.urlListId,
-        output?.urlListId,
-        "urllist",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const urlListId = yield* toId(id, news.urlListId, output?.urlListId, "urllist");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, COLLECTION, urlListId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -306,8 +265,7 @@ export const UrlListProvider = () =>
         return yield* new UrlListNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const valuesChanged = !sameStringList(current.values, desiredValues);
 
       if (descriptionChanged || valuesChanged) {
@@ -315,17 +273,15 @@ export const UrlListProvider = () =>
           descriptionChanged ? "description" : undefined,
           valuesChanged ? "values" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation = yield* networksecurity.patchProjectsLocationsUrlLists(
-          {
+        const operation = yield* networksecurity.patchProjectsLocationsUrlLists({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              values: desiredValues,
-            },
+            description: desiredDescription,
+            values: desiredValues,
           },
-        );
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);
       }

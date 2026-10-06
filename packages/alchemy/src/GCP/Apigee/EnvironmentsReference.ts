@@ -7,6 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   deployedConfig,
@@ -25,7 +26,6 @@ import {
   sameText,
   toResourceId,
 } from "./common.ts";
-import { createInternalLabels } from "../Labels.ts";
 
 const MAX_NAME_LENGTH = 255;
 const DEFAULT_RESOURCE_TYPE = "KeyStore";
@@ -119,11 +119,7 @@ export class EnvironmentsReferenceNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organizationId: string,
-  environmentId: string,
-  referenceId: string,
-) =>
+const resourceName = (organizationId: string, environmentId: string, referenceId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/references/${referenceId}`;
 
 const toAttrs = (
@@ -136,9 +132,7 @@ const toAttrs = (
   const referenceId = lastSegment(raw);
   const description = parseDescription(reference.description);
   return {
-    name: raw.includes("/")
-      ? raw
-      : resourceName(organizationId, environmentId, referenceId || raw),
+    name: raw.includes("/") ? raw : resourceName(organizationId, environmentId, referenceId || raw),
     referenceId: referenceId || raw,
     organizationId: parsed.organizationId || organizationId,
     environmentId: parsed.environmentId || environmentId,
@@ -167,8 +161,7 @@ export const EnvironmentsReferenceProvider = () =>
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -184,18 +177,11 @@ export const EnvironmentsReferenceProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
-      const referenceId = yield* toResourceId(
-        id,
-        olds?.referenceId,
-        output?.referenceId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
-      const name =
-        output?.name ??
-        resourceName(organizationId, environmentId, referenceId);
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
+      const referenceId = yield* toResourceId(id, olds?.referenceId, output?.referenceId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
+      const name = output?.name ?? resourceName(organizationId, environmentId, referenceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organizationId, environmentId);
@@ -208,9 +194,7 @@ export const EnvironmentsReferenceProvider = () =>
         const environments = yield* listProjectEnvironments();
         const found: EnvironmentsReference["Attributes"][] = [];
         for (const item of environments) {
-          const ids = namesFromConfig(
-            (yield* deployedConfig(item.parent))?.resourceReferences,
-          );
+          const ids = namesFromConfig((yield* deployedConfig(item.parent))?.resourceReferences);
           for (const raw of ids) {
             const name = raw.includes("/")
               ? raw
@@ -218,9 +202,7 @@ export const EnvironmentsReferenceProvider = () =>
             const reference = yield* getByName(name);
             if (reference === undefined) continue;
             if (!hasOwnershipMarker(reference.description)) continue;
-            found.push(
-              toAttrs(reference, item.organizationId, item.environmentId),
-            );
+            found.push(toAttrs(reference, item.organizationId, item.environmentId));
           }
         }
         return found;
@@ -230,12 +212,9 @@ export const EnvironmentsReferenceProvider = () =>
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(news.organization, project);
       const environmentId = environmentIdOf(news.environment);
-      const referenceId = yield* toResourceId(
-        id,
-        news.referenceId,
-        output?.referenceId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
+      const referenceId = yield* toResourceId(id, news.referenceId, output?.referenceId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
       const parent = environmentNameOf(organizationId, environmentId);
       const name = resourceName(organizationId, environmentId, referenceId);
       const ownership = yield* createInternalLabels(id);
@@ -285,11 +264,6 @@ export const EnvironmentsReferenceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsEnvironmentsReferences({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

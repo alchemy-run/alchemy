@@ -19,9 +19,16 @@ const build = () => {
   running = true;
   const started = Date.now();
   // Both decks, one after the other: they share the snippet type-check cache.
-  const child = spawn("sh", ["-c", `"${process.execPath}" "${path.join(dir, "build.ts")}" intro && "${process.execPath}" "${path.join(dir, "build.ts")}" loop`], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = spawn(
+    "sh",
+    [
+      "-c",
+      `"${process.execPath}" "${path.join(dir, "build.ts")}" intro && "${process.execPath}" "${path.join(dir, "build.ts")}" loop`,
+    ],
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   let output = "";
   child.stdout.on("data", (d) => (output += d));
   child.stderr.on("data", (d) => (output += d));
@@ -45,7 +52,13 @@ const schedule = (file: string | null) => {
 };
 
 watch(dir, { recursive: true }, (_, file) => {
-  if (file && file.startsWith(`snippets${path.sep}`) === false && file !== "steps.ts" && file !== "loop.ts") return;
+  if (
+    file &&
+    file.startsWith(`snippets${path.sep}`) === false &&
+    file !== "steps.ts" &&
+    file !== "loop.ts"
+  )
+    return;
   schedule(file);
 });
 watch(path.join(dir, "..", "shared"), (_, file) => schedule(file));

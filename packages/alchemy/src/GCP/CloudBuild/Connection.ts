@@ -1,6 +1,6 @@
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -18,8 +18,8 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
-import type { Providers } from "../Providers.ts";
 import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
+import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -378,12 +378,7 @@ export class ConnectionStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-type ScmKind =
-  | "github"
-  | "githubEnterprise"
-  | "gitlab"
-  | "bitbucketDataCenter"
-  | "bitbucketCloud";
+type ScmKind = "github" | "githubEnterprise" | "gitlab" | "bitbucketDataCenter" | "bitbucketCloud";
 
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -394,14 +389,10 @@ const lastSegment = (value: string) => {
 const normalizeLocation = (location: string | undefined, fallback: string) =>
   lastSegment(location ?? fallback).toLowerCase();
 
-const resourceName = (
-  project: string,
-  location: string,
-  connectionId: string,
-) => `projects/${project}/locations/${location}/connections/${connectionId}`;
+const resourceName = (project: string, location: string, connectionId: string) =>
+  `projects/${project}/locations/${location}/connections/${connectionId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -409,10 +400,8 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     connectionId:
       connectionsAt >= 0 && parts[connectionsAt + 1]
         ? parts[connectionsAt + 1]!
@@ -424,11 +413,7 @@ const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(annotations));
 
-const toId = (
-  id: string,
-  connectionId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, connectionId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       connectionId ??
@@ -442,9 +427,7 @@ const toId = (
   });
 
 const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const toOAuthCredential = (
   credential: OAuthCredential | undefined,
@@ -471,9 +454,7 @@ const toServiceDirectory = (
   return compact({ service: config.service });
 };
 
-const toGithub = (
-  config: GitHubConfig | undefined,
-): cloudbuild.GitHubConfig | undefined => {
+const toGithub = (config: GitHubConfig | undefined): cloudbuild.GitHubConfig | undefined => {
   if (config === undefined) return undefined;
   return compact({
     authorizerCredential: toOAuthCredential(config.authorizerCredential),
@@ -538,15 +519,12 @@ const toBitbucketCloud = (
   });
 };
 
-const fromGithub = (
-  config: cloudbuild.GitHubConfig | undefined,
-): GitHubConfig | undefined => {
+const fromGithub = (config: cloudbuild.GitHubConfig | undefined): GitHubConfig | undefined => {
   if (config === undefined) return undefined;
   return compact({
     authorizerCredential: config.authorizerCredential
       ? compact({
-          oauthTokenSecretVersion:
-            config.authorizerCredential.oauthTokenSecretVersion,
+          oauthTokenSecretVersion: config.authorizerCredential.oauthTokenSecretVersion,
         })
       : undefined,
     appInstallationId: config.appInstallationId,
@@ -554,9 +532,7 @@ const fromGithub = (
 };
 
 const fromGithubEnterprise = (
-  config:
-    | cloudbuild.GoogleDevtoolsCloudbuildV2GitHubEnterpriseConfig
-    | undefined,
+  config: cloudbuild.GoogleDevtoolsCloudbuildV2GitHubEnterpriseConfig | undefined,
 ): GitHubEnterpriseConfig | undefined => {
   if (config === undefined) return undefined;
   return compact({
@@ -583,14 +559,12 @@ const fromGitlab = (
     webhookSecretSecretVersion: config.webhookSecretSecretVersion,
     readAuthorizerCredential: config.readAuthorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.readAuthorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.readAuthorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     authorizerCredential: config.authorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.authorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.authorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     serviceDirectoryConfig: config.serviceDirectoryConfig
@@ -609,14 +583,12 @@ const fromBitbucketDataCenter = (
     webhookSecretSecretVersion: config.webhookSecretSecretVersion,
     readAuthorizerCredential: config.readAuthorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.readAuthorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.readAuthorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     authorizerCredential: config.authorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.authorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.authorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     serviceDirectoryConfig: config.serviceDirectoryConfig
@@ -635,14 +607,12 @@ const fromBitbucketCloud = (
     webhookSecretSecretVersion: config.webhookSecretSecretVersion,
     readAuthorizerCredential: config.readAuthorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.readAuthorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.readAuthorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     authorizerCredential: config.authorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.authorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.authorizerCredential.userTokenSecretVersion,
         })
       : undefined,
   });
@@ -668,28 +638,22 @@ const scmKindOf = (value: {
 }): ScmKind | undefined => {
   if (value.githubEnterpriseConfig !== undefined) return "githubEnterprise";
   if (value.gitlabConfig !== undefined) return "gitlab";
-  if (value.bitbucketDataCenterConfig !== undefined)
-    return "bitbucketDataCenter";
+  if (value.bitbucketDataCenterConfig !== undefined) return "bitbucketDataCenter";
   if (value.bitbucketCloudConfig !== undefined) return "bitbucketCloud";
   if (value.githubConfig !== undefined) return "github";
   return undefined;
 };
 
-const observedScmKind = (
-  connection: cloudbuild.Connection,
-): ScmKind | undefined => {
-  if (connection.githubEnterpriseConfig !== undefined)
-    return "githubEnterprise";
+const observedScmKind = (connection: cloudbuild.Connection): ScmKind | undefined => {
+  if (connection.githubEnterpriseConfig !== undefined) return "githubEnterprise";
   if (connection.gitlabConfig !== undefined) return "gitlab";
-  if (connection.bitbucketDataCenterConfig !== undefined)
-    return "bitbucketDataCenter";
+  if (connection.bitbucketDataCenterConfig !== undefined) return "bitbucketDataCenter";
   if (connection.bitbucketCloudConfig !== undefined) return "bitbucketCloud";
   if (connection.githubConfig !== undefined) return "github";
   return undefined;
 };
 
-const desiredScmKind = (news: ConnectionProps): ScmKind | undefined =>
-  scmKindOf(news);
+const desiredScmKind = (news: ConnectionProps): ScmKind | undefined => scmKindOf(news);
 
 const toScmBody = (news: ConnectionProps): Partial<cloudbuild.Connection> => {
   const kind = desiredScmKind(news) ?? "github";
@@ -702,9 +666,7 @@ const toScmBody = (news: ConnectionProps): Partial<cloudbuild.Connection> => {
       return { gitlabConfig: toGitlab(news.gitlabConfig) };
     case "bitbucketDataCenter":
       return {
-        bitbucketDataCenterConfig: toBitbucketDataCenter(
-          news.bitbucketDataCenterConfig,
-        ),
+        bitbucketDataCenterConfig: toBitbucketDataCenter(news.bitbucketDataCenterConfig),
       };
     case "bitbucketCloud":
       return {
@@ -715,15 +677,10 @@ const toScmBody = (news: ConnectionProps): Partial<cloudbuild.Connection> => {
   }
 };
 
-const fieldChanged = (
-  desired: string | undefined,
-  observed: string | undefined,
-) => desired !== undefined && (desired ?? "") !== (observed ?? "");
+const fieldChanged = (desired: string | undefined, observed: string | undefined) =>
+  desired !== undefined && (desired ?? "") !== (observed ?? "");
 
-const githubChanged = (
-  desired: GitHubConfig | undefined,
-  observed: GitHubConfig | undefined,
-) => {
+const githubChanged = (desired: GitHubConfig | undefined, observed: GitHubConfig | undefined) => {
   if (desired === undefined) return false;
   return (
     fieldChanged(desired.appInstallationId, observed?.appInstallationId) ||
@@ -744,14 +701,8 @@ const githubEnterpriseChanged = (
     fieldChanged(desired.apiKey, observed?.apiKey) ||
     fieldChanged(desired.appId, observed?.appId) ||
     fieldChanged(desired.appSlug, observed?.appSlug) ||
-    fieldChanged(
-      desired.privateKeySecretVersion,
-      observed?.privateKeySecretVersion,
-    ) ||
-    fieldChanged(
-      desired.webhookSecretSecretVersion,
-      observed?.webhookSecretSecretVersion,
-    ) ||
+    fieldChanged(desired.privateKeySecretVersion, observed?.privateKeySecretVersion) ||
+    fieldChanged(desired.webhookSecretSecretVersion, observed?.webhookSecretSecretVersion) ||
     fieldChanged(desired.appInstallationId, observed?.appInstallationId) ||
     fieldChanged(
       desired.serviceDirectoryConfig?.service,
@@ -761,17 +712,11 @@ const githubEnterpriseChanged = (
   );
 };
 
-const gitlabChanged = (
-  desired: GitLabConfig | undefined,
-  observed: GitLabConfig | undefined,
-) => {
+const gitlabChanged = (desired: GitLabConfig | undefined, observed: GitLabConfig | undefined) => {
   if (desired === undefined) return false;
   return (
     fieldChanged(desired.hostUri, observed?.hostUri) ||
-    fieldChanged(
-      desired.webhookSecretSecretVersion,
-      observed?.webhookSecretSecretVersion,
-    ) ||
+    fieldChanged(desired.webhookSecretSecretVersion, observed?.webhookSecretSecretVersion) ||
     fieldChanged(
       desired.readAuthorizerCredential?.userTokenSecretVersion,
       observed?.readAuthorizerCredential?.userTokenSecretVersion,
@@ -795,10 +740,7 @@ const bitbucketDataCenterChanged = (
   if (desired === undefined) return false;
   return (
     fieldChanged(desired.hostUri, observed?.hostUri) ||
-    fieldChanged(
-      desired.webhookSecretSecretVersion,
-      observed?.webhookSecretSecretVersion,
-    ) ||
+    fieldChanged(desired.webhookSecretSecretVersion, observed?.webhookSecretSecretVersion) ||
     fieldChanged(
       desired.readAuthorizerCredential?.userTokenSecretVersion,
       observed?.readAuthorizerCredential?.userTokenSecretVersion,
@@ -822,10 +764,7 @@ const bitbucketCloudChanged = (
   if (desired === undefined) return false;
   return (
     fieldChanged(desired.workspace, observed?.workspace) ||
-    fieldChanged(
-      desired.webhookSecretSecretVersion,
-      observed?.webhookSecretSecretVersion,
-    ) ||
+    fieldChanged(desired.webhookSecretSecretVersion, observed?.webhookSecretSecretVersion) ||
     fieldChanged(
       desired.readAuthorizerCredential?.userTokenSecretVersion,
       observed?.readAuthorizerCredential?.userTokenSecretVersion,
@@ -870,13 +809,9 @@ const toAttrs = (connection: cloudbuild.Connection, project: string) => {
     disabled: connection.disabled === true,
     annotations: userAnnotations(connection.annotations),
     githubConfig: fromGithub(connection.githubConfig),
-    githubEnterpriseConfig: fromGithubEnterprise(
-      connection.githubEnterpriseConfig,
-    ),
+    githubEnterpriseConfig: fromGithubEnterprise(connection.githubEnterpriseConfig),
     gitlabConfig: fromGitlab(connection.gitlabConfig),
-    bitbucketDataCenterConfig: fromBitbucketDataCenter(
-      connection.bitbucketDataCenterConfig,
-    ),
+    bitbucketDataCenterConfig: fromBitbucketDataCenter(connection.bitbucketDataCenterConfig),
     bitbucketCloudConfig: fromBitbucketCloud(connection.bitbucketCloudConfig),
     installationState: fromInstallationState(connection.installationState),
     reconciling: connection.reconciling === true,
@@ -896,10 +831,7 @@ const getByName = (name: string) =>
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */
-const waitForOperation = (
-  operation: cloudbuild.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+const waitForOperation = (operation: cloudbuild.Operation, options?: { notFoundOk?: boolean }) =>
   Effect.suspend(() => {
     let latest = operation;
     return waitForLongRunningOperation(
@@ -948,9 +880,7 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connection) =>
-      connection
-        ? Effect.succeed(connection)
-        : Effect.fail(new ConnectionNotResolved({ name })),
+      connection ? Effect.succeed(connection) : Effect.fail(new ConnectionNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.ConnectionNotResolved",
@@ -962,9 +892,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connection) =>
-      connection === undefined
-        ? Effect.void
-        : Effect.fail(new ConnectionStillExists({ name })),
+      connection === undefined ? Effect.void : Effect.fail(new ConnectionStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.ConnectionStillExists",
@@ -982,53 +910,31 @@ export const ConnectionProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.connectionId ?? output?.connectionId;
       const nextId = news.connectionId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const locationChanged = previousLocation !== nextLocation;
 
       const previousKind =
-        desiredScmKind(olds ?? {}) ??
-        (output === undefined ? undefined : scmKindOf(output));
+        desiredScmKind(olds ?? {}) ?? (output === undefined ? undefined : scmKindOf(output));
       const nextKind = desiredScmKind(news);
       const kindChanged =
-        previousKind !== undefined &&
-        nextKind !== undefined &&
-        nextKind !== previousKind;
+        previousKind !== undefined && nextKind !== undefined && nextKind !== previousKind;
 
-      const previousHost =
-        immutableHostOf(olds ?? {}) ?? immutableHostOf(output ?? {});
+      const previousHost = immutableHostOf(olds ?? {}) ?? immutableHostOf(output ?? {});
       const nextHost = immutableHostOf(news);
       const hostChanged =
-        previousHost !== undefined &&
-        nextHost !== undefined &&
-        nextHost !== previousHost;
+        previousHost !== undefined && nextHost !== undefined && nextHost !== previousHost;
 
-      const previousWebhook =
-        immutableWebhookOf(olds ?? {}) ?? immutableWebhookOf(output ?? {});
+      const previousWebhook = immutableWebhookOf(olds ?? {}) ?? immutableWebhookOf(output ?? {});
       const nextWebhook = immutableWebhookOf(news);
       const webhookChanged =
         previousWebhook !== undefined &&
         nextWebhook !== undefined &&
         nextWebhook !== previousWebhook;
 
-      if (
-        idChanged ||
-        locationChanged ||
-        kindChanged ||
-        hostChanged ||
-        webhookChanged
-      ) {
+      if (idChanged || locationChanged || kindChanged || hostChanged || webhookChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -1036,17 +942,9 @@ export const ConnectionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const connectionId = yield* toId(
-        id,
-        olds?.connectionId,
-        output?.connectionId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, connectionId);
+      const connectionId = yield* toId(id, olds?.connectionId, output?.connectionId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -1065,13 +963,9 @@ export const ConnectionProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.connections ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.connections ?? [])),
             Stream.filter((connection) =>
-              Object.keys(connection.annotations ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(connection.annotations ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((connection) => toAttrs(connection, env.project)),
             Stream.runCollect,
@@ -1082,15 +976,8 @@ export const ConnectionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const connectionId = yield* toId(
-        id,
-        news.connectionId,
-        output?.connectionId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const connectionId = yield* toId(id, news.connectionId, output?.connectionId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, connectionId);
       const parent = parentOf(env.project, location);
       const desiredAnnotations = {
@@ -1125,17 +1012,13 @@ export const ConnectionProvider = () =>
       }
 
       const observedAnnotations = tagRecord(current.annotations);
-      const { upsert, removed } = diffLabels(
-        observedAnnotations,
-        desiredAnnotations,
-      );
+      const { upsert, removed } = diffLabels(observedAnnotations, desiredAnnotations);
       const annotationsChanged = upsert.length > 0 || removed.length > 0;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
       const observedKind = observedScmKind(current);
       const nextKind = desiredScmKind(news);
       const githubConfigChanged =
-        nextKind === "github" &&
-        githubChanged(news.githubConfig, fromGithub(current.githubConfig));
+        nextKind === "github" && githubChanged(news.githubConfig, fromGithub(current.githubConfig));
       const githubEnterpriseConfigChanged =
         nextKind === "githubEnterprise" &&
         githubEnterpriseChanged(
@@ -1143,8 +1026,7 @@ export const ConnectionProvider = () =>
           fromGithubEnterprise(current.githubEnterpriseConfig),
         );
       const gitlabConfigChanged =
-        nextKind === "gitlab" &&
-        gitlabChanged(news.gitlabConfig, fromGitlab(current.gitlabConfig));
+        nextKind === "gitlab" && gitlabChanged(news.gitlabConfig, fromGitlab(current.gitlabConfig));
       const bitbucketDataCenterConfigChanged =
         nextKind === "bitbucketDataCenter" &&
         bitbucketDataCenterChanged(
@@ -1158,9 +1040,7 @@ export const ConnectionProvider = () =>
           fromBitbucketCloud(current.bitbucketCloudConfig),
         );
       const scmChanged =
-        (nextKind !== undefined &&
-          observedKind !== undefined &&
-          nextKind !== observedKind) ||
+        (nextKind !== undefined && observedKind !== undefined && nextKind !== observedKind) ||
         githubConfigChanged ||
         githubEnterpriseConfigChanged ||
         gitlabConfigChanged ||
@@ -1170,15 +1050,11 @@ export const ConnectionProvider = () =>
       const updateMask = [
         annotationsChanged ? "annotations" : undefined,
         disabledChanged ? "disabled" : undefined,
-        scmChanged && (nextKind ?? observedKind) === "github"
-          ? "githubConfig"
-          : undefined,
+        scmChanged && (nextKind ?? observedKind) === "github" ? "githubConfig" : undefined,
         scmChanged && (nextKind ?? observedKind) === "githubEnterprise"
           ? "githubEnterpriseConfig"
           : undefined,
-        scmChanged && (nextKind ?? observedKind) === "gitlab"
-          ? "gitlabConfig"
-          : undefined,
+        scmChanged && (nextKind ?? observedKind) === "gitlab" ? "gitlabConfig" : undefined,
         scmChanged && (nextKind ?? observedKind) === "bitbucketDataCenter"
           ? "bitbucketDataCenterConfig"
           : undefined,

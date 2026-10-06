@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -173,15 +168,11 @@ const listOwned = (project: string, region: string) =>
             view: "IMPORT_JOB_VIEW_BASIC",
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.importJobs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.importJobs ?? [])),
             Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as mc.ImportJob[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as mc.ImportJob[])),
           ),
       ),
     );
@@ -204,10 +195,7 @@ export const ImportJobProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.importJobId ?? output?.importJobId,
         nextId: news.importJobId ?? olds?.importJobId ?? output?.importJobId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -224,18 +212,12 @@ export const ImportJobProvider = () =>
         output?.importJobId,
         "importjob",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, importJobId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, importJobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -253,10 +235,7 @@ export const ImportJobProvider = () =>
         output?.importJobId,
         "importjob",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, importJobId);
       const assetSource = sourceOf(news.assetSource, env.project, location);
       const desiredLabels = {
@@ -293,10 +272,7 @@ export const ImportJobProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const mask = fieldMask([
-        labelsChanged && "labels",
-        displayNameChanged && "displayName",
-      ]);
+      const mask = fieldMask([labelsChanged && "labels", displayNameChanged && "displayName"]);
 
       if (mask.length > 0) {
         const operation = yield* mc.patchProjectsLocationsImportJobs({
@@ -309,10 +285,7 @@ export const ImportJobProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

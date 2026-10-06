@@ -93,13 +93,9 @@ export type MonetizationSubscriptionsBasePlansOffer = Resource<
     /** Offer phases. */
     phases: androidpublisher.SubscriptionOfferPhase[] | undefined;
     /** Regional availability. */
-    regionalConfigs:
-      | androidpublisher.RegionalSubscriptionOfferConfig[]
-      | undefined;
+    regionalConfigs: androidpublisher.RegionalSubscriptionOfferConfig[] | undefined;
     /** Configuration for future Play locations. */
-    otherRegionsConfig:
-      | androidpublisher.OtherRegionsSubscriptionOfferConfig
-      | undefined;
+    otherRegionsConfig: androidpublisher.OtherRegionsSubscriptionOfferConfig | undefined;
     /** Custom billing-library tags. */
     offerTags: androidpublisher.OfferTag[] | undefined;
     /** Eligibility targeting. */
@@ -190,10 +186,7 @@ export class MonetizationSubscriptionsBasePlansOfferNotResolved extends Data.Tag
   offerId: string;
 }> {}
 
-const toAttrs = (
-  offer: androidpublisher.SubscriptionOffer,
-  project: string,
-) => ({
+const toAttrs = (offer: androidpublisher.SubscriptionOffer, project: string) => ({
   packageName: offer.packageName ?? "",
   productId: offer.productId ?? "",
   basePlanId: offer.basePlanId ?? "",
@@ -233,10 +226,8 @@ const needsSync = (
   !jsonEqual(current.regionalConfigs, desired.regionalConfigs) ||
   (desired.otherRegionsConfig !== undefined &&
     !jsonEqual(current.otherRegionsConfig, desired.otherRegionsConfig)) ||
-  (desired.offerTags !== undefined &&
-    !jsonEqual(current.offerTags, desired.offerTags)) ||
-  (desired.targeting !== undefined &&
-    !jsonEqual(current.targeting, desired.targeting));
+  (desired.offerTags !== undefined && !jsonEqual(current.offerTags, desired.offerTags)) ||
+  (desired.targeting !== undefined && !jsonEqual(current.targeting, desired.targeting));
 
 const syncMask = (
   current: androidpublisher.SubscriptionOffer,
@@ -244,19 +235,15 @@ const syncMask = (
 ) =>
   updateMaskOf(
     !jsonEqual(current.phases, desired.phases) ? "phases" : undefined,
-    !jsonEqual(current.regionalConfigs, desired.regionalConfigs)
-      ? "regionalConfigs"
-      : undefined,
+    !jsonEqual(current.regionalConfigs, desired.regionalConfigs) ? "regionalConfigs" : undefined,
     desired.otherRegionsConfig !== undefined &&
       !jsonEqual(current.otherRegionsConfig, desired.otherRegionsConfig)
       ? "otherRegionsConfig"
       : undefined,
-    desired.offerTags !== undefined &&
-      !jsonEqual(current.offerTags, desired.offerTags)
+    desired.offerTags !== undefined && !jsonEqual(current.offerTags, desired.offerTags)
       ? "offerTags"
       : undefined,
-    desired.targeting !== undefined &&
-      !jsonEqual(current.targeting, desired.targeting)
+    desired.targeting !== undefined && !jsonEqual(current.targeting, desired.targeting)
       ? "targeting"
       : undefined,
   );
@@ -268,10 +255,7 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousPackage = olds?.packageName ?? output?.packageName;
-      if (
-        previousPackage !== undefined &&
-        news.packageName !== previousPackage
-      ) {
+      if (previousPackage !== undefined && news.packageName !== previousPackage) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousProduct = olds?.productId ?? output?.productId;
@@ -299,12 +283,7 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
       const productId = olds?.productId ?? output?.productId ?? "";
       const basePlanId = olds?.basePlanId ?? output?.basePlanId ?? "";
       const offerId = yield* toOfferId(id, olds?.offerId, output?.offerId);
-      const existing = yield* getOffer(
-        packageName,
-        productId,
-        basePlanId,
-        offerId,
-      );
+      const existing = yield* getOffer(packageName, productId, basePlanId, offerId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state the offer may not be ours.
@@ -326,12 +305,7 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
         news,
       });
 
-      let current = yield* getOffer(
-        packageName,
-        productId,
-        basePlanId,
-        offerId,
-      );
+      let current = yield* getOffer(packageName, productId, basePlanId, offerId);
 
       if (current === undefined) {
         const created = yield* androidpublisher
@@ -363,19 +337,16 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
       if (needsSync(current, desired)) {
         const updateMask = syncMask(current, desired);
         if (updateMask.length > 0) {
-          current =
-            yield* androidpublisher.patchMonetizationSubscriptionsBasePlansOffers(
-              {
-                packageName,
-                productId,
-                basePlanId,
-                offerId: current.offerId ?? offerId,
-                updateMask,
-                "regionsVersion.version": regionsVersion,
-                latencyTolerance: news.latencyTolerance,
-                body: desired,
-              },
-            );
+          current = yield* androidpublisher.patchMonetizationSubscriptionsBasePlansOffers({
+            packageName,
+            productId,
+            basePlanId,
+            offerId: current.offerId ?? offerId,
+            updateMask,
+            "regionsVersion.version": regionsVersion,
+            latencyTolerance: news.latencyTolerance,
+            body: desired,
+          });
         }
       }
 
@@ -383,12 +354,7 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      if (
-        !output.packageName ||
-        !output.productId ||
-        !output.basePlanId ||
-        !output.offerId
-      ) {
+      if (!output.packageName || !output.productId || !output.basePlanId || !output.offerId) {
         return;
       }
       yield* androidpublisher

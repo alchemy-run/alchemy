@@ -3,7 +3,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import {
@@ -13,17 +12,13 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 export const DEFAULT_SIZE_GIB = "100";
 export const DEFAULT_STORAGE_TYPE = "SSD";
 
-export {
-  createInternalLabels,
-  hasAlchemyLabels,
-  stripInternalLabels,
-  toLabels,
-};
+export { createInternalLabels, hasAlchemyLabels, stripInternalLabels, toLabels };
 
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.BareMetalSolution.ResourceNotResolved",
@@ -37,16 +32,12 @@ export class ResourceStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.BareMetalSolution.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.BareMetalSolution.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.BareMetalSolution.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.BareMetalSolution.ResourceFailed")<{
   name: string;
   state: string;
   details: string | undefined;
@@ -72,10 +63,8 @@ export const rfc1035 = (name: string, fallback = "baremetal"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -99,26 +88,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -145,17 +124,15 @@ export const networkOf = (value: string, project: string, location: string) => {
   return `projects/${project}/locations/${location}/networks/${rfc1035(next, "network")}`;
 };
 
-export const gibOf = (
-  value: number | string | undefined,
-): string | undefined => (value === undefined ? undefined : String(value));
+export const gibOf = (value: number | string | undefined): string | undefined =>
+  value === undefined ? undefined : String(value);
 
 export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const encodeOwnership = (
   labels: Record<string, string>,
@@ -189,9 +166,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -214,8 +189,7 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 const pickDefined = (observed: unknown, desired: unknown): unknown => {
   if (desired === undefined || desired === null) return undefined;
@@ -242,9 +216,7 @@ export const differs = (observed: unknown, desired: unknown): boolean => {
 };
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -306,25 +278,22 @@ export const waitForOperation = (
   waitForGcpOperation(
     operation,
     (name) =>
-      baremetalsolution
-        .getProjectsLocationsOperations({ name })
-        .pipe(
-          Effect.catchTag("NotFound", (error) =>
-            options?.notFoundOk === true
-              ? Effect.succeed<baremetalsolution.Operation>({
-                  name,
-                  done: true,
-                })
-              : Effect.fail(error),
-          ),
+      baremetalsolution.getProjectsLocationsOperations({ name }).pipe(
+        Effect.catchTag("NotFound", (error) =>
+          options?.notFoundOk === true
+            ? Effect.succeed<baremetalsolution.Operation>({
+                name,
+                done: true,
+              })
+            : Effect.fail(error),
         ),
+      ),
     { budget: "30 minutes" },
   ).pipe(
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.asVoid,
@@ -399,9 +368,7 @@ export const waitUntilReady = <A, E, R>(
       (value) => new ResourceNotReady({ name, state: stateOf(value) ?? "" }),
     ),
     Effect.retry({
-      while: (error) =>
-        error instanceof ResourceNotReady ||
-        error instanceof ResourceNotResolved,
+      while: (error) => error instanceof ResourceNotReady || error instanceof ResourceNotResolved,
       times: options?.times ?? 10,
       schedule: Schedule.spaced(options?.interval ?? "5 seconds"),
     }),
@@ -424,8 +391,7 @@ export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
 ) =>
   list(`projects/${project}/locations/${region}`).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       (): Effect.Effect<A[]> => Effect.succeed([]),
     ),
   );

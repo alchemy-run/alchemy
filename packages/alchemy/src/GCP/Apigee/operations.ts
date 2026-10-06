@@ -15,19 +15,10 @@ import {
   parseDescription,
 } from "./ownership.ts";
 
-export {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  orgIdOf,
-  orgParent,
-  parseDescription,
-};
+export { encodeDescription, hasOwnershipMarker, lastSegment, orgIdOf, orgParent, parseDescription };
 
 export const orgNameOf = (organization: string) =>
-  organization.startsWith("organizations/")
-    ? organization
-    : `organizations/${organization}`;
+  organization.startsWith("organizations/") ? organization : `organizations/${organization}`;
 
 export const orgName = orgNameOf;
 
@@ -36,8 +27,7 @@ export const defaultOrgName = (project: string, organization?: string) =>
 
 export const createOwnership = (id: string) => createInternalLabels(id);
 
-export const ownedBy = (id: string, labels: Record<string, string>) =>
-  hasAlchemyLabels(id, labels);
+export const ownedBy = (id: string, labels: Record<string, string>) => hasAlchemyLabels(id, labels);
 
 export const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -47,12 +37,9 @@ export const jsonEqual = sameJson;
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
-export const sortedStrings = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].sort();
+export const sortedStrings = (values: readonly string[] | undefined) => [...(values ?? [])].sort();
 
 export const sameRecord = (
   left: Record<string, string> | undefined,
@@ -116,20 +103,16 @@ export const collectPages = <Page, Item, E, R>(
 export const listOrgNames = () =>
   Effect.gen(function* () {
     const env = yield* GcpEnvironment.current;
-    const page = yield* apigee
-      .listOrganizations({ parent: "organizations" })
-      .pipe(
-        Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-          Effect.succeed({
-            organizations:
-              [] as apigee.GoogleCloudApigeeV1OrganizationProjectMappingList,
-          }),
-        ),
-      );
+    const page = yield* apigee.listOrganizations({ parent: "organizations" }).pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed({
+          organizations: [] as apigee.GoogleCloudApigeeV1OrganizationProjectMappingList,
+        }),
+      ),
+    );
     const mappings = (page.organizations ?? []).filter(
       (mapping) =>
-        mapping.projectId === env.project ||
-        (mapping.projectIds ?? []).includes(env.project),
+        mapping.projectId === env.project || (mapping.projectIds ?? []).includes(env.project),
     );
     const ids =
       mappings.length > 0
@@ -148,9 +131,7 @@ export const childName = (parent: string, collection: string, id: string) =>
   `${parent}/${collection}/${lastSegment(id)}`;
 
 const isAttributesObject = (
-  value:
-    | readonly apigee.GoogleCloudApigeeV1Attribute[]
-    | apigee.GoogleCloudApigeeV1Attributes,
+  value: readonly apigee.GoogleCloudApigeeV1Attribute[] | apigee.GoogleCloudApigeeV1Attributes,
 ): value is apigee.GoogleCloudApigeeV1Attributes => !Array.isArray(value);
 
 export const attributesToRecord = (
@@ -178,9 +159,7 @@ export const recordToAttributes = (
   Object.entries(record).map(([name, value]) => ({ name, value }));
 
 export const userAttributes = (record: Record<string, string> | undefined) =>
-  Object.fromEntries(
-    Object.entries(record ?? {}).filter(([key]) => !key.startsWith("alchemy-")),
-  );
+  Object.fromEntries(Object.entries(record ?? {}).filter(([key]) => !key.startsWith("alchemy-")));
 
 export const desiredAttributes = (
   user: Record<string, string> | undefined,
@@ -203,9 +182,8 @@ export const recordToProperties = (
   property: Object.entries(record).map(([name, value]) => ({ name, value })),
 });
 
-export const userProperties = (
-  properties: apigee.GoogleCloudApigeeV1Properties | undefined,
-) => userAttributes(propertiesToRecord(properties));
+export const userProperties = (properties: apigee.GoogleCloudApigeeV1Properties | undefined) =>
+  userAttributes(propertiesToRecord(properties));
 
 /**
  * Wait for an Apigee long-running operation through the shared GCP waiter.

@@ -35,10 +35,7 @@ export interface StartPipelineExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: StartPipelineExecutionRequest,
-    ) => Effect.Effect<
-      SVC.StartPipelineExecutionOutput,
-      SVC.StartPipelineExecutionError
-    >
+    ) => Effect.Effect<SVC.StartPipelineExecutionOutput, SVC.StartPipelineExecutionError>
   >
 > {}
 export const StartPipelineExecution = Binding.Service<StartPipelineExecution>(

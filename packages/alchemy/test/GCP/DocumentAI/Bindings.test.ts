@@ -1,17 +1,13 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as documentai from "@distilled.cloud/gcp/documentai_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import DocumentAIBindingsHost, {
-  Invoice,
-  InvoiceV1,
-  OcrBind,
-} from "./fixtures/bindings-host.ts";
+import DocumentAIBindingsHost, { Invoice, InvoiceV1, OcrBind } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -35,9 +31,7 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const grants = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({
       role: binding.role,
       condition: binding.condition?.expression,
@@ -52,12 +46,7 @@ const expectProjectGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable || !!process.env.FAST)(
   "DocumentAI Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:documentai",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:documentai", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -94,11 +83,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "reads the processor as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const processor =
-              yield* expectProbe<documentai.GoogleCloudDocumentaiV1Processor>(
-                baseUrl,
-                "getProcessor",
-              );
+            const processor = yield* expectProbe<documentai.GoogleCloudDocumentaiV1Processor>(
+              baseUrl,
+              "getProcessor",
+            );
             const live = yield* documentai.getProjectsLocationsProcessors({
               name: processorName,
             });
@@ -139,11 +127,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "reads the schema as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const schema =
-              yield* expectProbe<documentai.GoogleCloudDocumentaiV1NextSchema>(
-                baseUrl,
-                "getSchema",
-              );
+            const schema = yield* expectProbe<documentai.GoogleCloudDocumentaiV1NextSchema>(
+              baseUrl,
+              "getSchema",
+            );
             const live = yield* documentai.getProjectsLocationsSchemas({
               name: schemaName,
             });
@@ -164,26 +151,18 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "reads the schema version as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const version =
-              yield* expectProbe<documentai.GoogleCloudDocumentaiV1SchemaVersion>(
-                baseUrl,
-                "getSchemaVersion",
-              );
-            const live =
-              yield* documentai.getProjectsLocationsSchemasSchemaVersions({
-                name: versionName,
-              });
+            const version = yield* expectProbe<documentai.GoogleCloudDocumentaiV1SchemaVersion>(
+              baseUrl,
+              "getSchemaVersion",
+            );
+            const live = yield* documentai.getProjectsLocationsSchemasSchemaVersions({
+              name: versionName,
+            });
             expect(version.name).toEqual(versionName);
             expect(version.displayName).toEqual("v1");
             expect(
-              version.schema?.entityTypes?.[0]?.properties?.map(
-                (property) => property.name,
-              ),
-            ).toEqual(
-              live.schema?.entityTypes?.[0]?.properties?.map(
-                (property) => property.name,
-              ),
-            );
+              version.schema?.entityTypes?.[0]?.properties?.map((property) => property.name),
+            ).toEqual(live.schema?.entityTypes?.[0]?.properties?.map((property) => property.name));
             yield* expectProjectGrants;
           }),
         {

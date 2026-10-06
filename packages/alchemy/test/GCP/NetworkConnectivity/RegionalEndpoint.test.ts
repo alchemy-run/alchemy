@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -64,43 +61,33 @@ test.provider.skipIf(!runLifecycle)(
             ipCidrRange: "172.20.11.0/24",
             privateIpGoogleAccess: true,
           });
-          const endpoint = yield* GCP.NetworkConnectivity.RegionalEndpoint(
-            "Storage",
-            {
-              targetGoogleApi: "storage.us-central1.p.rep.googleapis.com",
-              accessType: "REGIONAL",
-              network: defaultNetworkSelfLink(project),
-              subnetwork: subnet.selfLink.as<string>(),
-              description: "rep a",
-              labels: { env: "test" },
-            },
-          );
+          const endpoint = yield* GCP.NetworkConnectivity.RegionalEndpoint("Storage", {
+            targetGoogleApi: "storage.us-central1.p.rep.googleapis.com",
+            accessType: "REGIONAL",
+            network: defaultNetworkSelfLink(project),
+            subnetwork: subnet.selfLink.as<string>(),
+            description: "rep a",
+            labels: { env: "test" },
+          });
           return { subnet, endpoint };
         }),
       );
 
       expect(created.endpoint.name).toContain("/regionalEndpoints/");
       expect(created.endpoint.location).toEqual("us-central1");
-      expect(created.endpoint.targetGoogleApi).toEqual(
-        "storage.us-central1.p.rep.googleapis.com",
-      );
+      expect(created.endpoint.targetGoogleApi).toEqual("storage.us-central1.p.rep.googleapis.com");
       expect(created.endpoint.accessType).toEqual("REGIONAL");
       expect(created.endpoint.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networkconnectivity.getProjectsLocationsRegionalEndpoints({
-          name: created.endpoint.name,
-        });
+      const fetched = yield* networkconnectivity.getProjectsLocationsRegionalEndpoints({
+        name: created.endpoint.name,
+      });
       expect(fetched.name).toEqual(created.endpoint.name);
-      expect(fetched.targetGoogleApi).toEqual(
-        "storage.us-central1.p.rep.googleapis.com",
-      );
+      expect(fetched.targetGoogleApi).toEqual("storage.us-central1.p.rep.googleapis.com");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       yield* stack.destroy();
 

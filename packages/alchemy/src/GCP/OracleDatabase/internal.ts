@@ -25,16 +25,12 @@ export class ResourceStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.OracleDatabase.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.OracleDatabase.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.OracleDatabase.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.OracleDatabase.ResourceFailed")<{
   name: string;
   state: string;
   details: string | undefined;
@@ -80,8 +76,7 @@ export const alphanumericId = (name: string, maxLength = 32): string => {
   return next;
 };
 
-export const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+export const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${normalizeLocation(location)}`;
@@ -111,10 +106,8 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts.slice(collectionAt + 1).join("/")
@@ -148,16 +141,10 @@ export const expandNetwork = (project: string, network: string | undefined) => {
   return `projects/${project}/global/networks/${network}`;
 };
 
-export const resourceNameOf = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `projects/${project}/locations/${location}/${collection}/${id}`;
+export const resourceNameOf = (project: string, location: string, collection: string, id: string) =>
+  `projects/${project}/locations/${location}/${collection}/${id}`;
 
-export const retryQuota = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+export const retryQuota = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "TooManyRequests",
@@ -166,13 +153,10 @@ export const retryQuota = <A, E extends { _tag: string }, R>(
     }),
   );
 
-export const retryConflict = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+export const retryConflict = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "Conflict" || error._tag === "TooManyRequests",
+      while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
       times: 8,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -199,24 +183,17 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const specifiedEquals = (
-  desired: unknown,
-  observed: unknown,
-): boolean => {
+export const specifiedEquals = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return true;
-  return (
-    JSON.stringify(canonical(desired) ?? null) ===
-    JSON.stringify(canonical(observed) ?? null)
-  );
+  return JSON.stringify(canonical(desired) ?? null) === JSON.stringify(canonical(observed) ?? null);
 };
 
 export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;

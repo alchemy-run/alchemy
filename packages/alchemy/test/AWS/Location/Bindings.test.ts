@@ -1,22 +1,19 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import LocationTestFunctionLive, { LocationTestFunction } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "LocationBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -35,19 +32,14 @@ const send = (route: string) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((response) => response.json),
   );
@@ -60,11 +52,7 @@ const send = (route: string) =>
 const sendUntil = <T>(route: string, until: (response: T) => boolean) =>
   send(route).pipe(
     Effect.map((response) => response as T),
-    Effect.repeat({
-      schedule: Schedule.spaced("3 seconds"),
-      until,
-      times: 10,
-    }),
+    Effect.repeat({ schedule: Schedule.spaced("3 seconds"), until, times: 10 }),
   );
 
 // Sequential: the tracker tests are write-then-read (BatchUpdateDevicePosition
@@ -86,9 +74,7 @@ describe.skipIf(!!process.env.FAST).sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Location test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Location test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Location test setup: deploying fixture");
@@ -102,21 +88,15 @@ describe.skipIf(!!process.env.FAST).sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `Location test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Location test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Location test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Location test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -125,36 +105,25 @@ describe.skipIf(!!process.env.FAST).sequential(
         // propagate — every geo:* call 500s until it does. Poll a cheap
         // Location-backed route until it succeeds so tests start only once
         // IAM is live.
-        yield* Effect.logInfo(
-          "Location test setup: waiting for IAM propagation",
-        );
+        yield* Effect.logInfo("Location test setup: waiting for IAM propagation");
         yield* HttpClient.get(`${baseUrl}/geofence/list`).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`IAM not propagated: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`IAM not propagated: ${response.status}`)),
           ),
           Effect.flatMap((body) =>
             (body as { ok?: boolean }).ok === true
               ? Effect.void
-              : Effect.fail(
-                  new Error(`geo:* not ready: ${JSON.stringify(body)}`),
-                ),
+              : Effect.fail(new Error(`geo:* not ready: ${JSON.stringify(body)}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Location test setup: geo:* not authorized yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Location test setup: geo:* not authorized yet (${String(error)})`),
           ),
           // IAM propagation of the fresh execution-role policy to geo:* has
           // been observed to take >150s — give it up to ~5 minutes.
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(150),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(150)]),
           }),
         );
       }),
@@ -168,9 +137,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         "uploads a device position to the tracker",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send("/tracker/update")) as {
-              errors: number;
-            };
+            const response = (yield* send("/tracker/update")) as { errors: number };
             expect(response.errors).toBe(0);
           }),
         { timeout: 120_000 },
@@ -198,10 +165,10 @@ describe.skipIf(!!process.env.FAST).sequential(
         "reads several devices in one call",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* sendUntil<{
-              found: number;
-              errors: number;
-            }>("/tracker/batch-get", (r) => r.found > 0);
+            const response = yield* sendUntil<{ found: number; errors: number }>(
+              "/tracker/batch-get",
+              (r) => r.found > 0,
+            );
             expect(response.found).toBe(1);
             expect(response.errors).toBe(0);
           }),
@@ -229,10 +196,10 @@ describe.skipIf(!!process.env.FAST).sequential(
         "lists the tracker's device positions",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* sendUntil<{
-              count: number;
-              deviceIds: string[];
-            }>("/tracker/list", (r) => r.count > 0);
+            const response = yield* sendUntil<{ count: number; deviceIds: string[] }>(
+              "/tracker/list",
+              (r) => r.count > 0,
+            );
             expect(response.count).toBeGreaterThan(0);
             expect(response.deviceIds).toContain("device-1");
           }),
@@ -254,8 +221,7 @@ describe.skipIf(!!process.env.FAST).sequential(
             // rejected with the typed ValidationException — both prove the
             // binding, IAM grant, and typed error union.
             expect(
-              response.inferredState === true ||
-                typeof response.validationError === "string",
+              response.inferredState === true || typeof response.validationError === "string",
             ).toBe(true);
           }),
         { timeout: 120_000 },
@@ -267,9 +233,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         "stores a circular geofence",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send("/geofence/put")) as {
-              geofenceId: string;
-            };
+            const response = (yield* send("/geofence/put")) as { geofenceId: string };
             expect(response.geofenceId).toBe("fence-1");
           }),
         { timeout: 120_000 },
@@ -297,10 +261,10 @@ describe.skipIf(!!process.env.FAST).sequential(
         "lists the collection's geofences",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* sendUntil<{
-              ok: boolean;
-              count?: number;
-            }>("/geofence/list", (r) => r.ok && (r.count ?? 0) > 0);
+            const response = yield* sendUntil<{ ok: boolean; count?: number }>(
+              "/geofence/list",
+              (r) => r.ok && (r.count ?? 0) > 0,
+            );
             expect(response).toMatchObject({ ok: true });
             expect(response.count).toBeGreaterThan(0);
           }),
@@ -360,9 +324,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         "deletes geofences in one call",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send("/geofence/batch-delete")) as {
-              errors: number;
-            };
+            const response = (yield* send("/geofence/batch-delete")) as { errors: number };
             expect(response.errors).toBe(0);
           }),
         { timeout: 120_000 },
@@ -374,9 +336,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         "purges the device's position history",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send("/tracker/delete-history")) as {
-              errors: number;
-            };
+            const response = (yield* send("/tracker/delete-history")) as { errors: number };
             expect(response.errors).toBe(0);
           }),
         { timeout: 120_000 },
@@ -501,9 +461,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         "serves a glyph range",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send("/map/glyphs")) as {
-              bytes: number;
-            };
+            const response = (yield* send("/map/glyphs")) as { bytes: number };
             expect(response.bytes).toBeGreaterThan(0);
           }),
         { timeout: 120_000 },
@@ -515,9 +473,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         "serves the sprite index",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send("/map/sprites")) as {
-              bytes: number;
-            };
+            const response = (yield* send("/map/sprites")) as { bytes: number };
             expect(response.bytes).toBeGreaterThan(0);
           }),
         { timeout: 120_000 },
@@ -557,9 +513,7 @@ describe.skipIf(!!process.env.FAST).sequential(
               tag: string;
               message?: string;
             };
-            expect(response).toMatchObject({
-              tag: "ResourceNotFoundException",
-            });
+            expect(response).toMatchObject({ tag: "ResourceNotFoundException" });
           }),
         { timeout: 120_000 },
       );
@@ -574,9 +528,7 @@ describe.skipIf(!!process.env.FAST).sequential(
               tag: string;
               message?: string;
             };
-            expect(response).toMatchObject({
-              tag: "ResourceNotFoundException",
-            });
+            expect(response).toMatchObject({ tag: "ResourceNotFoundException" });
           }),
         { timeout: 120_000 },
       );

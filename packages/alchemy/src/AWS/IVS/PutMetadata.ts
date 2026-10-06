@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Channel } from "./Channel.ts";
 
-export interface PutMetadataRequest extends Omit<
-  ivs.PutMetadataRequest,
-  "channelArn"
-> {}
+export interface PutMetadataRequest extends Omit<ivs.PutMetadataRequest, "channelArn"> {}
 
 /**
  * Runtime binding for `ivs:PutMetadata`.
@@ -38,9 +35,7 @@ export interface PutMetadata extends Binding.Service<
   (
     channel: Channel,
   ) => Effect.Effect<
-    (
-      request: PutMetadataRequest,
-    ) => Effect.Effect<ivs.PutMetadataResponse, ivs.PutMetadataError>
+    (request: PutMetadataRequest) => Effect.Effect<ivs.PutMetadataResponse, ivs.PutMetadataError>
   >
 > {}
 export const PutMetadata = Binding.Service<PutMetadata>("AWS.IVS.PutMetadata");

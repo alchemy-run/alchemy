@@ -29,9 +29,7 @@ export interface StopQuery extends Binding.Service<
   <G extends LogGroup>(
     logGroup: G,
   ) => Effect.Effect<
-    (
-      request: StopQueryRequest,
-    ) => Effect.Effect<Logs.StopQueryResponse, Logs.StopQueryError>
+    (request: StopQueryRequest) => Effect.Effect<Logs.StopQueryResponse, Logs.StopQueryError>
   >
 > {}
 export const StopQuery = Binding.Service<StopQuery>("AWS.Logs.StopQuery");

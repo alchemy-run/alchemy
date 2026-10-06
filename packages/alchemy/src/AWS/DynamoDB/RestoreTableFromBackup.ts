@@ -39,10 +39,7 @@ export interface RestoreTableFromBackup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RestoreTableFromBackupRequest,
-    ) => Effect.Effect<
-      DynamoDB.RestoreTableFromBackupOutput,
-      DynamoDB.RestoreTableFromBackupError
-    >
+    ) => Effect.Effect<DynamoDB.RestoreTableFromBackupOutput, DynamoDB.RestoreTableFromBackupError>
   >
 > {}
 export const RestoreTableFromBackup = Binding.Service<RestoreTableFromBackup>(

@@ -1,30 +1,24 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as botManagement from "@distilled.cloud/cloudflare/bot-management";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -44,6 +38,10 @@ interface ObservedConfig {
   readonly enableJs?: boolean | null;
   readonly fightMode?: boolean | null;
   readonly aiBotsProtection?: string | null;
+  readonly aiSearch?: string | null;
+  readonly aiUser?: string | null;
+  readonly aiTraining?: string | null;
+  readonly botPreferenceSyncEnabled?: boolean | null;
   readonly sbfmDefinitelyAutomated?: string | null;
   readonly sbfmVerifiedBots?: string | null;
   readonly sbfmStaticResourceProtection?: boolean | null;
@@ -71,6 +69,22 @@ const restoreSbfm = (zoneId: string, original: ObservedConfig) =>
     }
     if (original.sbfmStaticResourceProtection != null) {
       body.sbfmStaticResourceProtection = original.sbfmStaticResourceProtection;
+    }
+    if (Object.keys(body).length === 0) return;
+    yield* botManagement.putBotManagement({ zoneId, ...body });
+  }).pipe(Effect.ignore);
+
+const AI_CRAWLER_KEYS = ["aiSearch", "aiUser", "aiTraining", "botPreferenceSyncEnabled"] as const;
+
+/** The AI crawler policy fields of a config, attributes, or snapshot. */
+const pickAiCrawlers = (source: Pick<ObservedConfig, (typeof AI_CRAWLER_KEYS)[number]>) =>
+  Object.fromEntries(AI_CRAWLER_KEYS.map((key) => [key, source[key] ?? null]));
+
+const restoreAiCrawlers = (zoneId: string, original: ObservedConfig) =>
+  Effect.gen(function* () {
+    const body: Record<string, unknown> = {};
+    for (const key of AI_CRAWLER_KEYS) {
+      if (original[key] != null) body[key] = original[key];
     }
     if (Object.keys(body).length === 0) return;
     yield* botManagement.putBotManagement({ zoneId, ...body });
@@ -125,9 +139,9 @@ describe.sequential(
             expect(created.zoneId).toEqual(zoneId);
             expect(created.sbfmDefinitelyAutomated).toEqual(target);
             // Snapshot captured the pre-management value.
-            expect(
-              created.initialSettings.sbfmDefinitelyAutomated ?? null,
-            ).toEqual(original.sbfmDefinitelyAutomated ?? null);
+            expect(created.initialSettings.sbfmDefinitelyAutomated ?? null).toEqual(
+              original.sbfmDefinitelyAutomated ?? null,
+            );
 
             const live1 = yield* getConfig(zoneId);
             expect(live1.sbfmDefinitelyAutomated).toEqual(target);
@@ -144,9 +158,9 @@ describe.sequential(
             );
             expect(updated.zoneId).toEqual(zoneId);
             expect(updated.sbfmDefinitelyAutomated).toEqual(target2);
-            expect(
-              updated.initialSettings.sbfmDefinitelyAutomated ?? null,
-            ).toEqual(original.sbfmDefinitelyAutomated ?? null);
+            expect(updated.initialSettings.sbfmDefinitelyAutomated ?? null).toEqual(
+              original.sbfmDefinitelyAutomated ?? null,
+            );
 
             const live2 = yield* getConfig(zoneId);
             expect(live2.sbfmDefinitelyAutomated).toEqual(target2);
@@ -158,9 +172,7 @@ describe.sequential(
 
             const after = yield* getConfig(zoneId);
             if (original.sbfmDefinitelyAutomated != null) {
-              expect(after.sbfmDefinitelyAutomated).toEqual(
-                original.sbfmDefinitelyAutomated,
-              );
+              expect(after.sbfmDefinitelyAutomated).toEqual(original.sbfmDefinitelyAutomated);
             }
           }).pipe(Effect.ensuring(restoreSbfm(zoneId, original)));
 
@@ -181,9 +193,7 @@ describe.sequential(
 
           const adopted = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.BotManagement.BotManagement("Bots", {
-                zoneId,
-              });
+              return yield* Cloudflare.BotManagement.BotManagement("Bots", { zoneId });
             }),
           );
           expect(adopted.zoneId).toEqual(zoneId);
@@ -193,9 +203,7 @@ describe.sequential(
           expect(afterDeploy.sbfmDefinitelyAutomated ?? null).toEqual(
             before.sbfmDefinitelyAutomated ?? null,
           );
-          expect(afterDeploy.sbfmVerifiedBots ?? null).toEqual(
-            before.sbfmVerifiedBots ?? null,
-          );
+          expect(afterDeploy.sbfmVerifiedBots ?? null).toEqual(before.sbfmVerifiedBots ?? null);
           expect(afterDeploy.sbfmStaticResourceProtection ?? null).toEqual(
             before.sbfmStaticResourceProtection ?? null,
           );
@@ -208,9 +216,7 @@ describe.sequential(
           expect(afterDestroy.sbfmDefinitelyAutomated ?? null).toEqual(
             before.sbfmDefinitelyAutomated ?? null,
           );
-          expect(afterDestroy.enableJs ?? null).toEqual(
-            before.enableJs ?? null,
-          );
+          expect(afterDestroy.enableJs ?? null).toEqual(before.enableJs ?? null);
         }).pipe(logLevel),
       { timeout: 240_000 },
     );
@@ -255,6 +261,51 @@ describe.sequential(
       { timeout: 240_000 },
     );
 
+    // AI crawler policies only affect AI crawlers and the managed robots.txt,
+    // not the plain HTTP clients other live suites use against the zone, so
+    // this lifecycle runs ungated.
+    test.provider(
+      "manages the AI crawler policies and restores them on destroy",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+
+          const original = yield* getConfig(zoneId);
+          // Targets that differ from the live config so reconcile must write.
+          const target = {
+            aiSearch: original.aiSearch === "block" ? "disabled" : "block",
+            aiUser: original.aiUser === "block" ? "disabled" : "block",
+            aiTraining: original.aiTraining === "disallow" ? "disabled" : "disallow",
+            botPreferenceSyncEnabled: !(original.botPreferenceSyncEnabled ?? false),
+          } as const;
+
+          yield* Effect.gen(function* () {
+            const created = yield* stack.deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.BotManagement.BotManagement("Bots", {
+                  zoneId,
+                  ...target,
+                });
+              }),
+            );
+            expect(pickAiCrawlers(created)).toEqual(target);
+            // The snapshot captured the pre-management values.
+            expect(pickAiCrawlers(created.initialSettings)).toEqual(pickAiCrawlers(original));
+
+            expect(pickAiCrawlers(yield* getConfig(zoneId))).toEqual(target);
+
+            yield* stack.destroy();
+
+            expect(pickAiCrawlers(yield* getConfig(zoneId))).toEqual(pickAiCrawlers(original));
+          }).pipe(Effect.ensuring(restoreAiCrawlers(zoneId, original)));
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 240_000 },
+    );
+
     // Canonical `list()` test (zone-scoped singleton): there is no account-wide
     // API for this per-zone config, so `list()` enumerates every zone via
     // `listAllZones` and reads the bot-management singleton in each. Assert the
@@ -267,9 +318,7 @@ describe.sequential(
         Effect.gen(function* () {
           const zoneId = yield* resolveZoneId;
 
-          const provider = yield* Provider.findProvider(
-            Cloudflare.BotManagement.BotManagement,
-          );
+          const provider = yield* Provider.findProvider(Cloudflare.BotManagement.BotManagement);
           const all = yield* provider.list();
 
           expect(all.length).toBeGreaterThan(0);

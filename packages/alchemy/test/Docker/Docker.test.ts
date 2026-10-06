@@ -1,17 +1,17 @@
-import { Docker, DockerLive } from "@/Docker";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "alchemy-test";
-import { PlatformError, SystemError } from "effect/PlatformError";
-import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
-import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Redacted from "effect/Redacted";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { PlatformError, SystemError } from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { Docker, DockerLive } from "@/Docker";
+import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
 
 const describe = layer(Layer.provideMerge(DockerLive, NodeServices.layer));
 
@@ -23,15 +23,9 @@ describe("Docker.materialize", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const docker = yield* Docker;
-        const root = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-docker-ctx-",
-        });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-ctx-" });
         const ctx = path.join(root, "ctx");
-        yield* docker.materialize({
-          context: ctx,
-          dockerfile: "FROM scratch\n",
-          files: [],
-        });
+        yield* docker.materialize({ context: ctx, dockerfile: "FROM scratch\n", files: [] });
         const dockerfile = path.join(ctx, "Dockerfile");
         expect(yield* fs.exists(dockerfile)).toBe(true);
         expect(yield* fs.readFileString(dockerfile)).toBe("FROM scratch\n");
@@ -46,18 +40,14 @@ describe("Docker.materialize", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const docker = yield* Docker;
-        const root = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-docker-path-",
-        });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-path-" });
         const ctx = path.join(root, "ctx");
         yield* docker.materialize({
           context: ctx,
           dockerfile: "FROM scratch\n",
           files: [{ path: "nested/hello.txt", content: "hi" }],
         });
-        expect(
-          yield* fs.readFileString(path.join(ctx, "nested", "hello.txt")),
-        ).toBe("hi");
+        expect(yield* fs.readFileString(path.join(ctx, "nested", "hello.txt"))).toBe("hi");
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );
@@ -123,10 +113,7 @@ describe("Docker registry errors", (it) => {
       "#7 ERROR: failed to push: unknown: blob unknown to registry\n------\nERROR: failed to build: failed to solve: failed to push registry.example/image:latest: unknown: blob unknown to registry\n\nView build details: docker-desktop://dashboard/build/builder/node/build-id\n",
       "DockerRegistryBlobUnknown",
     ],
-    [
-      "Command exited with code 1: blob unknown to registry",
-      "DockerRegistryBlobUnknown",
-    ],
+    ["Command exited with code 1: blob unknown to registry", "DockerRegistryBlobUnknown"],
     [
       "ERROR: unexpected status from HEAD request to https://registry.example/v2/image/blobs/sha256:abc: 503 Service Unavailable",
       "DockerRegistryUnavailable",
@@ -144,14 +131,8 @@ describe("Docker registry errors", (it) => {
       'ERROR: failed to solve: process "/bin/sh -c echo 503 Service Unavailable && exit 1" did not complete successfully: exit code: 1',
       "PlatformError",
     ],
-    [
-      "#7 RUN echo 'blob unknown to registry'\nERROR: process exited with code 1",
-      "PlatformError",
-    ],
-    [
-      "#7 RUN echo '503 Service Unavailable'\nERROR: process exited with code 1",
-      "PlatformError",
-    ],
+    ["#7 RUN echo 'blob unknown to registry'\nERROR: process exited with code 1", "PlatformError"],
+    ["#7 RUN echo '503 Service Unavailable'\nERROR: process exited with code 1", "PlatformError"],
   ] as const) {
     it.effect(
       `classifies ${description}`,
@@ -174,9 +155,7 @@ describe("Docker registry errors", (it) => {
             expect(classified.message).toBe(error.message);
           }
         }),
-      {
-        tags: ["unit", "provider:docker", "provider:docker:registry", "local"],
-      },
+      { tags: ["unit", "provider:docker", "provider:docker:registry", "local"] },
     );
   }
 });
@@ -187,16 +166,12 @@ describe("Docker registry errors", (it) => {
  * records every other invocation (args + env), and exits 0.
  */
 const fakeDocker = (buildxVersion: string | undefined) => {
-  const calls: Array<{
-    args: ReadonlyArray<string>;
-    env: Record<string, string | undefined>;
-  }> = [];
+  const calls: Array<{ args: ReadonlyArray<string>; env: Record<string, string | undefined> }> = [];
   const encode = (text: string) => new TextEncoder().encode(text);
   const spawner = ChildProcessSpawner.make((command) =>
     Effect.gen(function* () {
       assert(command._tag === "StandardCommand");
-      const probe =
-        command.args[0] === "buildx" && command.args[1] === "version";
+      const probe = command.args[0] === "buildx" && command.args[1] === "version";
       if (!probe) {
         calls.push({ args: command.args, env: command.options.env ?? {} });
       }
@@ -205,9 +180,7 @@ const fakeDocker = (buildxVersion: string | undefined) => {
         probe && !missing
           ? `github.com/docker/buildx ${buildxVersion} 503f948aadbddb6de3ec5581f766e1d27f6975a1\n`
           : "";
-      const stderr = missing
-        ? "docker: 'buildx' is not a docker command.\n"
-        : "";
+      const stderr = missing ? "docker: 'buildx' is not a docker command.\n" : "";
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(1),
         exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(missing ? 1 : 0)),
@@ -228,9 +201,7 @@ const fakeDocker = (buildxVersion: string | undefined) => {
     // `fresh` sidesteps the describe-level memoized `DockerLive` so the
     // fake spawner is actually wired in.
     layer: Layer.fresh(DockerLive).pipe(
-      Layer.provide(
-        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      ),
+      Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
     ),
   };
 };
@@ -252,10 +223,7 @@ describe("Docker.image", (it) => {
           yield* docker.image.build(
             {
               context: "/ctx",
-              tag: [
-                "registry.invalid/app:1",
-                "registry.invalid/app:buildcache",
-              ],
+              tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
               platform: "linux/amd64",
             },
             undefined,
@@ -274,9 +242,7 @@ describe("Docker.image", (it) => {
           auths: Record<string, { auth: string }>;
         };
         expect(auth.auths["registry.invalid"]!.auth).toBe(
-          Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString(
-            "base64",
-          ),
+          Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString("base64"),
         );
       }),
     { tags: ["unit", "provider:docker", "local"] },
@@ -295,10 +261,7 @@ describe("Docker.image", (it) => {
             yield* docker.image.build(
               {
                 context: "/ctx",
-                tag: [
-                  "registry.invalid/app:1",
-                  "registry.invalid/app:buildcache",
-                ],
+                tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
                 platform: "linux/amd64",
               },
               undefined,
@@ -309,11 +272,7 @@ describe("Docker.image", (it) => {
           const [build, push, cachePush] = fake.calls;
           // `--load` so non-loading (docker-container) builders still land the
           // image in the local store for the follow-up push.
-          expect(build!.args.slice(0, 3)).toEqual([
-            "buildx",
-            "build",
-            "--load",
-          ]);
+          expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--load"]);
           expect(build!.args).toContain("/ctx");
           expect(build!.args).toContain("--platform");
           expect(build!.args).not.toContain("--push");
@@ -381,14 +340,8 @@ describe("Docker.image", (it) => {
   );
 
   for (const [name, auth] of [
-    [
-      "invalid JSON",
-      '{"auths":{"source.invalid":{"auth":"AUTH_SECRET_SENTINEL"}},',
-    ],
-    [
-      "invalid base64",
-      '{"auths":{"source.invalid":{"auth":"AUTH_SECRET_SENTINEL!"}}}',
-    ],
+    ["invalid JSON", '{"auths":{"source.invalid":{"auth":"AUTH_SECRET_SENTINEL"}},'],
+    ["invalid base64", '{"auths":{"source.invalid":{"auth":"AUTH_SECRET_SENTINEL!"}}}'],
     [
       "missing credential separator",
       '{"auths":{"source.invalid":{"auth":"QVVUSF9TRUNSRVRfU0VOVElORUw="}}}',
@@ -403,10 +356,7 @@ describe("Docker.image", (it) => {
             const docker = yield* Docker;
             return yield* docker.image
               .build(
-                {
-                  context: "/ctx",
-                  tag: "registry.invalid/invalid-auth:latest",
-                },
+                { context: "/ctx", tag: "registry.invalid/invalid-auth:latest" },
                 undefined,
                 registry,
               )
@@ -422,9 +372,7 @@ describe("Docker.image", (it) => {
           expect(serialized).not.toContain("DESTINATION_SECRET_SENTINEL");
         }).pipe(
           Effect.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({ DOCKER_AUTH_CONFIG: auth }),
-            ),
+            ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_AUTH_CONFIG: auth })),
           ),
         ),
       { tags: ["unit", "provider:docker", "local"] },
@@ -445,9 +393,7 @@ describe("Docker.image", (it) => {
             Effect.ignore,
           ),
         );
-        const root = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-docker-build-",
-        });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-build-" });
         const ctx = path.join(root, "ctx");
         yield* docker.materialize({
           context: ctx,
@@ -480,9 +426,7 @@ describe("Docker.image", (it) => {
             Effect.ignore,
           ),
         );
-        const root = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-docker-build-",
-        });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-build-" });
         const ctx = path.join(root, "ctx");
         yield* docker.materialize({
           context: ctx,
@@ -520,9 +464,7 @@ describe("Docker.image", (it) => {
             Effect.ignore,
           ),
         );
-        const root = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-docker-build-",
-        });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-build-" });
         const ctx = path.join(root, "ctx");
         yield* docker.materialize({
           context: ctx,
@@ -537,13 +479,7 @@ describe("Docker.image", (it) => {
           files: [],
         });
         yield* docker.image.build({ tag, context: ctx, target: "secondary" });
-        const out = yield* docker.run([
-          "run",
-          "--rm",
-          tag,
-          "cat",
-          "/stage.txt",
-        ]);
+        const out = yield* docker.run(["run", "--rm", tag, "cat", "/stage.txt"]);
         expect(out.stdout.trim()).toBe("secondary");
       }),
     { tags: ["unit", "provider:docker", "local"] },
