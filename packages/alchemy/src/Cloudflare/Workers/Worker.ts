@@ -2565,7 +2565,5 @@ export const relativeWorkerMain = (main: string, cwd: string): string => {
   const file = main.startsWith("file:")
     ? decodeURIComponent(new globalThis.URL(main).pathname)
     : main;
-  return path.isAbsolute(file) && isPathWithin(cwd, file, cwd)
-    ? path.relative(cwd, file)
-    : main;
+  return path.isAbsolute(file) && isPathWithin(cwd, file, cwd) ? path.relative(cwd, file) : main;
 };
