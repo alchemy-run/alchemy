@@ -41,6 +41,13 @@ export type CloneSource = Database | { databaseId: string } | { name: string };
 export type DatabaseProps = {
   /**
    * Name of the database. If omitted, a unique name will be generated.
+   *
+   * D1 names are unique per account. When an explicit name is kept across a
+   * replacement (e.g. `primaryLocationHint` or `jurisdiction` changes), the
+   * existing database and its data are deleted before the new one is created.
+   * Generated names get a new name on replacement, so the new database is
+   * created first.
+   *
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -284,7 +291,15 @@ export const ProviderLive = () =>
         (olds.primaryLocationHint !== news.primaryLocationHint &&
           news.primaryLocationHint !== undefined)
       ) {
-        return { action: "replace" } as const;
+        // D1 names are unique per account, so a replacement that keeps an
+        // explicit name cannot coexist with its predecessor: create-first
+        // would adopt the existing database by name and garbage collection
+        // would then delete it. Delete the old generation first instead.
+        // Generated names change with the new instance id, so they stay
+        // create-first.
+        return news.name !== undefined && news.name === oldName
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       const oldReplicationMode =
         output?.readReplication?.mode ?? olds.readReplication?.mode ?? "disabled";

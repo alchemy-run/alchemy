@@ -15,6 +15,7 @@ import FontPreloads from "../FontPreloads.astro";
 import PostHog from "../analytics/PostHog.astro";
 import BrandIcons from "../../brand/Icons.astro";
 import StructuredData from "../StructuredData.astro";
+import { socialOrigin } from "../../social-origin";
 
 // Starlight injects route data via Astro.locals at runtime; the public
 // types aren't ambient-declared in this project, so we cast through any.
@@ -24,7 +25,7 @@ const { id } = (Astro.locals as { starlightRoute: { id: string } })
   .starlightRoute;
 // Starlight normalizes the index entry's id to an empty string.
 const ogSlug = id === "" ? "index" : id;
-const ogImage = new URL(`/og/${ogSlug}.webp`, Astro.site);
+const ogImage = new URL(`/og/${ogSlug}.webp`, socialOrigin(Astro.site, Astro.url));
 ---
 
 <Default><slot /></Default>

@@ -338,6 +338,7 @@ export interface ProviderService<
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
   }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
+  /** Idempotent; fail with {@link DeleteInProgress} when the cloud cannot finish the delete yet. */
   delete(input: {
     id: string;
     /**
@@ -736,6 +737,11 @@ export const missingProviderError = (resourceType: string, fqn: string): Missing
     resourceType,
     fqn,
   });
+
+/** A started delete the cloud cannot finish yet: a replacement's old generation is retried next apply, any other delete fails. */
+export class DeleteInProgress extends Data.TaggedError("DeleteInProgress")<{
+  message: string;
+}> {}
 
 /** Resolve a concrete provider, using the current run's mode when omitted. */
 export const tryFindProviderByType = <R extends ResourceLike>(

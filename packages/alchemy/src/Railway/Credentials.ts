@@ -2,7 +2,6 @@ import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, toConfig } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import {
   deferUntilFirstUse,
   orDieCredentialsUnavailable,
@@ -46,7 +45,7 @@ export const fromAuthProvider = () =>
           resolve.pipe(
             Effect.map((creds) =>
               toConfig({
-                token: Redacted.value(creds.token),
+                token: creds.token,
                 tokenKind: creds.tokenKind,
                 apiBaseUrl: creds.apiBaseUrl,
               }),

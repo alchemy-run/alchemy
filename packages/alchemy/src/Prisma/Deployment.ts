@@ -14,7 +14,11 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import type { App } from "./App.ts";
-import { destroyDeployment, waitForDeploymentStatus } from "./ComputeLifecycle.ts";
+import {
+  destroyDeployment,
+  PrismaDeploymentWaitTimeout,
+  waitForDeploymentStatus,
+} from "./ComputeLifecycle.ts";
 import { promoteAppObserved } from "./Internal/AppPromotion.ts";
 import {
   inspectArtifactFile,
@@ -706,7 +710,18 @@ const ProviderLive = () =>
           );
           if (!deployment) return;
           yield* ensureDeploymentMembership(output.appId, deployment);
-          yield* destroyDeployment(output.deploymentId);
+          yield* destroyDeployment(output.deploymentId).pipe(
+            // The stop was requested; it finishes once open connections close.
+            Effect.catchIf(
+              (error) => error instanceof PrismaDeploymentWaitTimeout,
+              (error) =>
+                Effect.fail(
+                  new Provider.DeleteInProgress({
+                    message: `${error.message}. Prisma Compute drains open connections before it stops a deployment, and only a stopped deployment can be deleted.`,
+                  }),
+                ),
+            ),
+          );
         }),
         tail: ({ output }) =>
           output.deploymentId ? tailDeploymentLogs(output.deploymentId) : Stream.empty,
