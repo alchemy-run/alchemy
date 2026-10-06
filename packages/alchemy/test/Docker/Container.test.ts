@@ -2,12 +2,32 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Docker from "@/Docker";
+import { healthcheckCommand, isHealthcheckDisabled } from "@/Docker/HealthcheckCommand";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { findAvailablePort } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState(), adopt: true });
+
+test.provider(
+  "renders Docker healthcheck arrays as a --health-cmd string",
+  () =>
+    Effect.sync(() => {
+      expect(healthcheckCommand("pg_isready -U postgres")).toBe("pg_isready -U postgres");
+      expect(healthcheckCommand(["CMD-SHELL", "pg_isready -U postgres"])).toBe(
+        "pg_isready -U postgres",
+      );
+      expect(healthcheckCommand(["CMD", "pg_isready", "-U", "postgres"])).toBe(
+        "pg_isready -U postgres",
+      );
+      expect(healthcheckCommand(["CMD", "echo", "a b", "it's"])).toBe("echo 'a b' 'it'\\''s'");
+      expect(healthcheckCommand(["NONE"])).toBeUndefined();
+      expect(isHealthcheckDisabled(["NONE"])).toBe(true);
+      expect(isHealthcheckDisabled(["CMD", "true"])).toBe(false);
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
 
 test.provider(
   "diff replaces a container when its image changes",
@@ -374,6 +394,69 @@ describe(
         expect(health?.StartPeriod).toBe(1_000_000_000);
       }),
     );
+    // The array form used to be joined with spaces, so `["CMD-SHELL", "true"]`
+    // ran a command literally named `CMD-SHELL` and the container never
+    // became healthy.
+    test.provider("runs a CMD-SHELL array healthcheck as the shell command", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-shell", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["CMD-SHELL", "true"], interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "true"]);
+      }),
+    );
+
+    test.provider("runs a CMD array healthcheck with its arguments quoted", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-exec", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["CMD", "echo", "a b"], interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "echo 'a b'"]);
+      }),
+    );
+
+    test.provider("keeps a plain string healthcheck unchanged", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-string", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: "true", interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "true"]);
+      }),
+    );
+
+    test.provider("disables the image healthcheck with NONE", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-none", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["NONE"] },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["NONE"]);
+      }),
+    );
+
     test.provider("reports the host port Docker assigned to a random publish (#1388)", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;

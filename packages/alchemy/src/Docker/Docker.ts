@@ -68,6 +68,8 @@ export class Docker extends Context.Service<
         restart: "no" | "always" | "on-failure" | "unless-stopped";
         rm: boolean;
         "health-cmd": string | undefined;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval": string | undefined;
         "health-timeout": string | undefined;
         "health-retries": number | undefined;
