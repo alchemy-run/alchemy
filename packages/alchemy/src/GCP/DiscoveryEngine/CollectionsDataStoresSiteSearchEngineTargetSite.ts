@@ -128,8 +128,7 @@ const toAttrs = (
     dataStore: parentOf(name, "siteSearchEngine"),
     project: parsed.project || project,
     location: parsed.location,
-    providedUriPattern:
-      site.providedUriPattern ?? pattern ?? site.generatedUriPattern ?? "",
+    providedUriPattern: site.providedUriPattern ?? pattern ?? site.generatedUriPattern ?? "",
     generatedUriPattern: site.generatedUriPattern,
     type: site.type,
     exactMatch: site.exactMatch === true,
@@ -211,14 +210,7 @@ const waitUntilGone = (name: string) =>
 
 export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
   Provider.succeed(CollectionsDataStoresSiteSearchEngineTargetSite, {
-    stables: [
-      "name",
-      "targetSiteId",
-      "dataStore",
-      "project",
-      "location",
-      "exactMatch",
-    ],
+    stables: ["name", "targetSiteId", "dataStore", "project", "location", "exactMatch"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -257,24 +249,18 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
       const exactMatch = news.exactMatch === true;
       const parent = siteSearchEngineParent(news.dataStore);
 
-      let current = yield* findByPattern(
-        news.dataStore,
-        providedUriPattern,
-        output?.name,
-      );
+      let current = yield* findByPattern(news.dataStore, providedUriPattern, output?.name);
 
       if (current === undefined) {
         const created = yield* discoveryengine
-          .createProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites(
-            {
-              parent,
-              body: {
-                providedUriPattern,
-                type,
-                exactMatch: exactMatch ? true : undefined,
-              },
+          .createProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites({
+            parent,
+            body: {
+              providedUriPattern,
+              type,
+              exactMatch: exactMatch ? true : undefined,
             },
-          )
+          })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -283,9 +269,9 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved(
-          { name: output?.name ?? `${parent}/targetSites/-` },
-        );
+        return yield* new CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved({
+          name: output?.name ?? `${parent}/targetSites/-`,
+        });
       }
 
       const resource = current.name ?? "";
@@ -316,9 +302,9 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
       const existing = yield* getByName(output.name);
       if (existing === undefined) return;
       const operation = yield* discoveryengine
-        .deleteProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites(
-          { name: output.name },
-        )
+        .deleteProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites({
+          name: output.name,
+        })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

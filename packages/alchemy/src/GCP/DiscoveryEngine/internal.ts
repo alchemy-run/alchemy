@@ -45,30 +45,16 @@ export const parseResourceName = (name: string, collection: string) => {
   const dataStoresAt = parts.lastIndexOf("dataStores");
   const collectionsAt = parts.lastIndexOf("collections");
   const collectionId =
-    collectionsAt >= 0 && parts[collectionsAt + 1]
-      ? parts[collectionsAt + 1]!
-      : DEFAULT_COLLECTION;
+    collectionsAt >= 0 && parts[collectionsAt + 1] ? parts[collectionsAt + 1]! : DEFAULT_COLLECTION;
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     collection: collectionId,
     collectionId,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
-    dataStoreId:
-      dataStoresAt >= 0 && parts[dataStoresAt + 1]
-        ? parts[dataStoresAt + 1]!
-        : "",
-    dataStore:
-      dataStoresAt >= 0
-        ? parts.slice(0, dataStoresAt + 2).join("/")
-        : parentOf(name),
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
+    dataStoreId: dataStoresAt >= 0 && parts[dataStoresAt + 1] ? parts[dataStoresAt + 1]! : "",
+    dataStore: dataStoresAt >= 0 ? parts.slice(0, dataStoresAt + 2).join("/") : parentOf(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -76,11 +62,7 @@ export const parseResourceName = (name: string, collection: string) => {
   };
 };
 
-export const expandDataStore = (
-  value: string,
-  project: string,
-  location: string,
-) =>
+export const expandDataStore = (value: string, project: string, location: string) =>
   value.includes("/")
     ? value
     : `projects/${project}/locations/${location}/collections/${DEFAULT_COLLECTION}/dataStores/${value}`;
@@ -98,10 +80,7 @@ export const rfc1035 = (name: string, maxLength = MAX_ID_LENGTH): string => {
   return next.slice(0, maxLength);
 };
 
-export const controlIdOf = (
-  name: string,
-  maxLength = MAX_ID_LENGTH,
-): string => {
+export const controlIdOf = (name: string, maxLength = MAX_ID_LENGTH): string => {
   let next = name
     .toLowerCase()
     .replace(/[0-9]/g, (digit) => "abcdefghij"[Number(digit)]!)
@@ -113,10 +92,7 @@ export const controlIdOf = (
   return next.length > 0 ? next : "control";
 };
 
-export const servingConfigIdOf = (
-  name: string,
-  maxLength = MAX_ID_LENGTH,
-): string => {
+export const servingConfigIdOf = (name: string, maxLength = MAX_ID_LENGTH): string => {
   let next = name.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!/^[a-z]/.test(next)) next = `s${next}`;
   next = next.slice(0, maxLength);
@@ -124,10 +100,7 @@ export const servingConfigIdOf = (
   return next.length > 0 ? next : "scfg";
 };
 
-export const sessionIdOf = (
-  name: string,
-  maxLength = MAX_ID_LENGTH,
-): string => {
+export const sessionIdOf = (name: string, maxLength = MAX_ID_LENGTH): string => {
   let next = name.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!/^[a-z]/.test(next)) next = `s${next}`;
   next = next.slice(0, maxLength);
@@ -182,27 +155,18 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  fingerprint([...(left ?? [])].sort()) ===
-  fingerprint([...(right ?? [])].sort());
+) => fingerprint([...(left ?? [])].sort()) === fingerprint([...(right ?? [])].sort());
 
-export const parseJsonObject = (
-  json: string | undefined,
-): Record<string, unknown> | undefined => {
+export const parseJsonObject = (json: string | undefined): Record<string, unknown> | undefined => {
   if (json === undefined || json.length === 0) return undefined;
   try {
     const parsed: unknown = JSON.parse(json);
-    if (
-      parsed !== null &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed)
-    ) {
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }
   } catch {
@@ -247,19 +211,15 @@ export const listDataStores = (project: string) =>
 export const normalizeCollection = (collection: string | undefined) =>
   lastSegment(collection ?? DEFAULT_COLLECTION);
 
-export const collectionParent = (
-  project: string,
-  location: string,
-  collectionId: string,
-) => `${locationParent(project, location)}/collections/${collectionId}`;
+export const collectionParent = (project: string, location: string, collectionId: string) =>
+  `${locationParent(project, location)}/collections/${collectionId}`;
 
 export const dataStoreName = (
   project: string,
   location: string,
   collectionId: string,
   dataStoreId: string,
-) =>
-  `${collectionParent(project, location, collectionId)}/dataStores/${dataStoreId}`;
+) => `${collectionParent(project, location, collectionId)}/dataStores/${dataStoreId}`;
 
 export const dataStoreIdOf = (value: string) => lastSegment(value);
 
@@ -284,8 +244,7 @@ export const toResourceId = (
 
 export const ownershipLabels = (id: string) => createInternalLabels(id);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const listProjectDataStores = (project: string) =>
   Effect.gen(function* () {
@@ -305,8 +264,7 @@ export const listProjectDataStores = (project: string) =>
 export const branchParent = (dataStore: string, branchId = DEFAULT_BRANCH) =>
   `${dataStore}/branches/${branchId}`;
 
-export const siteSearchEngineParent = (dataStore: string) =>
-  `${dataStore}/siteSearchEngine`;
+export const siteSearchEngineParent = (dataStore: string) => `${dataStore}/siteSearchEngine`;
 
 export const listCollectionDataStores = (project: string) =>
   Effect.forEach(
@@ -340,8 +298,5 @@ export const matchesUriPattern = (
   pattern: string,
 ) => {
   const observed = site.providedUriPattern ?? site.generatedUriPattern ?? "";
-  return (
-    observed === pattern ||
-    normalizeUriPattern(observed) === normalizeUriPattern(pattern)
-  );
+  return observed === pattern || normalizeUriPattern(observed) === normalizeUriPattern(pattern);
 };

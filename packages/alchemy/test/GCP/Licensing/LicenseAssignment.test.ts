@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as licensing from "@distilled.cloud/gcp/licensing_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   customerId,
   logLevel,
@@ -86,9 +86,7 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.productId).toEqual(productId);
       expect(fetched.skuId).toEqual(skuId);
-      expect((fetched.userId ?? "").toLowerCase()).toEqual(
-        userId.toLowerCase(),
-      );
+      expect((fetched.userId ?? "").toLowerCase()).toEqual(userId.toLowerCase());
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

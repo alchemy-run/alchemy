@@ -1,10 +1,10 @@
+import * as Effect from "effect/Effect";
 /**
  * Type-level check (compiled with the test project, never run): bindings
  * and event sources accept a resource, the Effect that declares it, or the
  * resolved value from `yield*`.
  */
 import * as GCP from "@/GCP";
-import * as Effect from "effect/Effect";
 
 const Dataset = GCP.BigQuery.Dataset("D", {});
 const Table = Effect.gen(function* () {

@@ -1,3 +1,11 @@
+import * as s3 from "@distilled.cloud/aws/s3";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
 import {
@@ -6,19 +14,9 @@ import {
   PrincipalPortfolioAssociation,
   Product,
 } from "@/AWS/ServiceCatalog";
-import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Alchemy";
-import * as s3 from "@distilled.cloud/aws/s3";
-import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import ServiceCatalogTestFunctionLive, {
-  ServiceCatalogTestFunction,
-} from "./handler";
+import * as Core from "@/Test/Core";
+import ServiceCatalogTestFunctionLive, { ServiceCatalogTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -34,9 +32,7 @@ const PP_NAME = "alchemy-sc-bindings-pp";
 const TEMPLATE = JSON.stringify({
   AWSTemplateFormatVersion: "2010-09-09",
   Description: "alchemy Service Catalog bindings test template",
-  Resources: {
-    NoOp: { Type: "AWS::CloudFormation::WaitConditionHandle" },
-  },
+  Resources: { NoOp: { Type: "AWS::CloudFormation::WaitConditionHandle" } },
 });
 
 class ProvisionedProductStillExists extends Data.TaggedError(
@@ -57,11 +53,7 @@ const outOfBand = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const ensureProvisionedProductGone = Effect.gen(function* () {
   const existing = yield* servicecatalog
     .describeProvisionedProduct({ Name: PP_NAME })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   const id = existing?.ProvisionedProductDetail?.Id;
   if (id === undefined) return;
   yield* servicecatalog
@@ -72,27 +64,18 @@ const ensureProvisionedProductGone = Effect.gen(function* () {
     })
     .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
   yield* servicecatalog.describeProvisionedProduct({ Name: PP_NAME }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ProvisionedProductStillExists({ name: PP_NAME })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ProvisionedProductStillExists({ name: PP_NAME }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
-      while: (e): boolean =>
-        e._tag === "ScBindingsProvisionedProductStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("4 seconds"),
-        Schedule.recurs(20),
-      ]),
+      while: (e): boolean => e._tag === "ScBindingsProvisionedProductStillExists",
+      schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(20)]),
     }),
   );
 });
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let productId: string;
@@ -113,26 +96,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "ServiceCatalog Bindings",
@@ -148,9 +124,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "ServiceCatalog test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("ServiceCatalog test setup: destroying previous resources");
         yield* outOfBand(ensureProvisionedProductGone);
         yield* sharedStack.destroy();
 
@@ -158,9 +132,7 @@ describe.sequential(
         // exist in S3 before the product can be created.
         const phase1 = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            const bucket = yield* Bucket("ScBindingsTemplateBucket", {
-              forceDestroy: true,
-            });
+            const bucket = yield* Bucket("ScBindingsTemplateBucket", { forceDestroy: true });
             return { bucketName: bucket.bucketName, region: bucket.region };
           }),
         );
@@ -212,16 +184,12 @@ describe.sequential(
         provisioningArtifactId = deployed.provisioningArtifactId;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `ServiceCatalog test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`ServiceCatalog test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -282,13 +250,10 @@ describe.sequential(
           Effect.gen(function* () {
             // The principal association is eventually consistent — poll the
             // launch paths (bounded) until the portfolio grants access.
-            const paths = (yield* getJson(
-              `/launch-paths?productId=${productId}`,
-            ).pipe(
+            const paths = (yield* getJson(`/launch-paths?productId=${productId}`).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
-                until: (r): boolean =>
-                  (r as any).tag === "Ok" && (r as any).count > 0,
+                until: (r): boolean => (r as any).tag === "Ok" && (r as any).count > 0,
                 times: 30,
               }),
             )) as any;
@@ -328,8 +293,7 @@ describe.sequential(
               yield* getJson(`/pp?name=${PP_NAME}`).pipe(
                 Effect.repeat({
                   schedule: Schedule.spaced("4 seconds"),
-                  until: (r): boolean =>
-                    (r as any).tag === "ResourceNotFoundException",
+                  until: (r): boolean => (r as any).tag === "ResourceNotFoundException",
                   times: 30,
                 }),
               );
@@ -350,14 +314,11 @@ describe.sequential(
             expect(provisioned.recordId).toMatch(/^rec-/);
 
             // DescribeRecord — poll the record to completion.
-            const record = (yield* getJson(
-              `/record?id=${provisioned.recordId}`,
-            ).pipe(
+            const record = (yield* getJson(`/record?id=${provisioned.recordId}`).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("4 seconds"),
                 until: (r): boolean =>
-                  (r as any).status === "SUCCEEDED" ||
-                  (r as any).status === "FAILED",
+                  (r as any).status === "SUCCEEDED" || (r as any).status === "FAILED",
                 times: 30,
               }),
             )) as any;
@@ -395,8 +356,7 @@ describe.sequential(
             const gone = (yield* getJson(`/pp?name=${PP_NAME}`).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("4 seconds"),
-                until: (r): boolean =>
-                  (r as any).tag === "ResourceNotFoundException",
+                until: (r): boolean => (r as any).tag === "ResourceNotFoundException",
                 times: 30,
               }),
             )) as any;
@@ -412,10 +372,9 @@ describe.sequential(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* getJson("/update-nonexistent")) as any;
-            expect([
-              "ResourceNotFoundException",
-              "InvalidParametersException",
-            ]).toContain(response.tag);
+            expect(["ResourceNotFoundException", "InvalidParametersException"]).toContain(
+              response.tag,
+            );
           }),
         { timeout: 60_000 },
       );
@@ -426,13 +385,10 @@ describe.sequential(
         "surfaces the typed not-found for a nonexistent provisioned product (proving the grant)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* getJson(
-              "/stack-instances-nonexistent",
-            )) as any;
-            expect([
-              "ResourceNotFoundException",
-              "InvalidParametersException",
-            ]).toContain(response.tag);
+            const response = (yield* getJson("/stack-instances-nonexistent")) as any;
+            expect(["ResourceNotFoundException", "InvalidParametersException"]).toContain(
+              response.tag,
+            );
           }),
         { timeout: 60_000 },
       );
@@ -443,13 +399,10 @@ describe.sequential(
         "surfaces the typed not-found for a nonexistent service action (proving the grant)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* getJson(
-              "/service-action-params-nonexistent",
-            )) as any;
-            expect([
-              "ResourceNotFoundException",
-              "InvalidParametersException",
-            ]).toContain(response.tag);
+            const response = (yield* getJson("/service-action-params-nonexistent")) as any;
+            expect(["ResourceNotFoundException", "InvalidParametersException"]).toContain(
+              response.tag,
+            );
           }),
         { timeout: 60_000 },
       );

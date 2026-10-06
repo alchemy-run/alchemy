@@ -45,11 +45,7 @@ export interface Recognize extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RecognizeRequest,
-    ) => Effect.Effect<
-      speech.RecognizeResponse,
-      speech.RecognizeSpeechError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<speech.RecognizeResponse, speech.RecognizeSpeechError, RuntimeContext>
   >
 > {}
 

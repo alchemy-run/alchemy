@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
-import type { LocationsSecret } from "./LocationsSecret.ts";
-import type { Secret } from "./Secret.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import type { LocationsSecret } from "./LocationsSecret.ts";
+import type { Secret } from "./Secret.ts";
 
 export type SecretBindingTarget = Secret | LocationsSecret;
 
@@ -27,9 +27,7 @@ export const makeSecretHttpBinding = <I, A, E, Req = void>(options: {
         iam: [grantFor(options.iam, secret.name)],
       });
       const name = yield* secret.name;
-      return Effect.fn(`${options.tag}(${secret.LogicalId})`)(function* (
-        request?: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${secret.LogicalId})`)(function* (request?: Req) {
         return yield* run(options.toInput(yield* name, request));
       });
     });

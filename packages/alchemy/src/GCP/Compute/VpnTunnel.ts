@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_IKE_VERSION = 2;
 const MAX_NAME_LENGTH = 63;
@@ -261,16 +261,12 @@ export type VpnTunnel = Resource<
  */
 export const VpnTunnel = Resource<VpnTunnel>("GCP.Compute.VpnTunnel");
 
-export class VpnTunnelNotResolved extends Data.TaggedError(
-  "GCP.Compute.VpnTunnelNotResolved",
-)<{
+export class VpnTunnelNotResolved extends Data.TaggedError("GCP.Compute.VpnTunnelNotResolved")<{
   vpnTunnelName: string;
   region: string;
 }> {}
 
-export class VpnTunnelPending extends Data.TaggedError(
-  "GCP.Compute.VpnTunnelPending",
-)<{
+export class VpnTunnelPending extends Data.TaggedError("GCP.Compute.VpnTunnelPending")<{
   vpnTunnelName: string;
   status: string;
 }> {}
@@ -293,8 +289,7 @@ const resourceRefOf = (value: string | undefined) => {
   return lastSegment(value);
 };
 
-const ikeVersionOf = (value: number | undefined) =>
-  value ?? DEFAULT_IKE_VERSION;
+const ikeVersionOf = (value: number | undefined) => value ?? DEFAULT_IKE_VERSION;
 
 const selectorsKey = (values: ReadonlyArray<string> | undefined) =>
   [...(values ?? [])]
@@ -344,12 +339,7 @@ const toCipherSuite = (
   };
 };
 
-const regionalUrl = (
-  project: string,
-  region: string,
-  collection: string,
-  value: string,
-) => {
+const regionalUrl = (project: string, region: string, collection: string, value: string) => {
   if (value.includes("/")) {
     return value.startsWith("projects/") || value.startsWith("http")
       ? value
@@ -419,12 +409,7 @@ const toInsertBody = (
     description: news.description,
   };
   if (news.vpnGateway !== undefined) {
-    body.vpnGateway = regionalUrl(
-      project,
-      region,
-      "vpnGateways",
-      news.vpnGateway,
-    );
+    body.vpnGateway = regionalUrl(project, region, "vpnGateways", news.vpnGateway);
     body.vpnGatewayInterface = news.vpnGatewayInterface ?? 0;
   }
   if (news.targetVpnGateway !== undefined) {
@@ -436,19 +421,10 @@ const toInsertBody = (
     );
   }
   if (news.peerGcpGateway !== undefined) {
-    body.peerGcpGateway = regionalUrl(
-      project,
-      region,
-      "vpnGateways",
-      news.peerGcpGateway,
-    );
+    body.peerGcpGateway = regionalUrl(project, region, "vpnGateways", news.peerGcpGateway);
   }
   if (news.peerExternalGateway !== undefined) {
-    body.peerExternalGateway = globalUrl(
-      project,
-      "externalVpnGateways",
-      news.peerExternalGateway,
-    );
+    body.peerExternalGateway = globalUrl(project, "externalVpnGateways", news.peerExternalGateway);
     body.peerExternalGatewayInterface = news.peerExternalGatewayInterface ?? 0;
   }
   if (news.peerIp !== undefined) {
@@ -474,11 +450,7 @@ const getByName = (project: string, region: string, vpnTunnel: string) =>
     .getVpnTunnels({ project, region, vpnTunnel })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const requireTunnel = (
-  project: string,
-  region: string,
-  vpnTunnelName: string,
-) =>
+const requireTunnel = (project: string, region: string, vpnTunnelName: string) =>
   getByName(project, region, vpnTunnelName).pipe(
     Effect.flatMap((tunnel) =>
       tunnel
@@ -492,11 +464,7 @@ const requireTunnel = (
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  vpnTunnelName: string,
-) =>
+const waitUntilGone = (project: string, region: string, vpnTunnelName: string) =>
   getByName(project, region, vpnTunnelName).pipe(
     Effect.flatMap((tunnel) =>
       tunnel === undefined
@@ -541,55 +509,35 @@ export const VpnTunnelProvider = () =>
       const previousName = olds.vpnTunnelName ?? output?.vpnTunnelName;
       const nextName = news.vpnTunnelName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousRegion = normalizeRegion(
-        olds.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
       const previousDescription = olds.description ?? output?.description ?? "";
-      const previousVpnGateway = resourceRefOf(
-        olds.vpnGateway ?? output?.vpnGateway,
-      );
+      const previousVpnGateway = resourceRefOf(olds.vpnGateway ?? output?.vpnGateway);
       const previousVpnGatewayInterface =
         olds.vpnGatewayInterface ?? output?.vpnGatewayInterface ?? 0;
-      const previousPeerGcp = resourceRefOf(
-        olds.peerGcpGateway ?? output?.peerGcpGateway,
-      );
+      const previousPeerGcp = resourceRefOf(olds.peerGcpGateway ?? output?.peerGcpGateway);
       const previousPeerExternal = resourceRefOf(
         olds.peerExternalGateway ?? output?.peerExternalGateway,
       );
       const previousPeerExternalInterface =
-        olds.peerExternalGatewayInterface ??
-        output?.peerExternalGatewayInterface ??
-        0;
-      const previousTarget = resourceRefOf(
-        olds.targetVpnGateway ?? output?.targetVpnGateway,
-      );
+        olds.peerExternalGatewayInterface ?? output?.peerExternalGatewayInterface ?? 0;
+      const previousTarget = resourceRefOf(olds.targetVpnGateway ?? output?.targetVpnGateway);
       const previousPeerIp = olds.peerIp ?? output?.peerIp ?? "";
       const previousRouter = resourceRefOf(olds.router ?? output?.router);
       const previousIke = ikeVersionOf(olds.ikeVersion ?? output?.ikeVersion);
-      const previousLocal = selectorsKey(
-        olds.localTrafficSelector ?? output?.localTrafficSelector,
-      );
+      const previousLocal = selectorsKey(olds.localTrafficSelector ?? output?.localTrafficSelector);
       const previousRemote = selectorsKey(
         olds.remoteTrafficSelector ?? output?.remoteTrafficSelector,
       );
       const previousCipher = cipherKey(olds.cipherSuite ?? output?.cipherSuite);
 
       const immutableChanged =
-        (news.description !== undefined &&
-          (news.description ?? "") !== previousDescription) ||
-        (news.vpnGateway !== undefined &&
-          resourceRefOf(news.vpnGateway) !== previousVpnGateway) ||
+        (news.description !== undefined && (news.description ?? "") !== previousDescription) ||
+        (news.vpnGateway !== undefined && resourceRefOf(news.vpnGateway) !== previousVpnGateway) ||
         (news.vpnGatewayInterface !== undefined &&
           news.vpnGatewayInterface !== previousVpnGatewayInterface) ||
         (news.peerGcpGateway !== undefined &&
@@ -597,23 +545,18 @@ export const VpnTunnelProvider = () =>
         (news.peerExternalGateway !== undefined &&
           resourceRefOf(news.peerExternalGateway) !== previousPeerExternal) ||
         (news.peerExternalGatewayInterface !== undefined &&
-          news.peerExternalGatewayInterface !==
-            previousPeerExternalInterface) ||
+          news.peerExternalGatewayInterface !== previousPeerExternalInterface) ||
         (news.targetVpnGateway !== undefined &&
           resourceRefOf(news.targetVpnGateway) !== previousTarget) ||
         (news.peerIp !== undefined && news.peerIp !== previousPeerIp) ||
-        (news.router !== undefined &&
-          resourceRefOf(news.router) !== previousRouter) ||
-        (news.ikeVersion !== undefined &&
-          ikeVersionOf(news.ikeVersion) !== previousIke) ||
-        (olds.sharedSecret !== undefined &&
-          news.sharedSecret !== olds.sharedSecret) ||
+        (news.router !== undefined && resourceRefOf(news.router) !== previousRouter) ||
+        (news.ikeVersion !== undefined && ikeVersionOf(news.ikeVersion) !== previousIke) ||
+        (olds.sharedSecret !== undefined && news.sharedSecret !== olds.sharedSecret) ||
         (news.localTrafficSelector !== undefined &&
           selectorsKey(news.localTrafficSelector) !== previousLocal) ||
         (news.remoteTrafficSelector !== undefined &&
           selectorsKey(news.remoteTrafficSelector) !== previousRemote) ||
-        (news.cipherSuite !== undefined &&
-          cipherKey(news.cipherSuite) !== previousCipher);
+        (news.cipherSuite !== undefined && cipherKey(news.cipherSuite) !== previousCipher);
 
       if (nameChanged || regionChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -626,21 +569,12 @@ export const VpnTunnelProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const vpnTunnelName = yield* toName(
-        id,
-        olds?.vpnTunnelName,
-        output?.vpnTunnelName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const vpnTunnelName = yield* toName(id, olds?.vpnTunnelName, output?.vpnTunnelName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, vpnTunnelName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -658,9 +592,7 @@ export const VpnTunnelProvider = () =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.vpnTunnels ?? [])
               .filter((tunnel) =>
-                Object.keys(tunnel.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(tunnel.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((tunnel) => toAttrs(tunnel, env.project)),
           ),
@@ -669,11 +601,7 @@ export const VpnTunnelProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const vpnTunnelName = yield* toName(
-        id,
-        news.vpnTunnelName,
-        output?.vpnTunnelName,
-      );
+      const vpnTunnelName = yield* toName(id, news.vpnTunnelName, output?.vpnTunnelName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -693,15 +621,9 @@ export const VpnTunnelProvider = () =>
             Effect.flatMap((operation) =>
               waitRegionOperation(env.project, region, operation, {
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }).pipe(
-                Effect.flatMap(() =>
-                  requireTunnel(env.project, region, vpnTunnelName),
-                ),
-              ),
+              }).pipe(Effect.flatMap(() => requireTunnel(env.project, region, vpnTunnelName))),
             ),
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, region, vpnTunnelName),
-            ),
+            Effect.catchTag("Conflict", () => getByName(env.project, region, vpnTunnelName)),
           );
         current = created ?? undefined;
       }
@@ -715,8 +637,7 @@ export const VpnTunnelProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
-          const latest =
-            (yield* getByName(env.project, region, vpnTunnelName)) ?? resolved;
+          const latest = (yield* getByName(env.project, region, vpnTunnelName)) ?? resolved;
           yield* compute
             .setLabelsVpnTunnels({
               project: env.project,
@@ -728,9 +649,7 @@ export const VpnTunnelProvider = () =>
               },
             })
             .pipe(
-              Effect.flatMap((operation) =>
-                waitRegionOperation(env.project, region, operation),
-              ),
+              Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             );
         }).pipe(
           Effect.retry({
@@ -739,8 +658,7 @@ export const VpnTunnelProvider = () =>
             schedule: Schedule.spaced("1 second"),
           }),
         );
-        current =
-          (yield* getByName(env.project, region, vpnTunnelName)) ?? resolved;
+        current = (yield* getByName(env.project, region, vpnTunnelName)) ?? resolved;
       }
 
       return toAttrs(current ?? resolved, env.project);

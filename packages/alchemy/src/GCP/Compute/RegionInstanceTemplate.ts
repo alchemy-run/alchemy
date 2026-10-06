@@ -1,18 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  lastSegment,
-  normalizeRegion,
-  runRegionOp,
-  sameJson,
-  toPhysicalName,
-} from "./internal.ts";
-import type {
-  InstanceTemplateAccessConfig,
-  InstanceTemplateDisk,
-  InstanceTemplateNetworkInterface,
-  InstanceTemplateScheduling,
-  InstanceTemplateServiceAccount,
-} from "./InstanceTemplate.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -30,19 +16,24 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import type {
+  InstanceTemplateAccessConfig,
+  InstanceTemplateDisk,
+  InstanceTemplateNetworkInterface,
+  InstanceTemplateScheduling,
+  InstanceTemplateServiceAccount,
+} from "./InstanceTemplate.ts";
+import { lastSegment, normalizeRegion, runRegionOp, sameJson, toPhysicalName } from "./internal.ts";
 
 const DEFAULT_MACHINE_TYPE = "e2-micro";
-const DEFAULT_SOURCE_IMAGE =
-  "projects/debian-cloud/global/images/family/debian-12";
+const DEFAULT_SOURCE_IMAGE = "projects/debian-cloud/global/images/family/debian-12";
 const DEFAULT_DISK_SIZE_GB = "10";
 const DEFAULT_NETWORK = "global/networks/default";
 
 export type RegionInstanceTemplateAccessConfig = InstanceTemplateAccessConfig;
 export type RegionInstanceTemplateDisk = InstanceTemplateDisk;
-export type RegionInstanceTemplateNetworkInterface =
-  InstanceTemplateNetworkInterface;
-export type RegionInstanceTemplateServiceAccount =
-  InstanceTemplateServiceAccount;
+export type RegionInstanceTemplateNetworkInterface = InstanceTemplateNetworkInterface;
+export type RegionInstanceTemplateServiceAccount = InstanceTemplateServiceAccount;
 export type RegionInstanceTemplateScheduling = InstanceTemplateScheduling;
 
 export type RegionInstanceTemplateProps = {
@@ -193,27 +184,19 @@ const DEFAULT_DISKS: RegionInstanceTemplateDisk[] = [
   },
 ];
 
-const DEFAULT_NICS: RegionInstanceTemplateNetworkInterface[] = [
-  { network: DEFAULT_NETWORK },
-];
+const DEFAULT_NICS: RegionInstanceTemplateNetworkInterface[] = [{ network: DEFAULT_NETWORK }];
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const sortedRecord = (
-  labels: Record<string, string> | undefined,
-): Record<string, string> =>
+const sortedRecord = (labels: Record<string, string> | undefined): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(labels ?? {}).sort(([left], [right]) =>
-      left.localeCompare(right),
-    ),
+    Object.entries(labels ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   );
 
 const resolvedDisks = (props: RegionInstanceTemplateProps) =>
-  props.disks !== undefined && props.disks.length > 0
-    ? props.disks
-    : DEFAULT_DISKS;
+  props.disks !== undefined && props.disks.length > 0 ? props.disks : DEFAULT_DISKS;
 
 const resolvedNics = (props: RegionInstanceTemplateProps) =>
   props.networkInterfaces !== undefined && props.networkInterfaces.length > 0
@@ -276,8 +259,7 @@ const initializeParamsOf = (
     diskType: disk.diskType,
     diskName: disk.diskName,
     labels: disk.labels,
-    diskSizeGb:
-      disk.diskSizeGb !== undefined ? String(disk.diskSizeGb) : undefined,
+    diskSizeGb: disk.diskSizeGb !== undefined ? String(disk.diskSizeGb) : undefined,
   };
 };
 
@@ -293,9 +275,7 @@ const toDisks = (disks: RegionInstanceTemplateDisk[]): compute.AttachedDisk[] =>
     initializeParams: disk.source ? undefined : initializeParamsOf(disk),
   }));
 
-const toNics = (
-  nics: RegionInstanceTemplateNetworkInterface[],
-): compute.NetworkInterface[] =>
+const toNics = (nics: RegionInstanceTemplateNetworkInterface[]): compute.NetworkInterface[] =>
   nics.map((nic) => ({
     network: nic.network,
     subnetwork: nic.subnetwork,
@@ -312,8 +292,7 @@ const toProperties = (
   machineType: news.machineType ?? DEFAULT_MACHINE_TYPE,
   canIpForward: news.canIpForward,
   labels,
-  tags:
-    news.networkTags !== undefined ? { items: news.networkTags } : undefined,
+  tags: news.networkTags !== undefined ? { items: news.networkTags } : undefined,
   metadata:
     news.metadata !== undefined
       ? {
@@ -330,9 +309,7 @@ const toProperties = (
 });
 
 const bootSourceImage = (template: compute.InstanceTemplate) => {
-  const boot = (template.properties?.disks ?? []).find(
-    (disk) => disk.boot === true,
-  );
+  const boot = (template.properties?.disks ?? []).find((disk) => disk.boot === true);
   return boot?.initializeParams?.sourceImage;
 };
 
@@ -364,13 +341,10 @@ const awaitResource = (project: string, region: string, templateName: string) =>
     Effect.flatMap((template) =>
       template !== undefined
         ? Effect.succeed(template)
-        : Effect.fail(
-            new RegionInstanceTemplateNotResolved({ templateName, region }),
-          ),
+        : Effect.fail(new RegionInstanceTemplateNotResolved({ templateName, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionInstanceTemplateNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionInstanceTemplateNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -378,28 +352,15 @@ const awaitResource = (project: string, region: string, templateName: string) =>
 
 export const RegionInstanceTemplateProvider = () =>
   Provider.succeed(RegionInstanceTemplate, {
-    stables: [
-      "templateName",
-      "project",
-      "region",
-      "templateId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["templateName", "project", "region", "templateId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.templateName ?? output?.templateName;
       const nextName = news.templateName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       if (previousName === undefined && output === undefined) {
         return undefined;
       }
@@ -407,10 +368,8 @@ export const RegionInstanceTemplateProvider = () =>
         news.templateName !== undefined &&
         previousName !== undefined &&
         news.templateName !== previousName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
-      const propsChanged =
-        olds !== undefined && fingerprint(news) !== fingerprint(olds);
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
+      const propsChanged = olds !== undefined && fingerprint(news) !== fingerprint(olds);
       const adoptedChanged =
         olds === undefined &&
         output !== undefined &&
@@ -425,9 +384,7 @@ export const RegionInstanceTemplateProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          nextName === previousName,
+          previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
 
@@ -439,17 +396,11 @@ export const RegionInstanceTemplateProvider = () =>
         output?.templateName,
         "template",
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, templateName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        tagRecord(existing.properties?.labels),
-      ))
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.properties?.labels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -467,19 +418,18 @@ export const RegionInstanceTemplateProvider = () =>
             Stream.runCollect,
             Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
-        return Array.from(
-          pages as readonly compute.InstanceTemplateAggregatedList[],
-        ).flatMap((page) =>
-          Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
-            if (!scope.startsWith("regions/")) return [];
-            return (scoped?.instanceTemplates ?? [])
-              .filter((template) =>
-                Object.keys(template.properties?.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
-              )
-              .map((template) => toAttrs(template, env.project));
-          }),
+        return Array.from(pages as readonly compute.InstanceTemplateAggregatedList[]).flatMap(
+          (page) =>
+            Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
+              if (!scope.startsWith("regions/")) return [];
+              return (scoped?.instanceTemplates ?? [])
+                .filter((template) =>
+                  Object.keys(template.properties?.labels ?? {}).some((key) =>
+                    key.startsWith("alchemy-"),
+                  ),
+                )
+                .map((template) => toAttrs(template, env.project));
+            }),
         );
       }),
 

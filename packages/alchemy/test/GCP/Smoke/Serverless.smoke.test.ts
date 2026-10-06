@@ -1,7 +1,4 @@
-import * as GCP from "@/GCP";
-import { decodeFields } from "@/GCP/Firestore/Values.ts";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
+import { spawnSync } from "node:child_process";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
@@ -12,19 +9,16 @@ import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
+import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { decodeFields } from "@/GCP/Firestore/Values.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SmokeApi from "./fixtures/api.ts";
 import SmokeJob from "./fixtures/job.ts";
-import {
-  docId,
-  Jobs,
-  SCHEDULE_BODY,
-  Store,
-  Uploads,
-} from "./fixtures/serverless-resources.ts";
+import { docId, Jobs, SCHEDULE_BODY, Store, Uploads } from "./fixtures/serverless-resources.ts";
 import SmokeWorker from "./fixtures/worker.ts";
 
 /**
@@ -48,10 +42,7 @@ const sharedStack = Core.scratchStack(
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -106,19 +97,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -135,22 +121,16 @@ const awaitOk = (url: string) =>
                 `Serverless smoke: ${url} not ready (${response.status}: ${body.slice(0, 200)})`,
               ),
             ),
-            Effect.flatMap((body) =>
-              Effect.fail(new NotReady({ status: response.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new NotReady({ status: response.status, body }))),
           ),
     ),
     Effect.retry({
       while: (e) => e._tag === "NotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(72),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(72)]),
     }),
   );
 
-const documentName = (path: string) =>
-  `${outputs.databaseName}/documents/${path}`;
+const documentName = (path: string) => `${outputs.databaseName}/documents/${path}`;
 
 // Out-of-band Firestore read: `undefined` when the document is missing.
 const readDocument = (path: string) =>
@@ -163,35 +143,22 @@ const readDocument = (path: string) =>
 const awaitDocument = (path: string, times = 48) =>
   readDocument(path).pipe(
     Effect.flatMap((fields) =>
-      fields === undefined
-        ? Effect.fail(new DocumentMissing({ path }))
-        : Effect.succeed(fields),
+      fields === undefined ? Effect.fail(new DocumentMissing({ path })) : Effect.succeed(fields),
     ),
     Effect.retry({
       while: (e) => e._tag === "DocumentMissing",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(times),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(times)]),
     }),
   );
 
 // Bounded wait until an out-of-band probe reports the resource gone.
-const waitUntilGone = <E, R>(
-  what: string,
-  probe: Effect.Effect<boolean, E, R>,
-) =>
+const waitUntilGone = <E, R>(what: string, probe: Effect.Effect<boolean, E, R>) =>
   probe.pipe(
-    Effect.flatMap((gone) =>
-      gone ? Effect.void : Effect.fail(new StillExists({ what })),
-    ),
+    Effect.flatMap((gone) => (gone ? Effect.void : Effect.fail(new StillExists({ what })))),
     Effect.retry({
       // `instanceof`, not `_tag`: the probe's error type `E` is generic.
       while: (e) => e instanceof StillExists,
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -203,9 +170,7 @@ const schedulerJobFor = (workerUrl: string) =>
     })
     .pipe(
       Effect.map(({ jobs = [] }) =>
-        jobs.find((job) =>
-          job.httpTarget?.uri?.startsWith(`${workerUrl}/__alchemy/scheduler/`),
-        ),
+        jobs.find((job) => job.httpTarget?.uri?.startsWith(`${workerUrl}/__alchemy/scheduler/`)),
       ),
     );
 
@@ -216,10 +181,7 @@ const eventarcTriggerFor = (workerServiceId: string) =>
     })
     .pipe(
       Effect.map(({ triggers = [] }) =>
-        triggers.find(
-          (trigger) =>
-            trigger.destination?.cloudRun?.service === workerServiceId,
-        ),
+        triggers.find((trigger) => trigger.destination?.cloudRun?.service === workerServiceId),
       ),
     );
 
@@ -310,12 +272,8 @@ describe.sequential(
           const worker = yield* cloudrun.getProjectsLocationsServices({
             name: outputs.workerName,
           });
-          expect(worker.template?.serviceAccount).toEqual(
-            outputs.workerServiceAccount,
-          );
-          expect(outputs.workerServiceAccount).not.toEqual(
-            outputs.apiServiceAccount,
-          );
+          expect(worker.template?.serviceAccount).toEqual(outputs.workerServiceAccount);
+          expect(outputs.workerServiceAccount).not.toEqual(outputs.apiServiceAccount);
 
           // The worker is private: an anonymous request is rejected.
           const anonymous = yield* HttpClient.get(outputs.workerUrl);
@@ -349,9 +307,7 @@ describe.sequential(
             text,
           });
 
-          const read = yield* send(
-            HttpClientRequest.get(`${baseUrl}/todos/todo-1`),
-          );
+          const read = yield* send(HttpClientRequest.get(`${baseUrl}/todos/todo-1`));
           expect(read.status).toBe(200);
           expect((yield* read.json) as object).toEqual({
             item: { id: "todo-1", text },
@@ -373,15 +329,11 @@ describe.sequential(
             text: "updated",
           });
 
-          const deleted = yield* send(
-            HttpClientRequest.delete(`${baseUrl}/todos/todo-1`),
-          );
+          const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/todos/todo-1`));
           expect(deleted.status).toBe(204);
           expect(yield* readDocument("todos/todo-1")).toBeUndefined();
 
-          const missing = yield* send(
-            HttpClientRequest.get(`${baseUrl}/todos/todo-1`),
-          );
+          const missing = yield* send(HttpClientRequest.get(`${baseUrl}/todos/todo-1`));
           expect(missing.status).toBe(404);
         }),
       {
@@ -412,9 +364,7 @@ describe.sequential(
           expect(object.contentType).toBe("text/plain");
           expect(object.size).toBe(String(body.length));
 
-          const direct = yield* send(
-            HttpClientRequest.get(`${baseUrl}/files/${name}`),
-          );
+          const direct = yield* send(HttpClientRequest.get(`${baseUrl}/files/${name}`));
           expect(direct.status).toBe(200);
           expect(yield* direct.text).toBe(body);
 
@@ -423,9 +373,7 @@ describe.sequential(
           const { url } = (yield* send(
             HttpClientRequest.get(`${baseUrl}/files/${name}/signed`),
           ).pipe(Effect.flatMap((r) => r.json))) as { url: string };
-          expect(url).toContain(
-            `https://storage.googleapis.com/${outputs.bucketName}/${name}?`,
-          );
+          expect(url).toContain(`https://storage.googleapis.com/${outputs.bucketName}/${name}?`);
           expect(url).toContain("X-Goog-Signature=");
 
           // The signed URL downloads without any Google credentials.
@@ -433,9 +381,7 @@ describe.sequential(
           expect(yield* signed.text).toBe(body);
 
           // Tampering with the object path invalidates the signature.
-          const tampered = yield* HttpClient.get(
-            url.replace(`/${name}?`, "/other.txt?"),
-          );
+          const tampered = yield* HttpClient.get(url.replace(`/${name}?`, "/other.txt?"));
           expect(tampered.status).toBe(403);
         }),
       {
@@ -453,9 +399,9 @@ describe.sequential(
 
           const name = "eventarc/drop.txt";
           const put = yield* send(
-            HttpClientRequest.put(
-              `${baseUrl}/files/${encodeURIComponent(name)}`,
-            ).pipe(HttpClientRequest.bodyText("eventarc!", "text/plain")),
+            HttpClientRequest.put(`${baseUrl}/files/${encodeURIComponent(name)}`).pipe(
+              HttpClientRequest.bodyText("eventarc!", "text/plain"),
+            ),
           );
           expect(put.status).toBe(200);
 
@@ -496,10 +442,9 @@ describe.sequential(
           });
 
           // Out-of-band: the push subscription targets the worker.
-          const { subscriptions = [] } =
-            yield* pubsub.listProjectsTopicsSubscriptions({
-              topic: outputs.topicName,
-            });
+          const { subscriptions = [] } = yield* pubsub.listProjectsTopicsSubscriptions({
+            topic: outputs.topicName,
+          });
           expect(subscriptions.length).toBeGreaterThan(0);
         }),
       {
@@ -538,9 +483,9 @@ describe.sequential(
       "the API triggers a Cloud Run Job execution that records itself",
       (_stack) =>
         Effect.gen(function* () {
-          const started = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/run-job`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const started = (yield* send(HttpClientRequest.post(`${baseUrl}/run-job`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             operation: string;
             execution: string | undefined;
           };
@@ -557,10 +502,7 @@ describe.sequential(
               ),
               Effect.retry({
                 while: (e) => e._tag === "ExecutionPending",
-                schedule: Schedule.max([
-                  Schedule.fixed("10 seconds"),
-                  Schedule.recurs(36),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(36)]),
               }),
             );
           expect(execution.succeededCount).toBe(1);
@@ -588,12 +530,10 @@ describe.sequential(
 
           yield* waitUntilGone(
             "api service",
-            cloudrun
-              .getProjectsLocationsServices({ name: outputs.apiName })
-              .pipe(
-                Effect.as(false),
-                Effect.catchTag("NotFound", () => Effect.succeed(true)),
-              ),
+            cloudrun.getProjectsLocationsServices({ name: outputs.apiName }).pipe(
+              Effect.as(false),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            ),
           );
           yield* waitUntilGone(
             "worker service",
@@ -615,21 +555,17 @@ describe.sequential(
           );
           yield* waitUntilGone(
             "scheduler job",
-            scheduler
-              .getProjectsLocationsJobs({ name: schedulerJob!.name! })
-              .pipe(
-                Effect.as(false),
-                Effect.catchTag("NotFound", () => Effect.succeed(true)),
-              ),
+            scheduler.getProjectsLocationsJobs({ name: schedulerJob!.name! }).pipe(
+              Effect.as(false),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            ),
           );
           yield* waitUntilGone(
             "eventarc trigger",
-            eventarc
-              .getProjectsLocationsTriggers({ name: trigger!.name! })
-              .pipe(
-                Effect.as(false),
-                Effect.catchTag("NotFound", () => Effect.succeed(true)),
-              ),
+            eventarc.getProjectsLocationsTriggers({ name: trigger!.name! }).pipe(
+              Effect.as(false),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            ),
           );
           yield* waitUntilGone(
             "topic",

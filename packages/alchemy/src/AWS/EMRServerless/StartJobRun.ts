@@ -8,10 +8,7 @@ import type { Application } from "./Application.ts";
  * `applicationId` is injected from the bound {@link Application}; the
  * idempotency `clientToken` is auto-generated when omitted.
  */
-export type StartJobRunInput = Omit<
-  emr.StartJobRunRequest,
-  "applicationId" | "clientToken"
-> & {
+export type StartJobRunInput = Omit<emr.StartJobRunRequest, "applicationId" | "clientToken"> & {
   /**
    * Idempotency token deduplicating retried submissions.
    * @default a generated UUID per call
@@ -57,11 +54,7 @@ export interface StartJobRun extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: StartJobRunInput,
-    ) => Effect.Effect<emr.StartJobRunResponse, emr.StartJobRunError>
+    (request: StartJobRunInput) => Effect.Effect<emr.StartJobRunResponse, emr.StartJobRunError>
   >
 > {}
-export const StartJobRun = Binding.Service<StartJobRun>(
-  "AWS.EMRServerless.StartJobRun",
-);
+export const StartJobRun = Binding.Service<StartJobRun>("AWS.EMRServerless.StartJobRun");

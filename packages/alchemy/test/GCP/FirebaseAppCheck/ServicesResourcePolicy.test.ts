@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   runLifecycle,
@@ -42,10 +42,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.FirebaseAppCheck.ServicesResourcePolicy(
-            "IosOauth",
-            { enforcementMode: "UNENFORCED" },
-          );
+          return yield* GCP.FirebaseAppCheck.ServicesResourcePolicy("IosOauth", {
+            enforcementMode: "UNENFORCED",
+          });
         }),
       );
 
@@ -55,23 +54,19 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.enforcementMode).toEqual("UNENFORCED");
       expect(created.targetResource).toContain("/oauthClients/alc-");
 
-      const fetched =
-        yield* firebaseappcheck.getProjectsServicesResourcePolicies({
-          name: created.name,
-        });
+      const fetched = yield* firebaseappcheck.getProjectsServicesResourcePolicies({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.enforcementMode).toEqual("UNENFORCED");
       expect(fetched.targetResource).toEqual(created.targetResource);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.FirebaseAppCheck.ServicesResourcePolicy(
-            "IosOauth",
-            {
-              targetResource: created.targetResource,
-              enforcementMode: "OFF",
-            },
-          );
+          return yield* GCP.FirebaseAppCheck.ServicesResourcePolicy("IosOauth", {
+            targetResource: created.targetResource,
+            enforcementMode: "OFF",
+          });
         }),
       );
 

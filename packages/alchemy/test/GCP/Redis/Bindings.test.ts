@@ -1,18 +1,13 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import RedisBindingsHost, {
-  Acl,
-  Cache,
-  WRITTEN_VALUE,
-  slow,
-} from "./fixtures/bindings-host.ts";
+import RedisBindingsHost, { Acl, Cache, WRITTEN_VALUE, slow } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -75,14 +70,9 @@ describe.skipIf(!dockerAvailable)(
         "reads the ACL policy, granted viewer scoped to it",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<redis.AclPolicy>(
-              baseUrl,
-              "getAclPolicy",
-            );
+            const live = yield* expectProbe<redis.AclPolicy>(baseUrl, "getAclPolicy");
             expect(live.name).toEqual(aclName);
-            expect(live.rules).toEqual([
-              { username: "reader", rule: "on ~cache:* +get" },
-            ]);
+            expect(live.rules).toEqual([{ username: "reader", rule: "on ~cache:* +get" }]);
             expect(yield* hostProjectGrants).toContainEqual([
               "roles/redis.viewer",
               scoped(aclName),
@@ -101,10 +91,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the instance, granted viewer scoped to it",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<redis.Instance>(
-              baseUrl,
-              "getInstance",
-            );
+            const live = yield* expectProbe<redis.Instance>(baseUrl, "getInstance");
             expect(live.name).toEqual(cacheName);
             expect(live.authEnabled).toEqual(true);
             expect(yield* hostProjectGrants).toContainEqual([
@@ -124,13 +111,10 @@ describe.skipIf(!dockerAvailable)(
         "reads the AUTH string, granted admin scoped to the instance",
         (_stack) =>
           Effect.gen(function* () {
-            const auth = yield* expectProbe<redis.InstanceAuthString>(
-              baseUrl,
-              "getAuthString",
-            );
-            const direct = yield* redis.getAuthStringProjectsLocationsInstances(
-              { name: cacheName! },
-            );
+            const auth = yield* expectProbe<redis.InstanceAuthString>(baseUrl, "getAuthString");
+            const direct = yield* redis.getAuthStringProjectsLocationsInstances({
+              name: cacheName!,
+            });
             expect(auth.authString).toEqual(direct.authString);
             expect(auth.authString?.length ?? 0).toBeGreaterThan(0);
             expect(yield* hostProjectGrants).toContainEqual([
@@ -150,10 +134,7 @@ describe.skipIf(!dockerAvailable)(
         "writes over AUTH, the AUTH lookup granted admin scoped to the instance",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ incremented: number }>(
-              baseUrl,
-              "writeRedis",
-            );
+            const out = yield* expectProbe<{ incremented: number }>(baseUrl, "writeRedis");
             expect(out.incremented).toBeGreaterThan(0);
             expect(yield* hostProjectGrants).toContainEqual([
               "roles/redis.admin",

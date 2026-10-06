@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as biglake from "@distilled.cloud/gcp/biglake_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -58,9 +58,7 @@ test.provider(
       expect(created.database.catalog).toEqual(created.catalog.name);
       expect(created.database.type).toEqual("HIVE");
       expect(created.database.parameters).toMatchObject({ owner: "analytics" });
-      expect(created.database.locationUri).toEqual(
-        `gs://${bucket.bucketName}/warehouse`,
-      );
+      expect(created.database.locationUri).toEqual(`gs://${bucket.bucketName}/warehouse`);
 
       const fetched = yield* biglake.getProjectsLocationsCatalogsDatabases({
         name: created.database.name,
@@ -68,9 +66,7 @@ test.provider(
       expect(fetched.name).toEqual(created.database.name);
       expect(fetched.type).toEqual("HIVE");
       expect(fetched.hiveOptions?.parameters?.owner).toEqual("analytics");
-      expect(fetched.hiveOptions?.parameters?.["alchemy-id"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetched.hiveOptions?.parameters?.["alchemy-id"]).toEqual(expect.any(String));
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -89,9 +85,7 @@ test.provider(
       );
 
       expect(updated.database.name).toEqual(created.database.name);
-      expect(updated.database.locationUri).toEqual(
-        `gs://${bucket.bucketName}/warehouse-v2`,
-      );
+      expect(updated.database.locationUri).toEqual(`gs://${bucket.bucketName}/warehouse-v2`);
       expect(updated.database.parameters).toMatchObject({
         owner: "data",
         env: "prod",

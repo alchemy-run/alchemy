@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Model } from "./Model.ts";
 
-export interface GetModelRequest extends Omit<
-  ml.GetProjectsModelsRequest,
-  "name"
-> {}
+export interface GetModelRequest extends Omit<ml.GetProjectsModelsRequest, "name"> {}
 
 /**
  * Runtime binding for AI Platform (legacy ML Engine) `models.get`.
@@ -33,11 +30,7 @@ export interface GetModel extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetModelRequest,
-    ) => Effect.Effect<
-      ml.GoogleCloudMlV1__Model,
-      ml.GetProjectsModelsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<ml.GoogleCloudMlV1__Model, ml.GetProjectsModelsError, RuntimeContext>
   >
 > {}
 

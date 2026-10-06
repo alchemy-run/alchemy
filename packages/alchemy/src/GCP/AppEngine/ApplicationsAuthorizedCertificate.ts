@@ -152,10 +152,9 @@ export type ApplicationsAuthorizedCertificate = Resource<
  * @resource
  * @category AppEngine
  */
-export const ApplicationsAuthorizedCertificate =
-  Resource<ApplicationsAuthorizedCertificate>(
-    "GCP.AppEngine.ApplicationsAuthorizedCertificate",
-  );
+export const ApplicationsAuthorizedCertificate = Resource<ApplicationsAuthorizedCertificate>(
+  "GCP.AppEngine.ApplicationsAuthorizedCertificate",
+);
 
 export class ApplicationsAuthorizedCertificateNotResolved extends Data.TaggedError(
   "GCP.AppEngine.ApplicationsAuthorizedCertificateNotResolved",
@@ -164,8 +163,7 @@ export class ApplicationsAuthorizedCertificateNotResolved extends Data.TaggedErr
 }> {}
 
 const rawDataOf = (props: ApplicationsAuthorizedCertificateProps) => {
-  const publicCertificate =
-    props.publicCertificate ?? props.certificateRawData?.publicCertificate;
+  const publicCertificate = props.publicCertificate ?? props.certificateRawData?.publicCertificate;
   const privateKey = props.privateKey ?? props.certificateRawData?.privateKey;
   if (publicCertificate === undefined && privateKey === undefined) {
     return undefined;
@@ -241,11 +239,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
       }
       const previousApp = olds?.applicationsId ?? output?.applicationsId;
       const nextApp = news.applicationsId ?? previousApp;
-      if (
-        previousApp !== undefined &&
-        nextApp !== undefined &&
-        nextApp !== previousApp
-      ) {
+      if (previousApp !== undefined && nextApp !== undefined && nextApp !== previousApp) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.certificateId ?? output?.certificateId;
@@ -266,11 +260,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
         output?.applicationsId ?? output?.project,
       );
       const project = olds?.project ?? output?.project ?? env.project;
-      const location = yield* resolveLocation(
-        olds?.location,
-        output?.location,
-        applicationsId,
-      );
+      const location = yield* resolveLocation(olds?.location, output?.location, applicationsId);
       let existing = yield* getById(
         project,
         location,
@@ -280,28 +270,18 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
       if (existing === undefined) {
         existing = yield* findOwnedCertificate(
           id,
-          yield* listApplicationsAuthorizedCertificates(
-            project,
-            location,
-            applicationsId,
-          ),
+          yield* listApplicationsAuthorizedCertificates(project, location, applicationsId),
         );
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, project, location, applicationsId);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const location = yield* resolveLocation(
-          undefined,
-          undefined,
-          env.project,
-        );
+        const location = yield* resolveLocation(undefined, undefined, env.project);
         const certificates = yield* listApplicationsAuthorizedCertificates(
           env.project,
           location,
@@ -309,9 +289,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
         );
         return certificates
           .filter((certificate) => hasOwnershipMarker(certificate.displayName))
-          .map((certificate) =>
-            toAttrs(certificate, env.project, location, env.project),
-          );
+          .map((certificate) => toAttrs(certificate, env.project, location, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -321,11 +299,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
         output?.applicationsId ?? output?.project,
       );
       const project = news.project ?? output?.project ?? env.project;
-      const location = yield* resolveLocation(
-        news.location,
-        output?.location,
-        applicationsId,
-      );
+      const location = yield* resolveLocation(news.location, output?.location, applicationsId);
       const ownership = yield* ownershipLabels(id);
       const displayName = encodeOwnership(
         ownership,
@@ -343,11 +317,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
       if (current === undefined) {
         current = yield* findOwnedCertificate(
           id,
-          yield* listApplicationsAuthorizedCertificates(
-            project,
-            location,
-            applicationsId,
-          ),
+          yield* listApplicationsAuthorizedCertificates(project, location, applicationsId),
         );
       }
 
@@ -367,11 +337,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
               Effect.gen(function* () {
                 return yield* findOwnedCertificate(
                   id,
-                  yield* listApplicationsAuthorizedCertificates(
-                    project,
-                    location,
-                    applicationsId,
-                  ),
+                  yield* listApplicationsAuthorizedCertificates(project, location, applicationsId),
                 );
               }),
             ),
@@ -393,20 +359,17 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
         pemChanged ? "certificateRawData" : undefined,
       );
       if (updateMask.length > 0) {
-        current =
-          yield* appengine.patchProjectsLocationsApplicationsAuthorizedCertificates(
-            {
-              projectsId: project,
-              locationsId: location,
-              applicationsId,
-              authorizedCertificatesId: certificateId,
-              updateMask,
-              body: {
-                displayName,
-                certificateRawData,
-              },
-            },
-          );
+        current = yield* appengine.patchProjectsLocationsApplicationsAuthorizedCertificates({
+          projectsId: project,
+          locationsId: location,
+          applicationsId,
+          authorizedCertificatesId: certificateId,
+          updateMask,
+          body: {
+            displayName,
+            certificateRawData,
+          },
+        });
       }
 
       return toAttrs(current, project, location, applicationsId);

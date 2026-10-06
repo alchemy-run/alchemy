@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   changedFields,
@@ -38,9 +33,7 @@ export type AgentGatewayGovernedAccessPath =
   | networkservices.AgentGatewayGoogleManagedGovernedAccessPathEnum
   | (string & {});
 
-export type AgentGatewayProtocol =
-  | networkservices.AgentGatewayProtocolsItemEnum
-  | (string & {});
+export type AgentGatewayProtocol = networkservices.AgentGatewayProtocolsItemEnum | (string & {});
 
 export type AgentGatewayGoogleManaged = {
   /**
@@ -208,41 +201,28 @@ export type AgentGateway = Resource<
  * @resource
  * @category NetworkServices
  */
-export const AgentGateway = Resource<AgentGateway>(
-  "GCP.NetworkServices.AgentGateway",
-);
+export const AgentGateway = Resource<AgentGateway>("GCP.NetworkServices.AgentGateway");
 
 const toGoogleManaged = (
-  value:
-    | AgentGatewayGoogleManaged
-    | networkservices.AgentGatewayGoogleManaged
-    | undefined,
+  value: AgentGatewayGoogleManaged | networkservices.AgentGatewayGoogleManaged | undefined,
 ): AgentGatewayGoogleManaged | undefined => {
   if (value === undefined) return undefined;
   return { governedAccessPath: value.governedAccessPath };
 };
 
 const toSelfManaged = (
-  value:
-    | AgentGatewaySelfManaged
-    | networkservices.AgentGatewaySelfManaged
-    | undefined,
+  value: AgentGatewaySelfManaged | networkservices.AgentGatewaySelfManaged | undefined,
 ): AgentGatewaySelfManaged | undefined => {
   if (value === undefined) return undefined;
   return { resourceUri: value.resourceUri };
 };
 
 const toNetworkConfig = (
-  value:
-    | AgentGatewayNetworkConfig
-    | networkservices.AgentGatewayNetworkConfig
-    | undefined,
+  value: AgentGatewayNetworkConfig | networkservices.AgentGatewayNetworkConfig | undefined,
 ): AgentGatewayNetworkConfig | undefined => {
   if (value === undefined) return undefined;
   return {
-    egress: value.egress
-      ? { networkAttachment: value.egress.networkAttachment }
-      : undefined,
+    egress: value.egress ? { networkAttachment: value.egress.networkAttachment } : undefined,
     dnsPeeringConfig: value.dnsPeeringConfig
       ? {
           domains: value.dnsPeeringConfig.domains ?? [],
@@ -264,11 +244,7 @@ const toCard = (
   };
 };
 
-const toAttrs = (
-  gateway: networkservices.AgentGateway,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (gateway: networkservices.AgentGateway, project: string, region: string) => {
   const name = gateway.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   return {
@@ -306,18 +282,13 @@ export const AgentGatewayProvider = () =>
       const nextId = news.agentGatewayId
         ? rfc1035(news.agentGatewayId, "agent-gateway")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -333,19 +304,12 @@ export const AgentGatewayProvider = () =>
         output?.agentGatewayId,
         "agent-gateway",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, agentGatewayId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, agentGatewayId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -372,16 +336,8 @@ export const AgentGatewayProvider = () =>
         output?.agentGatewayId,
         "agent-gateway",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        agentGatewayId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, agentGatewayId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -426,28 +382,12 @@ export const AgentGatewayProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const googleChanged = !sameJson(
-        toGoogleManaged(current.googleManaged),
-        desiredGoogle,
-      );
-      const selfChanged = !sameJson(
-        toSelfManaged(current.selfManaged),
-        desiredSelf,
-      );
-      const registriesChanged = !sameStringList(
-        current.registries,
-        desiredRegistries,
-      );
-      const protocolsChanged = !sameStringList(
-        current.protocols,
-        desiredProtocols,
-      );
-      const networkChanged = !sameJson(
-        toNetworkConfig(current.networkConfig),
-        desiredNetwork,
-      );
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const googleChanged = !sameJson(toGoogleManaged(current.googleManaged), desiredGoogle);
+      const selfChanged = !sameJson(toSelfManaged(current.selfManaged), desiredSelf);
+      const registriesChanged = !sameStringList(current.registries, desiredRegistries);
+      const protocolsChanged = !sameStringList(current.protocols, desiredProtocols);
+      const networkChanged = !sameJson(toNetworkConfig(current.networkConfig), desiredNetwork);
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -460,27 +400,23 @@ export const AgentGatewayProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsAgentGateways({
+        const operation = yield* networkservices.patchProjectsLocationsAgentGateways({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              googleManaged: desiredGoogle,
-              selfManaged: desiredSelf,
-              registries: desiredRegistries,
-              protocols: desiredProtocols,
-              networkConfig: desiredNetwork,
-            },
-          });
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            googleManaged: desiredGoogle,
+            selfManaged: desiredSelf,
+            registries: desiredRegistries,
+            protocols: desiredProtocols,
+            networkConfig: desiredNetwork,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

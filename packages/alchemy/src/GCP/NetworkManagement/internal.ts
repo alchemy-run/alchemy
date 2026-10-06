@@ -1,5 +1,5 @@
-import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -26,9 +26,7 @@ export class NetworkmanagementStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class NetworkmanagementFailed extends Data.TaggedError(
-  "GCP.NetworkManagement.Failed",
-)<{
+export class NetworkmanagementFailed extends Data.TaggedError("GCP.NetworkManagement.Failed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -66,10 +64,8 @@ export const rfc1035 = (
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -79,46 +75,29 @@ export const organizationParent = (organization: string, location: string) =>
 
 export const organizationIdOf = (value: string) => lastSegment(value);
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `projects/${project}/locations/${location}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `projects/${project}/locations/${location}/${collection}/${id}`;
 
 export const organizationResourceName = (
   organization: string,
   location: string,
   collection: string,
   id: string,
-) =>
-  `organizations/${lastSegment(organization)}/locations/${location}/${collection}/${id}`;
+) => `organizations/${lastSegment(organization)}/locations/${location}/${collection}/${id}`;
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   const organizationsAt = parts.lastIndexOf("organizations");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     organization:
-      organizationsAt >= 0 && parts[organizationsAt + 1]
-        ? parts[organizationsAt + 1]!
-        : "",
+      organizationsAt >= 0 && parts[organizationsAt + 1] ? parts[organizationsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -169,36 +148,26 @@ export const sameStringList = (
   JSON.stringify([...(left ?? [])].map(canonicalizeLink).sort()) ===
   JSON.stringify([...(right ?? [])].map(canonicalizeLink).sort());
 
-export const changedFields = (
-  pairs: ReadonlyArray<readonly [string, boolean]>,
-) => pairs.filter(([, changed]) => changed).map(([field]) => field);
+export const changedFields = (pairs: ReadonlyArray<readonly [string, boolean]>) =>
+  pairs.filter(([, changed]) => changed).map(([field]) => field);
 
 export const toNetworkResource = (project: string, network: string) => {
   const trimmed = canonicalizeLink(network);
   const id = lastSegment(trimmed);
   const parts = trimmed.split("/").filter((part) => part.length > 0);
   const projectsAt = parts.lastIndexOf("projects");
-  const proj =
-    projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
+  const proj = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
   return `projects/${proj}/global/networks/${id || trimmed}`;
 };
 
-export const toSubnetworkResource = (
-  project: string,
-  region: string,
-  subnetwork: string,
-) => {
+export const toSubnetworkResource = (project: string, region: string, subnetwork: string) => {
   const trimmed = canonicalizeLink(subnetwork);
   if (trimmed.includes("/subnetworks/") || trimmed.includes("/subNetworks/")) {
     const parts = trimmed.split("/").filter((part) => part.length > 0);
     const projectsAt = parts.lastIndexOf("projects");
     const regionsAt = parts.lastIndexOf("regions");
-    const proj =
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : project;
-    const loc =
-      regionsAt >= 0 && parts[regionsAt + 1] ? parts[regionsAt + 1]! : region;
+    const proj = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
+    const loc = regionsAt >= 0 && parts[regionsAt + 1] ? parts[regionsAt + 1]! : region;
     return `projects/${proj}/regions/${loc}/subnetworks/${lastSegment(trimmed)}`;
   }
   return `projects/${project}/regions/${region}/subnetworks/${lastSegment(trimmed)}`;
@@ -215,12 +184,8 @@ export const toRegionalComputeResource = (
     const parts = trimmed.split("/").filter((part) => part.length > 0);
     const projectsAt = parts.lastIndexOf("projects");
     const regionsAt = parts.lastIndexOf("regions");
-    const proj =
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : project;
-    const loc =
-      regionsAt >= 0 && parts[regionsAt + 1] ? parts[regionsAt + 1]! : region;
+    const proj = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
+    const loc = regionsAt >= 0 && parts[regionsAt + 1] ? parts[regionsAt + 1]! : region;
     return `projects/${proj}/regions/${loc}/${collection}/${lastSegment(trimmed)}`;
   }
   return `projects/${project}/regions/${region}/${collection}/${lastSegment(trimmed)}`;
@@ -242,16 +207,11 @@ export const waitForOperation = (
   operation: networkmanagement.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  waitForLongRunning(
-    operation,
-    getOperation,
-    { budget: "10 minutes" },
-  ).pipe(
+  waitForLongRunning(operation, getOperation, { budget: "10 minutes" }).pipe(
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.catchIf(
@@ -260,15 +220,10 @@ export const waitForOperation = (
     ),
   );
 
-export const waitUntilPresent = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new NetworkmanagementNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new NetworkmanagementNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkmanagementNotResolved,
@@ -277,15 +232,10 @@ export const waitUntilPresent = <A, E, R>(
     }),
   );
 
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new NetworkmanagementStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new NetworkmanagementStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkmanagementStillExists,
@@ -294,12 +244,7 @@ export const waitUntilGone = <A, E, R>(
     }),
   );
 
-const PENDING_STATES = new Set([
-  "STATE_UNSPECIFIED",
-  "ACTIVATING",
-  "SUSPENDING",
-  "DELETING",
-]);
+const PENDING_STATES = new Set(["STATE_UNSPECIFIED", "ACTIVATING", "SUSPENDING", "DELETING"]);
 
 const FAILED_STATES = new Set(["DELETED"]);
 
@@ -328,12 +273,7 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
   );
 
 /** Collect every page; a missing parent (`NotFound`) lists as empty. */
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>
@@ -351,16 +291,12 @@ const parentOfResource = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         )
       : Effect.succeed(undefined);
 
@@ -375,10 +311,7 @@ const tryResolveOrganizationId = (project: string) =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return lastSegment(explicit);
     if (existing !== undefined) return lastSegment(existing);

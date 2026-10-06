@@ -8,11 +8,7 @@ import type { Topic } from "./Topic.ts";
  * Shared HTTP scaffolding for Pub/Sub bindings.
  * NOT exported from index.ts.
  */
-export const makeTopicHttpBinding = <
-  I extends { topic: string },
-  A,
-  E,
->(options: {
+export const makeTopicHttpBinding = <I extends { topic: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -26,9 +22,7 @@ export const makeTopicHttpBinding = <
         resource: topic,
         iam: [grantFor(options.iam, topic.name)],
       });
-      return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
-        request: Omit<I, "topic">,
-      ) {
+      return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (request: Omit<I, "topic">) {
         return yield* run({
           ...request,
           topic: yield* name,
@@ -37,11 +31,7 @@ export const makeTopicHttpBinding = <
     });
   });
 
-export const makeSubscriptionHttpBinding = <
-  I extends { subscription: string },
-  A,
-  E,
->(options: {
+export const makeSubscriptionHttpBinding = <I extends { subscription: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

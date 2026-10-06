@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -181,12 +176,9 @@ export type BackendsDomain = Resource<
  * @resource
  * @category FirebaseAppHosting
  */
-export const BackendsDomain = Resource<BackendsDomain>(
-  "GCP.FirebaseAppHosting.BackendsDomain",
-);
+export const BackendsDomain = Resource<BackendsDomain>("GCP.FirebaseAppHosting.BackendsDomain");
 
-const resourceName = (backend: string, domainId: string) =>
-  `${backend}/domains/${domainId}`;
+const resourceName = (backend: string, domainId: string) => `${backend}/domains/${domainId}`;
 
 const toServe = (
   value: firebaseapphosting.ServingBehavior | undefined,
@@ -242,15 +234,7 @@ const listOwned = (project: string) =>
 
 export const BackendsDomainProvider = () =>
   Provider.succeed(BackendsDomain, {
-    stables: [
-      "name",
-      "domainId",
-      "backend",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "domainId", "backend", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -259,10 +243,7 @@ export const BackendsDomainProvider = () =>
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const previousParent =
         (olds?.backend ?? output?.backend)
           ? expandParent(
@@ -272,12 +253,7 @@ export const BackendsDomainProvider = () =>
               "backends",
             )
           : undefined;
-      const nextParent = expandParent(
-        news.backend,
-        env.project,
-        location,
-        "backends",
-      );
+      const nextParent = expandParent(news.backend, env.project, location, "backends");
       return replaceOnIdentity({
         previousId: olds?.domainId ?? output?.domainId,
         nextId: news.domainId ?? olds?.domainId ?? output?.domainId,
@@ -291,24 +267,16 @@ export const BackendsDomainProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const domainId = yield* toDomainId(id, olds?.domainId, output?.domainId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const backend =
         output?.backend ??
-        (olds?.backend
-          ? expandParent(olds.backend, env.project, location, "backends")
-          : undefined);
-      const name =
-        output?.name ?? (backend ? resourceName(backend, domainId) : undefined);
+        (olds?.backend ? expandParent(olds.backend, env.project, location, "backends") : undefined);
+      const name = output?.name ?? (backend ? resourceName(backend, domainId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -321,16 +289,8 @@ export const BackendsDomainProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const domainId = yield* toDomainId(id, news.domainId, output?.domainId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const backend = expandParent(
-        news.backend,
-        env.project,
-        location,
-        "backends",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const backend = expandParent(news.backend, env.project, location, "backends");
       const name = resourceName(backend, domainId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -369,33 +329,28 @@ export const BackendsDomainProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.displayName, news.displayName) && "displayName",
         !sameBool(current.disabled, desiredDisabled) && "disabled",
-        fingerprint(toServe(current.serve)) !== fingerprint(news.serve) &&
-          "serve",
+        fingerprint(toServe(current.serve)) !== fingerprint(news.serve) && "serve",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* firebaseapphosting.patchProjectsLocationsBackendsDomains({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              serve: news.serve,
-              displayName: news.displayName,
-              disabled: desiredDisabled,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
-          });
+        const operation = yield* firebaseapphosting.patchProjectsLocationsBackendsDomains({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            serve: news.serve,
+            displayName: news.displayName,
+            disabled: desiredDisabled,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

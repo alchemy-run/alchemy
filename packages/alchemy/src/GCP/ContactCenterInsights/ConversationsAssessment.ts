@@ -31,12 +31,7 @@ type AgentInfo = {
    */
   displayName?: string;
   /** Agent type (`HUMAN_AGENT`, `AUTOMATED_AGENT`, …). */
-  agentType?:
-    | "ROLE_UNSPECIFIED"
-    | "HUMAN_AGENT"
-    | "AUTOMATED_AGENT"
-    | "END_USER"
-    | "ANY_AGENT";
+  agentType?: "ROLE_UNSPECIFIED" | "HUMAN_AGENT" | "AUTOMATED_AGENT" | "END_USER" | "ANY_AGENT";
   /** Deprecated team string. Prefer `teams`. */
   team?: string;
   /** Team names. */
@@ -140,9 +135,7 @@ const toAgentInfo = (
   stripOwnership: boolean,
 ): AgentInfo | undefined => {
   if (info === undefined) return undefined;
-  const displayName = stripOwnership
-    ? parseOwnership(info.displayName).text
-    : info.displayName;
+  const displayName = stripOwnership ? parseOwnership(info.displayName).text : info.displayName;
   return {
     agentId: info.agentId,
     displayName,
@@ -168,10 +161,7 @@ const encodeAgentInfo = (
   displayName: encodeOwnershipLine(ownership, info?.displayName, 256),
 });
 
-const toAttrs = (
-  assessment: cci.GoogleCloudContactcenterinsightsV1Assessment,
-  project: string,
-) => {
+const toAttrs = (assessment: cci.GoogleCloudContactcenterinsightsV1Assessment, project: string) => {
   const name = assessment.name ?? "";
   return {
     name,
@@ -194,44 +184,27 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAtParent = (parent: string, project: string) =>
-  cci.listProjectsLocationsConversationsAssessments
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.assessments ?? [])),
-      Stream.filter((assessment) =>
-        hasOwnershipMarker(assessment.agentInfo?.displayName),
-      ),
-      Stream.map((assessment) => toAttrs(assessment, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsConversationsAssessments.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.assessments ?? [])),
+    Stream.filter((assessment) => hasOwnershipMarker(assessment.agentInfo?.displayName)),
+    Stream.map((assessment) => toAttrs(assessment, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (parent: string, displayName: string) =>
-  cci.listProjectsLocationsConversationsAssessments
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.assessments ?? [])),
-      Stream.filter(
-        (assessment) => assessment.agentInfo?.displayName === displayName,
-      ),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  cci.listProjectsLocationsConversationsAssessments.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.assessments ?? [])),
+    Stream.filter((assessment) => assessment.agentInfo?.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const ConversationsAssessmentProvider = () =>
   Provider.succeed(ConversationsAssessment, {
-    stables: [
-      "name",
-      "assessmentId",
-      "parent",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "assessmentId", "parent", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -242,10 +215,7 @@ export const ConversationsAssessmentProvider = () =>
       const previousAgent = olds?.agentInfo ?? output?.agentInfo;
       if (
         previousAgent !== undefined &&
-        !sameJson(
-          toAgentInfo(previousAgent, false),
-          toAgentInfo(news.agentInfo, false),
-        )
+        !sameJson(toAgentInfo(previousAgent, false), toAgentInfo(news.agentInfo, false))
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -263,16 +233,11 @@ export const ConversationsAssessmentProvider = () =>
       }
       if (olds?.parent === undefined) return undefined;
       const ownership = yield* createInternalLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        olds.agentInfo?.displayName,
-      );
+      const displayName = encodeOwnershipLine(ownership, olds.agentInfo?.displayName);
       const found = yield* findOwned(olds.parent, displayName);
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
-      return (yield* ownedByAlchemy(id, found.agentInfo?.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, found.agentInfo?.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>

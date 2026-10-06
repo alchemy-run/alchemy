@@ -74,14 +74,7 @@ export interface ContainerProps {
 }
 
 export declare namespace Container {
-  type Status =
-    | "created"
-    | "running"
-    | "paused"
-    | "restarting"
-    | "removing"
-    | "exited"
-    | "dead";
+  type Status = "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead";
   type Image = string | { imageRef: string };
   interface PortMapping {
     /** External port on the host. */
@@ -322,12 +315,8 @@ export const inspectContainer = (
   context?: Docker.ContextRef,
 ): Effect.Effect<Container["Attributes"], PlatformError, Docker> =>
   Docker.pipe(
-    Effect.flatMap((docker) =>
-      docker.container.inspect(name, dockerContextName(context)),
-    ),
-    Effect.map((container) =>
-      toContainerAttributes(container, container.Config.Image),
-    ),
+    Effect.flatMap((docker) => docker.container.inspect(name, dockerContextName(context))),
+    Effect.map((container) => toContainerAttributes(container, container.Config.Image)),
   );
 
 export const ContainerProvider = () =>
@@ -348,9 +337,7 @@ export const ContainerProvider = () =>
           const entry = live.NetworkSettings.Networks?.[network.name];
           if (!entry) {
             connect.set(network.name, network);
-          } else if (
-            !Equal.equals(entry.Aliases ?? [], network.aliases ?? [])
-          ) {
+          } else if (!Equal.equals(entry.Aliases ?? [], network.aliases ?? [])) {
             connect.set(network.name, network);
             disconnect.add(network.name);
           }
@@ -362,17 +349,13 @@ export const ContainerProvider = () =>
         // compose file, or another tool had attached out of band (#1386).
         const desired = new Set((news.networks ?? []).map((n) => n.name));
         for (const network of olds?.networks ?? []) {
-          if (
-            !desired.has(network.name) &&
-            live.NetworkSettings.Networks?.[network.name]
-          ) {
+          if (!desired.has(network.name) && live.NetworkSettings.Networks?.[network.name]) {
             disconnect.add(network.name);
           }
         }
         yield* Effect.forEach(
           disconnect,
-          (network) =>
-            docker.network.disconnect({ network, container: live.Id, context }),
+          (network) => docker.network.disconnect({ network, container: live.Id, context }),
           { concurrency: "unbounded" },
         );
         yield* Effect.forEach(
@@ -395,30 +378,19 @@ export const ContainerProvider = () =>
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.container
             .inspect(name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (!info) return undefined;
           // `olds.image` may be `undefined` when a `creating` row was
           // persisted before upstream Outputs resolved — fall back to the
           // live container's actual image.
           const attrs = toContainerAttributes(
             info,
-            olds.image !== undefined
-              ? normalizeImageRef(olds.image)
-              : info.Config.Image,
+            olds.image !== undefined ? normalizeImageRef(olds.image) : info.Config.Image,
           );
           if (output) return attrs;
           // Without prior state, only adopt a container that carries our
           // branding; anything else is foreign and gated behind `--adopt`.
-          const owned = yield* hasAlchemyTags(
-            id,
-            info.Config.Labels ?? undefined,
-          );
+          const owned = yield* hasAlchemyTags(id, info.Config.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
@@ -427,9 +399,7 @@ export const ContainerProvider = () =>
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
           if (olds.image === undefined) return undefined;
-          if (
-            dockerContextName(olds.context) !== dockerContextName(news.context)
-          ) {
+          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
             return { action: "replace" as const, deleteFirst: true };
           }
           const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
@@ -449,13 +419,7 @@ export const ContainerProvider = () =>
           const args = yield* makeCreateArgs(id, news, instanceId);
           const live = yield* docker.container
             .inspect(args.name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
           if (live) {
             yield* reconcileNetworks(live, news, olds);
@@ -466,9 +430,7 @@ export const ContainerProvider = () =>
             }
             return yield* docker.container
               .inspect(live.Id, context)
-              .pipe(
-                Effect.map((info) => toContainerAttributes(info, args.image)),
-              );
+              .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
           }
 
           const internalTags = yield* createInternalTags(id);
@@ -495,22 +457,12 @@ export const ContainerProvider = () =>
           return toContainerAttributes(info, args.image);
         }),
         delete: Effect.fn(({ olds, output }) =>
-          docker.container
-            .stop(output.name, dockerContextName(olds.context))
-            .pipe(
-              Effect.andThen(
-                docker.container.remove(
-                  output.name,
-                  true,
-                  dockerContextName(olds.context),
-                ),
-              ),
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
+          docker.container.stop(output.name, dockerContextName(olds.context)).pipe(
+            Effect.andThen(
+              docker.container.remove(output.name, true, dockerContextName(olds.context)),
             ),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          ),
         ),
       });
     }),
@@ -531,8 +483,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
             command: news.command,
             env: normalizeEnvironment(news.environment),
             volume: news.volumes?.map(
-              (v) =>
-                `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+              (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
             ),
             p: news.ports?.map((port) => {
               const target = `${port.internal}/${port.protocol ?? "tcp"}`;
@@ -540,9 +491,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
               // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
               // host port 0 literally, which the daemon accepts and then reports
               // back as 0.
-              return isRandomHostPort(port.external)
-                ? target
-                : `${port.external}:${target}`;
+              return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
             }),
             "add-host": news.extraHosts,
             network: normalizeNetworkMode(news.networkMode),
@@ -557,17 +506,11 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
                   "health-cmd": Array.isArray(news.healthcheck.cmd)
                     ? news.healthcheck.cmd.join(" ")
                     : news.healthcheck.cmd,
-                  "health-interval": normalizeDuration(
-                    news.healthcheck.interval,
-                  ),
+                  "health-interval": normalizeDuration(news.healthcheck.interval),
                   "health-timeout": normalizeDuration(news.healthcheck.timeout),
                   "health-retries": news.healthcheck.retries ?? 0,
-                  "health-start-period": normalizeDuration(
-                    news.healthcheck.startPeriod,
-                  ),
-                  "health-start-interval": normalizeDuration(
-                    news.healthcheck.startInterval,
-                  ),
+                  "health-start-period": normalizeDuration(news.healthcheck.startPeriod),
+                  "health-start-interval": normalizeDuration(news.healthcheck.startInterval),
                 }
               : {
                   "health-cmd": undefined,
@@ -609,31 +552,18 @@ const toContainerAttributes = (
   })),
 });
 
-const normalizeNetworkMode = (
-  mode: Container.NetworkMode | undefined,
-): string | undefined =>
-  mode === undefined
-    ? undefined
-    : typeof mode === "string"
-      ? mode
-      : `container:${mode.container}`;
+const normalizeNetworkMode = (mode: Container.NetworkMode | undefined): string | undefined =>
+  mode === undefined ? undefined : typeof mode === "string" ? mode : `container:${mode.container}`;
 
-const normalizeCapabilities = (
-  capAdd: string[] | undefined,
-): string[] | undefined => {
+const normalizeCapabilities = (capAdd: string[] | undefined): string[] | undefined => {
   if (!capAdd?.length) return undefined;
-  return [
-    ...new Set(capAdd.map((capability) => capability.trim()).filter(Boolean)),
-  ].sort();
+  return [...new Set(capAdd.map((capability) => capability.trim()).filter(Boolean))].sort();
 };
 
-const normalizeDevices = (
-  devices: Container.DeviceMapping[] | undefined,
-): string[] | undefined => {
+const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): string[] | undefined => {
   if (!devices?.length) return undefined;
   const normalized = devices.map(
-    (device) =>
-      `${device.hostPath}:${device.containerPath}:${device.permissions ?? "rwm"}`,
+    (device) => `${device.hostPath}:${device.containerPath}:${device.permissions ?? "rwm"}`,
   );
   return [...new Set(normalized)].sort();
 };
@@ -659,9 +589,7 @@ const validateContainerOptions = (news: ContainerProps): void => {
   }
 };
 
-const isContainerNetworkMode = (
-  mode: Container.NetworkMode | undefined,
-): boolean =>
+const isContainerNetworkMode = (mode: Container.NetworkMode | undefined): boolean =>
   typeof mode === "string" ? mode.startsWith("container:") : mode !== undefined;
 
 /** First binding that carries a real (non-zero) host port. */
@@ -687,15 +615,11 @@ const boundHostPort = (
  */
 const toPortAttributes = (info: Docker.Container): Record<string, number> => {
   const ports: Record<string, number> = {};
-  for (const [internal, bindings] of Object.entries(
-    info.HostConfig.PortBindings ?? {},
-  )) {
+  for (const [internal, bindings] of Object.entries(info.HostConfig.PortBindings ?? {})) {
     const port = boundHostPort(bindings);
     if (port !== undefined) ports[internal] = port;
   }
-  for (const [internal, bindings] of Object.entries(
-    info.NetworkSettings.Ports ?? {},
-  )) {
+  for (const [internal, bindings] of Object.entries(info.NetworkSettings.Ports ?? {})) {
     const port = boundHostPort(bindings);
     if (port !== undefined) ports[internal] = port;
   }
@@ -716,9 +640,7 @@ const normalizeEnvironment = (
     ]),
   );
 
-const normalizeDuration = (
-  input: Duration.Input | undefined,
-): string | undefined => {
+const normalizeDuration = (input: Duration.Input | undefined): string | undefined => {
   if (!input) return undefined;
   const duration = Duration.fromInputUnsafe(input);
   // Docker parses `--health-*` durations with Go's `time.ParseDuration`, which

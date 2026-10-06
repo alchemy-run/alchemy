@@ -5,11 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 // Zonal default is left fixed: zones are not derivable from `GcpEnvironment.region` without assuming a suffix.
 export const DEFAULT_ZONE = "us-central1-a";
@@ -31,9 +27,7 @@ export const LIST_LOCATIONS = [
 
 const OWNERSHIP_MARKER = "+alc.";
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.PubSubLite.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.PubSubLite.NotResolved")<{
   name: string;
 }> {}
 
@@ -43,10 +37,8 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const regionOf = (location: string) => {
   const parts = location.split("-").filter((part) => part.length > 0);
@@ -60,12 +52,8 @@ export const regionOf = (location: string) => {
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `${parentOf(project, location)}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `${parentOf(project, location)}/${collection}/${id}`;
 
 export const parseName = (name: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -73,14 +61,9 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -110,9 +93,7 @@ export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 const sanitizeId = (value: string, maxLength: number) => {
   let next = value.replace(/[^a-zA-Z0-9._~+%:-]/g, "-").replace(/-+/g, "-");
@@ -127,15 +108,11 @@ export const stripOwnershipId = (id: string) => {
   return index >= 0 ? id.slice(0, index) : id;
 };
 
-export const parseOwnershipId = (
-  id: string | undefined,
-): Record<string, string> => {
+export const parseOwnershipId = (id: string | undefined): Record<string, string> => {
   if (!id) return {};
   const index = id.lastIndexOf(OWNERSHIP_MARKER);
   if (index < 0) return {};
-  const [stack, stage, ...idParts] = id
-    .slice(index + OWNERSHIP_MARKER.length)
-    .split(".");
+  const [stack, stage, ...idParts] = id.slice(index + OWNERSHIP_MARKER.length).split(".");
   const labels: Record<string, string> = {};
   if (stack) labels[alchemyLabelKeys.stack] = stack;
   if (stage) labels[alchemyLabelKeys.stage] = stage;
@@ -153,10 +130,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = `${OWNERSHIP_MARKER}${stack}.${stage}.${id}`;
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (id.length >= stack.length && id.length >= stage.length) {
       id = id.slice(0, -1);
     } else if (stack.length >= stage.length) {
@@ -176,18 +150,13 @@ export const encodeResourceId = (
 ) => {
   const stripped = sanitizeId(stripOwnershipId(base), maxLength);
   const minMarker = `${OWNERSHIP_MARKER}x.x.x`.length;
-  const marker = fitMarker(
-    labels,
-    Math.max(minMarker, Math.min(120, maxLength - 8)),
-  );
+  const marker = fitMarker(labels, Math.max(minMarker, Math.min(120, maxLength - 8)));
   const room = Math.max(1, maxLength - marker.length);
   return sanitizeId(`${stripped.slice(0, room)}${marker}`, maxLength);
 };
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (logicalId: string, resourceId: string) =>
   Effect.gen(function* () {
@@ -197,18 +166,9 @@ export const ownedByAlchemy = (logicalId: string, resourceId: string) =>
     const exact = yield* hasAlchemyLabels(logicalId, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -242,15 +202,10 @@ export const replaceOnIdentity = (input: {
   extra?: boolean;
 }) => {
   const previousId =
-    input.previousId !== undefined
-      ? stripOwnershipId(lastSegment(input.previousId))
-      : undefined;
+    input.previousId !== undefined ? stripOwnershipId(lastSegment(input.previousId)) : undefined;
   const nextId =
-    input.nextId !== undefined
-      ? stripOwnershipId(lastSegment(input.nextId))
-      : undefined;
-  const idChanged =
-    previousId !== undefined && nextId !== undefined && previousId !== nextId;
+    input.nextId !== undefined ? stripOwnershipId(lastSegment(input.nextId)) : undefined;
+  const idChanged = previousId !== undefined && nextId !== undefined && previousId !== nextId;
   const locationChanged =
     input.previousLocation !== undefined &&
     input.nextLocation !== undefined &&
@@ -266,8 +221,7 @@ export const replaceOnIdentity = (input: {
 };
 
 export const countOf = (value: number | string | undefined) => {
-  if (value === undefined || value === "")
-    return Number(DEFAULT_PARTITION_COUNT);
+  if (value === undefined || value === "") return Number(DEFAULT_PARTITION_COUNT);
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : Number(DEFAULT_PARTITION_COUNT);
 };
@@ -282,8 +236,7 @@ export const partitionBody = (input: {
   count: String(countOf(input.count)),
   capacity: {
     publishMibPerSec: input.capacity?.publishMibPerSec ?? DEFAULT_PUBLISH_MIB,
-    subscribeMibPerSec:
-      input.capacity?.subscribeMibPerSec ?? DEFAULT_SUBSCRIBE_MIB,
+    subscribeMibPerSec: input.capacity?.subscribeMibPerSec ?? DEFAULT_SUBSCRIBE_MIB,
   },
 });
 
@@ -316,8 +269,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -327,8 +279,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -348,14 +299,10 @@ export const retryInUse = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.PubSubLite.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.PubSubLite.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -378,20 +325,15 @@ const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
 
 const listParents = (project: string, region: string) =>
-  [...new Set<string>([region, ...LIST_LOCATIONS])].map((location) =>
-    parentOf(project, location),
-  );
+  [...new Set<string>([region, ...LIST_LOCATIONS])].map((location) => parentOf(project, location));
 
-const listAcross = <Item, E, R>(
-  listAt: (parent: string) => Effect.Effect<readonly Item[], E, R>,
-) =>
+const listAcross = <Item, E, R>(listAt: (parent: string) => Effect.Effect<readonly Item[], E, R>) =>
   Effect.gen(function* () {
     const env = yield* GcpEnvironment.current;
     const pages = yield* Effect.forEach(
@@ -462,21 +404,15 @@ export const listSubscriptionsAt = (parent: string) =>
 
 export const listOwnedReservations = () =>
   listAcross(listReservationsAt).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? ""))),
-    ),
+    Effect.map((items) => items.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? "")))),
   );
 
 export const listOwnedTopics = () =>
   listAcross(listTopicsAt).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? ""))),
-    ),
+    Effect.map((items) => items.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? "")))),
   );
 
 export const listOwnedSubscriptions = () =>
   listAcross(listSubscriptionsAt).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? ""))),
-    ),
+    Effect.map((items) => items.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? "")))),
   );

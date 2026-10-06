@@ -35,19 +35,14 @@ export const rfc1035 = (name: string, fallback = "auth"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  authProviderId: string,
-) => `${parentOf(project, location)}/${COLLECTION}/${authProviderId}`;
+export const resourceName = (project: string, location: string, authProviderId: string) =>
+  `${parentOf(project, location)}/${COLLECTION}/${authProviderId}`;
 
 export const toPhysicalId = (
   id: string,
@@ -73,16 +68,11 @@ export const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     authProviderId:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -90,9 +80,7 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
@@ -119,20 +107,16 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
 ) =>
-  fingerprint([...(left ?? [])].slice().sort()) ===
-  fingerprint([...(right ?? [])].slice().sort());
+  fingerprint([...(left ?? [])].slice().sort()) === fingerprint([...(right ?? [])].slice().sort());
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const clipDescription = (description: string | undefined) => {
   if (description === undefined) return undefined;
@@ -192,9 +176,7 @@ export const typeKind = (params: AuthProviderTypeParams | undefined) => {
   return undefined;
 };
 
-export const publicTypeParams = (
-  params: AuthProviderTypeParams | undefined,
-) => {
+export const publicTypeParams = (params: AuthProviderTypeParams | undefined) => {
   if (params === undefined || typeKind(params) === undefined) return undefined;
   return {
     kind: typeKind(params),
@@ -209,8 +191,7 @@ export const hasSecretUpdate = (
 ) => {
   if (news === undefined || olds === undefined) return false;
   const apiKeyChanged =
-    news.apiKey?.apiKey !== undefined &&
-    news.apiKey.apiKey !== olds.apiKey?.apiKey;
+    news.apiKey?.apiKey !== undefined && news.apiKey.apiKey !== olds.apiKey?.apiKey;
   const threeSecretChanged =
     news.threeLeggedOauth?.clientSecret !== undefined &&
     news.threeLeggedOauth.clientSecret !== olds.threeLeggedOauth?.clientSecret;
@@ -221,22 +202,14 @@ export const hasSecretUpdate = (
 };
 
 export const toTypeParams = (
-  params:
-    | agentidentity.AuthProviderTypeParams
-    | AuthProviderTypeParams
-    | undefined,
+  params: agentidentity.AuthProviderTypeParams | AuthProviderTypeParams | undefined,
 ): AuthProviderTypeParams | undefined => {
   if (params === undefined) return undefined;
   const three = params.threeLeggedOauth;
   const two = params.twoLeggedOauth;
   const apiKey = params.apiKey;
   const ge = params.geAuthProvider;
-  if (
-    three === undefined &&
-    two === undefined &&
-    apiKey === undefined &&
-    ge === undefined
-  ) {
+  if (three === undefined && two === undefined && apiKey === undefined && ge === undefined) {
     return undefined;
   }
   return {
@@ -289,14 +262,10 @@ const listPages = (parent: string) =>
     })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.authProviders ?? [])),
-      Stream.filter(
-        (item) => item.deleted !== true && hasAlchemyLabelMap(item.labels),
-      ),
+      Stream.filter((item) => item.deleted !== true && hasAlchemyLabelMap(item.labels)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as agentidentity.AuthProvider[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as agentidentity.AuthProvider[])),
     );
 
 const listLocationIds = (project: string, region: string) =>
@@ -307,9 +276,7 @@ const listLocationIds = (project: string, region: string) =>
     })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
-      Stream.map(
-        (location) => location.locationId ?? lastSegment(location.name ?? ""),
-      ),
+      Stream.map((location) => location.locationId ?? lastSegment(location.name ?? "")),
       Stream.filter((id) => id.length > 0),
       Stream.runCollect,
       Effect.map((chunk) => {

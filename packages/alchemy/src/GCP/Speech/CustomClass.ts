@@ -116,17 +116,12 @@ export type CustomClass = Resource<
  */
 export const CustomClass = Resource<CustomClass>("GCP.Speech.CustomClass");
 
-export class CustomClassNotResolved extends Data.TaggedError(
-  "GCP.Speech.CustomClassNotResolved",
-)<{
+export class CustomClassNotResolved extends Data.TaggedError("GCP.Speech.CustomClassNotResolved")<{
   name: string;
 }> {}
 
-const customClassNameOf = (
-  project: string,
-  location: string,
-  customClassId: string,
-) => resourceNameOf(project, location, "customClasses", customClassId);
+const customClassNameOf = (project: string, location: string, customClassId: string) =>
+  resourceNameOf(project, location, "customClasses", customClassId);
 
 const toAttrs = (customClass: speech.CustomClass, project: string) => {
   const name = customClass.name ?? "";
@@ -161,11 +156,7 @@ export const CustomClassProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const customClassId = yield* toPhysicalId(
-        id,
-        olds?.customClassId,
-        output?.customClassId,
-      );
+      const customClassId = yield* toPhysicalId(id, olds?.customClassId, output?.customClassId);
       const existing = yield* getCustomClass(
         output?.name ?? customClassNameOf(env.project, location, customClassId),
       );
@@ -173,9 +164,7 @@ export const CustomClassProvider = () =>
       const attrs = toAttrs(existing, env.project);
       // No labels: a generated id derives from this stack, stage, logical
       // id and instance; an explicit id is only ours when state has it.
-      return output !== undefined || olds?.customClassId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.customClassId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -187,17 +176,10 @@ export const CustomClassProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
-      const customClassId = yield* toPhysicalId(
-        id,
-        news.customClassId,
-        output?.customClassId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
+      const customClassId = yield* toPhysicalId(id, news.customClassId, output?.customClassId);
       const items = news.items ?? [];
-      const name =
-        output?.name ?? customClassNameOf(env.project, location, customClassId);
+      const name = output?.name ?? customClassNameOf(env.project, location, customClassId);
 
       let current = yield* getCustomClass(name);
 
@@ -212,9 +194,7 @@ export const CustomClassProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              getCustomClass(
-                customClassNameOf(env.project, location, customClassId),
-              ),
+              getCustomClass(customClassNameOf(env.project, location, customClassId)),
             ),
           );
         current = created ?? undefined;
@@ -231,8 +211,7 @@ export const CustomClassProvider = () =>
 
       const currentName = current.name ?? name;
       const updateMask = updateMaskOf(
-        markerFromItems(current.items) === undefined &&
-          sameItems(current.items, news.items)
+        markerFromItems(current.items) === undefined && sameItems(current.items, news.items)
           ? undefined
           : "items",
       );

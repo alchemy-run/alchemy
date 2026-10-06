@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -259,10 +254,7 @@ export type GrpcRoute = Resource<
 export const GrpcRoute = Resource<GrpcRoute>("GCP.NetworkServices.GrpcRoute");
 
 const toMethod = (
-  value:
-    | GrpcRouteMethodMatch
-    | networkservices.GrpcRouteMethodMatch
-    | undefined,
+  value: GrpcRouteMethodMatch | networkservices.GrpcRouteMethodMatch | undefined,
 ): GrpcRouteMethodMatch | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -296,10 +288,7 @@ const toDestination = (
 });
 
 const toFault = (
-  value:
-    | GrpcRouteFaultInjectionPolicy
-    | networkservices.GrpcRouteFaultInjectionPolicy
-    | undefined,
+  value: GrpcRouteFaultInjectionPolicy | networkservices.GrpcRouteFaultInjectionPolicy | undefined,
 ): GrpcRouteFaultInjectionPolicy | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -319,10 +308,7 @@ const toFault = (
 };
 
 const toRetry = (
-  value:
-    | GrpcRouteRetryPolicy
-    | networkservices.GrpcRouteRetryPolicy
-    | undefined,
+  value: GrpcRouteRetryPolicy | networkservices.GrpcRouteRetryPolicy | undefined,
 ): GrpcRouteRetryPolicy | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -342,10 +328,7 @@ const toAffinity = (
 };
 
 const toAction = (
-  value:
-    | GrpcRouteRouteAction
-    | networkservices.GrpcRouteRouteAction
-    | undefined,
+  value: GrpcRouteRouteAction | networkservices.GrpcRouteRouteAction | undefined,
 ): GrpcRouteRouteAction | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -392,21 +375,12 @@ const getByName = (name: string) =>
 
 export const GrpcRouteProvider = () =>
   Provider.succeed(GrpcRoute, {
-    stables: [
-      "name",
-      "grpcRouteId",
-      "project",
-      "location",
-      "selfLink",
-      "createTime",
-    ],
+    stables: ["name", "grpcRouteId", "project", "location", "selfLink", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.grpcRouteId ?? output?.grpcRouteId;
-      const nextId = news.grpcRouteId
-        ? rfc1035(news.grpcRouteId, "grpc-route")
-        : previousId;
+      const nextId = news.grpcRouteId ? rfc1035(news.grpcRouteId, "grpc-route") : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         DEFAULT_GLOBAL,
@@ -416,9 +390,7 @@ export const GrpcRouteProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -434,19 +406,12 @@ export const GrpcRouteProvider = () =>
         output?.grpcRouteId,
         "grpc-route",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, grpcRouteId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, grpcRouteId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -473,10 +438,7 @@ export const GrpcRouteProvider = () =>
         output?.grpcRouteId,
         "grpc-route",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, COLLECTION, grpcRouteId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -520,21 +482,11 @@ export const GrpcRouteProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const hostnamesChanged = !sameStringList(
-        current.hostnames,
-        desiredHostnames,
-      );
-      const rulesChanged = !sameJson(
-        (current.rules ?? []).map(toRule),
-        desiredRules,
-      );
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const hostnamesChanged = !sameStringList(current.hostnames, desiredHostnames);
+      const rulesChanged = !sameJson((current.rules ?? []).map(toRule), desiredRules);
       const meshesChanged = !sameStringList(current.meshes, desiredMeshes);
-      const gatewaysChanged = !sameStringList(
-        current.gateways,
-        desiredGateways,
-      );
+      const gatewaysChanged = !sameStringList(current.gateways, desiredGateways);
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -546,25 +498,21 @@ export const GrpcRouteProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsGrpcRoutes({
+        const operation = yield* networkservices.patchProjectsLocationsGrpcRoutes({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              hostnames: desiredHostnames,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            hostnames: desiredHostnames,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

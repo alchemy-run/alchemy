@@ -1,13 +1,13 @@
-import * as GCP from "@/GCP";
-import { makeObjectMedia } from "@/GCP/Storage/ObjectMedia.ts";
-import * as Test from "@/Test/Alchemy";
+import { spawnSync } from "node:child_process";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { spawnSync } from "node:child_process";
+import * as GCP from "@/GCP";
+import { makeObjectMedia } from "@/GCP/Storage/ObjectMedia.ts";
+import * as Test from "@/Test/Alchemy";
 import BucketEventsService, {
   INCOMING_PREFIX,
   markerFor,
@@ -16,17 +16,11 @@ import BucketEventsService, {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -49,25 +43,21 @@ test.provider.skipIf(!dockerAvailable)(
 
       // The notification publishes only `incoming/` finalizes to a topic
       // with one push subscription to the service.
-      const notifications = (yield* storage.listNotifications({ bucket }))
-        .items;
+      const notifications = (yield* storage.listNotifications({ bucket })).items;
       expect(notifications?.length).toEqual(1);
       const notification = notifications![0]!;
       expect(notification.event_types).toEqual(["OBJECT_FINALIZE"]);
       expect(notification.object_name_prefix).toEqual(INCOMING_PREFIX);
       expect(notification.payload_format).toEqual("JSON_API_V1");
       const topic = notification.topic!.replace("//pubsub.googleapis.com/", "");
-      const { subscriptions = [] } =
-        yield* pubsub.listProjectsTopicsSubscriptions({ topic });
+      const { subscriptions = [] } = yield* pubsub.listProjectsTopicsSubscriptions({ topic });
       expect(subscriptions.length).toEqual(1);
       const subscription = yield* pubsub.getProjectsSubscriptions({
         subscription: subscriptions[0]!,
       });
       const pushEndpoint = `${out.uri}/__alchemy/pubsub/uploads-bucketevents`;
       expect(subscription.pushConfig?.pushEndpoint).toEqual(pushEndpoint);
-      expect(subscription.pushConfig?.oidcToken?.audience).toEqual(
-        pushEndpoint,
-      );
+      expect(subscription.pushConfig?.oidcToken?.audience).toEqual(pushEndpoint);
 
       const media = yield* makeObjectMedia;
       // Outside the prefix: must not be delivered.
@@ -97,14 +87,10 @@ test.provider.skipIf(!dockerAvailable)(
       expect(event.contentType).toContain("text/plain");
       expect(event.eventTime).toEqual(expect.any(String));
 
-      const skipped = yield* media
-        .download({ bucket, object: markerFor("other/skip.txt") })
-        .pipe(
-          Effect.as("delivered" as const),
-          Effect.catchTag("GCP.Storage.ObjectNotFound", () =>
-            Effect.succeed("filtered" as const),
-          ),
-        );
+      const skipped = yield* media.download({ bucket, object: markerFor("other/skip.txt") }).pipe(
+        Effect.as("delivered" as const),
+        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.succeed("filtered" as const)),
+      );
       expect(skipped).toEqual("filtered");
 
       yield* stack.destroy();

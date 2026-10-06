@@ -32,8 +32,7 @@ export const waitForOperation = (
   options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
   Effect.gen(function* () {
-    const get = (name: string) =>
-      aiplatform.getProjectsLocationsOperations({ name });
+    const get = (name: string) => aiplatform.getProjectsLocationsOperations({ name });
     const finished = yield* waitForGcpOperation(operation, get, {
       budget: "30 minutes",
     }).pipe(
@@ -44,9 +43,7 @@ export const waitForOperation = (
           : Effect.fail(error),
       ),
       Effect.catchTag("NotFound", (error) =>
-        options?.notFoundOk === true
-          ? Effect.succeed(false)
-          : Effect.fail(error),
+        options?.notFoundOk === true ? Effect.succeed(false) : Effect.fail(error),
       ),
     );
     if (!finished || operation.done === true || !operation.name) {

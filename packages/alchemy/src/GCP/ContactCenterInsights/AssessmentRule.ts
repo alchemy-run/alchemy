@@ -134,9 +134,7 @@ export type AssessmentRule = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const AssessmentRule = Resource<AssessmentRule>(
-  "GCP.ContactCenterInsights.AssessmentRule",
-);
+export const AssessmentRule = Resource<AssessmentRule>("GCP.ContactCenterInsights.AssessmentRule");
 
 export class AssessmentRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AssessmentRuleNotResolved",
@@ -157,11 +155,8 @@ const toAssessmentRuleId = (
         Effect.map((generated) => generated.replace(/[^a-z0-9]/g, "")),
       );
 
-const resourceName = (
-  project: string,
-  location: string,
-  assessmentRuleId: string,
-) => `${locationParent(project, location)}/assessmentRules/${assessmentRuleId}`;
+const resourceName = (project: string, location: string, assessmentRuleId: string) =>
+  `${locationParent(project, location)}/assessmentRules/${assessmentRuleId}`;
 
 const sampleOf = (
   sample: cci.GoogleCloudContactcenterinsightsV1SampleRule | undefined,
@@ -187,10 +182,7 @@ const scheduleOf = (
   };
 };
 
-const toAttrs = (
-  rule: cci.GoogleCloudContactcenterinsightsV1AssessmentRule,
-  project: string,
-) => {
+const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AssessmentRule, project: string) => {
   const name = rule.name ?? "";
   const parsed = parseOwnership(rule.displayName);
   return {
@@ -215,16 +207,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  cci.listProjectsLocationsAssessmentRules
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.assessmentRules ?? [])),
-      Stream.filter((rule) => hasOwnershipMarker(rule.displayName)),
-      Stream.map((rule) => toAttrs(rule, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsAssessmentRules.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.assessmentRules ?? [])),
+    Stream.filter((rule) => hasOwnershipMarker(rule.displayName)),
+    Stream.map((rule) => toAttrs(rule, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 /** Assessment rules reject display names over 64 characters ("Request contains an invalid argument"). */
 const MAX_RULE_DISPLAY_NAME = 64;
@@ -261,33 +251,23 @@ export const AssessmentRuleProvider = () =>
         olds?.assessmentRuleId,
         output?.assessmentRuleId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, assessmentRuleId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, assessmentRuleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
       const assessmentRuleId = yield* toAssessmentRuleId(
         id,
@@ -296,11 +276,7 @@ export const AssessmentRuleProvider = () =>
       );
       const name = resourceName(env.project, location, assessmentRuleId);
       const ownership = yield* createInternalLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName,
-        MAX_RULE_DISPLAY_NAME,
-      );
+      const displayName = encodeOwnershipLine(ownership, news.displayName, MAX_RULE_DISPLAY_NAME);
       const active = news.active === true;
 
       let current = yield* getByName(output?.name ?? name);
@@ -328,14 +304,8 @@ export const AssessmentRuleProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = (current.displayName ?? "") !== displayName;
       const activeChanged = (current.active === true) !== active;
-      const sampleChanged = !jsonEqual(
-        sampleOf(current.sampleRule),
-        news.sampleRule,
-      );
-      const scheduleChanged = !jsonEqual(
-        scheduleOf(current.scheduleInfo),
-        news.scheduleInfo,
-      );
+      const sampleChanged = !jsonEqual(sampleOf(current.sampleRule), news.sampleRule);
+      const scheduleChanged = !jsonEqual(scheduleOf(current.scheduleInfo), news.scheduleInfo);
 
       if (displayChanged || activeChanged || sampleChanged || scheduleChanged) {
         current = yield* cci.patchProjectsLocationsAssessmentRules({

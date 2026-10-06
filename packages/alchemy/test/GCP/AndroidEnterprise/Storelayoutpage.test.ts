@@ -1,30 +1,23 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as androidenterprise from "@distilled.cloud/gcp/androidenterprise_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  enterpriseId,
-  logLevel,
-  probeEnterpriseId,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { enterpriseId, logLevel, probeEnterpriseId, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const waitUntilGone = (accountId: string, pageId: string) =>
-  androidenterprise
-    .getStorelayoutpages({ enterpriseId: accountId, pageId })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  androidenterprise.getStorelayoutpages({ enterpriseId: accountId, pageId }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider.skipIf(!runLifecycle)(
   "getStorelayoutpages on a missing page fails with a typed tag",

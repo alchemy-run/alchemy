@@ -1,15 +1,15 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as pricing from "@distilled.cloud/aws/pricing";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import PricingTestFunctionLive, { PricingTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -23,10 +23,7 @@ const withPricingRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -43,19 +40,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -72,10 +64,7 @@ test.provider(
   (_stack) =>
     Effect.gen(function* () {
       const result = yield* withPricingRegion(
-        pricing.getProducts({
-          ServiceCode: "AlchemyBogusServiceCodeProbe",
-          MaxResults: 1,
-        }),
+        pricing.getProducts({ ServiceCode: "AlchemyBogusServiceCodeProbe", MaxResults: 1 }),
       );
 
       expect(result.PriceList ?? []).toHaveLength(0);
@@ -88,12 +77,7 @@ test.provider(
   (_stack) =>
     Effect.gen(function* () {
       const result = yield* Effect.result(
-        withPricingRegion(
-          pricing.getProducts({
-            ServiceCode: "AmazonEC2",
-            MaxResults: 0,
-          }),
-        ),
+        withPricingRegion(pricing.getProducts({ ServiceCode: "AmazonEC2", MaxResults: 0 })),
       );
 
       expect(Result.isFailure(result)).toBe(true);
@@ -106,20 +90,11 @@ test.provider(
 
 describe(
   "Pricing Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:pricing",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:pricing", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Pricing test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Pricing test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Pricing test setup: deploying fixture");
@@ -133,21 +108,15 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `Pricing test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Pricing test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Pricing test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Pricing test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -162,9 +131,9 @@ describe(
         "returns a non-empty price list for AmazonEC2 t3.micro",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/products`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/products`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
               count: number;
               formatVersion: string | undefined;
               firstServiceCode: string | undefined;
@@ -184,14 +153,9 @@ describe(
         "describes AmazonEC2 with its filterable attribute names",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/services`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              services: Array<{
-                serviceCode: string;
-                attributeNameCount: number;
-              }>;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/services`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { services: Array<{ serviceCode: string; attributeNameCount: number }> };
 
             expect(response.services.length).toBe(1);
             expect(response.services[0].serviceCode).toBe("AmazonEC2");
@@ -235,17 +199,11 @@ describe(
           Effect.gen(function* () {
             const response = (yield* send(
               HttpClientRequest.get(`${baseUrl}/attribute-values`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              values: string[];
-            };
+            ).pipe(Effect.flatMap((r) => r.json))) as { values: string[] };
 
             expect(response.values.length).toBeGreaterThan(0);
             // gp2/gp3 are stable, long-standing EBS volume types.
-            expect(
-              response.values.some((value) =>
-                value.startsWith("General Purpose"),
-              ),
-            ).toBe(true);
+            expect(response.values.some((value) => value.startsWith("General Purpose"))).toBe(true);
           }),
         { timeout: 120_000 },
       );

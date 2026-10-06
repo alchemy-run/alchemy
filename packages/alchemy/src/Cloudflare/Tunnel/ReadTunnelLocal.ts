@@ -27,7 +27,4 @@ import { makeLocalTunnelClient } from "./TunnelLocalBinding.ts";
  * );
  * ```
  */
-export const ReadTunnelLocal = Layer.effect(
-  ReadTunnel,
-  makeLocalTunnelClient(readClient),
-);
+export const ReadTunnelLocal = Layer.effect(ReadTunnel, makeLocalTunnelClient(readClient));

@@ -9,11 +9,7 @@ const projectAndEnvironmentCreateGate = Semaphore.makeUnsafe(1);
  * window. Serialize these calls and retry a typed rejection once after 31s.
  * Other mutation failures propagate so an ambiguous create is never replayed.
  */
-export const waitOutCreateRateLimit = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const waitOutCreateRateLimit = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Semaphore.withPermits(

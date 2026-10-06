@@ -200,11 +200,7 @@ export const EndpointProvider = () =>
           .describeEndpoints({
             Filters: [{ Name: "endpoint-id", Values: [identifier] }],
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
         return response?.Endpoints?.[0];
       });
 
@@ -266,10 +262,7 @@ export const EndpointProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? ({} as EndpointProps))) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? ({} as EndpointProps))) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
           // KMS key is create-only.
@@ -280,14 +273,11 @@ export const EndpointProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
-            output?.endpointIdentifier ??
-            (yield* toName(id, olds ?? ({} as EndpointProps)));
+            output?.endpointIdentifier ?? (yield* toName(id, olds ?? ({} as EndpointProps)));
           const endpoint = yield* findEndpoint(name);
           if (!endpoint?.EndpointArn) return undefined;
           const attrs = yield* toAttrs(endpoint);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -314,9 +304,7 @@ export const EndpointProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.Endpoint),
-                Effect.catchTag("ResourceAlreadyExistsFault", () =>
-                  findEndpoint(name),
-                ),
+                Effect.catchTag("ResourceAlreadyExistsFault", () => findEndpoint(name)),
               );
           } else {
             // 3. Sync — the endpoint exists; push desired configuration. DMS
@@ -370,8 +358,7 @@ export const EndpointProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.Endpoints ?? []).filter(
                   (endpoint) =>
-                    endpoint.EndpointIdentifier !== undefined &&
-                    endpoint.EndpointArn !== undefined,
+                    endpoint.EndpointIdentifier !== undefined && endpoint.EndpointArn !== undefined,
                 ),
               ),
             ),

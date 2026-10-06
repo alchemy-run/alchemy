@@ -1,31 +1,23 @@
-import * as GCP from "@/GCP";
-import type { StackServices } from "@/Stack";
-import * as Test from "@/Test/Alchemy";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import type { StackServices } from "@/Stack";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
-  providers: GCP.providers() as Layer.Layer<
-    GCP.ProviderRequirements,
-    never,
-    StackServices
-  >,
+  providers: GCP.providers() as Layer.Layer<GCP.ProviderRequirements, never, StackServices>,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Runs against an existing Cloud SQL instance (creating one takes well over
 // 5 minutes); set GCP_SQL_INSTANCE to its name.
-const sqlInstance =
-  process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
+const sqlInstance = process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
 const runLifecycle = !!sqlInstance && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
@@ -33,9 +25,7 @@ const waitUntilGone = (name: string) =>
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     // Cloud SQL answers a deleted backup uid with this 403.
-    Effect.catchTag("SqlBackupAccessDenied", () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("SqlBackupAccessDenied", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -105,9 +95,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.backupId.length).toBeGreaterThan(0);
       expect(created.instance).toEqual(instance);
       expect(created.project).toEqual(project);
-      expect(created.name).toEqual(
-        `projects/${project}/backups/${created.backupId}`,
-      );
+      expect(created.name).toEqual(`projects/${project}/backups/${created.backupId}`);
       expect(created.description).toEqual("alchemy-on-demand");
 
       const fetched = yield* sqladmin.getBackupBackups({

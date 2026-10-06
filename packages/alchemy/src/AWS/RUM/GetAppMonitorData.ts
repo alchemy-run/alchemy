@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { AppMonitor } from "./AppMonitor.ts";
 
-export interface GetAppMonitorDataRequest extends Omit<
-  rum.GetAppMonitorDataRequest,
-  "Name"
-> {}
+export interface GetAppMonitorDataRequest extends Omit<rum.GetAppMonitorDataRequest, "Name"> {}
 
 /**
  * Runtime binding for `rum:GetAppMonitorData` — retrieve the raw performance
@@ -39,13 +36,8 @@ export interface GetAppMonitorData extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAppMonitorDataRequest,
-    ) => Effect.Effect<
-      rum.GetAppMonitorDataResponse,
-      rum.GetAppMonitorDataError
-    >
+    ) => Effect.Effect<rum.GetAppMonitorDataResponse, rum.GetAppMonitorDataError>
   >
 > {}
 
-export const GetAppMonitorData = Binding.Service<GetAppMonitorData>(
-  "AWS.RUM.GetAppMonitorData",
-);
+export const GetAppMonitorData = Binding.Service<GetAppMonitorData>("AWS.RUM.GetAppMonitorData");

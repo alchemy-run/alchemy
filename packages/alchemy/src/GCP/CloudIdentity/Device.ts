@@ -21,11 +21,7 @@ import {
   replaceOnIdentity,
   toPhysicalId,
 } from "./internal.ts";
-import {
-  resourceNameFromOperation,
-  waitForOperation,
-  waitUntilPresent,
-} from "./operations.ts";
+import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from "./operations.ts";
 
 export type DeviceProps = {
   /**
@@ -45,9 +41,7 @@ export type DeviceProps = {
    * Device type. Immutable — changing it replaces the device.
    * @default "LINUX"
    */
-  deviceType?:
-    | cloudidentity.GoogleAppsCloudidentityDevicesV1DeviceDeviceTypeEnum
-    | (string & {});
+  deviceType?: cloudidentity.GoogleAppsCloudidentityDevicesV1DeviceDeviceTypeEnum | (string & {});
   /**
    * Asset tag. Devices have no labels field, so Alchemy stores
    * ownership in a `[alchemy …]` prefix and strips it from attributes.
@@ -137,9 +131,7 @@ export type Device = Resource<
  */
 export const Device = Resource<Device>("GCP.CloudIdentity.Device");
 
-export class DeviceNotResolved extends Data.TaggedError(
-  "GCP.CloudIdentity.DeviceNotResolved",
-)<{
+export class DeviceNotResolved extends Data.TaggedError("GCP.CloudIdentity.DeviceNotResolved")<{
   name: string;
 }> {}
 
@@ -183,21 +175,13 @@ const observeDevice = (input: {
 
 export const DeviceProvider = () =>
   Provider.succeed(Device, {
-    stables: [
-      "name",
-      "deviceResourceId",
-      "customer",
-      "serialNumber",
-      "createTime",
-    ],
+    stables: ["name", "deviceResourceId", "customer", "serialNumber", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousCustomer = olds?.customer ?? output?.customer;
       const nextCustomer =
-        news.customer !== undefined
-          ? normalizeCustomer(news.customer)
-          : previousCustomer;
+        news.customer !== undefined ? normalizeCustomer(news.customer) : previousCustomer;
       const previousType = olds?.deviceType ?? output?.deviceType;
       const nextType = news.deviceType ?? DEFAULT_DEVICE_TYPE;
       return replaceOnIdentity({
@@ -219,9 +203,7 @@ export const DeviceProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, customer);
-      return (yield* ownedByAlchemy(id, existing.assetTag))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.assetTag)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -235,17 +217,8 @@ export const DeviceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const customer = normalizeCustomer(news.customer ?? output?.customer);
       const ownership = yield* ownershipLabels(id);
-      const serialNumber = yield* toPhysicalId(
-        id,
-        news.serialNumber,
-        output?.serialNumber,
-        20,
-      );
-      const assetTag = encodeOwnershipLine(
-        ownership,
-        news.assetTag,
-        MAX_ASSET_TAG_LENGTH,
-      );
+      const serialNumber = yield* toPhysicalId(id, news.serialNumber, output?.serialNumber, 20);
+      const assetTag = encodeOwnershipLine(ownership, news.assetTag, MAX_ASSET_TAG_LENGTH);
       const deviceType = news.deviceType ?? DEFAULT_DEVICE_TYPE;
       const desired: cloudidentity.GoogleAppsCloudidentityDevicesV1Device = {
         serialNumber,
@@ -276,10 +249,7 @@ export const DeviceProvider = () =>
           );
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
-            Effect.catchTag(
-              "GCP.CloudIdentity.OperationPending",
-              () => Effect.void,
-            ),
+            Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
           );
           const createdName = resourceNameFromOperation(created);
           if (createdName !== undefined) {

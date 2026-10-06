@@ -46,6 +46,4 @@ export interface FetchGitRefs extends Binding.Service<
   >
 > {}
 
-export const FetchGitRefs = Binding.Service<FetchGitRefs>(
-  "GCP.DeveloperConnect.FetchGitRefs",
-);
+export const FetchGitRefs = Binding.Service<FetchGitRefs>("GCP.DeveloperConnect.FetchGitRefs");

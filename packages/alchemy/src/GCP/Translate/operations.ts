@@ -2,10 +2,7 @@ import * as translate from "@distilled.cloud/gcp/translate_v3";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import {
-  OperationFailed,
-  waitForOperation as waitForGcpOperation,
-} from "../Operation.ts";
+import { OperationFailed, waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 /**
  * Translate reports some failures (e.g. a model created from an empty
@@ -16,9 +13,7 @@ const metadataFailure = (operation: translate.Operation) => {
   const error = operation.metadata?.error;
   if (!Predicate.isObject(error)) return undefined;
   const code =
-    Predicate.hasProperty(error, "code") && Predicate.isNumber(error.code)
-      ? error.code
-      : undefined;
+    Predicate.hasProperty(error, "code") && Predicate.isNumber(error.code) ? error.code : undefined;
   const message =
     Predicate.hasProperty(error, "message") && Predicate.isString(error.message)
       ? error.message
@@ -43,11 +38,9 @@ export const waitForOperation = (
   operation: translate.Operation,
   options?: { notFoundOk?: boolean; budget?: Duration.Input },
 ) =>
-  waitForGcpOperation(
-    operation,
-    (name) => translate.getProjectsLocationsOperations({ name }),
-    { budget: options?.budget ?? "10 minutes" },
-  ).pipe(
+  waitForGcpOperation(operation, (name) => translate.getProjectsLocationsOperations({ name }), {
+    budget: options?.budget ?? "10 minutes",
+  }).pipe(
     Effect.flatMap(() =>
       operation.name
         ? translate.getProjectsLocationsOperations({ name: operation.name })
@@ -60,8 +53,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         (error._tag === "GCP.OperationFailed" &&
-          (error.code === 6 ||
-            (options?.notFoundOk === true && error.code === 5))) ||
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
         (options?.notFoundOk === true && error._tag === "NotFound"),
       () => Effect.succeed(operation),
     ),

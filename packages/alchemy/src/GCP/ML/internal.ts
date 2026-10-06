@@ -16,21 +16,15 @@ import {
 export const MAX_NAME_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 8000;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.ML.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.ML.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.ML.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.ML.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class VersionNotReady extends Data.TaggedError(
-  "GCP.ML.VersionNotReady",
-)<{
+export class VersionNotReady extends Data.TaggedError("GCP.ML.VersionNotReady")<{
   name: string;
   state: string;
 }> {}
@@ -106,16 +100,9 @@ export const parseModelName = (name: string, fallbackProject = "") => {
   const modelsAt = parts.lastIndexOf("models");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : fallbackProject,
-    modelId:
-      modelsAt >= 0 && parts[modelsAt + 1]
-        ? parts[modelsAt + 1]!
-        : lastSegment(name),
-    parent:
-      modelsAt > 0 ? parts.slice(0, modelsAt).join("/") : projectParent(""),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject,
+    modelId: modelsAt >= 0 && parts[modelsAt + 1] ? parts[modelsAt + 1]! : lastSegment(name),
+    parent: modelsAt > 0 ? parts.slice(0, modelsAt).join("/") : projectParent(""),
   };
 };
 
@@ -126,9 +113,7 @@ export const parseVersionName = (name: string, fallbackProject = "") => {
   return {
     ...parsed,
     versionId:
-      versionsAt >= 0 && parts[versionsAt + 1]
-        ? parts[versionsAt + 1]!
-        : lastSegment(name),
+      versionsAt >= 0 && parts[versionsAt + 1] ? parts[versionsAt + 1]! : lastSegment(name),
     model:
       versionsAt > 0
         ? parts.slice(0, versionsAt).join("/")
@@ -140,9 +125,7 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
@@ -152,9 +135,7 @@ export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
 ) =>
-  JSON.stringify(
-    [...(left ?? [])].map((value) => value.toLowerCase()).sort(),
-  ) ===
+  JSON.stringify([...(left ?? [])].map((value) => value.toLowerCase()).sort()) ===
   JSON.stringify([...(right ?? [])].map((value) => value.toLowerCase()).sort());
 
 export const normalizeRegions = (
@@ -168,16 +149,9 @@ export const normalizeRegions = (
 };
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -185,10 +159,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -198,9 +169,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
     }
     marker = markerOf(labels, stack, stage, id);
   }
-  return marker.length <= maxLength
-    ? marker
-    : `${marker.slice(0, Math.max(0, maxLength - 1))}]`;
+  return marker.length <= maxLength ? marker : `${marker.slice(0, Math.max(0, maxLength - 1))}]`;
 };
 
 export const encodeOwnership = (
@@ -237,14 +206,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith(ALCHEMY_LABEL_PREFIX),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -254,34 +219,19 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
-export const modelOwnedByAlchemy = (
-  id: string,
-  model: ml.GoogleCloudMlV1__Model,
-) =>
+export const modelOwnedByAlchemy = (id: string, model: ml.GoogleCloudMlV1__Model) =>
   Effect.gen(function* () {
     if (yield* hasAlchemyLabels(id, tagRecord(model.labels))) return true;
     return yield* ownedByAlchemy(id, model.description);
   });
 
-export const versionOwnedByAlchemy = (
-  id: string,
-  version: ml.GoogleCloudMlV1__Version,
-) =>
+export const versionOwnedByAlchemy = (id: string, version: ml.GoogleCloudMlV1__Version) =>
   Effect.gen(function* () {
     if (yield* hasAlchemyLabels(id, tagRecord(version.labels))) return true;
     return yield* ownedByAlchemy(id, version.description);
@@ -346,9 +296,7 @@ export const listModels = (project: string) =>
     })
     .pipe(
       Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.models ?? []),
-      ),
+      Effect.map((pages) => Array.from(pages).flatMap((page) => page.models ?? [])),
       Effect.catchTag("NotFound", () => emptyList<ml.GoogleCloudMlV1__Model>()),
     );
 
@@ -362,28 +310,19 @@ export const listVersions = (parent: string) =>
         })
         .pipe(
           Stream.runCollect,
-          Effect.map((pages) =>
-            Array.from(pages).flatMap((page) => page.versions ?? []),
-          ),
-          Effect.catchTag("NotFound", () =>
-            emptyList<ml.GoogleCloudMlV1__Version>(),
-          ),
+          Effect.map((pages) => Array.from(pages).flatMap((page) => page.versions ?? [])),
+          Effect.catchTag("NotFound", () => emptyList<ml.GoogleCloudMlV1__Version>()),
         );
 
 export const listOwnedModels = (project: string) =>
-  listModels(project).pipe(
-    Effect.map((models) => models.filter(modelHasOwnership)),
-  );
+  listModels(project).pipe(Effect.map((models) => models.filter(modelHasOwnership)));
 
 export const listOwnedVersions = (project: string) =>
   Effect.gen(function* () {
     const models = yield* listOwnedModels(project);
     const pages = yield* Effect.forEach(
       models,
-      (model) =>
-        model.name
-          ? listVersions(model.name)
-          : emptyList<ml.GoogleCloudMlV1__Version>(),
+      (model) => (model.name ? listVersions(model.name) : emptyList<ml.GoogleCloudMlV1__Version>()),
       { concurrency: 4 },
     );
     return pages.flat().filter((version) => versionHasOwnership(version));
@@ -391,8 +330,7 @@ export const listOwnedVersions = (project: string) =>
 
 type Tagged = { readonly _tag: string };
 
-const versionState = (version: ml.GoogleCloudMlV1__Version) =>
-  (version.state ?? "").toUpperCase();
+const versionState = (version: ml.GoogleCloudMlV1__Version) => (version.state ?? "").toUpperCase();
 
 export const waitUntilGone = <A, R>(
   get: Effect.Effect<A, Tagged, R>,
@@ -431,17 +369,12 @@ export const waitUntilVersionReady = (
   name: string,
 ): Effect.Effect<
   ml.GoogleCloudMlV1__Version,
-  | ml.Forbidden
-  | ml.GcpOpError
-  | ResourceNotResolved
-  | VersionFailed
-  | VersionNotReady,
+  ml.Forbidden | ml.GcpOpError | ResourceNotResolved | VersionFailed | VersionNotReady,
   ml.GcpOpContext
 > =>
   getVersion(name).pipe(
     Effect.filterOrFail(
-      (version): version is ml.GoogleCloudMlV1__Version =>
-        version !== undefined,
+      (version): version is ml.GoogleCloudMlV1__Version => version !== undefined,
       () => new ResourceNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -455,21 +388,19 @@ export const waitUntilVersionReady = (
           state: version.state ?? "",
         }),
     ),
-    Effect.flatMap(
-      (version): Effect.Effect<ml.GoogleCloudMlV1__Version, VersionFailed> =>
-        versionState(version) === "FAILED"
-          ? Effect.fail(
-              new VersionFailed({
-                name,
-                message: version.errorMessage ?? "version failed",
-              }),
-            )
-          : Effect.succeed(version),
+    Effect.flatMap((version): Effect.Effect<ml.GoogleCloudMlV1__Version, VersionFailed> =>
+      versionState(version) === "FAILED"
+        ? Effect.fail(
+            new VersionFailed({
+              name,
+              message: version.errorMessage ?? "version failed",
+            }),
+          )
+        : Effect.succeed(version),
     ),
     Effect.retry({
       while: (error) =>
-        error._tag === "GCP.ML.ResourceNotResolved" ||
-        error._tag === "GCP.ML.VersionNotReady",
+        error._tag === "GCP.ML.ResourceNotResolved" || error._tag === "GCP.ML.VersionNotReady",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),

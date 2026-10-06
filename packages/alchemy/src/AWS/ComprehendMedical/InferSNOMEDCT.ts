@@ -36,6 +36,4 @@ export interface InferSNOMEDCT extends Binding.Service<
     >
   >
 > {}
-export const InferSNOMEDCT = Binding.Service<InferSNOMEDCT>(
-  "AWS.ComprehendMedical.InferSNOMEDCT",
-);
+export const InferSNOMEDCT = Binding.Service<InferSNOMEDCT>("AWS.ComprehendMedical.InferSNOMEDCT");

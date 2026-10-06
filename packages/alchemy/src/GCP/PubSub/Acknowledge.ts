@@ -35,14 +35,8 @@ export interface Acknowledge extends Binding.Service<
   ) => Effect.Effect<
     (
       request: AcknowledgeRequest,
-    ) => Effect.Effect<
-      pubsub.Empty,
-      pubsub.AcknowledgeProjectsSubscriptionsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<pubsub.Empty, pubsub.AcknowledgeProjectsSubscriptionsError, RuntimeContext>
   >
 > {}
 
-export const Acknowledge = Binding.Service<Acknowledge>(
-  "GCP.PubSub.Acknowledge",
-);
+export const Acknowledge = Binding.Service<Acknowledge>("GCP.PubSub.Acknowledge");

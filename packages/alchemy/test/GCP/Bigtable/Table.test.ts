@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -79,9 +76,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.table.name).toContain("/tables/");
       expect(created.table.tableId).toEqual(expect.any(String));
       expect(created.table.instance).toEqual(created.instance.name);
-      expect(created.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(
-        3,
-      );
+      expect(created.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(3);
       expect(created.table.deletionProtection).toEqual(false);
 
       const fetched = yield* bigtable.getProjectsInstancesTables({
@@ -117,9 +112,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.table.name).toEqual(created.table.name);
-      expect(updated.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(
-        5,
-      );
+      expect(updated.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(5);
 
       const refetched = yield* bigtable.getProjectsInstancesTables({
         name: created.table.name,

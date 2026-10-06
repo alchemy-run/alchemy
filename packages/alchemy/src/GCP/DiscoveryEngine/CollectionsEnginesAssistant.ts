@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  parentBefore,
-  parseResourceName,
-  sameJson,
-  toResourceId,
-} from "./internal.ts";
+import { parentBefore, parseResourceName, sameJson, toResourceId } from "./internal.ts";
 
 export type CollectionsEnginesAssistantProps = {
   /**
@@ -125,10 +120,9 @@ export type CollectionsEnginesAssistant = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const CollectionsEnginesAssistant =
-  Resource<CollectionsEnginesAssistant>(
-    "GCP.DiscoveryEngine.CollectionsEnginesAssistant",
-  );
+export const CollectionsEnginesAssistant = Resource<CollectionsEnginesAssistant>(
+  "GCP.DiscoveryEngine.CollectionsEnginesAssistant",
+);
 
 export class CollectionsEnginesAssistantNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesAssistantNotResolved",
@@ -136,8 +130,7 @@ export class CollectionsEnginesAssistantNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (engine: string, assistantId: string) =>
-  `${engine}/assistants/${assistantId}`;
+const resourceName = (engine: string, assistantId: string) => `${engine}/assistants/${assistantId}`;
 
 const getByName = (name: string) =>
   discoveryengine
@@ -160,8 +153,7 @@ const toAttrs = (
     displayName: assistant.displayName,
     description: assistant.description,
     webGroundingType: assistant.webGroundingType,
-    defaultWebGroundingToggleOff:
-      assistant.defaultWebGroundingToggleOff === true,
+    defaultWebGroundingToggleOff: assistant.defaultWebGroundingToggleOff === true,
     createTime: assistant.createTime,
     updateTime: assistant.updateTime,
   };
@@ -169,15 +161,7 @@ const toAttrs = (
 
 export const CollectionsEnginesAssistantProvider = () =>
   Provider.succeed(CollectionsEnginesAssistant, {
-    stables: [
-      "name",
-      "assistantId",
-      "engine",
-      "project",
-      "location",
-      "collectionId",
-      "createTime",
-    ],
+    stables: ["name", "assistantId", "engine", "project", "location", "collectionId", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -186,9 +170,7 @@ export const CollectionsEnginesAssistantProvider = () =>
       const nextId = news.assistantId ?? previousId;
       if (
         (previousEngine !== undefined && news.engine !== previousEngine) ||
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId)
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -198,14 +180,9 @@ export const CollectionsEnginesAssistantProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.engine ?? output?.engine;
-      const childId = yield* toResourceId(
-        id,
-        olds?.assistantId,
-        output?.assistantId,
-      );
+      const childId = yield* toResourceId(id, olds?.assistantId, output?.assistantId);
       const name =
-        output?.name ??
-        (parent !== undefined ? resourceName(parent, childId) : undefined);
+        output?.name ?? (parent !== undefined ? resourceName(parent, childId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -216,15 +193,10 @@ export const CollectionsEnginesAssistantProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const assistantId = yield* toResourceId(
-        id,
-        news.assistantId,
-        output?.assistantId,
-      );
+      const assistantId = yield* toResourceId(id, news.assistantId, output?.assistantId);
       const description = news.description;
       const displayName = news.displayName ?? assistantId;
-      const fallbackName =
-        output?.name ?? resourceName(news.engine, assistantId);
+      const fallbackName = output?.name ?? resourceName(news.engine, assistantId);
       const groundingOff = news.defaultWebGroundingToggleOff === true;
 
       let current = yield* getByName(fallbackName);
@@ -254,22 +226,13 @@ export const CollectionsEnginesAssistantProvider = () =>
       }
 
       const name = current.name ?? fallbackName;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (displayName ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== (description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (description ?? "");
       const groundingTypeChanged =
         (current.webGroundingType ?? "") !== (news.webGroundingType ?? "");
-      const groundingOffChanged =
-        (current.defaultWebGroundingToggleOff === true) !== groundingOff;
-      const generationChanged = !sameJson(
-        current.generationConfig,
-        news.generationConfig,
-      );
-      const policyChanged = !sameJson(
-        current.customerPolicy,
-        news.customerPolicy,
-      );
+      const groundingOffChanged = (current.defaultWebGroundingToggleOff === true) !== groundingOff;
+      const generationChanged = !sameJson(current.generationConfig, news.generationConfig);
+      const policyChanged = !sameJson(current.customerPolicy, news.customerPolicy);
 
       if (
         displayNameChanged ||
@@ -279,33 +242,28 @@ export const CollectionsEnginesAssistantProvider = () =>
         generationChanged ||
         policyChanged
       ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsEnginesAssistants(
-            {
-              name,
-              updateMask: [
-                displayNameChanged ? "display_name" : undefined,
-                descriptionChanged ? "description" : undefined,
-                groundingTypeChanged ? "web_grounding_type" : undefined,
-                groundingOffChanged
-                  ? "default_web_grounding_toggle_off"
-                  : undefined,
-                generationChanged ? "generation_config" : undefined,
-                policyChanged ? "customer_policy" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name,
-                displayName,
-                description,
-                webGroundingType: news.webGroundingType,
-                defaultWebGroundingToggleOff: groundingOff,
-                generationConfig: news.generationConfig,
-                customerPolicy: news.customerPolicy,
-              },
-            },
-          );
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesAssistants({
+          name,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+            groundingTypeChanged ? "web_grounding_type" : undefined,
+            groundingOffChanged ? "default_web_grounding_toggle_off" : undefined,
+            generationChanged ? "generation_config" : undefined,
+            policyChanged ? "customer_policy" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name,
+            displayName,
+            description,
+            webGroundingType: news.webGroundingType,
+            defaultWebGroundingToggleOff: groundingOff,
+            generationConfig: news.generationConfig,
+            customerPolicy: news.customerPolicy,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

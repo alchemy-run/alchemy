@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type CrossSiteNetworkProps = {
   /**
@@ -80,9 +76,7 @@ export type CrossSiteNetwork = Resource<
  * @resource
  * @category Compute
  */
-export const CrossSiteNetwork = Resource<CrossSiteNetwork>(
-  "GCP.Compute.CrossSiteNetwork",
-);
+export const CrossSiteNetwork = Resource<CrossSiteNetwork>("GCP.Compute.CrossSiteNetwork");
 
 export class CrossSiteNetworkNotResolved extends Data.TaggedError(
   "GCP.Compute.CrossSiteNetworkNotResolved",
@@ -189,14 +183,9 @@ export const CrossSiteNetworkProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.crossSiteNetworkName ?? output?.crossSiteNetworkName;
+      const previousName = olds?.crossSiteNetworkName ?? output?.crossSiteNetworkName;
       const nextName = news.crossSiteNetworkName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -224,9 +213,7 @@ export const CrossSiteNetworkProvider = () =>
           .pipe(
             Stream.filter((network) => {
               const { labels } = parseDescription(network.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((network) => toAttrs(network, env.project)),
             Stream.runCollect,
@@ -283,11 +270,7 @@ export const CrossSiteNetworkProvider = () =>
               description,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, crossSiteNetworkName);
         if (current === undefined) {
           return yield* new CrossSiteNetworkNotResolved({

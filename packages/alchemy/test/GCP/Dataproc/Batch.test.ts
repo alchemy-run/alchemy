@@ -1,26 +1,22 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Each serverless workload reserves 12 vCPUs and hundreds of GB of Hyperdisk;
 // next to the rest of the suite the testing project's quotas run out
 // (`Quota 'HDB_TOTAL_GB' exceeded. Limit: 500.0 in region us-central1`,
 // `Insufficient 'CPUS_ALL_REGIONS' quota`). Passes solo in ~2 minutes; set
 // GCP_TEST_DATAPROC_SERVERLESS=1 on a project with headroom.
-const runLifecycle =
-  !!process.env.GCP_TEST_DATAPROC_SERVERLESS && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_DATAPROC_SERVERLESS && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   dataproc.getProjectsLocationsBatches({ name }).pipe(
@@ -64,9 +60,7 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             sparkBatch: {
               mainClass: "org.apache.spark.examples.SparkPi",
-              jarFileUris: [
-                "file:///usr/lib/spark/examples/jars/spark-examples.jar",
-              ],
+              jarFileUris: ["file:///usr/lib/spark/examples/jars/spark-examples.jar"],
               args: ["1"],
             },
             environmentConfig: { executionConfig: { ttl: "600s" } },
@@ -86,9 +80,7 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(fetched.sparkBatch?.mainClass).toEqual(
-        "org.apache.spark.examples.SparkPi",
-      );
+      expect(fetched.sparkBatch?.mainClass).toEqual("org.apache.spark.examples.SparkPi");
 
       yield* stack.destroy();
 

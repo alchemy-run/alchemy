@@ -41,7 +41,6 @@ export interface GetSavingsPlansUtilizationDetails extends Binding.Service<
   >
 > {}
 
-export const GetSavingsPlansUtilizationDetails =
-  Binding.Service<GetSavingsPlansUtilizationDetails>(
-    "AWS.CostExplorer.GetSavingsPlansUtilizationDetails",
-  );
+export const GetSavingsPlansUtilizationDetails = Binding.Service<GetSavingsPlansUtilizationDetails>(
+  "AWS.CostExplorer.GetSavingsPlansUtilizationDetails",
+);

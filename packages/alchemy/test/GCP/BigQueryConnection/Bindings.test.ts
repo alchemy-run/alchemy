@@ -1,22 +1,17 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as bigqueryconnection from "@distilled.cloud/gcp/bigqueryconnection_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import BigQueryConnectionBindingsHost, {
-  Cloud,
-} from "./fixtures/bindings-host.ts";
+import BigQueryConnectionBindingsHost, { Cloud } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "BigQueryConnectionBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "BigQueryConnectionBindings");
 
 let baseUrl: string;
 let connectionName: string;
@@ -31,9 +26,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -43,12 +36,7 @@ const projectGrantsOf = (account: string) =>
 describe.skipIf(!dockerAvailable)(
   "BigQueryConnection Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:bigqueryconnection",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:bigqueryconnection", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -83,27 +71,21 @@ describe.skipIf(!dockerAvailable)(
               name?: string;
               cloudResource?: { serviceAccountId?: string };
             }>(baseUrl, "getConnection");
-            const expected =
-              yield* bigqueryconnection.getProjectsLocationsConnections({
-                name: connectionName,
-              });
+            const expected = yield* bigqueryconnection.getProjectsLocationsConnections({
+              name: connectionName,
+            });
             expect(live.name).toEqual(connectionName);
             expect(live.cloudResource?.serviceAccountId).toEqual(
               expected.cloudResource?.serviceAccountId,
             );
 
-            const policy =
-              yield* bigqueryconnection.getIamPolicyProjectsLocationsConnections(
-                {
-                  resource: connectionName,
-                  body: { options: { requestedPolicyVersion: 3 } },
-                },
-              );
+            const policy = yield* bigqueryconnection.getIamPolicyProjectsLocationsConnections({
+              resource: connectionName,
+              body: { options: { requestedPolicyVersion: 3 } },
+            });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => binding.role);
             expect(roles).toEqual(["roles/bigquery.connectionUser"]);

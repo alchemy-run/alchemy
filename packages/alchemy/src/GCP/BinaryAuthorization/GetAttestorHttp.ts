@@ -1,10 +1,10 @@
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { Attestor } from "./Attestor.ts";
-import { GetAttestor, type GetAttestorRequest } from "./GetAttestor.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
+import type { Attestor } from "./Attestor.ts";
+import { GetAttestor, type GetAttestorRequest } from "./GetAttestor.ts";
 
 /**
  * HTTP implementation of {@link GetAttestor}.
@@ -31,9 +31,9 @@ export const GetAttestorHttp = Layer.effect(
         ],
       });
       const name = yield* attestor.name;
-      return Effect.fn(
-        `GCP.BinaryAuthorization.GetAttestor(${attestor.LogicalId})`,
-      )(function* (request?: GetAttestorRequest) {
+      return Effect.fn(`GCP.BinaryAuthorization.GetAttestor(${attestor.LogicalId})`)(function* (
+        request?: GetAttestorRequest,
+      ) {
         const attestorName = yield* name;
         return yield* getAttestor({
           ...request,

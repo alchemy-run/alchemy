@@ -1,9 +1,9 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import type { Job } from "./Job.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor, type BindingIam } from "../HttpBinding.ts";
+import type { Job } from "./Job.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Scheduler job bindings.
@@ -32,9 +32,7 @@ export const makeJobHttpBinding = <I extends { name?: string }, A, E>(options: {
         iam: [grantFor(options.iam, job.name)],
       });
       const name = yield* job.name;
-      return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (
-        request?: Omit<I, "name">,
-      ) {
+      return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (request?: Omit<I, "name">) {
         const jobName = yield* name;
         return yield* run({
           ...(request ?? {}),

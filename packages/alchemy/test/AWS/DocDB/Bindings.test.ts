@@ -1,19 +1,16 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-
 import DocDBTestFunctionLive, { DocDBTestFunction } from "./handler";
-import DocDBSlowTestFunctionLive, {
-  DocDBSlowTestFunction,
-} from "./slow-handler";
+import DocDBSlowTestFunctionLive, { DocDBSlowTestFunction } from "./slow-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -21,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "DocDBBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,25 +30,18 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
 
 describe.sequential(
   "DocDB Bindings",
-  {
-    tags: ["provider:aws", "provider:aws:docdb", "provider:aws:lambda", "live"],
-  },
+  { tags: ["provider:aws", "provider:aws:docdb", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "DocDB test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("DocDB test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("DocDB test setup: deploying fixture");
@@ -72,9 +59,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -94,13 +79,11 @@ describe.sequential(
     });
 
     describe("DescribeDBClusters", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent cluster",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/clusters");
-            expect((response as any).tag).toBe("DBClusterNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent cluster", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/clusters");
+          expect((response as any).tag).toBe("DBClusterNotFoundFault");
+        }),
       );
     });
 
@@ -114,13 +97,11 @@ describe.sequential(
     });
 
     describe("DescribeDBInstances", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent instance",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/instances");
-            expect((response as any).tag).toBe("DBInstanceNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent instance", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/instances");
+          expect((response as any).tag).toBe("DBInstanceNotFoundFault");
+        }),
       );
     });
 
@@ -134,15 +115,11 @@ describe.sequential(
     });
 
     describe("DeleteDBClusterSnapshot", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent snapshot",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/delete-snapshot-probe");
-            expect((response as any).tag).toBe(
-              "DBClusterSnapshotNotFoundFault",
-            );
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent snapshot", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/delete-snapshot-probe");
+          expect((response as any).tag).toBe("DBClusterSnapshotNotFoundFault");
+        }),
       );
     });
 
@@ -152,40 +129,32 @@ describe.sequential(
         (_stack) =>
           Effect.gen(function* () {
             const response = yield* getJson("/copy-snapshot-probe");
-            expect((response as any).tag).toBe(
-              "DBClusterSnapshotNotFoundFault",
-            );
+            expect((response as any).tag).toBe("DBClusterSnapshotNotFoundFault");
           }),
       );
     });
 
     describe("DescribePendingMaintenanceActions", () => {
-      test.provider(
-        "lists the account's pending maintenance actions",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/pending-maintenance");
-            expect((response as any).count).toBeGreaterThanOrEqual(0);
-          }),
+      test.provider("lists the account's pending maintenance actions", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/pending-maintenance");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
+        }),
       );
     });
 
     describe("ApplyPendingMaintenanceAction", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent resource ARN",
-        (_stack) =>
-          Effect.gen(function* () {
-            // Build a well-formed cluster ARN in this account/region that
-            // cannot exist — the apply call must decode ResourceNotFoundFault.
-            // (`Region`'s service value is itself an Effect — resolve twice.)
-            const region = yield* yield* Region;
-            const identity = yield* sts.getCallerIdentity({});
-            const arn = `arn:aws:rds:${region}:${identity.Account}:cluster:alchemy-nonexistent-docdb-probe`;
-            const response = yield* getJson(
-              `/apply-probe?arn=${encodeURIComponent(arn)}`,
-            );
-            expect((response as any).tag).toBe("ResourceNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent resource ARN", (_stack) =>
+        Effect.gen(function* () {
+          // Build a well-formed cluster ARN in this account/region that
+          // cannot exist — the apply call must decode ResourceNotFoundFault.
+          // (`Region`'s service value is itself an Effect — resolve twice.)
+          const region = yield* yield* Region;
+          const identity = yield* sts.getCallerIdentity({});
+          const arn = `arn:aws:rds:${region}:${identity.Account}:cluster:alchemy-nonexistent-docdb-probe`;
+          const response = yield* getJson(`/apply-probe?arn=${encodeURIComponent(arn)}`);
+          expect((response as any).tag).toBe("ResourceNotFoundFault");
+        }),
       );
     });
   },
@@ -258,10 +227,7 @@ const ensureSecretsManagerEndpoint = (network: {
       SecurityGroupIds: network.securityGroupIds as `sg-${string}`[],
       PrivateDnsEnabled: true,
       TagSpecifications: [
-        {
-          ResourceType: "vpc-endpoint",
-          Tags: [{ Key: "alchemy-test", Value: "docdb-bindings" }],
-        },
+        { ResourceType: "vpc-endpoint", Tags: [{ Key: "alchemy-test", Value: "docdb-bindings" }] },
       ],
     });
     // Bounded readiness wait for the endpoint's private DNS to serve.
@@ -276,12 +242,7 @@ const ensureSecretsManagerEndpoint = (network: {
           ? Effect.void
           : Effect.fail(new Error("secretsmanager endpoint not available")),
       ),
-      Effect.retry({
-        schedule: Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(24),
-        ]),
-      }),
+      Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(24)]) }),
     );
   });
 
@@ -312,10 +273,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -345,21 +303,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const ping = (yield* get("/ping")) as { ok: number };
         expect(ping.ok).toBe(1);
 
-        const crud = (yield* get("/crud?value=alchemy-docdb")) as {
-          marker?: string;
-        };
+        const crud = (yield* get("/crud?value=alchemy-docdb")) as { marker?: string };
         expect(crud.marker).toBe("alchemy-docdb");
       }).pipe(Effect.ensuring(slowStack.destroy().pipe(Effect.orDie)));
     }),
   // cluster + instance create (~15 min) + probes + delete initiation.
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:docdb",
-      "provider:aws:ec2",
-      "provider:aws:lambda",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:docdb", "provider:aws:ec2", "provider:aws:lambda", "live"],
     timeout: 2_400_000,
   },
 );

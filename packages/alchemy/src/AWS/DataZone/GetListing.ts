@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface GetListingRequest extends Omit<
-  datazone.GetListingInput,
-  "domainIdentifier"
-> {}
+export interface GetListingRequest extends Omit<datazone.GetListingInput, "domainIdentifier"> {}
 
 /**
  * Runtime binding for `datazone:GetListing`.
@@ -37,6 +34,4 @@ export interface GetListing extends Binding.Service<
     ) => Effect.Effect<datazone.GetListingOutput, datazone.GetListingError>
   >
 > {}
-export const GetListing = Binding.Service<GetListing>(
-  "AWS.DataZone.GetListing",
-);
+export const GetListing = Binding.Service<GetListing>("AWS.DataZone.GetListing");

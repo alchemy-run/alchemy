@@ -42,10 +42,7 @@ export const parseResourceName = (name: string) => {
     backupScheduleId: after("backupSchedules"),
     instancePartitionId: after("instancePartitions"),
     instanceConfigId: after("instanceConfigs"),
-    instance:
-      project && instanceId
-        ? `projects/${project}/instances/${instanceId}`
-        : "",
+    instance: project && instanceId ? `projects/${project}/instances/${instanceId}` : "",
     database:
       project && instanceId && databaseId
         ? `projects/${project}/instances/${instanceId}/databases/${databaseId}`
@@ -54,14 +51,10 @@ export const parseResourceName = (name: string) => {
 };
 
 export const instanceIdOf = (value: string) =>
-  value.includes("/instances/")
-    ? parseResourceName(value).instanceId
-    : lastSegment(value);
+  value.includes("/instances/") ? parseResourceName(value).instanceId : lastSegment(value);
 
 export const databaseIdOf = (value: string) =>
-  value.includes("/databases/")
-    ? parseResourceName(value).databaseId
-    : lastSegment(value);
+  value.includes("/databases/") ? parseResourceName(value).databaseId : lastSegment(value);
 
 export const configIdOf = (config: string | undefined, region: string) =>
   lastSegment(config ?? defaultConfigId(region)).toLowerCase();
@@ -77,17 +70,10 @@ export const instanceNameOf = (project: string, instance: string) =>
       )
     : instanceName(project, lastSegment(instance));
 
-export const databaseName = (
-  project: string,
-  instanceId: string,
-  databaseId: string,
-) => `${instanceName(project, instanceId)}/databases/${databaseId}`;
+export const databaseName = (project: string, instanceId: string, databaseId: string) =>
+  `${instanceName(project, instanceId)}/databases/${databaseId}`;
 
-export const databaseNameOf = (
-  project: string,
-  instance: string,
-  database: string,
-) => {
+export const databaseNameOf = (project: string, instance: string, database: string) => {
   if (database.includes("/databases/")) {
     const parsed = parseResourceName(database);
     return databaseName(
@@ -99,38 +85,27 @@ export const databaseNameOf = (
   return databaseName(project, instanceIdOf(instance), lastSegment(database));
 };
 
-export const backupName = (
-  project: string,
-  instanceId: string,
-  backupId: string,
-) => `${instanceName(project, instanceId)}/backups/${backupId}`;
+export const backupName = (project: string, instanceId: string, backupId: string) =>
+  `${instanceName(project, instanceId)}/backups/${backupId}`;
 
 export const backupScheduleName = (
   project: string,
   instanceId: string,
   databaseId: string,
   scheduleId: string,
-) =>
-  `${databaseName(project, instanceId, databaseId)}/backupSchedules/${scheduleId}`;
+) => `${databaseName(project, instanceId, databaseId)}/backupSchedules/${scheduleId}`;
 
 export const instanceConfigName = (project: string, configId: string) =>
   `projects/${project}/instanceConfigs/${configId}`;
 
-export const configNameOf = (
-  project: string,
-  config: string | undefined,
-  region: string,
-) => {
+export const configNameOf = (project: string, config: string | undefined, region: string) => {
   const raw = (config ?? defaultConfigId(region)).trim();
   if (raw.includes("/")) return raw;
   return instanceConfigName(project, raw);
 };
 
-export const instancePartitionName = (
-  project: string,
-  instanceId: string,
-  partitionId: string,
-) => `${instanceName(project, instanceId)}/instancePartitions/${partitionId}`;
+export const instancePartitionName = (project: string, instanceId: string, partitionId: string) =>
+  `${instanceName(project, instanceId)}/instancePartitions/${partitionId}`;
 
 export const toSpannerId = (name: string, maxLength: number) => {
   let next = name
@@ -177,16 +152,10 @@ export const toPhysicalId = (
     );
   });
 
-export const toConfigId = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toConfigId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) {
-      return explicit.startsWith(CUSTOM_CONFIG_PREFIX)
-        ? explicit
-        : toCustomConfigId(explicit);
+      return explicit.startsWith(CUSTOM_CONFIG_PREFIX) ? explicit : toCustomConfigId(explicit);
     }
     if (existing !== undefined) return existing;
     return toCustomConfigId(
@@ -212,9 +181,7 @@ export const normalizeEnum = (value: string | undefined, fallback: string) => {
   return next.endsWith("_UNSPECIFIED") ? fallback : next;
 };
 
-export const hasAlchemyPrefix = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+export const hasAlchemyPrefix = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const getOperation = (name: string) => {
@@ -263,11 +230,7 @@ export const waitForOperation = (
     ),
   );
 
-export const retryConcurrentChanges = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
   effect.pipe(
@@ -316,9 +279,7 @@ export const listAlchemyDatabases = (project: string) =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             // The instance was deleted while listing.
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as spanner.Database[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as spanner.Database[])),
           );
       },
       { concurrency: 4 },
@@ -328,7 +289,5 @@ export const listAlchemyDatabases = (project: string) =>
 
 export const parentOwned = (instanceNameValue: string) =>
   getInstanceByName(instanceNameValue).pipe(
-    Effect.map((instance) =>
-      instance === undefined ? true : hasAlchemyPrefix(instance.labels),
-    ),
+    Effect.map((instance) => (instance === undefined ? true : hasAlchemyPrefix(instance.labels))),
   );

@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -170,10 +165,7 @@ const refOf = (value: string | undefined) => {
   return toResourcePath(value);
 };
 
-const toAttrs = (
-  group: networksecurity.SecurityProfileGroup,
-  project: string,
-) => {
+const toAttrs = (group: networksecurity.SecurityProfileGroup, project: string) => {
   const name = group.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -202,13 +194,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group
-        ? Effect.succeed(group)
-        : Effect.fail(new SecurityProfileGroupNotResolved({ name })),
+      group ? Effect.succeed(group) : Effect.fail(new SecurityProfileGroupNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.SecurityProfileGroupNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileGroupNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -222,8 +211,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new SecurityProfileGroupStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.SecurityProfileGroupStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -236,13 +224,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.securityProfileGroups ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.securityProfileGroups ?? [])),
       Stream.filter((group) =>
-        Object.keys(group.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(group.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((group) => toAttrs(group, project)),
       Stream.runCollect,
@@ -252,30 +236,16 @@ const listOwned = (project: string) =>
 
 export const SecurityProfileGroupProvider = () =>
   Provider.succeed(SecurityProfileGroup, {
-    stables: [
-      "name",
-      "securityProfileGroupId",
-      "project",
-      "location",
-      "dataPathId",
-      "createTime",
-    ],
+    stables: ["name", "securityProfileGroupId", "project", "location", "dataPathId", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.securityProfileGroupId ?? output?.securityProfileGroupId;
+      const previousId = olds?.securityProfileGroupId ?? output?.securityProfileGroupId;
       const nextId = news.securityProfileGroupId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -293,14 +263,11 @@ export const SecurityProfileGroupProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, securityProfileGroupId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, securityProfileGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -318,12 +285,7 @@ export const SecurityProfileGroupProvider = () =>
         "secgroup",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        securityProfileGroupId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, securityProfileGroupId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -370,19 +332,14 @@ export const SecurityProfileGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const threatChanged =
-        (current.threatPreventionProfile ?? "") !==
-        (threatPreventionProfile ?? "");
-      const urlChanged =
-        (current.urlFilteringProfile ?? "") !== (urlFilteringProfile ?? "");
+        (current.threatPreventionProfile ?? "") !== (threatPreventionProfile ?? "");
+      const urlChanged = (current.urlFilteringProfile ?? "") !== (urlFilteringProfile ?? "");
       const mirroringChanged =
-        (current.customMirroringProfile ?? "") !==
-        (customMirroringProfile ?? "");
+        (current.customMirroringProfile ?? "") !== (customMirroringProfile ?? "");
       const interceptChanged =
-        (current.customInterceptProfile ?? "") !==
-        (customInterceptProfile ?? "");
+        (current.customInterceptProfile ?? "") !== (customInterceptProfile ?? "");
 
       if (
         labelsChanged ||
@@ -400,21 +357,20 @@ export const SecurityProfileGroupProvider = () =>
           mirroringChanged ? "customMirroringProfile" : undefined,
           interceptChanged ? "customInterceptProfile" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsSecurityProfileGroups({
+        const operation = yield* networksecurity.patchProjectsLocationsSecurityProfileGroups({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              threatPreventionProfile,
-              urlFilteringProfile,
-              customMirroringProfile,
-              customInterceptProfile,
-            },
-          });
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            threatPreventionProfile,
+            urlFilteringProfile,
+            customMirroringProfile,
+            customInterceptProfile,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);
       }

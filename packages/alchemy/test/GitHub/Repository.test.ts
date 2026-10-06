@@ -1,19 +1,16 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import { adopt } from "@/AdoptPolicy";
 import * as GitHub from "@/GitHub";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // These tests create, mutate, and delete real repositories, so they run
 // against the dedicated test orgs (never a real one). Set GITHUB_TEST_OWNER=""
@@ -89,9 +86,7 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
       expect(fetched?.description).toEqual("alchemy-effect integration test");
       expect(fetched?.private).toEqual(true);
       expect(fetched?.has_issues).toEqual(false);
-      expect(fetched?.topics).toEqual(
-        expect.arrayContaining(["alchemy", "test"]),
-      );
+      expect(fetched?.topics).toEqual(expect.arrayContaining(["alchemy", "test"]));
 
       // Update — change settings and topics, same logical ID → same repoId.
       const updated = yield* stack.deploy(

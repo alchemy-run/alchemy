@@ -1,22 +1,19 @@
-import * as AdoptPolicy from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AdoptPolicy from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as State from "@/State/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Self-hosted Access Applications require a domain that belongs to an
 // *active* zone in the account (pending zones are rejected with "domain does
@@ -24,8 +21,7 @@ const logLevel = Effect.provideService(
 // nameserver delegation), so we adopt the shared pre-existing active zone.
 // It must stay on the default `retain` removal policy: it's registered via
 // Cloudflare Registrar, and the API refuses to delete registrar zones.
-const zoneName =
-  process.env.CLOUDFLARE_TEST_ACCESS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_ACCESS_ZONE_NAME ?? "alchemy-test-2.us";
 
 test.provider(
   "create and delete a self_hosted application gated by a reusable policy",
@@ -38,9 +34,7 @@ test.provider(
       const domain = `alchemy-test-app.${zoneName}`;
       const { app, policy } = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Cloudflare.Zone.Zone("TestZone", {
-            name: zoneName,
-          }).pipe(AdoptPolicy.adopt(true));
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const policy = yield* Cloudflare.Access.Policy("AllowExampleDomain", {
             name: "Allow example.com",
             decision: "allow",
@@ -52,10 +46,7 @@ test.provider(
             sessionDuration: "24h",
             oauthConfiguration: {
               enabled: true,
-              grant: {
-                sessionDuration: "24h",
-                accessTokenLifetime: "15m",
-              },
+              grant: { sessionDuration: "24h", accessTokenLifetime: "15m" },
               dynamicClientRegistration: {
                 enabled: true,
                 allowedUris: [],
@@ -76,12 +67,8 @@ test.provider(
       expect(app.oauthConfiguration?.enabled).toBe(true);
       expect(app.oauthConfiguration?.grant?.sessionDuration).toBe("24h");
       expect(app.oauthConfiguration?.grant?.accessTokenLifetime).toBe("15m");
-      expect(app.oauthConfiguration?.dynamicClientRegistration?.enabled).toBe(
-        true,
-      );
-      expect(
-        app.oauthConfiguration?.dynamicClientRegistration?.allowedUris ?? [],
-      ).toEqual([]);
+      expect(app.oauthConfiguration?.dynamicClientRegistration?.enabled).toBe(true);
+      expect(app.oauthConfiguration?.dynamicClientRegistration?.allowedUris ?? []).toEqual([]);
       expect(policy.policyId.length).toBeGreaterThan(0);
 
       const live = yield* zeroTrust.getAccessApplicationForAccount({
@@ -94,10 +81,7 @@ test.provider(
         policies?: ReadonlyArray<{ id?: string | null }> | null;
         oauthConfiguration?: {
           enabled?: boolean | null;
-          grant?: {
-            sessionDuration?: string | null;
-            accessTokenLifetime?: string | null;
-          } | null;
+          grant?: { sessionDuration?: string | null; accessTokenLifetime?: string | null } | null;
           dynamicClientRegistration?: {
             enabled?: boolean | null;
             allowedUris?: ReadonlyArray<string | null> | null;
@@ -113,34 +97,22 @@ test.provider(
       expect(liveIds).toContain(policy.policyId);
       expect(liveRecord.oauthConfiguration?.enabled).toBe(true);
       expect(liveRecord.oauthConfiguration?.grant?.sessionDuration).toBe("24h");
-      expect(liveRecord.oauthConfiguration?.grant?.accessTokenLifetime).toBe(
-        "15m",
+      expect(liveRecord.oauthConfiguration?.grant?.accessTokenLifetime).toBe("15m");
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.enabled).toBe(true);
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowedUris ?? []).toEqual(
+        [],
       );
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration?.enabled,
-      ).toBe(true);
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowedUris ??
-          [],
-      ).toEqual([]);
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration
-          ?.allowAnyOnLocalhost,
-      ).toBe(true);
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration
-          ?.allowAnyOnLoopback,
-      ).toBe(true);
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowAnyOnLocalhost).toBe(
+        true,
+      );
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowAnyOnLoopback).toBe(
+        true,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -193,9 +165,7 @@ test.provider(
       const domain = `alchemy-test-list-app.${zoneName}`;
       const app = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Cloudflare.Zone.Zone("TestZone", {
-            name: zoneName,
-          }).pipe(AdoptPolicy.adopt(true));
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const policy = yield* Cloudflare.Access.Policy("ListAllowDomain", {
             name: "Allow example.com",
             decision: "allow",
@@ -210,9 +180,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.Application,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.Application);
 
       // `list()` enumerates every Access application in the account. The
       // provider already rides out the transient enumeration failures internally
@@ -240,12 +208,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -261,9 +224,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Cloudflare.Zone.Zone("TestZone", {
-            name: zoneName,
-          }).pipe(AdoptPolicy.adopt(true));
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const allow = yield* Cloudflare.Access.Policy("UpdateAllow", {
             name: "Allow example.com",
             decision: "allow",
@@ -274,10 +235,7 @@ test.provider(
             domain,
             oauthConfiguration: {
               enabled: true,
-              grant: {
-                sessionDuration: "24h",
-                accessTokenLifetime: "15m",
-              },
+              grant: { sessionDuration: "24h", accessTokenLifetime: "15m" },
               dynamicClientRegistration: {
                 enabled: true,
                 allowedUris: ["https://client.example.com/callback"],
@@ -291,9 +249,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Cloudflare.Zone.Zone("TestZone", {
-            name: zoneName,
-          }).pipe(AdoptPolicy.adopt(true));
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const allow = yield* Cloudflare.Access.Policy("UpdateAllow", {
             name: "Allow example.com",
             decision: "allow",
@@ -308,11 +264,7 @@ test.provider(
             type: "self_hosted",
             domain,
             // Update one managed OAuth leaf while preserving omitted fields.
-            oauthConfiguration: {
-              dynamicClientRegistration: {
-                allowAnyOnLoopback: true,
-              },
-            },
+            oauthConfiguration: { dynamicClientRegistration: { allowAnyOnLoopback: true } },
             policies: [allow.policyId, deny.policyId],
           });
         }),
@@ -328,10 +280,7 @@ test.provider(
         policies?: ReadonlyArray<unknown> | null;
         oauthConfiguration?: {
           enabled?: boolean | null;
-          grant?: {
-            sessionDuration?: string | null;
-            accessTokenLifetime?: string | null;
-          } | null;
+          grant?: { sessionDuration?: string | null; accessTokenLifetime?: string | null } | null;
           dynamicClientRegistration?: {
             enabled?: boolean | null;
             allowedUris?: ReadonlyArray<string | null> | null;
@@ -345,33 +294,22 @@ test.provider(
       // configuration before the PUT-style application update.
       expect(liveRecord.oauthConfiguration?.enabled).toBe(true);
       expect(liveRecord.oauthConfiguration?.grant?.sessionDuration).toBe("24h");
-      expect(liveRecord.oauthConfiguration?.grant?.accessTokenLifetime).toBe(
-        "15m",
+      expect(liveRecord.oauthConfiguration?.grant?.accessTokenLifetime).toBe("15m");
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.enabled).toBe(true);
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowedUris).toEqual([
+        "https://client.example.com/callback",
+      ]);
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowAnyOnLocalhost).toBe(
+        true,
       );
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration?.enabled,
-      ).toBe(true);
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowedUris,
-      ).toEqual(["https://client.example.com/callback"]);
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration
-          ?.allowAnyOnLocalhost,
-      ).toBe(true);
-      expect(
-        liveRecord.oauthConfiguration?.dynamicClientRegistration
-          ?.allowAnyOnLoopback,
-      ).toBe(true);
+      expect(liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowAnyOnLoopback).toBe(
+        true,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -392,9 +330,7 @@ test.provider(
 
       const domain = `alchemy-test-cold-read.${zoneName}`;
       const program = Effect.gen(function* () {
-        yield* Cloudflare.Zone.Zone("TestZone", {
-          name: zoneName,
-        }).pipe(AdoptPolicy.adopt(true));
+        yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
         const policy = yield* Cloudflare.Access.Policy("ColdReadAllow", {
           name: "Allow example.com (cold read)",
           decision: "allow",
@@ -415,11 +351,7 @@ test.provider(
       // Simulate state loss for the application only: the app still
       // exists in Cloudflare, but the engine has no applicationId.
       const state = yield* yield* State.State;
-      yield* state.delete({
-        stack: stack.name,
-        stage: stack.stage,
-        fqn: "ColdReadApp",
-      });
+      yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "ColdReadApp" });
 
       // Without adopt, the domain-matched app is Unowned — the engine
       // must refuse the takeover rather than create a duplicate.
@@ -428,9 +360,7 @@ test.provider(
 
       // With adopt, the SAME app is adopted: identity is preserved and
       // no duplicate application appears on the domain.
-      const readopted = yield* stack.deploy(
-        program.pipe(AdoptPolicy.adopt(true)),
-      );
+      const readopted = yield* stack.deploy(program.pipe(AdoptPolicy.adopt(true)));
       expect(readopted.applicationId).toEqual(first.applicationId);
       expect(readopted.aud).toEqual(first.aud);
 
@@ -445,12 +375,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -477,13 +402,9 @@ test.provider(
       yield* stack.destroy();
 
       const domain = `alchemy-test-inline-policies.${zoneName}`;
-      const makeApp = (
-        policies: Cloudflare.Access.ApplicationProps["policies"],
-      ) =>
+      const makeApp = (policies: Cloudflare.Access.ApplicationProps["policies"]) =>
         Effect.gen(function* () {
-          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
-            AdoptPolicy.adopt(true),
-          );
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           return yield* Cloudflare.Access.Application("InlinePolicyApp", {
             type: "self_hosted",
             domain,
@@ -494,11 +415,7 @@ test.provider(
       // v1 — one inline policy via scalar shorthand.
       const first = yield* stack.deploy(
         makeApp([
-          {
-            decision: "allow",
-            name: "primary",
-            include: [{ emailDomain: "example.com" }],
-          },
+          { decision: "allow", name: "primary", include: [{ emailDomain: "example.com" }] },
         ]),
       );
       const live1 = (yield* zeroTrust.getAccessApplicationForAccount({
@@ -508,9 +425,7 @@ test.provider(
       expect(live1.policies?.length).toBe(1);
       expect(live1.policies![0].reusable).toBe(false);
       // Shorthand expanded to the wire shape on the way out.
-      expect(live1.policies![0].include).toEqual([
-        { emailDomain: { domain: "example.com" } },
-      ]);
+      expect(live1.policies![0].include).toEqual([{ emailDomain: { domain: "example.com" } }]);
       const inlineId = live1.policies![0].id;
       expect(inlineId).toBeDefined();
 
@@ -540,20 +455,14 @@ test.provider(
         { emailDomain: { domain: "example.com" } },
         { everyone: {} },
       ]);
-      expect(live2.policies![0].exclude).toEqual([
-        { email: { email: "intern@example.com" } },
-      ]);
-      expect(live2.policies![0].require).toEqual([
-        { geo: { countryCode: "US" } },
-      ]);
+      expect(live2.policies![0].exclude).toEqual([{ email: { email: "intern@example.com" } }]);
+      expect(live2.policies![0].require).toEqual([{ geo: { countryCode: "US" } }]);
       expect(live2.policies![0].sessionDuration).toBe("12h");
 
       // v3 — switch the application from inline to a reusable Policy
       // resource (passed directly).
       const reusableProgram = Effect.gen(function* () {
-        yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
-          AdoptPolicy.adopt(true),
-        );
+        yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
         const reusable = yield* Cloudflare.Access.Policy("InlineSwapPolicy", {
           name: "Reusable for inline-swap test",
           decision: "allow",
@@ -580,10 +489,7 @@ test.provider(
         .deploy(
           makeApp([
             reusable.policyId,
-            {
-              decision: "allow",
-              include: [{ emailDomain: "example.com" }],
-            },
+            { decision: "allow", include: [{ emailDomain: "example.com" }] },
           ]),
         )
         .pipe(Effect.flip);
@@ -592,12 +498,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
     timeout: 300_000,
   },
 );

@@ -159,9 +159,7 @@ export type CatalogsControl = Resource<
  * @resource
  * @category Retail
  */
-export const CatalogsControl = Resource<CatalogsControl>(
-  "GCP.Retail.CatalogsControl",
-);
+export const CatalogsControl = Resource<CatalogsControl>("GCP.Retail.CatalogsControl");
 
 export class CatalogsControlNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsControlNotResolved",
@@ -186,10 +184,7 @@ const actionKind = (input: {
   return "synonyms";
 };
 
-const toAttrs = (
-  control: retail.GoogleCloudRetailV2Control,
-  project: string,
-) => {
+const toAttrs = (control: retail.GoogleCloudRetailV2Control, project: string) => {
   const name = control.name ?? "";
   const parsed = parseResourceName(name, "controls");
   return {
@@ -209,8 +204,7 @@ const toAttrs = (
   };
 };
 
-const resourceName = (catalog: string, controlId: string) =>
-  `${catalog}/controls/${controlId}`;
+const resourceName = (catalog: string, controlId: string) => `${catalog}/controls/${controlId}`;
 
 const toRule = (news: CatalogsControlProps): retail.GoogleCloudRetailV2Rule => {
   const condition = news.condition;
@@ -218,18 +212,12 @@ const toRule = (news: CatalogsControlProps): retail.GoogleCloudRetailV2Rule => {
   return {
     condition,
     twowaySynonymsAction:
-      kind === "synonyms"
-        ? { synonyms: news.synonyms ?? ["hello", "hi"] }
-        : undefined,
-    redirectAction:
-      kind === "redirect" ? { redirectUri: news.redirectUri } : undefined,
+      kind === "synonyms" ? { synonyms: news.synonyms ?? ["hello", "hi"] } : undefined,
+    redirectAction: kind === "redirect" ? { redirectUri: news.redirectUri } : undefined,
     filterAction: kind === "filter" ? { filter: news.filter } : undefined,
     boostAction:
-      kind === "boost"
-        ? { boost: news.boost, productsFilter: news.productsFilter }
-        : undefined,
-    ignoreAction:
-      kind === "ignore" ? { ignoreTerms: news.ignoreTerms } : undefined,
+      kind === "boost" ? { boost: news.boost, productsFilter: news.productsFilter } : undefined,
+    ignoreAction: kind === "ignore" ? { ignoreTerms: news.ignoreTerms } : undefined,
   };
 };
 
@@ -309,11 +297,7 @@ export const CatalogsControlProvider = () =>
         output?.name ??
         (catalog !== undefined
           ? resourceName(
-              expandCatalog(
-                catalog,
-                env.project,
-                normalizeLocation(output?.location),
-              ),
+              expandCatalog(catalog, env.project, normalizeLocation(output?.location)),
               controlId,
             )
           : undefined);
@@ -360,9 +344,7 @@ export const CatalogsControlProvider = () =>
       const resource = current.name ?? name;
       const rule = toRule(news);
       const mask = updateMaskOf(
-        (current.displayName ?? "") !== displayName
-          ? "display_name"
-          : undefined,
+        (current.displayName ?? "") !== displayName ? "display_name" : undefined,
         sameJson(current.rule, rule) ? undefined : "rule",
         sameStringList(
           current.searchSolutionUseCase,

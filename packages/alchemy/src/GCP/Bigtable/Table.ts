@@ -153,15 +153,11 @@ export type Table = Resource<
  */
 export const Table = Resource<Table>("GCP.Bigtable.Table");
 
-export class TableNotResolved extends Data.TaggedError(
-  "GCP.Bigtable.TableNotResolved",
-)<{
+export class TableNotResolved extends Data.TaggedError("GCP.Bigtable.TableNotResolved")<{
   name: string;
 }> {}
 
-export class TableStillExists extends Data.TaggedError(
-  "GCP.Bigtable.TableStillExists",
-)<{
+export class TableStillExists extends Data.TaggedError("GCP.Bigtable.TableStillExists")<{
   name: string;
 }> {}
 
@@ -170,9 +166,7 @@ const SCHEMA_VIEW = "SCHEMA_VIEW";
 
 const normalizeGranularity = (value: string | undefined) => {
   const next = (value ?? DEFAULT_GRANULARITY).toUpperCase();
-  return next === "TIMESTAMP_GRANULARITY_UNSPECIFIED"
-    ? DEFAULT_GRANULARITY
-    : next;
+  return next === "TIMESTAMP_GRANULARITY_UNSPECIFIED" ? DEFAULT_GRANULARITY : next;
 };
 
 const gcKey = (rule: GcRule | bigtable.GcRule | undefined) =>
@@ -182,10 +176,7 @@ const gcKey = (rule: GcRule | bigtable.GcRule | undefined) =>
   });
 
 const familiesOf = (
-  families:
-    | Record<string, ColumnFamily | bigtable.ColumnFamily | undefined>
-    | null
-    | undefined,
+  families: Record<string, ColumnFamily | bigtable.ColumnFamily | undefined> | null | undefined,
 ): Record<string, ColumnFamily> => {
   const result: Record<string, ColumnFamily> = {};
   for (const [id, family] of Object.entries(families ?? {})) {
@@ -224,9 +215,7 @@ const getByName = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((table) =>
-      table === undefined
-        ? Effect.void
-        : Effect.fail(new TableStillExists({ name })),
+      table === undefined ? Effect.void : Effect.fail(new TableStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.TableStillExists",
@@ -293,20 +282,12 @@ export const TableProvider = () =>
           ? news.instance
           : `projects/_/instances/${news.instance}`,
       ).instanceId;
-      const previousGranularity = normalizeGranularity(
-        olds?.granularity ?? output?.granularity,
-      );
-      const nextGranularity = normalizeGranularity(
-        news.granularity ?? output?.granularity,
-      );
+      const previousGranularity = normalizeGranularity(olds?.granularity ?? output?.granularity);
+      const nextGranularity = normalizeGranularity(news.granularity ?? output?.granularity);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
-        (previousInstanceId !== undefined &&
-          previousInstanceId !== nextInstanceId) ||
-        (news.granularity !== undefined &&
-          previousGranularity !== nextGranularity)
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
+        (previousInstanceId !== undefined && previousInstanceId !== nextInstanceId) ||
+        (news.granularity !== undefined && previousGranularity !== nextGranularity)
       ) {
         return { action: "replace" as const };
       }
@@ -319,9 +300,7 @@ export const TableProvider = () =>
       const instanceRef = olds?.instance ?? output?.instance;
       const name =
         output?.name ??
-        (instanceRef
-          ? `${instanceNameOf(env.project, instanceRef)}/tables/${tableId}`
-          : undefined);
+        (instanceRef ? `${instanceNameOf(env.project, instanceRef)}/tables/${tableId}` : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -333,8 +312,7 @@ export const TableProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const instances = (yield* listAlchemyInstances(env.project)).filter(
-          (instance): instance is bigtable.Instance & { name: string } =>
-            !!instance.name,
+          (instance): instance is bigtable.Instance & { name: string } => !!instance.name,
         );
         const pages = yield* Effect.forEach(
           instances,
@@ -345,11 +323,7 @@ export const TableProvider = () =>
                 pageSize: 1000,
               }),
               (page) => page.tables,
-            ).pipe(
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as bigtable.Table[]),
-              ),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as bigtable.Table[]))),
           { concurrency: 4 },
         );
         return pages.flat().map((table) => toAttrs(table, env.project));
@@ -372,9 +346,7 @@ export const TableProvider = () =>
             body: {
               tableId,
               table: {
-                granularity: news.granularity
-                  ? normalizeGranularity(news.granularity)
-                  : undefined,
+                granularity: news.granularity ? normalizeGranularity(news.granularity) : undefined,
                 columnFamilies:
                   families === undefined
                     ? undefined
@@ -423,12 +395,10 @@ export const TableProvider = () =>
             yield* waitForOperation(unlocked);
             current = (yield* getByName(name)) ?? current;
           }
-          current = yield* bigtable.modifyColumnFamiliesProjectsInstancesTables(
-            {
-              name,
-              body: { modifications: mods },
-            },
-          );
+          current = yield* bigtable.modifyColumnFamiliesProjectsInstancesTables({
+            name,
+            body: { modifications: mods },
+          });
         }
       }
 
@@ -440,16 +410,14 @@ export const TableProvider = () =>
       }
       if (
         news.changeStreamConfig !== undefined &&
-        changeStreamKey(news.changeStreamConfig) !==
-          changeStreamKey(current.changeStreamConfig)
+        changeStreamKey(news.changeStreamConfig) !== changeStreamKey(current.changeStreamConfig)
       ) {
         patchBody.changeStreamConfig = news.changeStreamConfig;
         mask.push("change_stream_config");
       }
       if (
         news.automatedBackupPolicy !== undefined &&
-        backupKey(news.automatedBackupPolicy) !==
-          backupKey(current.automatedBackupPolicy)
+        backupKey(news.automatedBackupPolicy) !== backupKey(current.automatedBackupPolicy)
       ) {
         patchBody.automatedBackupPolicy = news.automatedBackupPolicy;
         mask.push("automated_backup_policy");

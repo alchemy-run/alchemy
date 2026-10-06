@@ -1,21 +1,18 @@
-import * as GCP from "@/GCP";
-import { zipFiles } from "@/Util/zip.ts";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { zipFiles } from "@/Util/zip.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const LOCATION = "us-central1";
 
@@ -52,15 +49,12 @@ const uploadSource = Effect.fn(function* () {
       }),
     },
   ]);
-  const uploaded =
-    yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
-      parent: `projects/${project}/locations/${LOCATION}`,
-      body: { environment: "GEN_2" },
-    });
+  const uploaded = yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
+    parent: `projects/${project}/locations/${LOCATION}`,
+    body: { environment: "GEN_2" },
+  });
   if (uploaded.uploadUrl === undefined) {
-    return yield* Effect.die(
-      new Error("generateUploadUrl did not return uploadUrl"),
-    );
+    return yield* Effect.die(new Error("generateUploadUrl did not return uploadUrl"));
   }
   const client = yield* HttpClient.HttpClient;
   const bytes = yield* Effect.sync(() => new Uint8Array(archive));
@@ -71,14 +65,10 @@ const uploadSource = Effect.fn(function* () {
   );
 
   if (response.status < 200 || response.status >= 300) {
-    return yield* Effect.die(
-      new Error(`source upload failed with HTTP ${response.status}`),
-    );
+    return yield* Effect.die(new Error(`source upload failed with HTTP ${response.status}`));
   }
   if (uploaded.storageSource === undefined) {
-    return yield* Effect.die(
-      new Error("generateUploadUrl did not return storageSource"),
-    );
+    return yield* Effect.die(new Error("generateUploadUrl did not return storageSource"));
   }
   return uploaded.storageSource;
 });
@@ -94,9 +84,7 @@ test.provider(
         pageSize: 10,
       });
       for (const fn of page.functions ?? []) {
-        expect(fn.name).toMatch(
-          new RegExp(`^projects/${project}/locations/[^/]+/functions/`),
-        );
+        expect(fn.name).toMatch(new RegExp(`^projects/${project}/locations/[^/]+/functions/`));
       }
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -152,11 +140,10 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.buildConfig?.runtime).toEqual("nodejs20");
       expect(fetched.serviceConfig?.timeoutSeconds).toEqual(60);
 
-      const downloaded =
-        yield* cloudfunctions.generateDownloadUrlProjectsLocationsFunctions({
-          name: created.name,
-          body: {},
-        });
+      const downloaded = yield* cloudfunctions.generateDownloadUrlProjectsLocationsFunctions({
+        name: created.name,
+        body: {},
+      });
       expect(downloaded.downloadUrl).toEqual(expect.any(String));
 
       const updated = yield* stack.deploy(

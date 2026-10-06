@@ -162,10 +162,9 @@ export type ConnectionsGitRepositoryLink = Resource<
  * @resource
  * @category DeveloperConnect
  */
-export const ConnectionsGitRepositoryLink =
-  Resource<ConnectionsGitRepositoryLink>(
-    "GCP.DeveloperConnect.ConnectionsGitRepositoryLink",
-  );
+export const ConnectionsGitRepositoryLink = Resource<ConnectionsGitRepositoryLink>(
+  "GCP.DeveloperConnect.ConnectionsGitRepositoryLink",
+);
 
 const parseLinkName = (name: string, region: string) => {
   const parsed = parseName(name, "gitRepositoryLinks", region);
@@ -221,11 +220,7 @@ const parentKey = (
 const resourceName = (parent: string, gitRepositoryLinkId: string) =>
   `${parent}/gitRepositoryLinks/${gitRepositoryLinkId}`;
 
-const toAttrs = (
-  item: developerconnect.GitRepositoryLink,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: developerconnect.GitRepositoryLink, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseLinkName(name, region);
   return {
@@ -265,11 +260,8 @@ const listLinksAt = (parent: string) =>
 
 const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const wildcard = yield* listAtNested(
-      project,
-      "connections/-",
-      region,
-      (parent) => listLinksAt(parent),
+    const wildcard = yield* listAtNested(project, "connections/-", region, (parent) =>
+      listLinksAt(parent),
     );
     if (wildcard.length > 0) return wildcard;
     const connections = yield* listAtLocation(project, region, (parent) =>
@@ -315,13 +307,8 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.gitRepositoryLinkId ?? output?.gitRepositoryLinkId,
         nextId:
-          news.gitRepositoryLinkId ??
-          olds?.gitRepositoryLinkId ??
-          output?.gitRepositoryLinkId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.gitRepositoryLinkId ?? olds?.gitRepositoryLinkId ?? output?.gitRepositoryLinkId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -347,8 +334,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
           (previousUri !== "" && nextUri !== previousUri) ||
           fingerprint(toLabels(olds?.labels ?? output?.labels)) !==
             fingerprint(toLabels(news.labels)) ||
-          fingerprint(olds?.annotations ?? output?.annotations) !==
-            fingerprint(news.annotations),
+          fingerprint(olds?.annotations ?? output?.annotations) !== fingerprint(news.annotations),
       });
     }),
 
@@ -377,9 +363,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>

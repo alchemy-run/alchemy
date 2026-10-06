@@ -20,11 +20,9 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type AuthorizedOrgsDescDirection =
-  acm.AuthorizedOrgsDescAuthorizationDirectionEnum;
+export type AuthorizedOrgsDescDirection = acm.AuthorizedOrgsDescAuthorizationDirectionEnum;
 export type AuthorizedOrgsDescAssetType = acm.AuthorizedOrgsDescAssetTypeEnum;
-export type AuthorizedOrgsDescAuthorizationType =
-  acm.AuthorizedOrgsDescAuthorizationTypeEnum;
+export type AuthorizedOrgsDescAuthorizationType = acm.AuthorizedOrgsDescAuthorizationTypeEnum;
 
 export type AccessPoliciesAuthorizedOrgsDescProps = {
   /**
@@ -136,10 +134,9 @@ export type AccessPoliciesAuthorizedOrgsDesc = Resource<
  * @resource
  * @category AccessContextManager
  */
-export const AccessPoliciesAuthorizedOrgsDesc =
-  Resource<AccessPoliciesAuthorizedOrgsDesc>(
-    "GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDesc",
-  );
+export const AccessPoliciesAuthorizedOrgsDesc = Resource<AccessPoliciesAuthorizedOrgsDesc>(
+  "GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDesc",
+);
 
 export class AccessPoliciesAuthorizedOrgsDescNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDescNotResolved",
@@ -147,9 +144,7 @@ export class AccessPoliciesAuthorizedOrgsDescNotResolved extends Data.TaggedErro
   name: string;
 }> {}
 
-const toAttrs = (
-  desc: acm.AuthorizedOrgsDesc,
-): AccessPoliciesAuthorizedOrgsDesc["Attributes"] => {
+const toAttrs = (desc: acm.AuthorizedOrgsDesc): AccessPoliciesAuthorizedOrgsDesc["Attributes"] => {
   const name = desc.name ?? "";
   const parsed = parseName(name, "authorizedOrgsDescs");
   return {
@@ -175,11 +170,7 @@ const listDescs = (policy: string) =>
       pageSize: 100,
     }),
     (page) => page.authorizedOrgsDescs,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as acm.AuthorizedOrgsDesc[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as acm.AuthorizedOrgsDesc[])));
 
 export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
   Provider.succeed(AccessPoliciesAuthorizedOrgsDesc, {
@@ -194,19 +185,16 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.authorizedOrgsDescId ?? output?.authorizedOrgsDescId;
+      const previousId = olds?.authorizedOrgsDescId ?? output?.authorizedOrgsDescId;
       const idChanged =
         previousId !== undefined &&
         news.authorizedOrgsDescId !== undefined &&
         news.authorizedOrgsDescId !== previousId;
       const previousPolicy = olds?.policy ?? output?.policy;
       const policyChanged =
-        previousPolicy !== undefined &&
-        policyNameOf(news.policy) !== policyNameOf(previousPolicy);
+        previousPolicy !== undefined && policyNameOf(news.policy) !== policyNameOf(previousPolicy);
       const directionChanged =
-        (olds?.authorizationDirection ?? output?.authorizationDirection) !==
-          undefined &&
+        (olds?.authorizationDirection ?? output?.authorizationDirection) !== undefined &&
         news.authorizationDirection !==
           (olds?.authorizationDirection ?? output?.authorizationDirection);
       const assetChanged =
@@ -214,14 +202,9 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
         news.assetType !== (olds?.assetType ?? output?.assetType);
       const typeChanged =
         (olds?.authorizationType ?? output?.authorizationType) !== undefined &&
-        news.authorizationType !==
-          (olds?.authorizationType ?? output?.authorizationType);
+        news.authorizationType !== (olds?.authorizationType ?? output?.authorizationType);
       return replaceOnIdentity(
-        idChanged ||
-          policyChanged ||
-          directionChanged ||
-          assetChanged ||
-          typeChanged,
+        idChanged || policyChanged || directionChanged || assetChanged || typeChanged,
       );
     }),
 
@@ -234,8 +217,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
       const policy = olds?.policy ?? output?.policy;
       if (policy === undefined) return undefined;
       const name =
-        output?.name ??
-        resourceNameOf(policy, "authorizedOrgsDescs", authorizedOrgsDescId);
+        output?.name ?? resourceNameOf(policy, "authorizedOrgsDescs", authorizedOrgsDescId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing);
@@ -262,11 +244,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
         news.authorizedOrgsDescId,
         output?.authorizedOrgsDescId,
       );
-      const name = resourceNameOf(
-        policy,
-        "authorizedOrgsDescs",
-        authorizedOrgsDescId,
-      );
+      const name = resourceNameOf(policy, "authorizedOrgsDescs", authorizedOrgsDescId);
       const desiredOrgs = news.orgs ?? [];
 
       let current = yield* getByName(output?.name ?? name);
@@ -311,10 +289,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       if (current === undefined) {

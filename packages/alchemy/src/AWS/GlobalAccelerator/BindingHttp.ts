@@ -64,9 +64,7 @@ export const makeGaAcceleratorHttpBinding = <
         // The region must also be pinned at the call site: the yield-time
         // snapshot is only a fallback — the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
-        return yield* withGaRegion(
-          op({ ...request, AcceleratorArn: acceleratorArn } as I),
-        );
+        return yield* withGaRegion(op({ ...request, AcceleratorArn: acceleratorArn } as I));
       });
     });
   });

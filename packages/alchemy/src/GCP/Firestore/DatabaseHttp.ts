@@ -5,10 +5,7 @@ import { type BindingIam, grantFor } from "../HttpBinding.ts";
 import type { Database } from "./Database.ts";
 import type { DocumentSnapshot, ReadDatabaseClient } from "./ReadDatabase.ts";
 import { decodeFields, encodeFields, fieldPath } from "./Values.ts";
-import {
-  DocumentAlreadyExists,
-  type WriteDatabaseClient,
-} from "./WriteDatabase.ts";
+import { DocumentAlreadyExists, type WriteDatabaseClient } from "./WriteDatabase.ts";
 
 // Firestore databases have no resource-level IAM policy: each grant is on
 // the project under an IAM Condition naming the bound database.
@@ -55,18 +52,13 @@ export const makeFirestoreDatabaseHelpers = Effect.gen(function* () {
   const listDocuments = yield* firestore.listProjectsDatabasesDocuments;
   const runQuery = yield* firestore.runQueryProjectsDatabasesDocuments;
   const patchDocument = yield* firestore.patchProjectsDatabasesDocuments;
-  const createDocument =
-    yield* firestore.createDocumentProjectsDatabasesDocuments;
+  const createDocument = yield* firestore.createDocumentProjectsDatabasesDocuments;
   const deleteDocument = yield* firestore.deleteProjectsDatabasesDocuments;
 
-  const makeRead = (
-    databaseName: Effect.Effect<string>,
-  ): ReadDatabaseClient => {
+  const makeRead = (databaseName: Effect.Effect<string>): ReadDatabaseClient => {
     const documentsRoot = Effect.map(databaseName, (db) => `${db}/documents`);
     const parentOf = (path: string) =>
-      Effect.map(documentsRoot, (root) =>
-        path.length > 0 ? `${root}/${path}` : root,
-      );
+      Effect.map(documentsRoot, (root) => (path.length > 0 ? `${root}/${path}` : root));
     return {
       get: (path) =>
         parentOf(trimPath(path)).pipe(
@@ -93,34 +85,26 @@ export const makeFirestoreDatabaseHelpers = Effect.gen(function* () {
       },
       query: (structuredQuery) =>
         documentsRoot.pipe(
-          Effect.flatMap((parent) =>
-            runQuery({ parent, body: { structuredQuery } }),
-          ),
+          Effect.flatMap((parent) => runQuery({ parent, body: { structuredQuery } })),
           // The REST endpoint streams a JSON array of RunQueryResponse
           // messages; the generated output type models a single message.
           Effect.map((response): ReadonlyArray<firestore.RunQueryResponse> =>
             Array.isArray(response) ? response : [response],
           ),
           Effect.map((responses) =>
-            responses.flatMap((r) =>
-              r.document === undefined ? [] : [snapshot(r.document)],
-            ),
+            responses.flatMap((r) => (r.document === undefined ? [] : [snapshot(r.document)])),
           ),
         ),
     };
   };
 
-  const makeWrite = (
-    databaseName: Effect.Effect<string>,
-  ): WriteDatabaseClient => {
+  const makeWrite = (databaseName: Effect.Effect<string>): WriteDatabaseClient => {
     const documentName = (path: string) =>
       Effect.map(databaseName, (db) => `${db}/documents/${trimPath(path)}`);
     return {
       set: (path, fields) =>
         documentName(path).pipe(
-          Effect.flatMap((name) =>
-            patchDocument({ name, body: { fields: encodeFields(fields) } }),
-          ),
+          Effect.flatMap((name) => patchDocument({ name, body: { fields: encodeFields(fields) } })),
           Effect.map(snapshot),
         ),
       update: (path, fields) =>

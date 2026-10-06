@@ -44,9 +44,7 @@ const noise = (i: number, seed: number) => {
   return x - Math.floor(x);
 };
 const err = (i: number, spikeFrom: number) =>
-  i >= spikeFrom
-    ? Math.min(28, 13 + 9 * noise(i, 3) + (i - spikeFrom) * 1.5)
-    : 1.5 * noise(i, 2);
+  i >= spikeFrom ? Math.min(28, 13 + 9 * noise(i, 3) + (i - spikeFrom) * 1.5) : 1.5 * noise(i, 2);
 
 const TRACES: [string, number][] = [
   ["PUT /photos/cat.jpg", 48],
@@ -89,12 +87,8 @@ export default function ObservabilityDash() {
   const spiking = t >= T_SPIKE && t < T_RECOVER;
   const alerting = t >= T_ALERT && t < T_RECOVER;
   // The spike enters at the right edge and scrolls left.
-  const spikeFrom = spiking
-    ? tick + POINTS - Math.floor((t - T_SPIKE) / TICK_MS) - 1
-    : Infinity;
-  const errors = Array.from({ length: POINTS }, (_, k) =>
-    err(tick + k, spikeFrom),
-  );
+  const spikeFrom = spiking ? tick + POINTS - Math.floor((t - T_SPIKE) / TICK_MS) - 1 : Infinity;
+  const errors = Array.from({ length: POINTS }, (_, k) => err(tick + k, spikeFrom));
   const phase = t < T_DASH ? "traces" : t < T_ALERT ? "dashboard" : "monitor";
   const traceCount = Math.min(TRACES.length, 1 + Math.floor(t / 500));
 
@@ -126,45 +120,24 @@ export default function ObservabilityDash() {
 
       <div className="od-win">
         <div className="od-bar">
-          <span
-            className="od-dot"
-            style={{ background: "var(--alc-dot-red)" }}
-          />
-          <span
-            className="od-dot"
-            style={{ background: "var(--alc-dot-yellow)" }}
-          />
-          <span
-            className="od-dot"
-            style={{ background: "var(--alc-dot-green)" }}
-          />
+          <span className="od-dot" style={{ background: "var(--alc-dot-red)" }} />
+          <span className="od-dot" style={{ background: "var(--alc-dot-yellow)" }} />
+          <span className="od-dot" style={{ background: "var(--alc-dot-green)" }} />
           <span className="od-bar__file">axiom · my-app</span>
           <span className={`od-badge ${alerting ? "is-red" : ""}`}>
             {alerting ? "ALERTING" : "OK"}
           </span>
         </div>
         <div className="od-win__body">
-          <div
-            className={`od-block ${phase === "dashboard" ? "is-focus" : ""}`}
-          >
+          <div className={`od-block ${phase === "dashboard" ? "is-focus" : ""}`}>
             <div className="od-label">
               <span>errors / min</span>
               <span className={alerting ? "od-red" : "od-muted"}>
                 {Math.round(errors[POINTS - 1]!)}
               </span>
             </div>
-            <svg
-              viewBox={`0 0 ${W} ${H}`}
-              preserveAspectRatio="none"
-              className="od-chart"
-            >
-              <line
-                x1={0}
-                x2={W}
-                y1={py(THRESHOLD)}
-                y2={py(THRESHOLD)}
-                className="od-threshold"
-              />
+            <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="od-chart">
+              <line x1={0} x2={W} y1={py(THRESHOLD)} y2={py(THRESHOLD)} className="od-threshold" />
               <path d={`${d} L${W} ${H} L0 ${H} Z`} className="od-area" />
               <path d={d} className="od-path" />
             </svg>
@@ -177,9 +150,7 @@ export default function ObservabilityDash() {
                 <li key={name} className={failed ? "is-failed" : ""}>
                   <span className="od-traces__mark">{failed ? "✗" : "✓"}</span>
                   <span className="od-traces__name">{name}</span>
-                  <span className="od-traces__ms">
-                    {failed ? "500" : `${ms}ms`}
-                  </span>
+                  <span className="od-traces__ms">{failed ? "500" : `${ms}ms`}</span>
                 </li>
               );
             })}
@@ -191,8 +162,8 @@ export default function ObservabilityDash() {
             <span className="od-muted">count(error) &gt; {THRESHOLD}</span>
           </div>
           <div className={`od-alert ${alerting ? "is-shown" : ""}`}>
-            <span className="od-red">✗</span> monitor fired → sent to the agent:
-            Photos.upload failing
+            <span className="od-red">✗</span> monitor fired → sent to the agent: Photos.upload
+            failing
           </div>
         </div>
       </div>

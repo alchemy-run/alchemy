@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CheckInLicense}.
  */
-export interface CheckInLicenseRequest
-  extends licensemanager.CheckInLicenseRequest {}
+export interface CheckInLicenseRequest extends licensemanager.CheckInLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:CheckInLicense` — return a
@@ -33,12 +32,7 @@ export interface CheckInLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: CheckInLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.CheckInLicenseResponse,
-      licensemanager.CheckInLicenseError
-    >
+    ) => Effect.Effect<licensemanager.CheckInLicenseResponse, licensemanager.CheckInLicenseError>
   >
 > {}
-export const CheckInLicense = Binding.Service<CheckInLicense>(
-  "AWS.LicenseManager.CheckInLicense",
-);
+export const CheckInLicense = Binding.Service<CheckInLicense>("AWS.LicenseManager.CheckInLicense");

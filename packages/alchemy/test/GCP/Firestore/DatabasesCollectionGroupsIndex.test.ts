@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -59,18 +56,15 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             type: "FIRESTORE_NATIVE",
           });
-          const index = yield* GCP.Firestore.DatabasesCollectionGroupsIndex(
-            "UsersByName",
-            {
-              database: database.name,
-              collectionGroup: "users",
-              queryScope: "COLLECTION",
-              fields: [
-                { fieldPath: "name", order: "ASCENDING" },
-                { fieldPath: "created", order: "DESCENDING" },
-              ],
-            },
-          );
+          const index = yield* GCP.Firestore.DatabasesCollectionGroupsIndex("UsersByName", {
+            database: database.name,
+            collectionGroup: "users",
+            queryScope: "COLLECTION",
+            fields: [
+              { fieldPath: "name", order: "ASCENDING" },
+              { fieldPath: "created", order: "DESCENDING" },
+            ],
+          });
           return { database, index };
         }),
       );
@@ -80,15 +74,12 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.index.collectionGroupId).toEqual("users");
       expect(created.index.queryScope).toEqual("COLLECTION");
 
-      const fetched =
-        yield* firestore.getProjectsDatabasesCollectionGroupsIndexes({
-          name: created.index.name,
-        });
+      const fetched = yield* firestore.getProjectsDatabasesCollectionGroupsIndexes({
+        name: created.index.name,
+      });
       expect(fetched.name).toEqual(created.index.name);
       expect(fetched.queryScope).toEqual("COLLECTION");
-      expect(
-        (fetched.fields ?? []).some((field) => field.fieldPath === "name"),
-      ).toEqual(true);
+      expect((fetched.fields ?? []).some((field) => field.fieldPath === "name")).toEqual(true);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -97,34 +88,26 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             type: "FIRESTORE_NATIVE",
           });
-          const index = yield* GCP.Firestore.DatabasesCollectionGroupsIndex(
-            "UsersByName",
-            {
-              database: database.name,
-              collectionGroup: "users",
-              queryScope: "COLLECTION",
-              fields: [
-                { fieldPath: "email", order: "ASCENDING" },
-                { fieldPath: "created", order: "DESCENDING" },
-              ],
-            },
-          );
+          const index = yield* GCP.Firestore.DatabasesCollectionGroupsIndex("UsersByName", {
+            database: database.name,
+            collectionGroup: "users",
+            queryScope: "COLLECTION",
+            fields: [
+              { fieldPath: "email", order: "ASCENDING" },
+              { fieldPath: "created", order: "DESCENDING" },
+            ],
+          });
           return { database, index };
         }),
       );
 
       expect(updated.index.collectionGroupId).toEqual("users");
-      expect(
-        updated.index.fields.some((field) => field.fieldPath === "email"),
-      ).toEqual(true);
+      expect(updated.index.fields.some((field) => field.fieldPath === "email")).toEqual(true);
 
-      const refetched =
-        yield* firestore.getProjectsDatabasesCollectionGroupsIndexes({
-          name: updated.index.name,
-        });
-      expect(
-        (refetched.fields ?? []).some((field) => field.fieldPath === "email"),
-      ).toEqual(true);
+      const refetched = yield* firestore.getProjectsDatabasesCollectionGroupsIndexes({
+        name: updated.index.name,
+      });
+      expect((refetched.fields ?? []).some((field) => field.fieldPath === "email")).toEqual(true);
 
       yield* stack.destroy();
 

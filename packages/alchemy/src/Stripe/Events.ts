@@ -11,18 +11,12 @@ import type {
   Subscription,
 } from "@distilled.cloud/stripe/stripe";
 
-export interface StripeEventClass<
-  Type extends string = string,
-  Object = unknown,
-> {
+export interface StripeEventClass<Type extends string = string, Object = unknown> {
   readonly type: Type;
   new (object: any): StripeEventInstance<Type, Object>;
 }
 
-export interface StripeEventInstance<
-  Type extends string = string,
-  Object = unknown,
-> {
+export interface StripeEventInstance<Type extends string = string, Object = unknown> {
   readonly type: Type;
   readonly object: Object;
 }

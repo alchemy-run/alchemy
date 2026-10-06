@@ -17,9 +17,7 @@ const DEFAULT_DELETE_PROTECTION = "DELETE_PROTECTION_DISABLED";
 const DEFAULT_APP_ENGINE = "DISABLED";
 const MAX_DATABASE_ID_LENGTH = 63;
 
-export type DatabaseType =
-  | firestore.GoogleFirestoreAdminV1DatabaseTypeEnum
-  | (string & {});
+export type DatabaseType = firestore.GoogleFirestoreAdminV1DatabaseTypeEnum | (string & {});
 export type DatabaseEdition =
   | firestore.GoogleFirestoreAdminV1DatabaseDatabaseEditionEnum
   | (string & {});
@@ -222,15 +220,11 @@ export type Database = Resource<
  */
 export const Database = Resource<Database>("GCP.Firestore.Database");
 
-export class DatabaseNotResolved extends Data.TaggedError(
-  "GCP.Firestore.DatabaseNotResolved",
-)<{
+export class DatabaseNotResolved extends Data.TaggedError("GCP.Firestore.DatabaseNotResolved")<{
   name: string;
 }> {}
 
-export class DatabaseStillExists extends Data.TaggedError(
-  "GCP.Firestore.DatabaseStillExists",
-)<{
+export class DatabaseStillExists extends Data.TaggedError("GCP.Firestore.DatabaseStillExists")<{
   name: string;
 }> {}
 
@@ -248,11 +242,9 @@ const normalizeEnum = (value: string | undefined, fallback: string) => {
   return next.endsWith("_UNSPECIFIED") ? fallback : next;
 };
 
-const normalizeType = (value: string | undefined) =>
-  normalizeEnum(value, DEFAULT_TYPE);
+const normalizeType = (value: string | undefined) => normalizeEnum(value, DEFAULT_TYPE);
 
-const normalizeEdition = (value: string | undefined) =>
-  normalizeEnum(value, DEFAULT_EDITION);
+const normalizeEdition = (value: string | undefined) => normalizeEnum(value, DEFAULT_EDITION);
 
 const resourceName = (project: string, databaseId: string) =>
   `projects/${project}/databases/${databaseId}`;
@@ -262,20 +254,13 @@ const parseName = (name: string) => {
   const databasesAt = parts.lastIndexOf("databases");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     databaseId:
-      databasesAt >= 0 && parts[databasesAt + 1]
-        ? parts[databasesAt + 1]!
-        : lastSegment(name),
+      databasesAt >= 0 && parts[databasesAt + 1] ? parts[databasesAt + 1]! : lastSegment(name),
   };
 };
 
-const toDatabaseId = (
-  id: string,
-  databaseId: string | undefined,
-  existing?: string,
-) =>
+const toDatabaseId = (id: string, databaseId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (databaseId !== undefined) return databaseId;
     if (existing !== undefined) return existing;
@@ -327,9 +312,7 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   firestore.getProjectsDatabases({ name }).pipe(
-    Effect.map((database) =>
-      database.deleteTime !== undefined ? undefined : database,
-    ),
+    Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
@@ -342,11 +325,9 @@ const waitForOperation = (
   operation: firestore.GoogleLongrunningOperation,
   options?: { alreadyExistsOk?: boolean },
 ) =>
-  waitForGcpOperation(
-    operation,
-    (name) => firestore.getProjectsDatabasesOperations({ name }),
-    { budget: "10 minutes" },
-  ).pipe(
+  waitForGcpOperation(operation, (name) => firestore.getProjectsDatabasesOperations({ name }), {
+    budget: "10 minutes",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         options?.alreadyExistsOk === true &&
@@ -359,8 +340,7 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (database): database is firestore.GoogleFirestoreAdminV1Database =>
-        database !== undefined,
+      (database): database is firestore.GoogleFirestoreAdminV1Database => database !== undefined,
       () => new DatabaseNotResolved({ name }),
     ),
     Effect.retry({
@@ -395,10 +375,7 @@ const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-const enumChanged = (
-  desired: string | undefined,
-  observed: string | undefined,
-) => {
+const enumChanged = (desired: string | undefined, observed: string | undefined) => {
   if (desired === undefined) return false;
   return normalizeEnum(observed, desired) !== normalizeEnum(desired, desired);
 };
@@ -422,22 +399,11 @@ export const DatabaseProvider = () =>
 
       const previousId = olds?.databaseId ?? output?.databaseId;
       const nextId = news.databaseId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousEdition = normalizeEdition(
-        olds?.databaseEdition ?? output?.databaseEdition,
-      );
-      const nextEdition = normalizeEdition(
-        news.databaseEdition ?? output?.databaseEdition,
-      );
-      const previousKms =
-        olds?.cmekConfig?.kmsKeyName ?? output?.kmsKeyName ?? "";
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousEdition = normalizeEdition(olds?.databaseEdition ?? output?.databaseEdition);
+      const nextEdition = normalizeEdition(news.databaseEdition ?? output?.databaseEdition);
+      const previousKms = olds?.cmekConfig?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.cmekConfig?.kmsKeyName ?? previousKms;
       const previousRealtime = (
         olds?.realtimeUpdatesMode ??
@@ -451,32 +417,22 @@ export const DatabaseProvider = () =>
       ).toUpperCase();
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousEdition !== nextEdition ||
         previousKms !== nextKms ||
-        (news.realtimeUpdatesMode !== undefined &&
-          previousRealtime !== nextRealtime);
+        (news.realtimeUpdatesMode !== undefined && previousRealtime !== nextRealtime);
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
-        deleteFirst:
-          previousId !== undefined &&
-          nextId !== undefined &&
-          nextId === previousId,
+        deleteFirst: previousId !== undefined && nextId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const databaseId = yield* toDatabaseId(
-        id,
-        olds?.databaseId,
-        output?.databaseId,
-      );
+      const databaseId = yield* toDatabaseId(id, olds?.databaseId, output?.databaseId);
       const name = output?.name ?? resourceName(env.project, databaseId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -487,19 +443,11 @@ export const DatabaseProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const databaseId = yield* toDatabaseId(
-        id,
-        news.databaseId,
-        output?.databaseId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const databaseId = yield* toDatabaseId(id, news.databaseId, output?.databaseId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const type = normalizeType(news.type);
       const name = resourceName(env.project, databaseId);
-      const desiredProtection =
-        news.deleteProtectionState ?? DEFAULT_DELETE_PROTECTION;
+      const desiredProtection = news.deleteProtectionState ?? DEFAULT_DELETE_PROTECTION;
 
       let current = yield* getByName(name);
 
@@ -516,13 +464,11 @@ export const DatabaseProvider = () =>
                 : undefined,
               concurrencyMode: news.concurrencyMode,
               pointInTimeRecoveryEnablement: news.pointInTimeRecoveryEnablement,
-              appEngineIntegrationMode:
-                news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
+              appEngineIntegrationMode: news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
               deleteProtectionState: desiredProtection,
               realtimeUpdatesMode: news.realtimeUpdatesMode,
               firestoreDataAccessMode: news.firestoreDataAccessMode,
-              mongodbCompatibleDataAccessMode:
-                news.mongodbCompatibleDataAccessMode,
+              mongodbCompatibleDataAccessMode: news.mongodbCompatibleDataAccessMode,
               cmekConfig: news.cmekConfig?.kmsKeyName
                 ? { kmsKeyName: news.cmekConfig.kmsKeyName }
                 : undefined,
@@ -550,22 +496,11 @@ export const DatabaseProvider = () =>
         patchBody.concurrencyMode = news.concurrencyMode;
         mask.push("concurrencyMode");
       }
-      if (
-        enumChanged(
-          news.pointInTimeRecoveryEnablement,
-          current.pointInTimeRecoveryEnablement,
-        )
-      ) {
-        patchBody.pointInTimeRecoveryEnablement =
-          news.pointInTimeRecoveryEnablement;
+      if (enumChanged(news.pointInTimeRecoveryEnablement, current.pointInTimeRecoveryEnablement)) {
+        patchBody.pointInTimeRecoveryEnablement = news.pointInTimeRecoveryEnablement;
         mask.push("pointInTimeRecoveryEnablement");
       }
-      if (
-        enumChanged(
-          news.appEngineIntegrationMode,
-          current.appEngineIntegrationMode,
-        )
-      ) {
+      if (enumChanged(news.appEngineIntegrationMode, current.appEngineIntegrationMode)) {
         patchBody.appEngineIntegrationMode = news.appEngineIntegrationMode;
         mask.push("appEngineIntegrationMode");
       }
@@ -573,23 +508,14 @@ export const DatabaseProvider = () =>
         patchBody.deleteProtectionState = desiredProtection;
         mask.push("deleteProtectionState");
       }
-      if (
-        enumChanged(
-          news.firestoreDataAccessMode,
-          current.firestoreDataAccessMode,
-        )
-      ) {
+      if (enumChanged(news.firestoreDataAccessMode, current.firestoreDataAccessMode)) {
         patchBody.firestoreDataAccessMode = news.firestoreDataAccessMode;
         mask.push("firestoreDataAccessMode");
       }
       if (
-        enumChanged(
-          news.mongodbCompatibleDataAccessMode,
-          current.mongodbCompatibleDataAccessMode,
-        )
+        enumChanged(news.mongodbCompatibleDataAccessMode, current.mongodbCompatibleDataAccessMode)
       ) {
-        patchBody.mongodbCompatibleDataAccessMode =
-          news.mongodbCompatibleDataAccessMode;
+        patchBody.mongodbCompatibleDataAccessMode = news.mongodbCompatibleDataAccessMode;
         mask.push("mongodbCompatibleDataAccessMode");
       }
 
@@ -613,10 +539,8 @@ export const DatabaseProvider = () =>
       if (current === undefined) return;
 
       if (
-        normalizeEnum(
-          current.deleteProtectionState,
-          DEFAULT_DELETE_PROTECTION,
-        ) === "DELETE_PROTECTION_ENABLED"
+        normalizeEnum(current.deleteProtectionState, DEFAULT_DELETE_PROTECTION) ===
+        "DELETE_PROTECTION_ENABLED"
       ) {
         const patched = yield* retryConcurrentChanges(
           firestore.patchProjectsDatabases({
@@ -630,9 +554,9 @@ export const DatabaseProvider = () =>
         yield* waitForOperation(patched);
       }
 
-      yield* retryConcurrentChanges(
-        firestore.deleteProjectsDatabases({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryConcurrentChanges(firestore.deleteProjectsDatabases({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       // Soft-delete: GET reports `deleteTime` long before the LRO is done.
       yield* waitUntilGone(output.name);
     }),

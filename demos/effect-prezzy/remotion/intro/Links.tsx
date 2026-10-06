@@ -24,7 +24,10 @@ export const LinksView = ({
 }) => {
   if (!step.links || !step.beside) return null;
   const text = (s: CodeStep, span: { line: number; col: number; len: number }) =>
-    (s.lines[span.line] ?? []).map((t) => t.text).join("").slice(span.col, span.col + span.len);
+    (s.lines[span.line] ?? [])
+      .map((t) => t.text)
+      .join("")
+      .slice(span.col, span.col + span.len);
   // A link already drawn on the previous step (same text at both ends, same tone) stays drawn.
   const drawn = (link: NonNullable<CodeStep["links"]>[number]) =>
     !!prev?.links &&
@@ -37,7 +40,11 @@ export const LinksView = ({
     );
   let order = 0;
   return (
-    <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+    <svg
+      width={1920}
+      height={1080}
+      style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
+    >
       {step.links.map((link, i) => {
         const color = TONE[link.tone ?? "construct"];
         const a = spanRect(step, left, link.from);
@@ -50,7 +57,12 @@ export const LinksView = ({
         const bend = Math.max(60, (x2 - x1) * 0.45);
         return (
           <g key={i}>
-            {stroke(underlinePath(a.x, ay, a.w, i * 7 + 1), color, drawProgress(local, start, 6), 3)}
+            {stroke(
+              underlinePath(a.x, ay, a.w, i * 7 + 1),
+              color,
+              drawProgress(local, start, 6),
+              3,
+            )}
             <g opacity={0.7}>
               {stroke(
                 `M ${x1} ${ay} C ${x1 + bend} ${ay}, ${x2 - bend} ${by}, ${x2} ${by}`,
@@ -59,7 +71,12 @@ export const LinksView = ({
                 2,
               )}
             </g>
-            {stroke(underlinePath(b.x, by, b.w, i * 7 + 4), color, drawProgress(local, start + 9, 6), 3)}
+            {stroke(
+              underlinePath(b.x, by, b.w, i * 7 + 4),
+              color,
+              drawProgress(local, start + 9, 6),
+              3,
+            )}
           </g>
         );
       })}

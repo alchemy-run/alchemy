@@ -66,9 +66,7 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: options.resources?.(parameter) ?? [
-                parameter.parameterArn,
-              ],
+              Resource: options.resources?.(parameter) ?? [parameter.parameterArn],
             },
           ];
           if (options.kmsActions !== undefined) {
@@ -77,9 +75,7 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
               Action: [...options.kmsActions],
               Resource: [
                 Output.all(parameter.parameterArn, parameter.keyArn).pipe(
-                  Output.map(
-                    ([parameterArn, keyArn]) => keyArn ?? parameterArn,
-                  ),
+                  Output.map(([parameterArn, keyArn]) => keyArn ?? parameterArn),
                 ),
               ],
             });

@@ -122,11 +122,7 @@ export class NodesNodesDeploymentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  deployment: sasportal.SasPortalDeployment,
-  parent: string,
-  project: string,
-) => {
+const toAttrs = (deployment: sasportal.SasPortalDeployment, parent: string, project: string) => {
   const name = deployment.name ?? "";
   return {
     name,
@@ -158,9 +154,7 @@ export const NodesNodesDeploymentProvider = () =>
       const parent = expandPath(olds?.parent ?? output?.parent ?? "");
       const name = olds?.name ?? output?.name ?? "";
       let existing = yield* getNodeDeployment(name);
-      let locatedParent = existing
-        ? parentOf(existing.name ?? "") || parent
-        : parent;
+      let locatedParent = existing ? parentOf(existing.name ?? "") || parent : parent;
       if (existing === undefined) {
         const found =
           (yield* findOwnedNodeNodeDeployment(id, parent)) ??
@@ -170,9 +164,7 @@ export const NodesNodesDeploymentProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, locatedParent, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -228,9 +220,7 @@ export const NodesNodesDeploymentProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              findOwnedNodeNodeDeployment(id, parent).pipe(
-                Effect.map((found) => found?.row),
-              ),
+              findOwnedNodeNodeDeployment(id, parent).pipe(Effect.map((found) => found?.row)),
             ),
           );
         current = created ?? undefined;
@@ -246,8 +236,7 @@ export const NodesNodesDeploymentProvider = () =>
       const name = current.name ?? news.name ?? output?.name ?? "";
       const nameChanged = !sameText(current.displayName, displayName);
       const usersChanged =
-        news.sasUserIds !== undefined &&
-        !sameStringList(current.sasUserIds, news.sasUserIds);
+        news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchNodesDeployments({
           name,
@@ -264,9 +253,9 @@ export const NodesNodesDeploymentProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryDelete(
-        sasportal.deleteNodesDeployments({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryDelete(sasportal.deleteNodesDeployments({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getNodeDeployment(output.name));
     }),
   });

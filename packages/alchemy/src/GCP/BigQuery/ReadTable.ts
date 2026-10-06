@@ -6,9 +6,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Table } from "./Table.ts";
 
 /** A query job did not finish within the client's bounded wait. */
-export class QueryNotComplete extends Data.TaggedError(
-  "GCP.BigQuery.QueryNotComplete",
-)<{
+export class QueryNotComplete extends Data.TaggedError("GCP.BigQuery.QueryNotComplete")<{
   jobId: string | undefined;
 }> {}
 
@@ -49,9 +47,7 @@ export interface ReadTableClient {
     params?: Record<string, string | number | boolean>,
   ): Effect.Effect<
     Record<string, unknown>[],
-    | bigquery.QueryJobsError
-    | bigquery.GetQueryResultsJobsError
-    | QueryNotComplete,
+    bigquery.QueryJobsError | bigquery.GetQueryResultsJobsError | QueryNotComplete,
     RuntimeContext
   >;
 }

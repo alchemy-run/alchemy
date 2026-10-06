@@ -12,9 +12,7 @@ export default class SandboxDO extends Cloudflare.DurableObject<SandboxDO>()(
       return {
         fetch: Effect.gen(function* () {
           const { fetch } = yield* container.getTcpPort(3000);
-          const response = yield* fetch(
-            HttpClientRequest.get("http://container/"),
-          );
+          const response = yield* fetch(HttpClientRequest.get("http://container/"));
           return HttpServerResponse.text(yield* response.text, {
             status: response.status,
             headers: response.headers,

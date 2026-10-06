@@ -126,16 +126,12 @@ const getByEntity = (bucketName: string, entity: string) =>
 const listOnBucket = (bucketName: string) =>
   storage.listDefaultObjectAccessControls({ bucket: bucketName }).pipe(
     Effect.map((page) => page.items ?? []),
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as storage.ObjectAccessControl[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as storage.ObjectAccessControl[])),
   );
 
 const waitUntilGone = (bucketName: string, entity: string) =>
   getByEntity(bucketName, entity).pipe(
-    Effect.map((existing) =>
-      existing === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((existing) => (existing === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -191,12 +187,9 @@ export const DefaultObjectAccessControlProvider = () =>
             // Legacy ACL APIs reject uniform bucket-level access buckets.
             if (
               !bucketName ||
-              bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled ===
-                true
+              bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled === true
             ) {
-              return Effect.succeed(
-                [] as Array<DefaultObjectAccessControl["Attributes"]>,
-              );
+              return Effect.succeed([] as Array<DefaultObjectAccessControl["Attributes"]>);
             }
             return listOnBucket(bucketName).pipe(
               Effect.map((items) =>
@@ -218,10 +211,7 @@ export const DefaultObjectAccessControlProvider = () =>
 
       let current =
         output?.entity !== undefined
-          ? yield* getByEntity(
-              output.bucketName ?? bucketName,
-              normalizeEntity(output.entity),
-            )
+          ? yield* getByEntity(output.bucketName ?? bucketName, normalizeEntity(output.entity))
           : undefined;
       if (current === undefined) {
         current = yield* getByEntity(bucketName, entity);
@@ -233,9 +223,7 @@ export const DefaultObjectAccessControlProvider = () =>
             bucket: bucketName,
             body: { entity, role },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getByEntity(bucketName, entity)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByEntity(bucketName, entity)));
         current = created ?? undefined;
       }
 

@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Account } from "./Account.ts";
 
-export interface RetrieveAccountRequest extends Omit<
-  GetAccountByAccountRequest,
-  "account"
-> {}
+export interface RetrieveAccountRequest extends Omit<GetAccountByAccountRequest, "account"> {}
 
 /**
  * Retrieve a bound Stripe Connect Account over HTTP.
@@ -38,6 +35,4 @@ export interface RetrieveAccount extends Binding.Service<
   >
 > {}
 
-export const RetrieveAccount = Binding.Service<RetrieveAccount>(
-  "Stripe.RetrieveAccount",
-);
+export const RetrieveAccount = Binding.Service<RetrieveAccount>("Stripe.RetrieveAccount");

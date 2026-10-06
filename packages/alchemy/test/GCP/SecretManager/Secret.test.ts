@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   secretmanager.getProjectsSecrets({ name }).pipe(
@@ -133,17 +130,13 @@ test.provider(
       expect(replaced.name).toEqual(created.name);
       expect(replaced.secretId).toEqual(created.secretId);
       expect(replaced.replication?.automatic).toBeUndefined();
-      expect(
-        replaced.replication?.userManaged?.replicas?.[0]?.location,
-      ).toEqual("us-central1");
+      expect(replaced.replication?.userManaged?.replicas?.[0]?.location).toEqual("us-central1");
 
       const fetched = yield* secretmanager.getProjectsSecrets({
         name: replaced.name,
       });
       expect(fetched.replication?.automatic).toBeUndefined();
-      expect(fetched.replication?.userManaged?.replicas?.[0]?.location).toEqual(
-        "us-central1",
-      );
+      expect(fetched.replication?.userManaged?.replicas?.[0]?.location).toEqual("us-central1");
 
       yield* stack.destroy();
 

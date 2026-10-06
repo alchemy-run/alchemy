@@ -67,9 +67,7 @@ export type InstanceProps = {
    * Immutable — changing it replaces the instance.
    * @default "MYSQL_8_0"
    */
-  databaseVersion?:
-    | sqladmin.DatabaseInstanceDatabaseVersionEnum
-    | (string & {});
+  databaseVersion?: sqladmin.DatabaseInstanceDatabaseVersionEnum | (string & {});
   /**
    * Machine type (`db-f1-micro`, `db-custom-1-3840`, …). Changing it
    * restarts the instance.
@@ -234,16 +232,12 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.SQL.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.SQL.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.SQL.InstanceNotResolved")<{
   instanceName: string;
   project: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.SQL.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.SQL.InstanceNotReady")<{
   instanceName: string;
   state: string;
 }> {}
@@ -253,9 +247,7 @@ export class InstanceFailed extends Data.TaggedError("GCP.SQL.InstanceFailed")<{
   state: string;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.SQL.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.SQL.InstanceStillExists")<{
   instanceName: string;
 }> {}
 
@@ -283,13 +275,11 @@ const normalizeAvailability = (value: string | undefined) =>
 const normalizeActivation = (value: string | undefined) =>
   (value ?? DEFAULT_ACTIVATION).toUpperCase();
 
-const normalizeDiskType = (value: string | undefined) =>
-  (value ?? DEFAULT_DISK_TYPE).toUpperCase();
+const normalizeDiskType = (value: string | undefined) => (value ?? DEFAULT_DISK_TYPE).toUpperCase();
 
 const isMysql = (version: string) => version.toUpperCase().startsWith("MYSQL_");
 
-const isPostgres = (version: string) =>
-  version.toUpperCase().startsWith("POSTGRES_");
+const isPostgres = (version: string) => version.toUpperCase().startsWith("POSTGRES_");
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -324,11 +314,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
   });
 
 const flagsKey = (flags: sqladmin.DatabaseFlagsList | undefined) =>
-  JSON.stringify(
-    [...(flags ?? [])]
-      .map((flag) => `${flag.name ?? ""}=${flag.value ?? ""}`)
-      .sort(),
-  );
+  JSON.stringify([...(flags ?? [])].map((flag) => `${flag.name ?? ""}=${flag.value ?? ""}`).sort());
 
 const diskSizeOf = (value: string | number | undefined) => {
   if (value === undefined) return undefined;
@@ -340,11 +326,7 @@ const primaryIp = (instance: sqladmin.DatabaseInstance) =>
   instance.ipAddresses?.find((item) => item.type === "PRIMARY")?.ipAddress ??
   instance.ipAddresses?.[0]?.ipAddress;
 
-const toAttrs = (
-  instance: sqladmin.DatabaseInstance,
-  project: string,
-  defaultRegion: string,
-) => {
+const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRegion: string) => {
   const settings = instance.settings;
   return {
     instanceName: instance.name ?? "",
@@ -412,8 +394,7 @@ const waitUntilExists = (project: string, instanceName: string) =>
 const waitUntilRunnable = (project: string, instanceName: string) =>
   getByName(project, instanceName).pipe(
     Effect.filterOrFail(
-      (instance): instance is sqladmin.DatabaseInstance =>
-        instance !== undefined,
+      (instance): instance is sqladmin.DatabaseInstance => instance !== undefined,
       () => new InstanceNotResolved({ instanceName, project }),
     ),
     Effect.filterOrFail(
@@ -430,8 +411,7 @@ const waitUntilRunnable = (project: string, instanceName: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag === "GCP.SQL.InstanceNotReady" ||
-        error._tag === "GCP.SQL.InstanceNotResolved",
+        error._tag === "GCP.SQL.InstanceNotReady" || error._tag === "GCP.SQL.InstanceNotResolved",
       ...LONG_OPERATION_POLL,
     }),
   );
@@ -439,9 +419,7 @@ const waitUntilRunnable = (project: string, instanceName: string) =>
 const waitUntilGone = (project: string, instanceName: string) =>
   getByName(project, instanceName).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ instanceName })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ instanceName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.InstanceStillExists",
@@ -449,10 +427,7 @@ const waitUntilGone = (project: string, instanceName: string) =>
     }),
   );
 
-const backupConfiguration = (
-  enabled: boolean,
-  version: string,
-): sqladmin.BackupConfiguration => ({
+const backupConfiguration = (enabled: boolean, version: string): sqladmin.BackupConfiguration => ({
   enabled,
   binaryLogEnabled: enabled && isMysql(version),
   pointInTimeRecoveryEnabled: enabled && isPostgres(version),
@@ -498,11 +473,7 @@ const insertBody = (
   };
 };
 
-const applyPatch = (
-  project: string,
-  instanceName: string,
-  body: sqladmin.DatabaseInstance,
-) =>
+const applyPatch = (project: string, instanceName: string, body: sqladmin.DatabaseInstance) =>
   sqladmin
     .patchInstances({
       project,
@@ -535,25 +506,13 @@ export const InstanceProvider = () =>
 
       const previousName = olds?.instanceName ?? output?.instanceName;
       const nextName = news.instanceName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
-      const previousVersion = normalizeVersion(
-        olds?.databaseVersion ?? output?.databaseVersion,
-      );
-      const nextVersion = normalizeVersion(
-        news.databaseVersion ?? output?.databaseVersion,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
+      const previousVersion = normalizeVersion(olds?.databaseVersion ?? output?.databaseVersion);
+      const nextVersion = normalizeVersion(news.databaseVersion ?? output?.databaseVersion);
 
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const regionChanged = previousRegion !== nextRegion;
       const versionChanged = previousVersion !== nextVersion;
 
@@ -568,18 +527,11 @@ export const InstanceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const instanceName = yield* toName(
-        id,
-        olds?.instanceName,
-        output?.instanceName,
-      );
+      const instanceName = yield* toName(id, olds?.instanceName, output?.instanceName);
       const existing = yield* getByName(env.project, instanceName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(
-        id,
-        tagRecord(existing.settings?.userLabels),
-      ))
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.settings?.userLabels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -598,9 +550,7 @@ export const InstanceProvider = () =>
                 key.startsWith("alchemy-"),
               ),
             ),
-            Stream.map((instance) =>
-              toAttrs(instance, env.project, env.region),
-            ),
+            Stream.map((instance) => toAttrs(instance, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -609,36 +559,21 @@ export const InstanceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const instanceName = yield* toName(
-        id,
-        news.instanceName,
-        output?.instanceName,
-      );
+      const instanceName = yield* toName(id, news.instanceName, output?.instanceName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
-      const version = normalizeVersion(
-        news.databaseVersion ?? output?.databaseVersion,
-      );
+      const version = normalizeVersion(news.databaseVersion ?? output?.databaseVersion);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
 
-      let current = yield* getByName(
-        env.project,
-        output?.instanceName ?? instanceName,
-      );
+      let current = yield* getByName(env.project, output?.instanceName ?? instanceName);
 
       if (current === undefined) {
         const created = yield* sqladmin
           .insertInstances({
             project: env.project,
-            body: insertBody(
-              news,
-              instanceName,
-              region,
-              version,
-              desiredLabels,
-            ),
+            body: insertBody(news, instanceName, region, version, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
@@ -666,12 +601,9 @@ export const InstanceProvider = () =>
 
       const desiredTier = normalizeTier(news.tier ?? settings?.tier);
       const tierChanged =
-        news.tier !== undefined &&
-        (settings?.tier ?? DEFAULT_TIER) !== desiredTier;
+        news.tier !== undefined && (settings?.tier ?? DEFAULT_TIER) !== desiredTier;
 
-      const desiredEdition = normalizeEdition(
-        news.edition ?? settings?.edition,
-      );
+      const desiredEdition = normalizeEdition(news.edition ?? settings?.edition);
       const editionChanged =
         news.edition !== undefined &&
         (settings?.edition ?? DEFAULT_EDITION).toUpperCase() !== desiredEdition;
@@ -681,16 +613,14 @@ export const InstanceProvider = () =>
       );
       const activationChanged =
         news.activationPolicy !== undefined &&
-        (settings?.activationPolicy ?? DEFAULT_ACTIVATION).toUpperCase() !==
-          desiredActivation;
+        (settings?.activationPolicy ?? DEFAULT_ACTIVATION).toUpperCase() !== desiredActivation;
 
       const desiredAvailability = normalizeAvailability(
         news.availabilityType ?? settings?.availabilityType,
       );
       const availabilityChanged =
         news.availabilityType !== undefined &&
-        (settings?.availabilityType ?? DEFAULT_AVAILABILITY).toUpperCase() !==
-          desiredAvailability;
+        (settings?.availabilityType ?? DEFAULT_AVAILABILITY).toUpperCase() !== desiredAvailability;
 
       const desiredProtection = news.deletionProtectionEnabled === true;
       const protectionChanged =
@@ -709,9 +639,7 @@ export const InstanceProvider = () =>
       const desiredDisk = news.dataDiskSizeGb;
       const currentDisk = diskSizeOf(settings?.dataDiskSizeGb);
       const diskChanged =
-        desiredDisk !== undefined &&
-        currentDisk !== undefined &&
-        desiredDisk > currentDisk;
+        desiredDisk !== undefined && currentDisk !== undefined && desiredDisk > currentDisk;
 
       const desiredZone = news.zone;
       const zoneChanged =
@@ -753,25 +681,16 @@ export const InstanceProvider = () =>
             userLabels: nextLabels as unknown as Record<string, string>,
             tier: desiredTier,
             edition: news.edition !== undefined ? desiredEdition : undefined,
-            activationPolicy:
-              news.activationPolicy !== undefined
-                ? desiredActivation
-                : undefined,
-            availabilityType:
-              news.availabilityType !== undefined
-                ? desiredAvailability
-                : undefined,
+            activationPolicy: news.activationPolicy !== undefined ? desiredActivation : undefined,
+            availabilityType: news.availabilityType !== undefined ? desiredAvailability : undefined,
             deletionProtectionEnabled: desiredProtection,
             dataDiskSizeGb: diskChanged ? String(desiredDisk) : undefined,
-            ipConfiguration: ipv4Changed
-              ? { ipv4Enabled: desiredIpv4 }
-              : undefined,
+            ipConfiguration: ipv4Changed ? { ipv4Enabled: desiredIpv4 } : undefined,
             backupConfiguration: backupChanged
               ? backupConfiguration(desiredBackup, version)
               : undefined,
             locationPreference: zoneChanged ? { zone: desiredZone } : undefined,
-            databaseFlags:
-              news.databaseFlags !== undefined ? news.databaseFlags : undefined,
+            databaseFlags: news.databaseFlags !== undefined ? news.databaseFlags : undefined,
             dataApiAccess: desiredDataApi,
           },
         });

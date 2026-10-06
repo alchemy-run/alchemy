@@ -35,11 +35,7 @@ export interface Pull extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PullRequest,
-    ) => Effect.Effect<
-      pubsub.PullResponse,
-      pubsub.PullProjectsSubscriptionsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<pubsub.PullResponse, pubsub.PullProjectsSubscriptionsError, RuntimeContext>
   >
 > {}
 

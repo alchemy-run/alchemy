@@ -161,12 +161,7 @@ const resourceName = (run: string, lineageEventId: string) =>
 
 const nowIso = () => Effect.sync(() => new Date().toISOString());
 
-const runOf = (
-  run: string,
-  process: string | undefined,
-  project: string,
-  location: string,
-) => {
+const runOf = (run: string, process: string | undefined, project: string, location: string) => {
   if (run.includes("/")) return run.replace(/\/+$/, "");
   const parent = processOf(process ?? "", project, location);
   return `${parent}/runs/${run}`;
@@ -185,15 +180,11 @@ const linksOf = (
       field: link.target.field,
     },
     dependencyInfo:
-      link.dependencyType !== undefined
-        ? { dependencyType: link.dependencyType }
-        : undefined,
+      link.dependencyType !== undefined ? { dependencyType: link.dependencyType } : undefined,
   }));
 
 const linksFrom = (
-  links:
-    | readonly datalineage.GoogleCloudDatacatalogLineageV1EventLink[]
-    | undefined,
+  links: readonly datalineage.GoogleCloudDatacatalogLineageV1EventLink[] | undefined,
 ): LineageEventLink[] =>
   (links ?? [])
     .filter(
@@ -261,22 +252,12 @@ const identityFingerprint = (news: {
 
 export const ProcessesRunsLineageEventProvider = () =>
   Provider.succeed(ProcessesRunsLineageEvent, {
-    stables: [
-      "name",
-      "lineageEventId",
-      "run",
-      "process",
-      "project",
-      "location",
-    ],
+    stables: ["name", "lineageEventId", "run", "process", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -304,21 +285,14 @@ export const ProcessesRunsLineageEventProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const run = runOf(
         olds?.run ?? output?.run ?? "",
         olds?.process ?? output?.process,
         env.project,
         location,
       );
-      const lineageEventId = yield* toPhysicalId(
-        id,
-        olds?.lineageEventId,
-        output?.lineageEventId,
-      );
+      const lineageEventId = yield* toPhysicalId(id, olds?.lineageEventId, output?.lineageEventId);
       const name = output?.name ?? resourceName(run, lineageEventId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -333,31 +307,20 @@ export const ProcessesRunsLineageEventProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const processes = yield* listOwnedProcesses(env.project, env.region);
-        const runs = (yield* Effect.forEach(
-          processes,
-          (process) => listRuns(process.name ?? ""),
-          { concurrency: 4 },
-        )).flat();
-        const events = (yield* Effect.forEach(
-          runs,
-          (run) => listLineageEvents(run.name ?? ""),
-          { concurrency: 4 },
-        )).flat();
+        const runs = (yield* Effect.forEach(processes, (process) => listRuns(process.name ?? ""), {
+          concurrency: 4,
+        })).flat();
+        const events = (yield* Effect.forEach(runs, (run) => listLineageEvents(run.name ?? ""), {
+          concurrency: 4,
+        })).flat();
         return events.map((event) => toAttrs(event, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const run = runOf(news.run, news.process, env.project, location);
-      const lineageEventId = yield* toPhysicalId(
-        id,
-        news.lineageEventId,
-        output?.lineageEventId,
-      );
+      const lineageEventId = yield* toPhysicalId(id, news.lineageEventId, output?.lineageEventId);
       const name = output?.name ?? resourceName(run, lineageEventId);
 
       let current = yield* getByName(name);

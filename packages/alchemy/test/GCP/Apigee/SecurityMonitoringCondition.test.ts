@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs a provisioned Apigee organization on the testing project (paid, or
 // ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
@@ -24,9 +21,7 @@ const waitUntilGone = (name: string) =>
   apigee.getOrganizationsSecurityMonitoringConditions({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("ApigeeResourceNotFound", () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("ApigeeResourceNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -66,27 +61,21 @@ test.provider.skipIf(!runLifecycle)(
           const profile = yield* GCP.Apigee.SecurityProfilesV2("Default", {
             description: "default scoring",
           });
-          const condition = yield* GCP.Apigee.SecurityMonitoringCondition(
-            "Eval",
-            {
-              profile: profile.name,
-              includeAllResources: true,
-            },
-          );
+          const condition = yield* GCP.Apigee.SecurityMonitoringCondition("Eval", {
+            profile: profile.name,
+            includeAllResources: true,
+          });
           return { profile, condition };
         }),
       );
 
-      expect(created.condition.securityMonitoringConditionId).toEqual(
-        expect.any(String),
-      );
+      expect(created.condition.securityMonitoringConditionId).toEqual(expect.any(String));
       expect(created.condition.profile).toEqual(created.profile.name);
       expect(created.condition.includeAllResources).toEqual(true);
 
-      const fetched =
-        yield* apigee.getOrganizationsSecurityMonitoringConditions({
-          name: created.condition.name,
-        });
+      const fetched = yield* apigee.getOrganizationsSecurityMonitoringConditions({
+        name: created.condition.name,
+      });
       expect(fetched.profile).toEqual(created.profile.name);
 
       const updated = yield* stack.deploy(
@@ -95,15 +84,11 @@ test.provider.skipIf(!runLifecycle)(
             securityProfileV2Id: created.profile.securityProfileV2Id,
             description: "default scoring",
           });
-          const condition = yield* GCP.Apigee.SecurityMonitoringCondition(
-            "Eval",
-            {
-              securityMonitoringConditionId:
-                created.condition.securityMonitoringConditionId,
-              profile: profile.name,
-              includeAllResources: false,
-            },
-          );
+          const condition = yield* GCP.Apigee.SecurityMonitoringCondition("Eval", {
+            securityMonitoringConditionId: created.condition.securityMonitoringConditionId,
+            profile: profile.name,
+            includeAllResources: false,
+          });
           return { profile, condition };
         }),
       );

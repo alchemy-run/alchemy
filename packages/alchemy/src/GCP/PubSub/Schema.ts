@@ -107,9 +107,7 @@ export type Schema = Resource<
  */
 export const Schema = Resource<Schema>("GCP.PubSub.Schema");
 
-export class SchemaNotResolved extends Data.TaggedError(
-  "GCP.PubSub.SchemaNotResolved",
-)<{
+export class SchemaNotResolved extends Data.TaggedError("GCP.PubSub.SchemaNotResolved")<{
   name: string;
 }> {}
 
@@ -153,10 +151,7 @@ const getByName = (name: string) =>
     .getProjectsSchemas({ name: canonicalName(name), view: "FULL" })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const definitionsEqual = (
-  left: string | undefined,
-  right: string | undefined,
-) => {
+const definitionsEqual = (left: string | undefined, right: string | undefined) => {
   const a = (left ?? "").trim();
   const b = (right ?? "").trim();
   if (a === b) return true;
@@ -176,12 +171,9 @@ export const SchemaProvider = () =>
       const previousId = olds?.schemaId ?? output?.schemaId;
       const nextId = news.schemaId ?? previousId;
       const nameChanged =
-        previousId !== undefined &&
-        news.schemaId !== undefined &&
-        news.schemaId !== previousId;
+        previousId !== undefined && news.schemaId !== undefined && news.schemaId !== previousId;
       const previousType = olds?.type ?? output?.type;
-      const typeChanged =
-        previousType !== undefined && previousType !== news.type;
+      const typeChanged = previousType !== undefined && previousType !== news.type;
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -197,9 +189,7 @@ export const SchemaProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const schemaId = yield* toId(id, olds?.schemaId, output?.schemaId);
-      const name = canonicalName(
-        output?.name ?? resourceName(env.project, schemaId),
-      );
+      const name = canonicalName(output?.name ?? resourceName(env.project, schemaId));
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, env.project);

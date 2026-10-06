@@ -182,10 +182,7 @@ export class CatalogsServingConfigNotResolved extends Data.TaggedError(
 
 const defaultSolutionTypes = ["SOLUTION_TYPE_SEARCH"] as const;
 
-const toAttrs = (
-  config: retail.GoogleCloudRetailV2ServingConfig,
-  project: string,
-) => {
+const toAttrs = (config: retail.GoogleCloudRetailV2ServingConfig, project: string) => {
   const name = config.name ?? "";
   const parsed = parseResourceName(name, "servingConfigs");
   return {
@@ -292,11 +289,7 @@ export const CatalogsServingConfigProvider = () =>
         output?.name ??
         (catalog !== undefined
           ? resourceName(
-              expandCatalog(
-                catalog,
-                env.project,
-                normalizeLocation(output?.location),
-              ),
+              expandCatalog(catalog, env.project, normalizeLocation(output?.location)),
               servingConfigId,
             )
           : undefined);
@@ -342,9 +335,7 @@ export const CatalogsServingConfigProvider = () =>
 
       const resource = current.name ?? name;
       const mask = updateMaskOf(
-        (current.displayName ?? "") !== displayName
-          ? "display_name"
-          : undefined,
+        (current.displayName ?? "") !== displayName ? "display_name" : undefined,
         sameText(current.modelId, news.modelId) ? undefined : "model_id",
         sameStringList(current.filterControlIds, news.filterControlIds)
           ? undefined
@@ -355,39 +346,25 @@ export const CatalogsServingConfigProvider = () =>
         sameStringList(current.redirectControlIds, news.redirectControlIds)
           ? undefined
           : "redirect_control_ids",
-        sameStringList(
-          current.twowaySynonymsControlIds,
-          news.twowaySynonymsControlIds,
-        )
+        sameStringList(current.twowaySynonymsControlIds, news.twowaySynonymsControlIds)
           ? undefined
           : "twoway_synonyms_control_ids",
-        sameStringList(
-          current.onewaySynonymsControlIds,
-          news.onewaySynonymsControlIds,
-        )
+        sameStringList(current.onewaySynonymsControlIds, news.onewaySynonymsControlIds)
           ? undefined
           : "oneway_synonyms_control_ids",
-        sameStringList(
-          current.replacementControlIds,
-          news.replacementControlIds,
-        )
+        sameStringList(current.replacementControlIds, news.replacementControlIds)
           ? undefined
           : "replacement_control_ids",
         sameStringList(current.ignoreControlIds, news.ignoreControlIds)
           ? undefined
           : "ignore_control_ids",
-        sameStringList(
-          current.doNotAssociateControlIds,
-          news.doNotAssociateControlIds,
-        )
+        sameStringList(current.doNotAssociateControlIds, news.doNotAssociateControlIds)
           ? undefined
           : "do_not_associate_control_ids",
         sameStringList(current.facetControlIds, news.facetControlIds)
           ? undefined
           : "facet_control_ids",
-        sameText(current.diversityLevel, news.diversityLevel)
-          ? undefined
-          : "diversity_level",
+        sameText(current.diversityLevel, news.diversityLevel) ? undefined : "diversity_level",
         sameText(current.priceRerankingLevel, news.priceRerankingLevel)
           ? undefined
           : "price_reranking_level",

@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { parseArgs } from "node:util";
 /**
  * Renders the deck with Remotion and writes a presentation workspace that
  * `tcut present` opens directly:
@@ -18,10 +22,6 @@
  */
 import { bundle } from "@remotion/bundler";
 import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
-import { createHash } from "node:crypto";
-import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { parseArgs } from "node:util";
 import { deck } from "./deck.ts";
 import { schedule } from "./remotion/scene/schedule.ts";
 import { introTimeline, type IntroJson } from "./shared/intro.ts";
@@ -41,7 +41,11 @@ const subset = args.deck ? new Set(args.deck.split(",")) : undefined;
 const items = subset ? deck.filter((item) => subset.has(item.id)) : deck;
 if (items.length === 0) throw new Error(`no deck items match ${args.deck}`);
 
-const exists = (file: string) => stat(file).then(() => true, () => false);
+const exists = (file: string) =>
+  stat(file).then(
+    () => true,
+    () => false,
+  );
 
 interface Part {
   title: string;
@@ -57,7 +61,9 @@ interface Part {
 const partsOf = async (item: (typeof deck)[number], durationInFrames: number): Promise<Part[]> => {
   const file = (k: number, ext: string) => path.join(clipsDir, `${item.id}.${k}.${ext}`);
   if (item.kind === "intro") {
-    const intro = JSON.parse(await readFile(path.join(captureDir, "intro", "intro.json"), "utf8")) as IntroJson;
+    const intro = JSON.parse(
+      await readFile(path.join(captureDir, "intro", "intro.json"), "utf8"),
+    ) as IntroJson;
     return introTimeline(intro.steps).map((range, k) => ({
       title: intro.steps[k]!.title,
       notes: intro.steps[k]!.notes,
@@ -67,7 +73,16 @@ const partsOf = async (item: (typeof deck)[number], durationInFrames: number): P
     }));
   }
   if (item.kind === "slide") {
-    return [{ title: item.title, notes: item.notes, from: 0, to: durationInFrames, clip: file(0, "mp4"), poster: file(0, "jpg") }];
+    return [
+      {
+        title: item.title,
+        notes: item.notes,
+        from: 0,
+        to: durationInFrames,
+        clip: file(0, "mp4"),
+        poster: file(0, "jpg"),
+      },
+    ];
   }
   const capture = JSON.parse(
     await readFile(path.join(captureDir, item.id, "scene.json"), "utf8"),
@@ -97,7 +112,9 @@ for (const item of items) {
   const parts = await partsOf(item, composition.durationInFrames);
   const missing = (await Promise.all(parts.map((p) => exists(p.clip)))).includes(false);
   if (rerender.has(item.id) || missing) {
-    console.log(`● rendering ${item.id}: ${parts.length} step(s), ${(composition.durationInFrames / VIDEO.fps).toFixed(1)}s`);
+    console.log(
+      `● rendering ${item.id}: ${parts.length} step(s), ${(composition.durationInFrames / VIDEO.fps).toFixed(1)}s`,
+    );
     for (const part of parts) {
       await renderMedia({
         composition,
@@ -126,7 +143,14 @@ for (const item of items) {
   }
   for (const part of parts) {
     const duration = (part.to - part.from) / VIDEO.fps;
-    steps.push({ id: `${item.id}.${steps.length}`, title: part.title, notes: part.notes, start, end: start + duration, source: part });
+    steps.push({
+      id: `${item.id}.${steps.length}`,
+      title: part.title,
+      notes: part.notes,
+      start,
+      end: start + duration,
+      source: part,
+    });
     start += duration;
   }
 }

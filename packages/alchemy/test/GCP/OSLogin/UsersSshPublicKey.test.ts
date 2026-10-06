@@ -1,22 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as oslogin from "@distilled.cloud/gcp/oslogin_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const KEY1 =
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN6Ot81wrURgF58/jKCFQgEzJFjD39ibwfpeC7JLoS6d";
-const KEY2 =
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBpVICT7tXAjpo6pXw/44Wm+DYcQRexT7J8nwS9/XtnL";
+const KEY1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN6Ot81wrURgF58/jKCFQgEzJFjD39ibwfpeC7JLoS6d";
+const KEY2 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBpVICT7tXAjpo6pXw/44Wm+DYcQRexT7J8nwS9/XtnL";
 
 const EXPIRY_A = "4102444800000000";
 const EXPIRY_B = "4133980800000000";

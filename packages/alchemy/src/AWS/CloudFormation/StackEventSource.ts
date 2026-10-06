@@ -53,8 +53,7 @@ const DETAIL_TYPES: Record<StackEventKind, string> = {
   "drift-detection": "CloudFormation Drift Detection Status Change",
   "stack-set": "CloudFormation StackSet Status Change",
   "stack-set-operation": "CloudFormation StackSet Operation Status Change",
-  "stack-set-stack-instance":
-    "CloudFormation StackSet StackInstance Status Change",
+  "stack-set-stack-instance": "CloudFormation StackSet StackInstance Status Change",
 };
 
 export interface StackEventSourceProps extends EventRouteProps {
@@ -112,20 +111,16 @@ export interface StackEventSourceProps extends EventRouteProps {
  */
 export const consumeStackEvents = <StreamReq = never, Req = never>(
   props: StackEventSourceProps,
-  process: (
-    events: Stream.Stream<StackEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<StackEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "CloudFormationEvents",
     {
       source: ["aws.cloudformation"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as StackEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
-      ...(props.stackIds !== undefined
-        ? { detail: { "stack-id": [...props.stackIds] } }
-        : {}),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as StackEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
+      ...(props.stackIds !== undefined ? { detail: { "stack-id": [...props.stackIds] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

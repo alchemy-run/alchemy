@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as jobs from "@distilled.cloud/gcp/jobs_v4";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -97,9 +97,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.job.parent).toEqual(created.tenant.name);
       expect(created.job.company).toEqual(created.company.name);
       expect(created.job.title).toEqual("Software Engineer");
-      expect(created.job.description).toEqual(
-        "Build Cloud Talent integrations.",
-      );
+      expect(created.job.description).toEqual("Build Cloud Talent integrations.");
       expect(created.job.requisitionId).toEqual("eng-001");
 
       const fetched = yield* jobs.getProjectsTenantsJobs({

@@ -219,15 +219,10 @@ export type PrivateCloud = Resource<
  * @resource
  * @category VMwareEngine
  */
-export const PrivateCloud = Resource<PrivateCloud>(
-  "GCP.VMwareEngine.PrivateCloud",
-);
+export const PrivateCloud = Resource<PrivateCloud>("GCP.VMwareEngine.PrivateCloud");
 
-const resourceName = (
-  project: string,
-  location: string,
-  privateCloudId: string,
-) => `${parentOf(project, location)}/${COLLECTION}/${privateCloudId}`;
+const resourceName = (project: string, location: string, privateCloudId: string) =>
+  `${parentOf(project, location)}/${COLLECTION}/${privateCloudId}`;
 
 const nodeTypeConfigsOf = (
   value: vmwareengine.NodeTypeConfigMap | undefined,
@@ -302,9 +297,7 @@ const applianceOf = (
   };
 };
 
-const defaultManagementCluster = (
-  value: ManagementCluster | undefined,
-): ManagementCluster => ({
+const defaultManagementCluster = (value: ManagementCluster | undefined): ManagementCluster => ({
   clusterId: value?.clusterId ?? DEFAULT_MGMT_CLUSTER_ID,
   stretchedClusterConfig: value?.stretchedClusterConfig,
   nodeTypeConfigs: value?.nodeTypeConfigs ?? {
@@ -318,12 +311,7 @@ const defaultNetworkConfig = (
 ): NetworkConfig => ({
   managementCidr: value?.managementCidr ?? DEFAULT_MANAGEMENT_CIDR,
   vmwareEngineNetwork: value?.vmwareEngineNetwork
-    ? expandName(
-        value.vmwareEngineNetwork,
-        project,
-        DEFAULT_GLOBAL,
-        VEN_COLLECTION,
-      )
+    ? expandName(value.vmwareEngineNetwork, project, DEFAULT_GLOBAL, VEN_COLLECTION)
     : undefined,
 });
 
@@ -360,44 +348,28 @@ const getByName = (name: string) =>
 
 export const PrivateCloudProvider = () =>
   Provider.succeed(PrivateCloud, {
-    stables: [
-      "name",
-      "privateCloudId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "privateCloudId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousType = olds?.type ?? output?.type ?? DEFAULT_TYPE;
       const nextType = news.type ?? previousType;
       const previousCidr =
-        olds?.networkConfig?.managementCidr ??
-        output?.networkConfig?.managementCidr ??
-        "";
+        olds?.networkConfig?.managementCidr ?? output?.networkConfig?.managementCidr ?? "";
       const nextCidr = news.networkConfig?.managementCidr ?? previousCidr;
       const previousVen = canonicalizeLink(
-        olds?.networkConfig?.vmwareEngineNetwork ??
-          output?.networkConfig?.vmwareEngineNetwork,
+        olds?.networkConfig?.vmwareEngineNetwork ?? output?.networkConfig?.vmwareEngineNetwork,
       );
       const nextVen = canonicalizeLink(news.networkConfig?.vmwareEngineNetwork);
       const previousClusterId =
-        olds?.managementCluster?.clusterId ??
-        output?.managementCluster?.clusterId ??
-        "";
-      const nextClusterId =
-        news.managementCluster?.clusterId ?? previousClusterId;
+        olds?.managementCluster?.clusterId ?? output?.managementCluster?.clusterId ?? "";
+      const nextClusterId = news.managementCluster?.clusterId ?? previousClusterId;
       return replaceOnIdentity({
         previousId: olds?.privateCloudId ?? output?.privateCloudId,
         nextId: news.privateCloudId
           ? rfc1035(news.privateCloudId, "privatecloud")
           : (olds?.privateCloudId ?? output?.privateCloudId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          DEFAULT_ZONE,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           DEFAULT_ZONE,
@@ -405,16 +377,11 @@ export const PrivateCloudProvider = () =>
         extra:
           previousType !== nextType ||
           (previousCidr.length > 0 && previousCidr !== nextCidr) ||
-          (previousVen.length > 0 &&
-            nextVen.length > 0 &&
-            previousVen !== nextVen) ||
+          (previousVen.length > 0 && nextVen.length > 0 && previousVen !== nextVen) ||
           (previousClusterId.length > 0 &&
             nextClusterId.length > 0 &&
             previousClusterId !== nextClusterId) ||
-          !sameJson(
-            news.encryptionConfig,
-            olds?.encryptionConfig ?? output?.encryptionConfig,
-          ),
+          !sameJson(news.encryptionConfig, olds?.encryptionConfig ?? output?.encryptionConfig),
       });
     }),
 
@@ -426,12 +393,8 @@ export const PrivateCloudProvider = () =>
         output?.privateCloudId,
         "privatecloud",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, privateCloudId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
+      const name = output?.name ?? resourceName(env.project, location, privateCloudId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -442,17 +405,14 @@ export const PrivateCloudProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsPrivateClouds.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.privateClouds,
-            ),
+        const items = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsPrivateClouds.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.privateClouds,
+          ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
@@ -467,21 +427,13 @@ export const PrivateCloudProvider = () =>
         output?.privateCloudId,
         "privatecloud",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_ZONE);
       const name = resourceName(env.project, location, privateCloudId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
       const type = news.type ?? DEFAULT_TYPE;
-      const managementCluster = defaultManagementCluster(
-        news.managementCluster,
-      );
-      const networkConfig = defaultNetworkConfig(
-        env.project,
-        news.networkConfig,
-      );
+      const managementCluster = defaultManagementCluster(news.managementCluster);
+      const networkConfig = defaultNetworkConfig(env.project, news.networkConfig);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -522,20 +474,18 @@ export const PrivateCloudProvider = () =>
         (item) => item.state,
       );
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const updateMask = changedFields([["description", descriptionChanged]]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsPrivateClouds({
+        const operation = yield* vmwareengine.patchProjectsLocationsPrivateClouds({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-            },
-          });
+            description: desiredDescription,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

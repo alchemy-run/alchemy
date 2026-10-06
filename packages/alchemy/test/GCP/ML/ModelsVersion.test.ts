@@ -1,16 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as ml from "@distilled.cloud/gcp/ml_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  logLevel,
-  currentProject,
-  region,
-  runLifecycle,
-  runVersionLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, currentProject, region, runLifecycle, runVersionLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 

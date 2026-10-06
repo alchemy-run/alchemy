@@ -3,7 +3,8 @@ import { defineScene } from "../capture/scene.ts";
 export default defineScene({
   title: "Ship it",
   chapter: "08-dashboard",
-  notes: "The service is built and tested. Now, and only now, deploy it: one command stands up the whole architecture as a new stage.",
+  notes:
+    "The service is built and tested. Now, and only now, deploy it: one command stands up the whole architecture as a new stage.",
   async run(s) {
     s.step(
       "Deploy to production with alchemy deploy",
@@ -21,8 +22,14 @@ export default defineScene({
       return found;
     });
 
-    s.step("The same architecture, now in the cloud", "Every resource from the talk, now really deployed to the prod stage.");
-    await s.diagram({ stage: "prod", nodes: ["Web", "Api", "LinkRoom", "Clicks", "Postgres", "Dashboard"] });
+    s.step(
+      "The same architecture, now in the cloud",
+      "Every resource from the talk, now really deployed to the prod stage.",
+    );
+    await s.diagram({
+      stage: "prod",
+      nodes: ["Web", "Api", "LinkRoom", "Clicks", "Postgres", "Dashboard"],
+    });
     s.pause(1.5);
 
     s.step("Shorty is live");

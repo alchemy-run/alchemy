@@ -167,30 +167,20 @@ export const ConnectClustersConnectorProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       return replaceOnIdentity({
         previousId: olds?.connectorId ?? output?.connectorId,
         nextId: news.connectorId
           ? rfc1035(news.connectorId, "connector")
           : (olds?.connectorId ?? output?.connectorId),
         previousParent: olds?.connectCluster ?? output?.connectCluster,
-        nextParent: connectClusterOf(
-          news.connectCluster,
-          env.project,
-          location,
-        ),
+        nextParent: connectClusterOf(news.connectCluster, env.project, location),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const connectorId = yield* toPhysicalId(
         id,
         olds?.connectorId,
@@ -203,24 +193,17 @@ export const ConnectClustersConnectorProvider = () =>
           : (output?.connectCluster ?? "");
       const name =
         output?.name ??
-        (connectCluster.length > 0
-          ? resourceName(connectCluster, connectorId)
-          : "");
+        (connectCluster.length > 0 ? resourceName(connectCluster, connectorId) : "");
       const existing = yield* getConnector(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return output !== undefined || olds !== undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds !== undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clusters = yield* listAlchemyConnectClusters(
-          env.project,
-          env.region,
-        );
+        const clusters = yield* listAlchemyConnectClusters(env.project, env.region);
         const connectors = yield* Effect.forEach(
           clusters.filter((cluster) => (cluster.name ?? "").length > 0),
           (cluster: kafka.ConnectCluster) =>
@@ -230,29 +213,16 @@ export const ConnectClustersConnectorProvider = () =>
                 pageSize: 1000,
               }),
               (page) => page.connectors,
-            ).pipe(
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as kafka.Connector[]),
-              ),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as kafka.Connector[]))),
           { concurrency: 4 },
         );
-        return connectors
-          .flat()
-          .map((connector) => toAttrs(connector, env.project));
+        return connectors.flat().map((connector) => toAttrs(connector, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const connectCluster = connectClusterOf(
-        news.connectCluster,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const connectCluster = connectClusterOf(news.connectCluster, env.project, location);
       const connectorId = yield* toPhysicalId(
         id,
         news.connectorId,
@@ -286,8 +256,7 @@ export const ConnectClustersConnectorProvider = () =>
       }
 
       const configsChanged =
-        fingerprint(stringMapOf(current.configs)) !==
-        fingerprint(stringMapOf(configs));
+        fingerprint(stringMapOf(current.configs)) !== fingerprint(stringMapOf(configs));
       const policyChanged =
         fingerprint(policyOf(current.taskRestartPolicy)) !==
         fingerprint(policyOf(taskRestartPolicy));

@@ -1,7 +1,7 @@
-import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import VectorizeEffectWorker from "./effect-worker.ts";
 import { ensureMetaIndex, TestIndex } from "./index-resource.ts";
 
