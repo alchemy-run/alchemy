@@ -20,6 +20,4 @@ import { WriteQueueHttp } from "./WriteQueueHttp.ts";
  * @product Queues
  * @category Storage & Databases
  */
-export const QueueSinkHttp = QueueSinkFromWriteQueue.pipe(
-  Layer.provide(WriteQueueHttp),
-);
+export const QueueSinkHttp = QueueSinkFromWriteQueue.pipe(Layer.provide(WriteQueueHttp));

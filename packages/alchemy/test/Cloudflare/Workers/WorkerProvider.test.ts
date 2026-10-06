@@ -1,7 +1,6 @@
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { deepEqual } from "@/Diff";
 import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
@@ -17,6 +16,7 @@ import {
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
+import { deepEqual } from "@/Diff";
 
 describe(
   "WorkerProvider",
@@ -447,23 +447,24 @@ describe(
         const persisted = [auth, api, docs];
         const listed = [docs, api, auth];
         expect(deepEqual(listed, persisted)).toBe(false);
-        expect(
-          deepEqual(orderObservedWorkerRoutes(listed, persisted), persisted),
-        ).toBe(true);
+        expect(deepEqual(orderObservedWorkerRoutes(listed, persisted), persisted)).toBe(true);
       });
 
       test("appends routes missing from state in listing order", () => {
         const extra = { id: "r4", pattern: "example.com/x/*", zoneId: "z1" };
-        expect(
-          orderObservedWorkerRoutes([extra, docs, auth], [auth, api]),
-        ).toEqual([auth, extra, docs]);
+        expect(orderObservedWorkerRoutes([extra, docs, auth], [auth, api])).toEqual([
+          auth,
+          extra,
+          docs,
+        ]);
       });
 
       test("keys routes by zone and pattern", () => {
         const sameInZ2 = { id: "r5", pattern: auth.pattern, zoneId: "z2" };
-        expect(
-          orderObservedWorkerRoutes([sameInZ2, auth], [auth, sameInZ2]),
-        ).toEqual([auth, sameInZ2]);
+        expect(orderObservedWorkerRoutes([sameInZ2, auth], [auth, sameInZ2])).toEqual([
+          auth,
+          sameInZ2,
+        ]);
       });
     });
 

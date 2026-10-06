@@ -1,40 +1,12 @@
 name: Check
 
-# Validates the repository type graph and website docs.
+# Validates repository formatting, the type graph, and website docs.
 
 on:
   push:
     branches: [main]
-    paths:
-      - "submodules/distilled"
-      - "benchmark/**"
-      - "examples/**"
-      - "packages/**"
-      - "website/**"
-      - "scripts/**"
-      - "patches/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "tsconfig.json"
-      - ".github/workflows/check.yml"
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - "submodules/distilled"
-      - "benchmark/**"
-      - "examples/**"
-      - "packages/**"
-      - "website/**"
-      - "scripts/**"
-      - "patches/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "tsconfig.json"
-      - ".github/workflows/check.yml"
   workflow_dispatch:
 
 permissions:
@@ -80,6 +52,9 @@ jobs:
           cache: true
           install: true
           require-lockfile: true
+
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Build
         run: pnpm tsc -b
