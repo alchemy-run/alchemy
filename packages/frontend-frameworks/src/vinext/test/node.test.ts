@@ -43,9 +43,10 @@ describe("makeNodeTarget", () => {
               yield* fs.writeFileString(
                 path.join(root, "vite.config.ts"),
                 `
+                import { fileURLToPath } from "node:url";
                 import vinext from "vinext";
                 export default {
-                  resolve: { alias: { "@legacy-text": new URL("./legacy-text.ts", import.meta.url).pathname } },
+                  resolve: { alias: { "@legacy-text": fileURLToPath(new URL("./legacy-text.ts", import.meta.url)) } },
                   plugins: [vinext({ prerender: true, nextConfig: { basePath: "/nested"${pageExtensions} } })],
                 };
               `,
