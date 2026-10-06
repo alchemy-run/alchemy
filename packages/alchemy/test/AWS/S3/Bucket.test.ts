@@ -20,6 +20,7 @@ import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import { BucketProvider } from "@/AWS/S3/Bucket.ts";
 import { InstanceId } from "@/InstanceId.ts";
+import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
@@ -1259,6 +1260,48 @@ test.provider(
 
       const web2 = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
       expect(web2.IndexDocument?.Suffix).toEqual("home.html");
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
+);
+
+// IAM's grammar takes a bare `"*"` for `Principal` (not only a principal
+// map) — the usual form for resource-policy denies like "TLS only".
+test.provider(
+  "bucket policy with a wildcard string principal",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const definition = Effect.gen(function* () {
+        const bucket = yield* Bucket("TlsOnlyBucket", { forceDestroy: true });
+        yield* bucket.bind`DenyInsecureTransport`({
+          policyStatements: [
+            {
+              Sid: "DenyInsecureTransport",
+              Effect: "Deny",
+              Principal: "*",
+              Action: ["s3:*"],
+              Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
+              Condition: { Bool: { "aws:SecureTransport": "false" } },
+            },
+          ],
+        });
+        return bucket;
+      });
+
+      const bucket = yield* stack.deploy(definition);
+      const policy = yield* S3.getBucketPolicy({ Bucket: bucket.bucketName });
+      const statements = JSON.parse(policy.Policy ?? "{}").Statement as Array<{
+        Sid?: string;
+        Principal?: unknown;
+      }>;
+      expect(statements.find((s) => s.Sid === "DenyInsecureTransport")?.Principal).toBe("*");
+
+      const unchanged = yield* stack.plan(definition);
+      expect(unchanged.resources.TlsOnlyBucket?.action).toBe("noop");
 
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
