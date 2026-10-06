@@ -164,6 +164,8 @@ const makeHarness = () => {
       Effect.succeed({
         accessKeyId: Redacted.make("AKIDEXAMPLE"),
         secretAccessKey: Redacted.make("example"),
+        sessionToken: undefined,
+        region: "us-east-1",
       }),
     ),
     Region.of("us-east-1"),
@@ -188,7 +190,7 @@ const makeHarness = () => {
       Effect.provide(aws),
       Effect.provide(Layer.succeed(Stage, STAGE)),
       provideFreshArtifactStore,
-    ) as Effect.Effect<any, any, never>;
+    ) as unknown as Effect.Effect<any, any, never>;
   return { fake, deploy };
 };
 
