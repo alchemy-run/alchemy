@@ -96,11 +96,12 @@ needs no API token.
 
 ## Type records with a schema
 
-Pass an Effect Schema, and `send` takes values of that type. The client
-encodes each value as JSON and sets a `content-type: application/json`
-header.
+Declare the stream with an Effect Schema, and every binding on it is typed by
+that schema:
 
 ```diff lang="typescript"
+// src/Orders.ts
+import * as Cloudflare from "alchemy/Cloudflare";
 +import * as Schema from "effect/Schema";
 +
 +export const Order = Schema.Struct({
@@ -108,13 +109,22 @@ header.
 +  amountCents: Schema.Number,
 +});
 
--    const orders = yield* Cloudflare.K2.WriteStream(Orders);
-+    const orders = yield* Cloudflare.K2.WriteStream(Orders, { schema: Order });
+export const Orders = Cloudflare.K2.Stream("Orders", {
+  retention: "7 days",
++  schema: Order,
+});
 ```
+
+Now `orders.send` takes `Order` values. The client encodes each one as JSON
+and sets a `content-type: application/json` header:
 
 ```typescript
 yield* orders.send([{ orderId: "o_1", amountCents: 4200 }]);
 ```
+
+K2 itself stores bytes, so the schema is a client-side codec. Changing it
+never updates or replaces the stream. Producers and consumers read the schema
+from the same stream, so they can't disagree about the record type.
 
 ## Handle produce errors
 
@@ -140,7 +150,7 @@ works with either layer.
 up to 5 MB and retries only the errors that mean the batch was not stored.
 
 ```typescript
-const sink = yield* Cloudflare.K2.StreamSink(Orders, { schema: Order });
+const sink = yield* Cloudflare.K2.StreamSink(Orders);
 yield* Stream.fromIterable(pending).pipe(Stream.run(sink));
 ```
 
@@ -209,7 +219,7 @@ import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { Order, Orders } from "./Orders.ts";
+import { Orders } from "./Orders.ts";
 
 export default class Fraud extends Fly.Service<Fraud>()(
   "Fraud",
@@ -217,7 +227,7 @@ export default class Fraud extends Fly.Service<Fraud>()(
   Effect.gen(function* () {
     yield* Cloudflare.K2.consumeStreamRecords(
       Orders,
-      { schema: Order, startAt: "earliest", concurrency: 4 },
+      { startAt: "earliest", concurrency: 4 },
       (records) =>
         records.pipe(
           Stream.map((record) => record.value),
@@ -256,8 +266,9 @@ mints at deploy. `StreamEventSourcePolling` needs a host with a long-lived
 process (Fly, ECS, EC2, Railway, Hetzner, Docker), so it doesn't work in a
 Worker.
 
-Without `schema`, each record is `{ content: Uint8Array, headers, timestamp }`.
-With `schema`, the JSON content is also decoded into `record.value`.
+For a stream with a schema, each record's JSON content is decoded into
+`record.value`. For a stream without one, each record is
+`{ content: Uint8Array, headers, timestamp }`.
 
 ## Share a subscription between hosts
 
@@ -275,8 +286,8 @@ export const FraudWorkers = Cloudflare.K2.Subscription("FraudWorkers", {
 ```diff lang="typescript"
      yield* Cloudflare.K2.consumeStreamRecords(
        Orders,
--      { schema: Order, startAt: "earliest", concurrency: 4 },
-+      { schema: Order, subscription: FraudWorkers, concurrency: 4 },
+-      { startAt: "earliest", concurrency: 4 },
++      { subscription: FraudWorkers, concurrency: 4 },
 ```
 
 Hosts sharing a subscription compete for batches. A subscription allows up
@@ -311,6 +322,8 @@ Related:
 
 - [Queues](/cloudflare/messaging/queues): a work queue with push delivery to
   Workers, retries, and dead-letter queues.
+- [Basin](/cloudflare/data/basin): land events as Iceberg tables with
+  Pipelines instead of consuming them yourself.
 - [Workers](/cloudflare/compute/workers): the runtime that produces records.
 - [Sinks](/infrastructure-as-effects/sinks): the Effect `Sink` model behind
   `StreamSink`.
