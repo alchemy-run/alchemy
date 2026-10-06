@@ -107,8 +107,8 @@ const authorizeS3 = <A, E>(
       Layer.mergeAll(
         fromCredentials(
           {
-            accessKeyId: scope.accessKeyId,
-            secretAccessKey: scope.secretAccessKey,
+            accessKeyId: Redacted.make(scope.accessKeyId),
+            secretAccessKey: Redacted.make(scope.secretAccessKey),
           },
           scope.region,
         ),

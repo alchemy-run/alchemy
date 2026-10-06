@@ -95,14 +95,26 @@ export const makeObjectMedia = Effect.gen(function* () {
   const credentials = yield* Credentials;
   const http = yield* HttpClient.HttpClient;
 
-  const authorized = (request: HttpClientRequest.HttpClientRequest) =>
+  // A failed token exchange (e.g. workload identity) fails the object request
+  // with status 401 rather than leaking `GCPCredentialsError` into the
+  // binding's typed errors.
+  const authorized = (
+    bucket: string,
+    object: string,
+    request: HttpClientRequest.HttpClientRequest,
+  ) =>
     credentials.pipe(
+      Effect.mapError(
+        (cause) => new ObjectRequestFailed({ bucket, object, status: 401, message: cause.message }),
+      ),
       Effect.map((config) => request.pipe(HttpClientRequest.bearerToken(config.accessToken))),
     );
 
   const download = (options: { bucket: string; object: string; generation?: string }) =>
     Effect.gen(function* () {
       const request = yield* authorized(
+        options.bucket,
+        options.object,
         HttpClientRequest.get(
           `${API}/storage/v1/b/${encodeURIComponent(options.bucket)}/o/${encodeURIComponent(options.object)}`,
         ).pipe(
@@ -162,6 +174,8 @@ export const makeObjectMedia = Effect.gen(function* () {
       payload.set(tail, head.length + bytes.length);
 
       const request = yield* authorized(
+        bucket,
+        options.name,
         HttpClientRequest.post(`${API}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o`).pipe(
           HttpClientRequest.setUrlParams({
             uploadType: "multipart",

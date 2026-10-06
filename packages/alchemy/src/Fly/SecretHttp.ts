@@ -132,7 +132,7 @@ export const makeKmsAuth = (
               Layer.succeed(MachineIdentity, true),
               flyMachineApiHttp,
               credentials({
-                apiKey: "unused",
+                apiKey: Redacted.make("unused"),
                 apiBaseUrl: "http://localhost/v1",
               }),
             ),
