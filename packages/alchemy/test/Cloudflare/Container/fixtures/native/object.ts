@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
 import { DurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
@@ -83,7 +84,52 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
       }),
     );
 
+    const ensureShell = Effect.gen(function* () {
+      if (!(yield* container.running)) yield* startImage("shell");
+    });
+
+    /** Process lifecycle against the real runtime (workerd + Docker or Cloudflare). */
+    const lifecycle = Effect.fn(function* (mode: "interrupt" | "stream" | "monitor") {
+      if (mode === "interrupt") {
+        yield* ensureShell;
+        // Closing the exec scope (here via timeout) must SIGKILL the process.
+        yield* Effect.scoped(
+          Effect.flatMap(container.exec(["sleep", "301"]), (child) => child.exitCode),
+        ).pipe(Effect.timeout("1 second"), Effect.ignore);
+        // `30[1]` keeps pgrep from matching this shell's own command line.
+        // Poll briefly: the kill is delivered asynchronously.
+        const check = yield* run([
+          "sh",
+          "-c",
+          "for i in 1 2 3 4 5 6; do pgrep -f 'sleep 30[1]' >/dev/null || exit 0; sleep 0.5; done; pgrep -f 'sleep 30[1]'",
+        ]);
+        return { remaining: decode(check.stdout).trim() };
+      }
+      if (mode === "stream") {
+        yield* ensureShell;
+        const chunks = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const child = yield* container.exec(["sh", "-c", "printf a; sleep 0.2; printf b"]);
+            return yield* Stream.runCollect(child.stdout!);
+          }),
+        );
+        return { stdout: chunks.map((chunk) => new TextDecoder().decode(chunk)).join("") };
+      }
+      if (yield* container.running) yield* container.destroy();
+      const images = yield* container.images;
+      yield* container.start({
+        image: images.shell,
+        entrypoint: ["sh", "-c", "exit 3"],
+        enableInternet: false,
+      });
+      const result = yield* container.monitor().pipe(Effect.result);
+      return Result.isFailure(result)
+        ? { failed: true, tag: result.failure._tag }
+        : { failed: false, tag: undefined };
+    });
+
     return Effect.succeed({
+      lifecycle,
       metadata: Effect.fn(function* () {
         incarnation ??= crypto.randomUUID();
         return {

@@ -120,3 +120,9 @@ export const imageTypes = Effect.gen(function* () {
   const missing: string = (yield* dynamicClient.images).shell;
   void missing;
 });
+
+export const invalidInstanceType: Cloudflare.Containers.DurableObjectContainerProps = {
+  schedulingPolicy: "durable_object",
+  // @ts-expect-error Instance sizes are selected by start(), not at deployment.
+  instanceType: "lite",
+};

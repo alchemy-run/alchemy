@@ -20,6 +20,10 @@ const isTcpUpgrade = (headers: string) => /^upgrade:\s*tcp\s*$/im.test(headers);
  * This router reads each connection's request headers, then pipes the whole
  * connection either straight to the Docker socket (`Upgrade: tcp`) or to the
  * HTTP proxy (everything else). Its scope destroys all sockets on shutdown.
+ *
+ * Bun 1.3.x only (repo pins 1.3.13): the `node:http` `upgrade` event fires but
+ * writes to its socket never reach the client. Fixed in Bun 1.4.0; once the
+ * repo moves to Bun >= 1.4, handle `upgrade` in the HTTP proxy and delete this.
  */
 export const makeDockerUpgradeRouter = Effect.fnUntraced(function* ({
   dockerSocketPath,

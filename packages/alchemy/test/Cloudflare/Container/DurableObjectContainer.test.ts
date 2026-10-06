@@ -1,13 +1,16 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import { DockerLive } from "@/Docker/Docker.ts";
 import * as Test from "@/Test/Alchemy";
+import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
 import { NativeImages, nativeStack } from "./fixtures/native/stack.ts";
 
 /** What `/probe` reports about the running container (fixtures/native). */
@@ -118,7 +121,7 @@ for (const dev of [true, false]) {
       // Alpine <-> Debian passed locally and live, including external-image
       // publication. Local Alpine replacement also passed. No root cause yet;
       // eviction alone is not a reliable remedy. Keep these assertions intact.
-      test.provider.todo(
+      (dev ? test.provider : test.provider.todo)(
         "preserves state across redeploys and selects replaced named images",
         (stack) =>
           Effect.gen(function* () {
@@ -279,6 +282,84 @@ for (const dev of [true, false]) {
         { timeout: 120_000, retry: 0 },
       );
 
+      if (!dev) {
+        const observe = (application: { accountId: string; applicationId: string }) =>
+          Containers.getContainerApplication({
+            accountId: application.accountId,
+            applicationId: application.applicationId,
+          });
+
+        test.provider(
+          "manages SSH, authorized keys, and observability on the application",
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              yield* Effect.gen(function* () {
+                const declared = yield* stack.deploy(
+                  settingsStack({
+                    wranglerSsh: { enabled: true, port: 22 },
+                    authorizedKeys: [{ name: "alchemy-test", publicKey: TEST_SSH_PUBLIC_KEY }],
+                    observability: { logs: { enabled: true } },
+                  }),
+                );
+                const application = declared.application;
+                const withSettings = yield* observe(application);
+                expect(withSettings.configuration.wranglerSsh).toMatchObject({
+                  enabled: true,
+                  port: 22,
+                });
+                expect(
+                  withSettings.configuration.authorizedKeys?.map((key) => key.publicKey),
+                ).toEqual([TEST_SSH_PUBLIC_KEY]);
+                expect(withSettings.observability?.logs?.enabled).toBe(true);
+
+                // Removing declarations clears what this stack managed.
+                const removed = yield* stack.deploy(settingsStack());
+                expect(removed.application.applicationId).toBe(application.applicationId);
+                const cleared = yield* observe(application);
+                expect(cleared.configuration.wranglerSsh?.enabled ?? false).toBe(false);
+                expect(cleared.configuration.authorizedKeys ?? []).toEqual([]);
+                expect(cleared.observability?.logs?.enabled ?? false).toBe(false);
+
+                // Settings this stack never declared are left alone.
+                yield* Containers.updateContainerApplication({
+                  accountId: application.accountId,
+                  applicationId: application.applicationId,
+                  configuration: { wranglerSsh: { enabled: true, port: 22 } },
+                });
+                yield* stack.deploy(settingsStack());
+                expect((yield* observe(application)).configuration.wranglerSsh?.enabled).toBe(true);
+              }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+            }),
+          { timeout: 120_000, retry: 0 },
+        );
+
+        test.provider(
+          "rejects switching an application between fleet and Durable Object scheduling",
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              yield* Effect.gen(function* () {
+                const fleet = yield* stack.deploy(policyStack("default"));
+                const switched = yield* stack
+                  .deploy(policyStack("durable_object"))
+                  .pipe(Effect.exit);
+                expect(Exit.isFailure(switched)).toBe(true);
+                if (Exit.isFailure(switched)) {
+                  expect(Cause.pretty(switched.cause)).toContain(
+                    "cannot switch between fleet and Durable Object scheduling",
+                  );
+                }
+                // The rejected deploy did not touch the deployed application.
+                const observed = yield* observe(fleet);
+                expect(observed.id).toBe(fleet.applicationId);
+                expect(observed.schedulingPolicy).toBe("default");
+              }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+            }),
+          { timeout: 120_000, retry: 0 },
+        );
+      }
+
       for (const scenario of ["execution", "named images"] as const) {
         // TODO: Live image-map updates are inconsistent. Adding an image can
         // leave it unavailable; removing images can retain the old map, even
@@ -327,6 +408,27 @@ for (const dev of [true, false]) {
                     exitCode: 0,
                     images: ["shell"],
                   });
+
+                  // Closing an exec's scope kills the process; stdout streams;
+                  // a failed container surfaces as ContainerError from monitor().
+                  const lifecycle = (mode: string) =>
+                    getJson<Record<string, unknown>>(
+                      deployed.worker.url!,
+                      `/lifecycle/${mode}`,
+                    ).pipe(Effect.timeout("25 seconds"));
+                  expect(yield* lifecycle("interrupt")).toEqual({ remaining: "" });
+                  expect(yield* lifecycle("stream")).toEqual({ stdout: "ab" });
+                  expect(yield* lifecycle("monitor")).toEqual({
+                    failed: true,
+                    tag: "ContainerError",
+                  });
+
+                  if (dev) {
+                    // Local emulation never creates a cloud application.
+                    for (const application of [deployed.application, deployed.asyncApplication]) {
+                      expect(application.applicationId).toMatch(/^dev:/);
+                    }
+                  }
 
                   if (!dev) {
                     // The applications exist without any fleet configuration.

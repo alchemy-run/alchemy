@@ -9,6 +9,10 @@ import * as NodeStream from "node:stream";
  * that with `allowHalfOpen`. Bun 1.3's `node:net` `Socket.end()` closes both
  * halves, so under Bun this wraps `Bun.connect`, whose `shutdown()` closes
  * only the write half, in a Node `Duplex`.
+ *
+ * Bun 1.3.x only (repo pins 1.3.13): with `allowHalfOpen`, `end()` still drops
+ * data the peer sends afterwards. Fixed in Bun 1.4.0; once the repo moves to
+ * Bun >= 1.4, use `NodeNet.createConnection` unconditionally and delete this.
  */
 export const connectDockerSocket = (path: string): NodeStream.Duplex => {
   if (typeof Bun === "undefined") {

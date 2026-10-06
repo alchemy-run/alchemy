@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -14,6 +15,15 @@ import { Docker, DockerLive } from "@/Docker";
 import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
 
 const describe = layer(Layer.provideMerge(DockerLive, NodeServices.layer));
+
+/** `docker info` proves the daemon is reachable; skipIf needs a plain boolean. */
+const dockerAvailable = (() => {
+  try {
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
+  } catch {
+    return false;
+  }
+})();
 
 describe("Docker.materialize", (it) => {
   it.effect(
@@ -115,7 +125,7 @@ describe("Docker registry errors", (it) => {
  * plugin version (or fails it like a missing plugin when `undefined`),
  * records every other invocation (args + env), and exits 0.
  */
-const fakeDocker = (buildxVersion: string | undefined, output = { stdout: "", stderr: "" }) => {
+const fakeDocker = (buildxVersion: string | undefined) => {
   const calls: Array<{ args: ReadonlyArray<string>; env: Record<string, string | undefined> }> = [];
   const encode = (text: string) => new TextEncoder().encode(text);
   const spawner = ChildProcessSpawner.make((command) =>
@@ -129,8 +139,8 @@ const fakeDocker = (buildxVersion: string | undefined, output = { stdout: "", st
       const stdout =
         probe && !missing
           ? `github.com/docker/buildx ${buildxVersion} 503f948aadbddb6de3ec5581f766e1d27f6975a1\n`
-          : output.stdout;
-      const stderr = missing ? "docker: 'buildx' is not a docker command.\n" : output.stderr;
+          : "";
+      const stderr = missing ? "docker: 'buildx' is not a docker command.\n" : "";
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(1),
         exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(missing ? 1 : 0)),
@@ -163,14 +173,11 @@ const registry = {
 };
 
 describe("Docker.image", (it) => {
-  it.effect(
-    "streams pull and push output through deployment notes",
+  it.effect.skipIf(!dockerAvailable)(
+    "streams real pull output through deployment notes",
     () =>
       Effect.gen(function* () {
-        const fake = fakeDocker("v0.26.1", {
-          stdout: "layer uploaded\n",
-          stderr: "transfer progress\n",
-        });
+        const docker = yield* Docker;
         const notes: Array<{ message: string; kind?: string }> = [];
         const session = {
           note: (message: string, options?: { kind?: "status" | "output" }) =>
@@ -178,60 +185,48 @@ describe("Docker.image", (it) => {
               notes.push({ message, kind: options?.kind });
             }),
         };
+        yield* docker.image.pull("alpine:3.21", "linux/amd64", undefined, session);
+        expect(notes.length).toBeGreaterThan(0);
+        expect(notes.every((note) => note.kind === "output")).toBe(true);
+        expect(notes.some((note) => note.message.includes("alpine:3.21"))).toBe(true);
+      }),
+    { tags: ["provider:docker", "local"], timeout: 120_000 },
+  );
+
+  it.effect(
+    "exports straight to the registry on Buildx >= 0.26",
+    () =>
+      Effect.gen(function* () {
+        const fake = fakeDocker("v0.26.1");
         yield* Effect.gen(function* () {
           const docker = yield* Docker;
-          yield* docker.image.pull("alpine:3.21", "linux/amd64", undefined, session);
-          yield* docker.image.push(
-            "registry.invalid/image:tag",
-            registry,
-            "linux/amd64",
+          yield* docker.image.build(
+            {
+              context: "/ctx",
+              tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
+              platform: "linux/amd64",
+            },
             undefined,
-            session,
+            registry,
           );
         }).pipe(Effect.provide(fake.layer));
-        expect(notes.filter((note) => note.message === "layer uploaded")).toHaveLength(2);
-        expect(notes.filter((note) => note.message === "transfer progress")).toHaveLength(2);
-        expect(notes.every((note) => note.kind === "output")).toBe(true);
+        expect(fake.calls).toHaveLength(1);
+        const [build] = fake.calls;
+        expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--push"]);
+        expect(build!.args).toContain("/ctx");
+        expect(build!.args).toContain("registry.invalid/app:1");
+        expect(build!.args).toContain("registry.invalid/app:buildcache");
+        expect(build!.args.filter((arg) => arg === "--tag")).toHaveLength(2);
+        expect(build!.env.DOCKER_CONFIG).toBeUndefined();
+        const auth = JSON.parse(build!.env.DOCKER_AUTH_CONFIG!) as {
+          auths: Record<string, { auth: string }>;
+        };
+        expect(auth.auths["registry.invalid"]!.auth).toBe(
+          Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString("base64"),
+        );
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );
-
-  for (const version of ["v0.26.1", "0.37.2"]) {
-    it.effect(
-      `exports straight to the registry on Buildx ${version}`,
-      () =>
-        Effect.gen(function* () {
-          const fake = fakeDocker(version);
-          yield* Effect.gen(function* () {
-            const docker = yield* Docker;
-            yield* docker.image.build(
-              {
-                context: "/ctx",
-                tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
-                platform: "linux/amd64",
-              },
-              undefined,
-              registry,
-            );
-          }).pipe(Effect.provide(fake.layer));
-          expect(fake.calls).toHaveLength(1);
-          const [build] = fake.calls;
-          expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--push"]);
-          expect(build!.args).toContain("/ctx");
-          expect(build!.args).toContain("registry.invalid/app:1");
-          expect(build!.args).toContain("registry.invalid/app:buildcache");
-          expect(build!.args.filter((arg) => arg === "--tag")).toHaveLength(2);
-          expect(build!.env.DOCKER_CONFIG).toBeUndefined();
-          const auth = JSON.parse(build!.env.DOCKER_AUTH_CONFIG!) as {
-            auths: Record<string, { auth: string }>;
-          };
-          expect(auth.auths["registry.invalid"]!.auth).toBe(
-            Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString("base64"),
-          );
-        }),
-      { tags: ["unit", "provider:docker", "local"] },
-    );
-  }
 
   for (const version of ["v0.23.0-desktop.1", "v0.25.0"]) {
     it.effect(

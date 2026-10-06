@@ -40,6 +40,17 @@ export const NativeWorker = Cloudflare.Worker(
           }
           case "/revision":
             return HttpServerResponse.text(yield* probe.revision().pipe(Effect.orDie));
+          case "/lifecycle/interrupt":
+          case "/lifecycle/stream":
+          case "/lifecycle/monitor": {
+            const mode = url.pathname.slice("/lifecycle/".length) as
+              | "interrupt"
+              | "stream"
+              | "monitor";
+            return yield* HttpServerResponse.json(
+              yield* objects.getByName(`lifecycle-${mode}`).lifecycle(mode).pipe(Effect.orDie),
+            );
+          }
           case "/probe":
             return yield* HttpServerResponse.json(
               yield* probe
