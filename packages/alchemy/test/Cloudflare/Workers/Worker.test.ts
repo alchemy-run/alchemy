@@ -151,13 +151,10 @@ describe.concurrent(
           });
           expect(uploaded.id).toEqual(candidate.versionId);
 
-          const detectDrift = () =>
-            Drift.detect(stack).pipe(Effect.provide(stack.state));
+          const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
           const unchanged = yield* detectDrift();
           expect(unchanged.resources.ReceiptWorker?.action).toBe("unchanged");
-          expect(unchanged.resources.ReceiptWorker?.attr.versionId).toEqual(
-            candidate.versionId,
-          );
+          expect(unchanged.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
 
           const afterRead = yield* workers.listScriptDeployments({
             accountId,
@@ -172,7 +169,7 @@ describe.concurrent(
 
           // Change real script settings outside Alchemy. Keeping the upload
           // receipt must not mask genuine drift in the live configuration.
-          yield* workers.updateScriptSubdomain({
+          yield* workers.createScriptSubdomain({
             accountId,
             scriptName: candidate.workerName,
             enabled: true,
@@ -180,9 +177,7 @@ describe.concurrent(
           });
           const changed = yield* detectDrift();
           expect(changed.resources.ReceiptWorker?.action).toBe("drifted");
-          expect(changed.resources.ReceiptWorker?.attr.versionId).toEqual(
-            candidate.versionId,
-          );
+          expect(changed.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
           expect(changed.resources.ReceiptWorker?.attr.url).toBeDefined();
 
           yield* stack.destroy();
