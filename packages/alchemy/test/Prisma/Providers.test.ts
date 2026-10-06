@@ -14,6 +14,7 @@ import * as CliKit from "@/Cli/CliKit";
 import * as Prisma from "@/Prisma";
 import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
 import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { testStackContext } from "./fixtures/StackContext.ts";
 
@@ -43,17 +44,6 @@ const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.provide(devAlchemyContext),
     Effect.provide(CliKit.layer({ input: false })),
   );
-
-const reconcileInput = (id: string, news: unknown, output?: unknown) =>
-  ({
-    id,
-    instanceId: "00000000000000000000000000000000",
-    news,
-    olds: undefined,
-    output,
-    session: undefined as never,
-    bindings: [],
-  }) as never;
 
 describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect(
@@ -158,73 +148,6 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
     },
   );
 
-  it.effect(
-    "uses tokenless dev providers from Prisma.providers()",
-    () =>
-      Effect.gen(function* () {
-        const projectProvider = yield* Provider.findProviderByType(Prisma.Project.Type as any);
-        const appProvider = yield* Provider.findProviderByType(Prisma.App.Type as any);
-        const envProvider = yield* Provider.findProviderByType(
-          Prisma.EnvironmentVariable.Type as any,
-        );
-        const branchProvider = yield* Provider.findProviderByType(Prisma.Branch.Type as any);
-        const bucketProvider = yield* Provider.findProviderByType(Prisma.Bucket.Type as any);
-        const bucketKeyProvider = yield* Provider.findProviderByType(
-          Prisma.BucketAccessKey.Type as any,
-        );
-
-        const project = (yield* projectProvider.reconcile(
-          reconcileInput("Project", { name: "local-project", createDatabase: false }),
-        )) as Prisma.Project["Attributes"];
-        const app = (yield* appProvider.reconcile(
-          reconcileInput("App", { project, displayName: "api", regionId: "us-east-1" }),
-        )) as Prisma.App["Attributes"];
-        const env = (yield* envProvider.reconcile(
-          reconcileInput("Environment", {
-            project,
-            branchId: "branch-preview",
-            class: "preview",
-            key: "TOKEN",
-            value: Redacted.make("secret"),
-          }),
-        )) as Prisma.EnvironmentVariable["Attributes"];
-        const branch = (yield* branchProvider.reconcile(
-          reconcileInput("Branch", { project, gitName: "main", isDefault: true }),
-        )) as Prisma.Branch["Attributes"];
-
-        const bucket = (yield* bucketProvider.reconcile(
-          reconcileInput("Bucket", { project, name: "uploads" }),
-        )) as Prisma.Bucket["Attributes"];
-        const bucketKey = (yield* bucketKeyProvider.reconcile(
-          reconcileInput("BucketAccessKey", { bucket, role: "read_write" }),
-        )) as Prisma.BucketAccessKey["Attributes"];
-
-        expect(project.projectId).toBe("dev:project:Project");
-        expect(app.projectId).toBe(project.projectId);
-        expect(app.appId).toBe("dev:app:App");
-        expect(env.projectId).toBe(project.projectId);
-        expect(env.branchId).toBe("branch-preview");
-        expect(Redacted.value(env.value)).toBe("secret");
-        expect(branch.role).toBe("production");
-        expect(bucket.bucketId).toBe("dev:bucket:Bucket");
-        expect(bucket.name).toBe("uploads");
-        expect(bucket.projectId).toBe(project.projectId);
-        expect(bucketKey.bucketAccessKeyId).toBe("dev:bucket-access-key:BucketAccessKey");
-        expect(bucketKey.bucketId).toBe(bucket.bucketId);
-        expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
-      }).pipe(providePrismaDev),
-    {
-      tags: [
-        "provider:prisma:app",
-        "provider:prisma:branch",
-        "provider:prisma:bucket",
-        "provider:prisma:bucketaccesskey",
-        "provider:prisma:environmentvariable",
-        "provider:prisma:project",
-      ],
-    },
-  );
-
   it.effect("managementApi rejects an unknown explicit profile", () =>
     Effect.gen(function* () {
       const result = yield* Effect.result(
@@ -289,3 +212,74 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
     { tags: ["provider:prisma:deployment"], timeout: 30_000 },
   );
 });
+
+const dev = Test.make({ providers: Prisma.providers(), dev: true });
+
+dev.test.provider(
+  "uses tokenless dev providers from Prisma.providers()",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { project, app, env, branch, bucket, bucketKey } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Prisma.Project("Project", {
+            name: "local-project",
+            createDatabase: false,
+          });
+          const app = yield* Prisma.App("App", {
+            project,
+            displayName: "api",
+            regionId: "us-east-1",
+          });
+          const env = yield* Prisma.EnvironmentVariable("Environment", {
+            project,
+            branchId: "branch-preview",
+            class: "preview",
+            key: "TOKEN",
+            value: Redacted.make("secret"),
+          });
+          const branch = yield* Prisma.Branch("Branch", {
+            project,
+            gitName: "main",
+            isDefault: true,
+          });
+          const bucket = yield* Prisma.Bucket("Bucket", { project, name: "uploads" });
+          const bucketKey = yield* Prisma.BucketAccessKey("BucketAccessKey", {
+            bucket,
+            role: "read_write",
+          });
+          return { project, app, env, branch, bucket, bucketKey };
+        }),
+      );
+
+      expect(project.projectId).toBe("dev:project:Project");
+      expect(app.projectId).toBe(project.projectId);
+      expect(app.appId).toBe("dev:app:App");
+      expect(env.projectId).toBe(project.projectId);
+      expect(env.branchId).toBe("branch-preview");
+      expect(Redacted.value(env.value)).toBe("secret");
+      expect(branch.role).toBe("production");
+      expect(bucket.bucketId).toBe("dev:bucket:Bucket");
+      expect(bucket.name).toBe("uploads");
+      expect(bucket.projectId).toBe(project.projectId);
+      expect(bucketKey.bucketAccessKeyId).toBe("dev:bucket-access-key:BucketAccessKey");
+      expect(bucketKey.bucketId).toBe(bucket.bucketId);
+      expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:app",
+      "provider:prisma:branch",
+      "provider:prisma:bucket",
+      "provider:prisma:bucketaccesskey",
+      "provider:prisma:environmentvariable",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
+);
