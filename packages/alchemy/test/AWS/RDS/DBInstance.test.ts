@@ -1,21 +1,26 @@
-import * as AWS from "@/AWS";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { SecurityGroup } from "@/AWS/EC2/SecurityGroup";
-import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup";
-import { Network } from "@/AWS/EC2/Network";
-import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
-import * as Drift from "@/Drift";
-import { State } from "@/State";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as rds from "@distilled.cloud/aws/rds";
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { expect } from "alchemy-test";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Network } from "@/AWS/EC2/Network";
+import { SecurityGroup } from "@/AWS/EC2/SecurityGroup";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { normalizePolicyDocument, type PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
+import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup";
+import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
+import * as Drift from "@/Drift";
+import * as Provider from "@/Provider";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -133,13 +138,14 @@ test.provider(
         )
         .pipe(Effect.result);
       expect(Result.isFailure(emptyGroups)).toBe(true);
-      expect(renderFailure(emptyGroups)).toContain(
-        "InvalidDBInstanceAssociations",
-      );
+      expect(renderFailure(emptyGroups)).toContain("InvalidDBInstanceAssociations");
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Default (read-only) path: an RDS instance takes many minutes to create and
@@ -149,21 +155,24 @@ test.provider(
 // asserting it returns a well-typed `DBInstance["Attributes"][]`. On a fresh
 // account this is typically empty; either way every element must conform to
 // the exact `read` shape.
-test.provider("list returns well-typed DB instance attributes", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DBInstance);
-    const all = yield* provider.list();
+test.provider(
+  "list returns well-typed DB instance attributes",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(DBInstance);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
+      expect(Array.isArray(all)).toBe(true);
 
-    // Every element must match the exact `Attributes` shape `read` produces.
-    for (const instance of all) {
-      expect(typeof instance.dbInstanceIdentifier).toBe("string");
-      expect(typeof instance.dbInstanceArn).toBe("string");
-      expect(Array.isArray(instance.dbParameterGroupNames)).toBe(true);
-      expect(typeof instance.tags).toBe("object");
-    }
-  }),
+      // Every element must match the exact `Attributes` shape `read` produces.
+      for (const instance of all) {
+        expect(typeof instance.dbInstanceIdentifier).toBe("string");
+        expect(typeof instance.dbInstanceArn).toBe("string");
+        expect(Array.isArray(instance.dbParameterGroupNames)).toBe(true);
+        expect(typeof instance.tags).toBe("object");
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );
 
 // Full lifecycle is gated: provisioning an Aurora cluster + instance and then
@@ -191,10 +200,10 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
             vpcId: network.vpcId,
             description: "Aurora cluster group",
           });
-          const ignoredInstanceGroup = yield* SecurityGroup(
-            "ListIgnoredInstanceGroup",
-            { vpcId: network.vpcId, description: "Ignored instance group" },
-          );
+          const ignoredInstanceGroup = yield* SecurityGroup("ListIgnoredInstanceGroup", {
+            vpcId: network.vpcId,
+            description: "Ignored instance group",
+          });
           const cluster = yield* DBCluster("ListCluster", {
             dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
             vpcSecurityGroupIds: [clusterGroup.groupId],
@@ -227,16 +236,12 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
         .pipe(Effect.provideService(HttpClient.HttpClient, client));
       expect(updated.endpointPort).toBe(5434);
       expect(requests.filter((request) => request.port !== null)).toEqual([]);
-      expect(
-        requests.filter((request) => request.securityGroups.length > 0),
-      ).toEqual([]);
+      expect(requests.filter((request) => request.securityGroups.length > 0)).toEqual([]);
       const cluster = (yield* rds.describeDBClusters({
         DBClusterIdentifier: instance.dbClusterIdentifier!,
       })).DBClusters![0]!;
       expect([...updated.vpcSecurityGroupIds].sort()).toEqual(
-        cluster
-          .VpcSecurityGroups!.map((group) => group.VpcSecurityGroupId!)
-          .sort(),
+        cluster.VpcSecurityGroups!.map((group) => group.VpcSecurityGroupId!).sort(),
       );
       const family = (yield* rds.describeDBEngineVersions({
         Engine: "aurora-postgresql",
@@ -245,30 +250,23 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
       expect(updated.dbParameterGroupNames).toEqual([`default.${family}`]);
       expect(
         requests.filter(
-          (request) =>
-            request.action === "ModifyDBInstance" &&
-            request.parameterGroup !== null,
+          (request) => request.action === "ModifyDBInstance" && request.parameterGroup !== null,
         ),
       ).toEqual([]);
-      expect(
-        requests.some((request) => request.action === "CreateDBInstance"),
-      ).toBe(true);
+      expect(requests.some((request) => request.action === "CreateDBInstance")).toBe(true);
       yield* assertPort(instance.dbInstanceIdentifier, 5434);
-      expect(
-        (yield* stack.plan(program("updated"))).resources.ListInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(program("updated"))).resources.ListInstance).toMatchObject({
+        action: "noop",
+      });
 
       const provider = yield* Provider.findProvider(DBInstance);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (i) => i.dbInstanceIdentifier === instance.dbInstanceIdentifier,
-        ),
-      ).toBe(true);
+      expect(all.some((i) => i.dbInstanceIdentifier === instance.dbInstanceIdentifier)).toBe(true);
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 // RDS provisioning and storage optimization exceed the default test budget.
@@ -305,9 +303,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             engine: "postgres",
             dbInstanceClass: "db.t3.micro",
             allocatedStorage,
-            ...(maxAllocatedStorage === undefined
-              ? {}
-              : { maxAllocatedStorage }),
+            ...(maxAllocatedStorage === undefined ? {} : { maxAllocatedStorage }),
             storageType: "gp2",
             masterUsername: "alchemy",
             manageMasterUserPassword: true,
@@ -326,17 +322,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       const describe = rds.describeDBInstances({
         DBInstanceIdentifier: created.dbInstanceIdentifier,
       });
-      expect([0, 20]).toContain(
-        (yield* describe).DBInstances?.[0]?.MaxAllocatedStorage ?? 0,
-      );
+      expect([0, 20]).toContain((yield* describe).DBInstances?.[0]?.MaxAllocatedStorage ?? 0);
 
       const enabled = yield* stack.deploy(program(20, 40));
       expect(enabled.maxAllocatedStorage).toBe(40);
       expect((yield* describe).DBInstances?.[0]?.MaxAllocatedStorage).toBe(40);
       // Grow beyond the old ceiling while disabling autoscaling in the same request.
-      const updated = yield* stack.deploy(
-        program(50, undefined, "3 days", true),
-      );
+      const updated = yield* stack.deploy(program(50, undefined, "3 days", true));
       expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(updated.backupRetentionPeriod).toBe(3);
       expect(updated.allocatedStorage).toBe(50);
@@ -362,16 +354,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             times: 8,
-            until: (response) =>
-              response.DBInstances?.[0]?.MaxAllocatedStorage === ceiling,
+            until: (response) => response.DBInstances?.[0]?.MaxAllocatedStorage === ceiling,
           }),
         );
         expect(injected.DBInstances?.[0]?.MaxAllocatedStorage).toBe(ceiling);
       });
       yield* injectCeiling(120);
-      expect(
-        (yield* stack.plan(explicit)).resources.StandaloneInstance,
-      ).toMatchObject({
+      expect((yield* stack.plan(explicit)).resources.StandaloneInstance).toMatchObject({
         action: "update",
       });
       const repairedExplicit = yield* stack.deploy(explicit);
@@ -380,9 +369,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       // Lowering the minimum cannot shrink capacity, but omission disables autoscaling.
       const lowerMinimum = program(20);
-      expect(
-        (yield* stack.plan(lowerMinimum)).resources.StandaloneInstance,
-      ).toMatchObject({
+      expect((yield* stack.plan(lowerMinimum)).resources.StandaloneInstance).toMatchObject({
         action: "update",
       });
       const preserved = yield* stack.deploy(lowerMinimum);
@@ -400,9 +387,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         stage: stack.stage,
       });
       expect(drift.resources.StandaloneInstance?.action).toBe("drifted");
-      expect(
-        (yield* stack.plan(lowerMinimum)).resources.StandaloneInstance,
-      ).toMatchObject({
+      expect((yield* stack.plan(lowerMinimum)).resources.StandaloneInstance).toMatchObject({
         action: "update",
       });
       const repaired = yield* stack.deploy(lowerMinimum);
@@ -412,17 +397,17 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       const settled = (yield* describe).DBInstances?.[0];
       expect([0, 50]).toContain(settled?.MaxAllocatedStorage ?? 0);
       expect(settled?.AllocatedStorage).toBe(50);
-      expect(
-        (yield* stack.plan(lowerMinimum)).resources.StandaloneInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(lowerMinimum)).resources.StandaloneInstance).toMatchObject({
+        action: "noop",
+      });
 
       const disabled = program(20, 0);
       const explicitZero = yield* stack.deploy(disabled);
       expect([0, 50]).toContain(explicitZero.maxAllocatedStorage ?? 0);
       expect(explicitZero.allocatedStorage).toBe(50);
-      expect(
-        (yield* stack.plan(disabled)).resources.StandaloneInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(disabled)).resources.StandaloneInstance).toMatchObject({
+        action: "noop",
+      });
 
       yield* stack.destroy();
       const gone = yield* describe.pipe(
@@ -436,15 +421,12 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       );
       expect(gone).toBe(true);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 type StorageProps = Pick<
   DBInstanceProps,
-  | "allocatedStorage"
-  | "storageType"
-  | "iops"
-  | "storageThroughput"
-  | "maxAllocatedStorage"
+  "allocatedStorage" | "storageType" | "iops" | "storageThroughput" | "maxAllocatedStorage"
 >;
 
 type StorageState = readonly [
@@ -501,17 +483,15 @@ const assertStorageState = Effect.fn(function* (
 });
 
 const assertInstanceGone = Effect.fn(function* (identifier: string) {
-  const gone = yield* rds
-    .describeDBInstances({ DBInstanceIdentifier: identifier })
-    .pipe(
-      Effect.as(false),
-      Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
-      Effect.repeat({
-        schedule: Schedule.spaced("5 seconds"),
-        times: 8,
-        until: (gone) => gone,
-      }),
-    );
+  const gone = yield* rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
+    Effect.as(false),
+    Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      times: 8,
+      until: (gone) => gone,
+    }),
+  );
   expect(gone).toBe(true);
 });
 
@@ -623,12 +603,12 @@ for (const scenario of storageCases) {
           );
         }
         expect(
-          (yield* stack.plan(storageProgram(finalProps))).resources
-            .StorageInstance,
+          (yield* stack.plan(storageProgram(finalProps))).resources.StorageInstance,
         ).toMatchObject({ action: "noop" });
         yield* stack.destroy();
         yield* assertInstanceGone(created.dbInstanceIdentifier);
       }),
+    { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
   );
 }
 
@@ -639,12 +619,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       const desired = storageProgram({});
       const created = yield* stack.deploy(desired);
-      yield* assertStorageState(created.dbInstanceIdentifier, [
-        20,
-        "gp3",
-        3000,
-        125,
-      ]);
+      yield* assertStorageState(created.dbInstanceIdentifier, [20, "gp3", 3000, 125]);
       yield* rds.modifyDBInstance({
         DBInstanceIdentifier: created.dbInstanceIdentifier,
         StorageType: "gp2",
@@ -672,24 +647,20 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             },
           }),
         );
-      yield* assertStorageState(created.dbInstanceIdentifier, [
-        20,
-        "gp2",
-        0,
-        0,
-      ]);
+      yield* assertStorageState(created.dbInstanceIdentifier, [20, "gp2", 0, 0]);
       const drift = yield* Drift.detect({
         name: stack.name,
         stage: stack.stage,
       });
       expect(drift.resources.StorageInstance?.action).toBe("drifted");
-      expect(
-        (yield* stack.plan(desired)).resources.StorageInstance,
-      ).toMatchObject({ action: "update" });
+      expect((yield* stack.plan(desired)).resources.StorageInstance).toMatchObject({
+        action: "update",
+      });
       // A second storage modification must wait for AWS's optimization cooldown.
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 const observeInstanceRequests = Effect.gen(function* () {
@@ -699,14 +670,19 @@ const observeInstanceRequests = Effect.gen(function* () {
     port: string | null;
     parameterGroup: string | null;
     securityGroups: string[];
+    iamAuthentication: string | null;
+    publiclyAccessible: string | null;
+    deletionProtection: string | null;
+    networkType: string | null;
+    applyImmediately: string | null;
+    enabledLogs: string[];
+    disabledLogs: string[];
   }> = [];
   const observedClient = client.pipe(
     HttpClient.tapRequest((request) =>
       Effect.sync(() => {
         if (request.body._tag !== "Uint8Array") return;
-        const parameters = new URLSearchParams(
-          new TextDecoder().decode(request.body.body),
-        );
+        const parameters = new URLSearchParams(new TextDecoder().decode(request.body.body));
         const action = parameters.get("Action");
         if (
           action === "CreateDBInstance" ||
@@ -715,14 +691,31 @@ const observeInstanceRequests = Effect.gen(function* () {
         ) {
           requests.push({
             action,
+            iamAuthentication: parameters.get("EnableIAMDatabaseAuthentication"),
+            publiclyAccessible: parameters.get("PubliclyAccessible"),
+            deletionProtection: parameters.get("DeletionProtection"),
+            networkType: parameters.get("NetworkType"),
+            applyImmediately: parameters.get("ApplyImmediately"),
+            enabledLogs: [...parameters.entries()]
+              .filter(
+                ([key]) =>
+                  key.startsWith("EnableCloudwatchLogsExports.") ||
+                  key.startsWith("CloudwatchLogsExportConfiguration.EnableLogTypes."),
+              )
+              .map(([, value]) => value)
+              .sort(),
+            disabledLogs: [...parameters.entries()]
+              .filter(([key]) =>
+                key.startsWith("CloudwatchLogsExportConfiguration.DisableLogTypes."),
+              )
+              .map(([, value]) => value)
+              .sort(),
             parameterGroup: parameters.get("DBParameterGroupName"),
             securityGroups: [...parameters.entries()]
               .filter(([key]) => key.startsWith("VpcSecurityGroupIds."))
               .map(([, value]) => value)
               .sort(),
-            port: parameters.get(
-              action === "CreateDBInstance" ? "Port" : "DBPortNumber",
-            ),
+            port: parameters.get(action === "CreateDBInstance" ? "Port" : "DBPortNumber"),
           });
         }
       }),
@@ -760,9 +753,7 @@ const assertPort = Effect.fn(function* (identifier: string, port: number) {
   })).DBInstances?.[0];
   expect(instance?.Endpoint?.Port).toBe(port);
   expect(instance?.PendingModifiedValues?.Port).toBeUndefined();
-  expect(["available", "storage-optimization"]).toContain(
-    instance?.DBInstanceStatus,
-  );
+  expect(["available", "storage-optimization"]).toContain(instance?.DBInstanceStatus);
   return instance;
 });
 
@@ -774,10 +765,7 @@ const injectPort = Effect.fn(function* (identifier: string, port: number) {
   });
   yield* rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
     Effect.repeat({
-      schedule: Schedule.min([
-        Schedule.exponential("5 seconds"),
-        Schedule.spaced("1 minute"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("5 seconds"), Schedule.spaced("1 minute")]),
       times: 10,
       until: (response) => {
         const instance = response.DBInstances?.[0];
@@ -804,10 +792,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
           .pipe(Effect.provideService(HttpClient.HttpClient, client));
       const writes = () =>
         requests
-          .filter(
-            (request) =>
-              request.action === "ModifyDBInstance" && request.port !== null,
-          )
+          .filter((request) => request.action === "ModifyDBInstance" && request.port !== null)
           .map((request) => request.port);
       const created = yield* deploy();
       expect(created.endpointPort).toBe(5432);
@@ -816,15 +801,11 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
           .filter((request) => request.action === "CreateDBInstance")
           .map((request) => request.port),
       ).toEqual(["5432"]);
-      expect(
-        (yield* assertPort(created.dbInstanceIdentifier, 5432))?.DbInstancePort,
-      ).toBe(0);
+      expect((yield* assertPort(created.dbInstanceIdentifier, 5432))?.DbInstancePort).toBe(0);
 
       requests.length = 0;
       yield* deploy(5432, "same-port");
-      expect(
-        requests.some((request) => request.action === "DescribeDBInstances"),
-      ).toBe(true);
+      expect(requests.some((request) => request.action === "DescribeDBInstances")).toBe(true);
       expect(writes()).toEqual([]);
 
       requests.length = 0;
@@ -845,12 +826,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       expect(restored.endpointPort).toBe(5432);
       expect(writes()).toEqual(["5432"]);
       yield* assertPort(created.dbInstanceIdentifier, 5432);
-      expect(
-        (yield* stack.plan(portProgram())).resources.PortInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(portProgram())).resources.PortInstance).toMatchObject({
+        action: "noop",
+      });
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -859,14 +841,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
     Effect.gen(function* () {
       yield* stack.destroy();
       const identifier = "alchemy-rds-port-adoption";
-      const program = (port?: number) =>
-        portProgram(port, "adoption", identifier);
+      const program = (port?: number) => portProgram(port, "adoption", identifier);
       const created = yield* stack.deploy(program(5433));
       yield* assertPort(identifier, 5433);
       yield* injectPort(identifier, 5434);
-      expect(
-        (yield* stack.plan(program(5433))).resources.PortInstance,
-      ).toMatchObject({ action: "update" });
+      expect((yield* stack.plan(program(5433))).resources.PortInstance).toMatchObject({
+        action: "update",
+      });
       const drift = yield* Drift.detect({
         name: stack.name,
         stage: stack.stage,
@@ -876,9 +857,9 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(repaired.endpointPort).toBe(5433);
       yield* assertPort(identifier, 5433);
-      expect(
-        (yield* stack.plan(program(5433))).resources.PortInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(program(5433))).resources.PortInstance).toMatchObject({
+        action: "noop",
+      });
 
       // Removing the saved row exercises discovery with no previous props or attributes.
       yield* Effect.gen(function* () {
@@ -893,23 +874,24 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(adopted.endpointPort).toBe(5432);
       yield* assertPort(identifier, 5432);
-      expect(
-        (yield* stack.plan(program())).resources.PortInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(program())).resources.PortInstance).toMatchObject({
+        action: "noop",
+      });
 
       yield* injectPort(identifier, 5434);
-      expect(
-        (yield* stack.plan(program())).resources.PortInstance,
-      ).toMatchObject({ action: "update" });
+      expect((yield* stack.plan(program())).resources.PortInstance).toMatchObject({
+        action: "update",
+      });
       const defaultRepaired = yield* stack.deploy(program());
       expect(defaultRepaired.endpointPort).toBe(5432);
       yield* assertPort(identifier, 5432);
-      expect(
-        (yield* stack.plan(program())).resources.PortInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(program())).resources.PortInstance).toMatchObject({
+        action: "noop",
+      });
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -930,22 +912,508 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         .pipe(Effect.provideService(HttpClient.HttpClient, client));
       expect(settled.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(settled.endpointPort).toBe(5433);
-      expect(
-        requests.some((request) => request.action === "DescribeDBInstances"),
-      ).toBe(true);
+      expect(requests.some((request) => request.action === "DescribeDBInstances")).toBe(true);
       expect(
         requests.filter(
-          (request) =>
-            request.action === "ModifyDBInstance" && request.port !== null,
+          (request) => request.action === "ModifyDBInstance" && request.port !== null,
         ),
       ).toEqual([]);
       yield* assertPort(created.dbInstanceIdentifier, 5433);
-      expect(
-        (yield* stack.plan(portProgram(5433))).resources.PortInstance,
-      ).toMatchObject({ action: "noop" });
+      expect((yield* stack.plan(portProgram(5433))).resources.PortInstance).toMatchObject({
+        action: "noop",
+      });
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+);
+
+type SecurityProps = Pick<
+  DBInstanceProps,
+  | "enableIAMDatabaseAuthentication"
+  | "publiclyAccessible"
+  | "deletionProtection"
+  | "networkType"
+  | "enableCloudwatchLogsExports"
+>;
+
+const securityProgram = (
+  security: SecurityProps = {},
+  round = "security",
+  identifier?: string,
+  preferredMaintenanceWindow?: string,
+) =>
+  Effect.gen(function* () {
+    const network = yield* Network("SecurityNet", {
+      cidrBlock: "10.51.0.0/16",
+    });
+    const subnetGroup = yield* DBSubnetGroup("SecuritySubnetGroup", {
+      description: "RDS security desired-state lifecycle",
+      subnetIds: network.publicSubnetIds,
+    });
+    return yield* DBInstance("SecurityInstance", {
+      dbInstanceIdentifier: identifier,
+      engine: "postgres",
+      dbInstanceClass: "db.t3.micro",
+      masterUsername: "alchemy",
+      manageMasterUserPassword: true,
+      dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+      backupRetentionPeriod: "0 days",
+      preferredMaintenanceWindow,
+      skipFinalSnapshot: true,
+      ...security,
+      tags: { round },
+    });
+  });
+
+const assertSecurity = Effect.fn(function* (identifier: string, security: SecurityProps = {}) {
+  const instance = (yield* rds.describeDBInstances({
+    DBInstanceIdentifier: identifier,
+  })).DBInstances?.[0];
+  expect(["available", "storage-optimization"]).toContain(instance?.DBInstanceStatus);
+  expect(instance?.IAMDatabaseAuthenticationEnabled).toBe(
+    security.enableIAMDatabaseAuthentication ?? false,
+  );
+  expect(instance?.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled).toBeUndefined();
+  expect(instance?.PubliclyAccessible).toBe(security.publiclyAccessible ?? false);
+  expect(instance?.DeletionProtection).toBe(security.deletionProtection ?? false);
+  expect(instance?.NetworkType).toBe(security.networkType ?? "IPV4");
+  expect([...(instance?.EnabledCloudwatchLogsExports ?? [])].sort()).toEqual(
+    [...new Set(security.enableCloudwatchLogsExports ?? [])].sort(),
+  );
+  expect(
+    instance?.PendingModifiedValues?.PendingCloudwatchLogsExports?.LogTypesToEnable ?? [],
+  ).toEqual([]);
+  expect(
+    instance?.PendingModifiedValues?.PendingCloudwatchLogsExports?.LogTypesToDisable ?? [],
+  ).toEqual([]);
+  return instance;
+});
+
+const waitForSecurityObservation = (
+  identifier: string,
+  until: (instance: rds.DBInstance) => boolean,
+) =>
+  rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
+    Effect.map((response) => response.DBInstances?.[0]),
+    Effect.repeat({
+      schedule: Schedule.min([Schedule.exponential("5 seconds"), Schedule.spaced("1 minute")]),
+      times: 10,
+      until: (instance) =>
+        instance !== undefined &&
+        ["available", "storage-optimization"].includes(instance.DBInstanceStatus ?? "") &&
+        until(instance),
+    }),
+    Effect.tap((instance) =>
+      Effect.sync(() => {
+        expect(instance).toBeDefined();
+        expect(["available", "storage-optimization"]).toContain(instance?.DBInstanceStatus);
+        expect(instance !== undefined && until(instance)).toBe(true);
+      }),
+    ),
+  );
+
+const enabledSecurity: SecurityProps = {
+  enableIAMDatabaseAuthentication: true,
+  publiclyAccessible: true,
+  deletionProtection: true,
+  networkType: "IPV4",
+  enableCloudwatchLogsExports: ["postgresql", "upgrade"],
+};
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "security: defaults, removal, drift, adoption, and no redundant writes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = "alchemy-rds-security-defaults";
+      const { client, requests } = yield* observeInstanceRequests;
+      const program = (security: SecurityProps = {}, round = "security") =>
+        securityProgram(security, round, identifier);
+      const deploy = (security: SecurityProps = {}, round = "security") =>
+        stack
+          .deploy(program(security, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const created = yield* deploy();
+      yield* assertSecurity(identifier);
+      expect(created.iamDatabaseAuthenticationEnabled).toBe(false);
+      expect(created.pendingIamDatabaseAuthenticationEnabled).toBeUndefined();
+      expect(created.publiclyAccessible).toBe(false);
+      expect(created.deletionProtection).toBe(false);
+      expect(created.networkType).toBe("IPV4");
+      expect(created.enabledCloudwatchLogsExports).toEqual([]);
+      expect(Object.keys(created.vpcSecurityGroupStatuses).sort()).toEqual(
+        [...created.vpcSecurityGroupIds].sort(),
+      );
+      expect(Object.values(created.vpcSecurityGroupStatuses)).toEqual(["active"]);
+      expect(requests.filter((request) => request.action === "CreateDBInstance")).toMatchObject([
+        {
+          iamAuthentication: "false",
+          publiclyAccessible: "false",
+          deletionProtection: "false",
+          networkType: "IPV4",
+          enabledLogs: [],
+        },
+      ]);
+
+      const enabled = yield* deploy(enabledSecurity);
+      expect(enabled.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(enabled.iamDatabaseAuthenticationEnabled).toBe(true);
+      expect(enabled.pendingIamDatabaseAuthenticationEnabled).toBeUndefined();
+      yield* assertSecurity(identifier, enabledSecurity);
+      requests.length = 0;
+      yield* deploy(
+        {
+          ...enabledSecurity,
+          enableCloudwatchLogsExports: ["upgrade", "postgresql", "postgresql"],
+        },
+        "set-equivalent",
+      );
+      expect(requests.filter((request) => request.action === "ModifyDBInstance")).toEqual([]);
+
+      requests.length = 0;
+      const removed = yield* deploy();
+      expect(removed.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier);
+      expect(requests.filter((request) => request.disabledLogs.length > 0)).toMatchObject([
+        {
+          disabledLogs: ["postgresql", "upgrade"],
+          applyImmediately: "false",
+        },
+      ]);
+      expect((yield* stack.plan(program())).resources.SecurityInstance).toMatchObject({
+        action: "noop",
+      });
+
+      const inject = Effect.gen(function* () {
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: identifier,
+          EnableIAMDatabaseAuthentication: true,
+          PubliclyAccessible: true,
+          DeletionProtection: true,
+          CloudwatchLogsExportConfiguration: {
+            EnableLogTypes: ["postgresql", "upgrade"],
+          },
+          ApplyImmediately: true,
+        });
+        yield* waitForSecurityObservation(
+          identifier,
+          (instance) =>
+            instance.IAMDatabaseAuthenticationEnabled === true &&
+            instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled === undefined &&
+            instance.PubliclyAccessible === true &&
+            instance.DeletionProtection === true &&
+            (instance.EnabledCloudwatchLogsExports ?? []).length === 2 &&
+            (instance.PendingModifiedValues?.PendingCloudwatchLogsExports?.LogTypesToEnable
+              ?.length ?? 0) === 0 &&
+            (instance.PendingModifiedValues?.PendingCloudwatchLogsExports?.LogTypesToDisable
+              ?.length ?? 0) === 0,
+        );
+        yield* assertSecurity(identifier, enabledSecurity);
+      });
+      yield* inject;
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.SecurityInstance?.action).toBe("drifted");
+      expect((yield* stack.plan(program())).resources.SecurityInstance).toMatchObject({
+        action: "update",
+      });
+      const repaired = yield* deploy();
+      expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier);
+
+      yield* inject;
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "SecurityInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* deploy();
+      expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier);
+      requests.length = 0;
+      yield* deploy({}, "tag-only");
+      expect(requests.filter((request) => request.action === "ModifyDBInstance")).toEqual([]);
+      expect((yield* stack.plan(program({}, "tag-only"))).resources.SecurityInstance).toMatchObject(
+        { action: "noop" },
+      );
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 1_800_000,
+  },
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "security: maintenance-queued IAM convergence and immediate-only queue isolation",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const maintenance = yield* Effect.sync(() => {
+        const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
+          (new Date().getUTCDay() + 2) % 7
+        ];
+        return `${day}:03:00-${day}:04:00`;
+      });
+      const { client, requests } = yield* observeInstanceRequests;
+      const program = (security: SecurityProps = {}, round = "security") =>
+        securityProgram(security, round, undefined, maintenance);
+      const deploy = (security: SecurityProps = {}, round = "security") =>
+        stack
+          .deploy(program(security, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const created = yield* deploy();
+      const identifier = created.dbInstanceIdentifier;
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        BackupRetentionPeriod: 1,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) => instance.PendingModifiedValues?.BackupRetentionPeriod === 1,
+      );
+      requests.length = 0;
+      const immediateOnly: SecurityProps = {
+        publiclyAccessible: true,
+        deletionProtection: true,
+        enableCloudwatchLogsExports: ["postgresql"],
+      };
+      const changed = yield* deploy(immediateOnly);
+      expect(changed.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(
+        (yield* assertSecurity(identifier, immediateOnly))?.PendingModifiedValues
+          ?.BackupRetentionPeriod,
+      ).toBe(1);
+      expect(requests.filter((request) => request.action === "ModifyDBInstance")).toMatchObject([
+        { applyImmediately: "false", iamAuthentication: null },
+      ]);
+      expect((yield* stack.plan(program(immediateOnly))).resources.SecurityInstance).toMatchObject({
+        action: "noop",
+      });
+      yield* deploy();
+      expect(
+        (yield* assertSecurity(identifier))?.PendingModifiedValues?.BackupRetentionPeriod,
+      ).toBe(1);
+      // Cancel the test's unrelated queued change before exercising queue promotion.
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        BackupRetentionPeriod: 0,
+        ApplyImmediately: true,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.BackupRetentionPeriod === 0 &&
+          instance.PendingModifiedValues?.BackupRetentionPeriod === undefined,
+      );
+
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        EnableIAMDatabaseAuthentication: true,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.IAMDatabaseAuthenticationEnabled === false &&
+          instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled === true,
+      );
+      const pendingDrift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(pendingDrift.resources.SecurityInstance).toMatchObject({
+        action: "drifted",
+        attr: {
+          iamDatabaseAuthenticationEnabled: false,
+          pendingIamDatabaseAuthenticationEnabled: true,
+        },
+      });
+      requests.length = 0;
+      const desired = { enableIAMDatabaseAuthentication: true };
+      const promoted = yield* deploy(desired);
+      expect(promoted.iamDatabaseAuthenticationEnabled).toBe(true);
+      expect(promoted.pendingIamDatabaseAuthenticationEnabled).toBeUndefined();
+      yield* assertSecurity(identifier, desired);
+      // Matching pending IAM needs queue promotion, not another IAM assignment.
+      expect(requests.filter((request) => request.action === "ModifyDBInstance")).toMatchObject([
+        { applyImmediately: "true", iamAuthentication: null },
+      ]);
+
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        EnableIAMDatabaseAuthentication: false,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.IAMDatabaseAuthenticationEnabled === true &&
+          instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled === false,
+      );
+      expect((yield* stack.plan(program(desired))).resources.SecurityInstance).toMatchObject({
+        action: "update",
+      });
+      requests.length = 0;
+      const repaired = yield* deploy(desired);
+      expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier, desired);
+      expect(requests.filter((request) => request.action === "ModifyDBInstance")).toMatchObject([
+        { applyImmediately: "true", iamAuthentication: "true" },
+      ]);
+      requests.length = 0;
+      yield* deploy(desired, "tag-only");
+      expect(requests.filter((request) => request.action === "ModifyDBInstance")).toEqual([]);
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        EnableIAMDatabaseAuthentication: false,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.IAMDatabaseAuthenticationEnabled === true &&
+          instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled === false,
+      );
+      requests.length = 0;
+      yield* deploy();
+      yield* assertSecurity(identifier);
+      expect(requests.filter((request) => request.action === "ModifyDBInstance")).toMatchObject([
+        { applyImmediately: "true", iamAuthentication: null },
+      ]);
+      expect((yield* stack.plan(program())).resources.SecurityInstance).toMatchObject({
+        action: "noop",
+      });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 1_800_000,
+  },
+);
+
+test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
+  "security: Aurora cluster ownership survives omitted membership and adoption",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = "alchemy-rds-security-aurora";
+      const { client, requests } = yield* observeInstanceRequests;
+      const program = (membership = true, explicit = true, round = "created") =>
+        Effect.gen(function* () {
+          const network = yield* Network("AuroraSecurityNet", {
+            cidrBlock: "10.52.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup("AuroraSecuritySubnetGroup", {
+            description: "Aurora instance security ownership",
+            subnetIds: network.privateSubnetIds,
+          });
+          const cluster = yield* DBCluster("AuroraSecurityCluster", {
+            engine: "aurora-postgresql",
+            engineMode: "provisioned",
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            enableIAMDatabaseAuthentication: true,
+            enableCloudwatchLogsExports: ["postgresql"],
+            networkType: "IPV4",
+            deletionProtection: false,
+            serverlessV2ScalingConfiguration: {
+              MinCapacity: 0.5,
+              MaxCapacity: 1,
+            },
+          });
+          return yield* DBInstance("AuroraSecurityInstance", {
+            dbInstanceIdentifier: identifier,
+            dbClusterIdentifier: membership ? cluster.dbClusterIdentifier : undefined,
+            engine: "aurora-postgresql",
+            dbInstanceClass: "db.serverless",
+            ...(explicit
+              ? {
+                  enableIAMDatabaseAuthentication: false,
+                  deletionProtection: true,
+                  networkType: "DUAL",
+                  enableCloudwatchLogsExports: ["not-an-instance-log"],
+                }
+              : {}),
+            tags: { round, cluster: cluster.dbClusterIdentifier },
+          });
+        });
+      const deploy = (membership = true, explicit = true, round = "created") =>
+        stack
+          .deploy(program(membership, explicit, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const created = yield* deploy();
+      expect(created.publiclyAccessible).toBe(false);
+      const check = Effect.gen(function* () {
+        const instance = (yield* rds.describeDBInstances({
+          DBInstanceIdentifier: identifier,
+        })).DBInstances![0]!;
+        const cluster = (yield* rds.describeDBClusters({
+          DBClusterIdentifier: instance.DBClusterIdentifier!,
+        })).DBClusters![0]!;
+        expect(cluster.IAMDatabaseAuthenticationEnabled).toBe(true);
+        expect(cluster.EnabledCloudwatchLogsExports).toEqual(["postgresql"]);
+        expect(cluster.DeletionProtection).toBe(false);
+        expect(cluster.NetworkType).toBe("IPV4");
+        expect(instance.PubliclyAccessible).toBe(false);
+        expect(
+          requests
+            .filter(
+              (request) =>
+                request.action === "CreateDBInstance" || request.action === "ModifyDBInstance",
+            )
+            .every(
+              (request) =>
+                request.iamAuthentication === null &&
+                request.deletionProtection === null &&
+                request.networkType === null &&
+                request.enabledLogs.length === 0 &&
+                request.disabledLogs.length === 0,
+            ),
+        ).toBe(true);
+        return instance;
+      });
+      yield* check;
+      const omitted = yield* deploy(true, false, "omitted");
+      expect(omitted.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* check;
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "AuroraSecurityInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* deploy(false, true, "adopted");
+      expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
+      const observed = yield* check;
+      expect(adopted.iamDatabaseAuthenticationEnabled).toBe(
+        observed.IAMDatabaseAuthenticationEnabled,
+      );
+      expect(adopted.enabledCloudwatchLogsExports).toEqual(
+        observed.EnabledCloudwatchLogsExports ?? [],
+      );
+      expect(
+        (yield* stack.plan(program(false, true, "adopted"))).resources.AuroraSecurityInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 1_800_000,
+  },
 );
 
 const associationProgram = (
@@ -988,9 +1456,7 @@ const associationProgram = (
       dbInstanceClass: "db.t3.micro",
       masterUsername: "alchemy",
       manageMasterUserPassword: true,
-      ...(options.omitSubnet
-        ? {}
-        : { dbSubnetGroupName: subnetGroup.dbSubnetGroupName }),
+      ...(options.omitSubnet ? {} : { dbSubnetGroupName: subnetGroup.dbSubnetGroupName }),
       ...(options.explicit
         ? {
             dbParameterGroupName: parameterGroup.dbParameterGroupName,
@@ -1034,23 +1500,17 @@ const assertAssociations = Effect.fn(function* (
   const instance = (yield* rds.describeDBInstances({
     DBInstanceIdentifier: identifier,
   })).DBInstances?.[0];
-  expect(["available", "storage-optimization"]).toContain(
-    instance?.DBInstanceStatus,
-  );
-  expect(
-    instance?.DBParameterGroups?.map((group) => group.DBParameterGroupName),
-  ).toEqual([parameterGroup]);
+  expect(["available", "storage-optimization"]).toContain(instance?.DBInstanceStatus);
+  expect(instance?.DBParameterGroups?.map((group) => group.DBParameterGroupName)).toEqual([
+    parameterGroup,
+  ]);
   expect(["in-sync", "pending-reboot"]).toContain(
     instance?.DBParameterGroups?.[0]?.ParameterApplyStatus,
   );
-  expect(
-    instance?.VpcSecurityGroups?.map(
-      (group) => group.VpcSecurityGroupId,
-    ).sort(),
-  ).toEqual([...securityGroups].sort());
-  expect(
-    instance?.VpcSecurityGroups?.every((group) => group.Status === "active"),
-  ).toBe(true);
+  expect(instance?.VpcSecurityGroups?.map((group) => group.VpcSecurityGroupId).sort()).toEqual(
+    [...securityGroups].sort(),
+  );
+  expect(instance?.VpcSecurityGroups?.every((group) => group.Status === "active")).toBe(true);
   return instance;
 });
 
@@ -1067,10 +1527,7 @@ const injectAssociations = Effect.fn(function* (
   });
   yield* rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
     Effect.repeat({
-      schedule: Schedule.min([
-        Schedule.exponential("5 seconds"),
-        Schedule.spaced("1 minute"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("5 seconds"), Schedule.spaced("1 minute")]),
       times: 10,
       until: (response) => {
         const db = response.DBInstances?.[0];
@@ -1080,13 +1537,9 @@ const injectAssociations = Effect.fn(function* (
           ["in-sync", "pending-reboot"].includes(
             db.DBParameterGroups?.[0]?.ParameterApplyStatus ?? "",
           ) &&
-          db.VpcSecurityGroups?.every((group) => group.Status === "active") ===
-            true &&
-          JSON.stringify(
-            db.VpcSecurityGroups.map(
-              (group) => group.VpcSecurityGroupId,
-            ).sort(),
-          ) === JSON.stringify([...securityGroups].sort())
+          db.VpcSecurityGroups?.every((group) => group.Status === "active") === true &&
+          JSON.stringify(db.VpcSecurityGroups.map((group) => group.VpcSecurityGroupId).sort()) ===
+            JSON.stringify([...securityGroups].sort())
         );
       },
     }),
@@ -1107,15 +1560,11 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
           .pipe(Effect.provideService(HttpClient.HttpClient, client));
       const created = yield* deploy();
       const defaultGroup = yield* defaultGroupForVpc(created.vpcId);
-      yield* assertAssociations(
-        created.instance.dbInstanceIdentifier,
-        "default.postgres16",
-        [defaultGroup],
-      );
+      yield* assertAssociations(created.instance.dbInstanceIdentifier, "default.postgres16", [
+        defaultGroup,
+      ]);
       expect(created.instance.vpcSecurityGroupIds).toEqual([defaultGroup]);
-      expect(
-        requests.filter((request) => request.action === "CreateDBInstance"),
-      ).toMatchObject([
+      expect(requests.filter((request) => request.action === "CreateDBInstance")).toMatchObject([
         {
           parameterGroup: "default.postgres16",
           securityGroups: [defaultGroup],
@@ -1124,9 +1573,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       requests.length = 0;
       const attached = yield* deploy({ explicit: true });
-      expect(attached.instance.dbInstanceArn).toBe(
-        created.instance.dbInstanceArn,
-      );
+      expect(attached.instance.dbInstanceArn).toBe(created.instance.dbInstanceArn);
       yield* assertAssociations(
         created.instance.dbInstanceIdentifier,
         created.parameterGroupName,
@@ -1136,27 +1583,21 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         requests.filter(
           (request) =>
             request.action === "ModifyDBInstance" &&
-            (request.parameterGroup !== null ||
-              request.securityGroups.length > 0),
+            (request.parameterGroup !== null || request.securityGroups.length > 0),
         ),
       ).toHaveLength(1);
       expect(["in-sync", "pending-reboot"]).toContain(
-        attached.instance.dbParameterGroupApplyStatuses[
-          created.parameterGroupName
-        ],
+        attached.instance.dbParameterGroupApplyStatuses[created.parameterGroupName],
       );
 
       requests.length = 0;
       yield* deploy({ explicit: true, reverse: true, round: "reordered" });
-      expect(
-        requests.some((request) => request.action === "DescribeDBInstances"),
-      ).toBe(true);
+      expect(requests.some((request) => request.action === "DescribeDBInstances")).toBe(true);
       expect(
         requests.filter(
           (request) =>
             request.action === "ModifyDBInstance" &&
-            (request.parameterGroup !== null ||
-              request.securityGroups.length > 0),
+            (request.parameterGroup !== null || request.securityGroups.length > 0),
         ),
       ).toEqual([]);
       yield* assertAssociations(
@@ -1177,6 +1618,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.instance.dbInstanceIdentifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
@@ -1187,27 +1629,16 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       const identifier = "alchemy-rds-association-defaults";
       const program = (extra: Parameters<typeof associationProgram>[0] = {}) =>
         associationProgram({ identifier, ...extra });
-      const created = yield* stack.deploy(
-        program({ version: "16.13", explicit: true }),
-      );
+      const created = yield* stack.deploy(program({ version: "16.13", explicit: true }));
       const defaultGroup = yield* defaultGroupForVpc(created.vpcId);
-      yield* assertAssociations(
-        identifier,
-        created.parameterGroupName,
-        created.groupIds,
-      );
+      yield* assertAssociations(identifier, created.parameterGroupName, created.groupIds);
 
       const removed = yield* stack.deploy(program());
-      expect(removed.instance.dbInstanceArn).toBe(
-        created.instance.dbInstanceArn,
-      );
+      expect(removed.instance.dbInstanceArn).toBe(created.instance.dbInstanceArn);
       expect(removed.instance.engineVersion).toBe("16.13");
-      yield* assertAssociations(identifier, "default.postgres16", [
-        defaultGroup,
-      ]);
+      yield* assertAssociations(identifier, "default.postgres16", [defaultGroup]);
       expect(
-        (yield* ec2.describeSecurityGroups({ GroupIds: created.groupIds }))
-          .SecurityGroups,
+        (yield* ec2.describeSecurityGroups({ GroupIds: created.groupIds })).SecurityGroups,
       ).toHaveLength(2);
       expect(
         (yield* rds.describeDBParameterGroups({
@@ -1215,32 +1646,22 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         })).DBParameterGroups,
       ).toHaveLength(1);
 
-      yield* injectAssociations(
-        identifier,
-        created.parameterGroupName,
-        created.groupIds,
-      );
+      yield* injectAssociations(identifier, created.parameterGroupName, created.groupIds);
       const drift = yield* Drift.detect({
         name: stack.name,
         stage: stack.stage,
       });
       expect(drift.resources.AssociationInstance?.action).toBe("drifted");
-      expect(
-        (yield* stack.plan(program())).resources.AssociationInstance,
-      ).toMatchObject({ action: "update" });
+      expect((yield* stack.plan(program())).resources.AssociationInstance).toMatchObject({
+        action: "update",
+      });
       yield* stack.deploy(program());
-      yield* assertAssociations(identifier, "default.postgres16", [
-        defaultGroup,
-      ]);
-      expect(
-        (yield* stack.plan(program())).resources.AssociationInstance,
-      ).toMatchObject({ action: "noop" });
+      yield* assertAssociations(identifier, "default.postgres16", [defaultGroup]);
+      expect((yield* stack.plan(program())).resources.AssociationInstance).toMatchObject({
+        action: "noop",
+      });
 
-      yield* injectAssociations(
-        identifier,
-        created.parameterGroupName,
-        created.groupIds,
-      );
+      yield* injectAssociations(identifier, created.parameterGroupName, created.groupIds);
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
         yield* state.delete({
@@ -1250,20 +1671,481 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         });
       }).pipe(Effect.provide(stack.state));
       const adopted = yield* stack.deploy(program({ omitSubnet: true }));
-      expect(adopted.instance.dbInstanceArn).toBe(
-        created.instance.dbInstanceArn,
-      );
+      expect(adopted.instance.dbInstanceArn).toBe(created.instance.dbInstanceArn);
       expect(adopted.instance.engineVersion).toBe("16.13");
-      yield* assertAssociations(identifier, "default.postgres16", [
-        defaultGroup,
-      ]);
+      yield* assertAssociations(identifier, "default.postgres16", [defaultGroup]);
       expect(
-        (yield* stack.plan(program({ omitSubnet: true }))).resources
-          .AssociationInstance,
+        (yield* stack.plan(program({ omitSubnet: true }))).resources.AssociationInstance,
       ).toMatchObject({ action: "noop" });
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "managed secret policy: create, update, removal, drift, adoption, and public rejection",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* AWSEnvironment.current;
+      const policy = (actions: string[]): PolicyDocument => ({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: actions,
+            Resource: "*",
+          },
+        ],
+      });
+      const initialPolicy = policy(["secretsmanager:DescribeSecret"]);
+      const updatedPolicy = policy([
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetResourcePolicy",
+      ]);
+      const client = yield* HttpClient.HttpClient;
+      const requests: Array<{
+        action: string;
+        blockPublicPolicy: boolean | undefined;
+        secretId: string | undefined;
+      }> = [];
+      const observedClient = client.pipe(
+        HttpClient.tapRequest((request) =>
+          Effect.sync(() => {
+            const target = request.headers["x-amz-target"];
+            if (!target?.startsWith("secretsmanager.")) return;
+            const body =
+              request.body._tag === "Uint8Array"
+                ? JSON.parse(new TextDecoder().decode(request.body.body))
+                : {};
+            requests.push({
+              action: target.split(".").at(-1)!,
+              blockPublicPolicy: body.BlockPublicPolicy,
+              secretId: body.SecretId,
+            });
+          }),
+        ),
+      );
+      const identifier = "alchemy-rds-secret-policy";
+      const program = (
+        masterUserSecretResourcePolicy: PolicyDocument | undefined,
+        round = "default",
+      ) =>
+        Effect.gen(function* () {
+          const net = yield* Network("SecretPolicyNet", {
+            cidrBlock: "10.49.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup("SecretPolicySubnetGroup", {
+            description: "RDS managed secret policy lifecycle",
+            subnetIds: net.privateSubnetIds,
+          });
+          return yield* DBInstance("SecretPolicyInstance", {
+            dbInstanceIdentifier: identifier,
+            engine: "postgres",
+            dbInstanceClass: "db.t3.micro",
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            masterUserSecretResourcePolicy,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            backupRetentionPeriod: "0 days",
+            deletionProtection: false,
+            skipFinalSnapshot: true,
+            publiclyAccessible: false,
+            tags: { round },
+          });
+        });
+      const deploy = (desired: PolicyDocument | undefined, round = "default") =>
+        stack
+          .deploy(program(desired, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, observedClient));
+      const created = yield* deploy(initialPolicy);
+      const secretArn = created.masterUserSecretArn;
+      if (!secretArn)
+        return yield* Effect.fail(new Error("RDS did not return its managed secret ARN"));
+      const readPolicy = secretsmanager
+        .getResourcePolicy({ SecretId: secretArn })
+        .pipe(
+          Effect.map((response) =>
+            response.ResourcePolicy === undefined
+              ? undefined
+              : normalizePolicyDocument(response.ResourcePolicy),
+          ),
+        );
+      const waitPolicy = (desired: PolicyDocument | undefined) =>
+        readPolicy.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
+            until: (actual) =>
+              actual === (desired === undefined ? undefined : normalizePolicyDocument(desired)),
+          }),
+        );
+      const injectPolicy = (desired: PolicyDocument) =>
+        Effect.gen(function* () {
+          yield* secretsmanager.putResourcePolicy({
+            SecretId: secretArn,
+            ResourcePolicy: JSON.stringify(desired),
+            BlockPublicPolicy: true,
+          });
+          expect(yield* waitPolicy(desired)).toBe(normalizePolicyDocument(desired));
+        });
+      const metadata = yield* secretsmanager.describeSecret({
+        SecretId: secretArn,
+      });
+      expect(metadata.OwningService).toBe("rds");
+      expect(created.masterUserSecretResourcePolicy).toBe(normalizePolicyDocument(initialPolicy));
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(initialPolicy));
+      expect(requests.filter((request) => request.action === "PutResourcePolicy")).toEqual([
+        { action: "PutResourcePolicy", blockPublicPolicy: true, secretId: secretArn },
+      ]);
+      // ValidateResourcePolicy is authorized against the secret it names, so
+      // once the secret exists every validation must name it: an identity
+      // scoped to this secret's ARN is denied an untargeted (`*`) validation.
+      // Only the first create, before RDS returns a secret, runs untargeted.
+      const validatedSecretIds = (from: number) =>
+        requests
+          .slice(from)
+          .filter((request) => request.action === "ValidateResourcePolicy")
+          .map((request) => request.secretId);
+      expect(validatedSecretIds(0).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(0).every((secretId) => secretId === undefined)).toBe(true);
+      const beforePlan = requests.length;
+      expect(
+        (yield* stack
+          .plan(program(initialPolicy))
+          .pipe(Effect.provideService(HttpClient.HttpClient, observedClient))).resources
+          .SecretPolicyInstance,
+      ).toMatchObject({ action: "noop" });
+      expect(validatedSecretIds(beforePlan).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(beforePlan).every((secretId) => secretId === secretArn)).toBe(true);
+
+      const beforeNoop = requests.length;
+      const unchanged = yield* deploy(initialPolicy, "force-reconcile");
+      expect(unchanged.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(validatedSecretIds(beforeNoop).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(beforeNoop).every((secretId) => secretId === secretArn)).toBe(true);
+      expect(
+        requests
+          .slice(beforeNoop)
+          .filter((request) =>
+            ["PutResourcePolicy", "DeleteResourcePolicy"].includes(request.action),
+          ),
+      ).toEqual([]);
+
+      const updated = yield* deploy(updatedPolicy);
+      expect(updated.masterUserSecretArn).toBe(secretArn);
+      expect(updated.masterUserSecretResourcePolicy).toBe(normalizePolicyDocument(updatedPolicy));
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(updatedPolicy));
+
+      yield* secretsmanager.deleteResourcePolicy({ SecretId: secretArn });
+      expect(yield* waitPolicy(undefined)).toBeUndefined();
+      expect(
+        (yield* stack.plan(program(updatedPolicy))).resources.SecretPolicyInstance,
+      ).toMatchObject({ action: "update" });
+      yield* deploy(updatedPolicy);
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(updatedPolicy));
+
+      const removed = yield* deploy(undefined);
+      expect(removed.masterUserSecretArn).toBe(secretArn);
+      expect(removed.masterUserSecretResourcePolicy).toBeUndefined();
+      expect(yield* readPolicy).toBeUndefined();
+      expect((yield* stack.plan(program(undefined))).resources.SecretPolicyInstance).toMatchObject({
+        action: "noop",
+      });
+
+      yield* injectPolicy(initialPolicy);
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.SecretPolicyInstance?.action).toBe("drifted");
+      expect((yield* stack.plan(program(undefined))).resources.SecretPolicyInstance).toMatchObject({
+        action: "update",
+      });
+      yield* deploy(undefined);
+      expect(yield* readPolicy).toBeUndefined();
+
+      yield* injectPolicy(updatedPolicy);
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "SecretPolicyInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* deploy(undefined);
+      expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(adopted.masterUserSecretArn).toBe(secretArn);
+      expect(yield* readPolicy).toBeUndefined();
+
+      const publicPolicy: PolicyDocument = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: "*" },
+            Action: ["secretsmanager:GetSecretValue"],
+            Resource: "*",
+          },
+        ],
+      };
+      const rejected = yield* deploy(publicPolicy).pipe(Effect.result);
+      expect(Result.isFailure(rejected)).toBe(true);
+      expect(renderFailure(rejected)).toContain("InvalidDBInstanceSecretPolicy");
+      expect(yield* readPolicy).toBeUndefined();
+      yield* deploy(undefined);
+      const finalMetadata = yield* secretsmanager.describeSecret({
+        SecretId: secretArn,
+      });
+      expect(finalMetadata.ARN).toBe(metadata.ARN);
+      expect(finalMetadata.RotationEnabled).toBe(metadata.RotationEnabled);
+      expect(finalMetadata.VersionIdsToStages).toEqual(metadata.VersionIdsToStages);
+      expect(
+        requests.some((request) =>
+          [
+            "GetSecretValue",
+            "BatchGetSecretValue",
+            "PutSecretValue",
+            "UpdateSecret",
+            "RotateSecret",
+            "DeleteSecret",
+          ].includes(request.action),
+        ),
+      ).toBe(false);
+      expect(
+        requests
+          .filter((request) => request.action === "PutResourcePolicy")
+          .every((request) => request.blockPublicPolicy),
+      ).toBe(true);
+      expect((yield* stack.plan(program(undefined))).resources.SecretPolicyInstance).toMatchObject({
+        action: "noop",
+      });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+      expect(
+        yield* secretsmanager.describeSecret({ SecretId: secretArn }).pipe(
+          Effect.as(false),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
+            until: (gone) => gone,
+          }),
+        ),
+      ).toBe(true);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "provider:aws:rds",
+      "provider:aws:secretsmanager",
+      "live",
+    ],
+  },
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "managed secret policy: enable management on an existing instance",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* AWSEnvironment.current;
+      const policy: PolicyDocument = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: ["secretsmanager:DescribeSecret"],
+            Resource: "*",
+          },
+        ],
+      };
+      const program = (managed: boolean, resourcePolicy?: PolicyDocument) =>
+        Effect.gen(function* () {
+          const net = yield* Network("EnableSecretNet", {
+            cidrBlock: "10.50.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup("EnableSecretSubnetGroup", {
+            description: "Enable RDS managed credentials",
+            subnetIds: net.privateSubnetIds,
+          });
+          return yield* DBInstance("EnableSecretInstance", {
+            engine: "postgres",
+            dbInstanceClass: "db.t3.micro",
+            masterUsername: "alchemy",
+            masterUserPassword: managed ? undefined : Redacted.make("Alchemy-secret-policy-42!"),
+            manageMasterUserPassword: managed,
+            masterUserSecretResourcePolicy: resourcePolicy,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            backupRetentionPeriod: "0 days",
+            deletionProtection: false,
+            skipFinalSnapshot: true,
+            publiclyAccessible: false,
+          });
+        });
+      const invalid = yield* stack.deploy(program(false, policy)).pipe(Effect.result);
+      expect(renderFailure(invalid)).toContain("InvalidDBInstanceSecretPolicy");
+      const created = yield* stack.deploy(program(false));
+      expect(created.masterUserSecretArn).toBeUndefined();
+      expect(created.masterUserSecretResourcePolicy).toBeUndefined();
+      const enabled = yield* stack.deploy(program(true, policy));
+      expect(enabled.dbInstanceArn).toBe(created.dbInstanceArn);
+      const secretArn = enabled.masterUserSecretArn;
+      if (!secretArn) return yield* Effect.fail(new Error("RDS did not enable its managed secret"));
+      expect(enabled.masterUserSecretResourcePolicy).toBe(normalizePolicyDocument(policy));
+      expect(
+        normalizePolicyDocument(
+          (yield* secretsmanager.getResourcePolicy({ SecretId: secretArn })).ResourcePolicy!,
+        ),
+      ).toBe(normalizePolicyDocument(policy));
+      const removed = yield* stack.deploy(program(true));
+      expect(removed.masterUserSecretArn).toBe(secretArn);
+      expect(
+        (yield* secretsmanager.getResourcePolicy({ SecretId: secretArn })).ResourcePolicy,
+      ).toBeUndefined();
+      expect((yield* stack.plan(program(true))).resources.EnableSecretInstance).toMatchObject({
+        action: "noop",
+      });
+      yield* stack.destroy();
+      yield* assertInstanceGone(created.dbInstanceIdentifier);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "provider:aws:rds",
+      "provider:aws:secretsmanager",
+      "live",
+    ],
+  },
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "readiness: pending creation, blocked stop, and restart recovery",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const client = yield* HttpClient.HttpClient;
+      const observations: Array<{ action: string; statuses: string[] }> = [];
+      const observedClient = client.pipe(
+        HttpClient.transformResponse(
+          Effect.flatMap((response) =>
+            Effect.gen(function* () {
+              const body = response.request.body;
+              if (body._tag !== "Uint8Array") return response;
+              const action = yield* Effect.sync(() =>
+                new URLSearchParams(new TextDecoder().decode(body.body)).get("Action"),
+              );
+              if (action !== "DescribeDBInstances") return response;
+              const bytes = yield* response.arrayBuffer;
+              return yield* Effect.sync(() => {
+                const text = new TextDecoder().decode(bytes);
+                observations.push({
+                  action,
+                  statuses: [
+                    ...text.matchAll(/<DBInstanceStatus>([^<]+)<\/DBInstanceStatus>/g),
+                  ].map((match) => match[1]!),
+                });
+                // Forward the real response bytes unchanged to the SDK parser.
+                return HttpClientResponse.fromWeb(
+                  response.request,
+                  new Response(bytes, {
+                    status: response.status,
+                    headers: response.headers,
+                  }),
+                );
+              });
+            }),
+          ),
+        ),
+      );
+      const program = Effect.gen(function* () {
+        const network = yield* Network("ReadinessNet", {
+          cidrBlock: "10.48.0.0/16",
+        });
+        const subnetGroup = yield* DBSubnetGroup("ReadinessSubnetGroup", {
+          description: "RDS readiness lifecycle",
+          subnetIds: network.privateSubnetIds,
+        });
+        return yield* DBInstance("ReadinessInstance", {
+          engine: "postgres",
+          dbInstanceClass: "db.t3.micro",
+          dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+          masterUsername: "alchemy",
+          manageMasterUserPassword: true,
+          backupRetentionPeriod: "0 days",
+          deletionProtection: false,
+          skipFinalSnapshot: true,
+          publiclyAccessible: false,
+        });
+      });
+      const deploy = stack
+        .deploy(program)
+        .pipe(Effect.provideService(HttpClient.HttpClient, observedClient));
+      const created = yield* deploy;
+      const statuses = () => observations.flatMap((observation) => observation.statuses);
+      expect(statuses()).toContain("creating");
+      expect(statuses().at(-1)).toBe("available");
+      expect(created.status).toBe("available");
+      const identifier = created.dbInstanceIdentifier;
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: identifier,
+      });
+      const waitForStatus = (status: string) =>
+        describe.pipe(
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            times: 10,
+            until: (response) => response.DBInstances?.[0]?.DBInstanceStatus === status,
+          }),
+        );
+      expect((yield* describe).DBInstances?.[0]?.DBInstanceStatus).toBe("available");
+
+      yield* rds.stopDBInstance({ DBInstanceIdentifier: identifier });
+      const stopped = yield* waitForStatus("stopped");
+      expect(stopped.DBInstances?.[0]?.DBInstanceStatus).toBe("stopped");
+      expect((yield* stack.plan(program)).resources.ReadinessInstance).toMatchObject({
+        action: "update",
+      });
+      const [elapsed, blocked] = yield* deploy.pipe(Effect.result, Effect.timed);
+      expect(Result.isFailure(blocked)).toBe(true);
+      expect(renderFailure(blocked)).toContain("DBInstanceReadinessBlocked");
+      expect(renderFailure(blocked)).toContain("stopped");
+      expect(Duration.toMillis(elapsed)).toBeLessThan(60_000);
+
+      yield* rds.startDBInstance({ DBInstanceIdentifier: identifier });
+      const starting = yield* describe.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (response) =>
+            ["starting", "available"].includes(response.DBInstances?.[0]?.DBInstanceStatus ?? ""),
+        }),
+      );
+      expect(["starting", "available"]).toContain(starting.DBInstances?.[0]?.DBInstanceStatus);
+      observations.length = 0;
+      const started = yield* deploy;
+      expect(statuses().at(-1)).toBe("available");
+      expect(started.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(started.status).toBe("available");
+      expect((yield* describe).DBInstances?.[0]?.DBInstanceStatus).toBe("available");
+      expect((yield* stack.plan(program)).resources.ReadinessInstance).toMatchObject({
+        action: "noop",
+      });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
 
 // Fingerprint-guarded master password lifecycle (#876), gated behind
@@ -1368,10 +2250,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // round "two" (unchanged password) never triggered a reset.
       const events = yield* resetEvents.pipe(
         Effect.repeat({
-          schedule: Schedule.min([
-            Schedule.exponential("5 seconds"),
-            Schedule.spaced("1 minute"),
-          ]),
+          schedule: Schedule.min([Schedule.exponential("5 seconds"), Schedule.spaced("1 minute")]),
           until: (found) => found.length > 0,
           times: 10,
         }),
@@ -1380,4 +2259,5 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );

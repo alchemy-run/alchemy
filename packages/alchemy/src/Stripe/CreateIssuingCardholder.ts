@@ -30,6 +30,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  * ```
  *
  * @binding
+ * @product Issuing
  */
 export interface CreateIssuingCardholder extends Binding.Service<
   CreateIssuingCardholder,
@@ -37,11 +38,7 @@ export interface CreateIssuingCardholder extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateIssuingCardholderRequest,
-    ) => Effect.Effect<
-      StripeIssuingCardholder,
-      CreateIssuingCardholderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeIssuingCardholder, CreateIssuingCardholderError, RuntimeContext>
   >
 > {}
 

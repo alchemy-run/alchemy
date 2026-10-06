@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { FileLink } from "./FileLink.ts";
 
-export interface RetrieveFileLinkRequest extends Omit<
-  GetFileLinkRequest,
-  "link"
-> {}
+export interface RetrieveFileLinkRequest extends Omit<GetFileLinkRequest, "link"> {}
 
 /**
  * Retrieve a bound Stripe File Link over HTTP.
@@ -24,6 +21,7 @@ export interface RetrieveFileLinkRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Files
  */
 export interface RetrieveFileLink extends Binding.Service<
   RetrieveFileLink,
@@ -37,6 +35,4 @@ export interface RetrieveFileLink extends Binding.Service<
   >
 > {}
 
-export const RetrieveFileLink = Binding.Service<RetrieveFileLink>(
-  "Stripe.RetrieveFileLink",
-);
+export const RetrieveFileLink = Binding.Service<RetrieveFileLink>("Stripe.RetrieveFileLink");

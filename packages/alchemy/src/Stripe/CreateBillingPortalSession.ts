@@ -31,6 +31,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  * ```
  *
  * @binding
+ * @product Billing
  */
 export interface CreateBillingPortalSession extends Binding.Service<
   CreateBillingPortalSession,
@@ -38,15 +39,10 @@ export interface CreateBillingPortalSession extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateBillingPortalSessionRequest,
-    ) => Effect.Effect<
-      BillingPortalSession,
-      CreateBillingPortalSessionError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<BillingPortalSession, CreateBillingPortalSessionError, RuntimeContext>
   >
 > {}
 
-export const CreateBillingPortalSession =
-  Binding.Service<CreateBillingPortalSession>(
-    "Stripe.CreateBillingPortalSession",
-  );
+export const CreateBillingPortalSession = Binding.Service<CreateBillingPortalSession>(
+  "Stripe.CreateBillingPortalSession",
+);

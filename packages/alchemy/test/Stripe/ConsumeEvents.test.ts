@@ -1,14 +1,14 @@
-import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Stripe from "@/Stripe";
+import * as Test from "@/Test/Alchemy";
 import StripeEventSourceWorker from "./fixtures/event-source-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -16,10 +16,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 const { executeWhenReady, getWhenReady } = Test;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "StripeEventSourceTestStack",
@@ -49,9 +46,7 @@ test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
 
     // Ride out binding cold-start: the Stripe CreateCustomer token may not
     // be visible on the first request after a fresh deploy.
-    const created = yield* executeWhenReady(
-      HttpClientRequest.post(`${base}/customers`),
-    );
+    const created = yield* executeWhenReady(HttpClientRequest.post(`${base}/customers`));
     expect(created.status).toBe(201);
     const body = (yield* created.json) as { id: string };
     expect(body.id).toMatch(/^cus_/);
@@ -60,9 +55,7 @@ test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
     // reads are eventually consistent, so poll up to ~3 minutes, absorbing
     // transient transport errors during edge propagation.
     const id = yield* Effect.gen(function* () {
-      const res = yield* HttpClient.execute(
-        HttpClientRequest.get(`${base}/last/${body.id}`),
-      );
+      const res = yield* HttpClient.execute(HttpClientRequest.get(`${base}/last/${body.id}`));
       if (res.status !== 200) return null;
       const json = (yield* res.json) as { id: string | null };
       return json.id;
@@ -76,7 +69,17 @@ test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
     );
     expect(id).toEqual(body.id);
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:worker",
+      "provider:stripe",
+      "provider:stripe:customer",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -93,5 +96,15 @@ test(
     );
     expect(res.status).toBe(401);
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:worker",
+      "provider:stripe",
+      "provider:stripe:customer",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

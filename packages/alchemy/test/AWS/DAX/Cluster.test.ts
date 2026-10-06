@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Cluster, SubnetGroup } from "@/AWS/DAX";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as dax from "@distilled.cloud/aws/dax";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster, SubnetGroup } from "@/AWS/DAX";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -19,12 +19,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        dax.describeClusters({
-          ClusterNames: ["alchemy-nonexistent-dax-cluster-probe"],
-        }),
+        dax.describeClusters({ ClusterNames: ["alchemy-nonexistent-dax-cluster-probe"] }),
       );
       expect(error._tag).toBe("ClusterNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:dax", "live"] },
 );
 
 // Resolve two default-for-AZ subnets and the default security group.
@@ -40,9 +39,7 @@ const defaultNetwork = Effect.gen(function* () {
   // region's first three AZs (suffix a/b/c) only.
   const subnetIds = (subnets.Subnets ?? [])
     .filter((s) => /[abc]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .map((s) => s.SubnetId)
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .slice(0, 2);
@@ -67,22 +64,13 @@ const assertClusterDeleting = (name: string) =>
   Effect.gen(function* () {
     const status = yield* dax.describeClusters({ ClusterNames: [name] }).pipe(
       Effect.map((r) => r.Clusters?.[0]?.Status ?? "gone"),
-      Effect.catchTag("ClusterNotFoundFault", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "deleting") {
-      return yield* Effect.fail(
-        new Error(`cluster '${name}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`cluster '${name}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // A DAX cluster takes ~5-10 minutes to provision and bills per node-hour
@@ -109,9 +97,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess"],
           });
           const subnetGroup = yield* SubnetGroup("Subnets", {
             description: "alchemy dax cluster subnets",
@@ -139,9 +125,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(cluster.discoveryEndpointPort).toBeDefined();
 
       // Out-of-band verification via distilled.
-      const described = yield* dax.describeClusters({
-        ClusterNames: [cluster.clusterName],
-      });
+      const described = yield* dax.describeClusters({ ClusterNames: [cluster.clusterName] });
       const observed = described.Clusters?.[0];
       expect(observed?.Status).toBe("available");
       expect(observed?.NodeType).toBe("dax.t3.small");
@@ -153,5 +137,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertClusterDeleting(cluster.clusterName);
     }),
   // cluster create (~10 min) + delete initiation, one test.
-  { timeout: 1_500_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dax", "provider:aws:ec2", "provider:aws:iam", "live"],
+    timeout: 1_500_000,
+  },
 );

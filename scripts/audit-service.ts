@@ -133,11 +133,7 @@ const EVENT_SOURCE_PATTERNS = [
 
 // Operations that are both bindings AND helper candidates (will be classified as bindings first)
 // These are data-plane operations that might benefit from higher-level wrappers
-const HELPER_CANDIDATE_PATTERNS = [
-  /^batch/i,
-  /^transact/i,
-  /^execute.*Statement/,
-];
+const HELPER_CANDIDATE_PATTERNS = [/^batch/i, /^transact/i, /^execute.*Statement/];
 
 // Core data-plane bindings (these should always be classified as bindings)
 const CORE_BINDING_PATTERNS = [
@@ -191,10 +187,6 @@ const N_ARITY_PATTERNS = [
 
 function toPascalCase(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-function toCamelCase(str: string): string {
-  return str.charAt(0).toLowerCase() + str.slice(1);
 }
 
 function matchesAnyPattern(name: string, patterns: RegExp[]): boolean {
@@ -257,10 +249,7 @@ function classifyOperation(
       return {
         category: "resource-lifecycle",
         resourceArity:
-          name === "updateAccountPasswordPolicy" ||
-          name === "deleteAccountPasswordPolicy"
-            ? 0
-            : 1,
+          name === "updateAccountPasswordPolicy" || name === "deleteAccountPasswordPolicy" ? 0 : 1,
         impliesResource: true,
         impliesEventSource: false,
       };
@@ -295,10 +284,7 @@ function classifyOperation(
   }
 
   if (serviceName === "kinesis") {
-    if (
-      name === "registerStreamConsumer" ||
-      name === "deregisterStreamConsumer"
-    ) {
+    if (name === "registerStreamConsumer" || name === "deregisterStreamConsumer") {
       return {
         category: "resource-lifecycle",
         resourceArity: 1,
@@ -509,8 +495,7 @@ function classifyOperation(
     ) {
       return {
         category: "resource-lifecycle",
-        resourceArity:
-          name === "putPermission" || name === "removePermission" ? 1 : 1,
+        resourceArity: name === "putPermission" || name === "removePermission" ? 1 : 1,
         impliesResource: true,
         impliesEventSource: name === "putRule" || name === "deleteRule",
       };
@@ -530,8 +515,7 @@ function classifyOperation(
     ) {
       return {
         category: "binding",
-        resourceArity:
-          name === "listEventBuses" || name === "testEventPattern" ? 0 : 1,
+        resourceArity: name === "listEventBuses" || name === "testEventPattern" ? 0 : 1,
         impliesResource: false,
         impliesEventSource: false,
       };
@@ -540,14 +524,9 @@ function classifyOperation(
 
   if (serviceName === "pipes") {
     if (
-      [
-        "createPipe",
-        "describePipe",
-        "updatePipe",
-        "deletePipe",
-        "startPipe",
-        "stopPipe",
-      ].includes(name)
+      ["createPipe", "describePipe", "updatePipe", "deletePipe", "startPipe", "stopPipe"].includes(
+        name,
+      )
     ) {
       return {
         category: "resource-lifecycle",
@@ -587,11 +566,7 @@ function classifyOperation(
       };
     }
 
-    if (
-      ["listSchedules", "listScheduleGroups", "listTagsForResource"].includes(
-        name,
-      )
-    ) {
+    if (["listSchedules", "listScheduleGroups", "listTagsForResource"].includes(name)) {
       return {
         category: "binding",
         resourceArity: name === "listTagsForResource" ? 1 : 0,
@@ -751,10 +726,7 @@ async function getProvidersRegistrations(
     const content = await fs.readFile(providersPath, "utf-8");
 
     // Match DynamoDB.TableProvider(), S3.BucketProvider(), etc.
-    const resourceRegex = new RegExp(
-      `${service}\\.([A-Z][a-zA-Z0-9]+)Provider\\(\\)`,
-      "g",
-    );
+    const resourceRegex = new RegExp(`${service}\\.([A-Z][a-zA-Z0-9]+)Provider\\(\\)`, "g");
     let match;
     while ((match = resourceRegex.exec(content)) !== null) {
       resources.add(match[1]);
@@ -762,10 +734,7 @@ async function getProvidersRegistrations(
 
     // Match DynamoDB.GetItemPolicyLive, S3.GetObjectPolicyLive, etc.
     // Note: The binding name is like "GetItem" and the export is "GetItemPolicyLive"
-    const bindingRegex = new RegExp(
-      `${service}\\.([A-Z][a-zA-Z0-9]+)PolicyLive`,
-      "g",
-    );
+    const bindingRegex = new RegExp(`${service}\\.([A-Z][a-zA-Z0-9]+)PolicyLive`, "g");
     while ((match = bindingRegex.exec(content)) !== null) {
       bindings.add(match[1]);
     }
@@ -842,20 +811,13 @@ function inferCanonicalResources(
   operations: Operation[],
   existingFiles: Set<string>,
 ): CanonicalResource[] {
-  const resourceMap = new Map<
-    string,
-    { operations: string[]; bindings: string[] }
-  >();
+  const resourceMap = new Map<string, { operations: string[]; bindings: string[] }>();
 
   for (const op of operations) {
     if (op.category === "resource-lifecycle") {
       let resourceName: string | undefined;
 
-      if (
-        ["registerStreamConsumer", "deregisterStreamConsumer"].includes(
-          op.camelCase,
-        )
-      ) {
+      if (["registerStreamConsumer", "deregisterStreamConsumer"].includes(op.camelCase)) {
         resourceName = "StreamConsumer";
       } else if (["putRule", "deleteRule"].includes(op.camelCase)) {
         resourceName = "Rule";
@@ -891,9 +853,7 @@ function inferCanonicalResources(
       // Extract resource name from operation like createTable -> Table
       const match =
         resourceName === undefined
-          ? op.camelCase.match(
-              /^(create|delete|update|describe)([A-Z][a-zA-Z]+)/,
-            )
+          ? op.camelCase.match(/^(create|delete|update|describe)([A-Z][a-zA-Z]+)/)
           : undefined;
       if (resourceName || match) {
         const resolvedResourceName = resourceName ?? match![2];
@@ -909,13 +869,7 @@ function inferCanonicalResources(
       // Associate binding with likely resource
       // e.g., getItem, putItem, deleteItem -> Table (DynamoDB convention)
       // This is heuristic and service-specific
-      const commonResources = [
-        "Table",
-        "Bucket",
-        "Queue",
-        "Stream",
-        "Function",
-      ];
+      const commonResources = ["Table", "Bucket", "Queue", "Stream", "Function"];
       for (const res of commonResources) {
         if (!resourceMap.has(res)) {
           resourceMap.set(res, { operations: [], bindings: [] });
@@ -942,10 +896,7 @@ function inferCanonicalResources(
 
 // ============ Helper Suggestions ============
 
-function suggestHelpers(
-  operations: Operation[],
-  service: string,
-): SuggestedHelper[] {
+function suggestHelpers(operations: Operation[], service: string): SuggestedHelper[] {
   const suggestions: SuggestedHelper[] = [];
 
   // Pattern: Stream-based helpers like notifications(bucket), messages(queue), changes(table)
@@ -975,8 +926,7 @@ function suggestHelpers(
 
   // Pattern: Batch operations -> typed batch helpers
   const batchOps = operations.filter(
-    (op) =>
-      op.camelCase.startsWith("batch") || op.camelCase.startsWith("transact"),
+    (op) => op.camelCase.startsWith("batch") || op.camelCase.startsWith("transact"),
   );
   if (batchOps.length > 0) {
     suggestions.push({
@@ -994,36 +944,34 @@ function suggestHelpers(
 
 async function auditService(serviceName: string): Promise<AuditReport> {
   const serviceNameLower = serviceName.toLowerCase();
-  const serviceNameUpper =
-    serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+  const serviceNameUpper = serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
 
   // Map common service names to their distilled paths and alchemy paths
-  const serviceConfig: Record<string, { distilled: string; alchemy: string }> =
-    {
-      dynamodb: { distilled: "dynamodb", alchemy: "DynamoDB" },
-      s3: { distilled: "s3", alchemy: "S3" },
-      sqs: { distilled: "sqs", alchemy: "SQS" },
-      lambda: { distilled: "lambda", alchemy: "Lambda" },
-      kinesis: { distilled: "kinesis", alchemy: "Kinesis" },
-      ec2: { distilled: "ec2", alchemy: "EC2" },
-      ecs: { distilled: "ecs", alchemy: "ECS" },
-      cloudfront: { distilled: "cloudfront", alchemy: "CloudFront" },
-      cloudwatch: { distilled: "cloudwatch", alchemy: "CloudWatch" },
-      eventbridge: { distilled: "eventbridge", alchemy: "EventBridge" },
-      iam: { distilled: "iam", alchemy: "IAM" },
-      pipes: { distilled: "pipes", alchemy: "Pipes" },
-      sns: { distilled: "sns", alchemy: "SNS" },
-      scheduler: { distilled: "scheduler", alchemy: "Scheduler" },
-      rds: { distilled: "rds", alchemy: "RDS" },
-      "rds-data": { distilled: "rds-data", alchemy: "RDSData" },
-      "secrets-manager": {
-        distilled: "secrets-manager",
-        alchemy: "SecretsManager",
-      },
-      apigateway: { distilled: "api-gateway", alchemy: "ApiGateway" },
-      ses: { distilled: "ses", alchemy: "SES" },
-      sesv2: { distilled: "sesv2", alchemy: "SES" },
-    };
+  const serviceConfig: Record<string, { distilled: string; alchemy: string }> = {
+    dynamodb: { distilled: "dynamodb", alchemy: "DynamoDB" },
+    s3: { distilled: "s3", alchemy: "S3" },
+    sqs: { distilled: "sqs", alchemy: "SQS" },
+    lambda: { distilled: "lambda", alchemy: "Lambda" },
+    kinesis: { distilled: "kinesis", alchemy: "Kinesis" },
+    ec2: { distilled: "ec2", alchemy: "EC2" },
+    ecs: { distilled: "ecs", alchemy: "ECS" },
+    cloudfront: { distilled: "cloudfront", alchemy: "CloudFront" },
+    cloudwatch: { distilled: "cloudwatch", alchemy: "CloudWatch" },
+    eventbridge: { distilled: "eventbridge", alchemy: "EventBridge" },
+    iam: { distilled: "iam", alchemy: "IAM" },
+    pipes: { distilled: "pipes", alchemy: "Pipes" },
+    sns: { distilled: "sns", alchemy: "SNS" },
+    scheduler: { distilled: "scheduler", alchemy: "Scheduler" },
+    rds: { distilled: "rds", alchemy: "RDS" },
+    "rds-data": { distilled: "rds-data", alchemy: "RDSData" },
+    "secrets-manager": {
+      distilled: "secrets-manager",
+      alchemy: "SecretsManager",
+    },
+    apigateway: { distilled: "api-gateway", alchemy: "ApiGateway" },
+    ses: { distilled: "ses", alchemy: "SES" },
+    sesv2: { distilled: "sesv2", alchemy: "SES" },
+  };
 
   const config = serviceConfig[serviceNameLower] || {
     distilled: serviceNameLower,
@@ -1037,11 +985,8 @@ async function auditService(serviceName: string): Promise<AuditReport> {
     .access(preferredDistilledPath)
     .then(() => preferredDistilledPath)
     .catch(() => undefined);
-  const distilledPath =
-    resolvedDistilledPath ?? `@distilled.cloud/aws/${config.distilled}`;
-  const alchemyPath = path.resolve(
-    `packages/alchemy/src/AWS/${config.alchemy}`,
-  );
+  const distilledPath = resolvedDistilledPath ?? `@distilled.cloud/aws/${config.distilled}`;
+  const alchemyPath = path.resolve(`packages/alchemy/src/AWS/${config.alchemy}`);
   const bindingTestPath = path.resolve(
     `packages/alchemy/test/AWS/${config.alchemy}/Bindings.test.ts`,
   );
@@ -1055,10 +1000,7 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   );
   const alchemyFiles = await getAlchemyFiles(alchemyPath);
   const indexExports = await getIndexExports(indexPath);
-  const providerRegs = await getProvidersRegistrations(
-    providersPath,
-    config.alchemy,
-  );
+  const providerRegs = await getProvidersRegistrations(providersPath, config.alchemy);
   const bindingTestCoverage = await getBindingTestDescribes(bindingTestPath);
 
   // Classify operations
@@ -1068,11 +1010,7 @@ async function auditService(serviceName: string): Promise<AuditReport> {
       const classification = classifyOperation(serviceNameLower, name);
       const implemented = alchemyFiles.has(pascalCase);
       const resourceArity = implemented
-        ? await inferImplementedResourceArity(
-            alchemyPath,
-            pascalCase,
-            classification.resourceArity,
-          )
+        ? await inferImplementedResourceArity(alchemyPath, pascalCase, classification.resourceArity)
         : classification.resourceArity;
 
       return {
@@ -1092,34 +1030,21 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   const implementedBindings = operations.filter(
     (op) => op.category === "binding" && op.implemented,
   );
-  const missingBindings = operations.filter(
-    (op) => op.category === "binding" && !op.implemented,
-  );
-  const resourceLifecycleOps = operations.filter(
-    (op) => op.category === "resource-lifecycle",
-  );
-  const eventSourceOps = operations.filter(
-    (op) => op.category === "event-source",
-  );
-  const helperCandidates = operations.filter(
-    (op) => op.category === "helper-candidate",
-  );
+  const missingBindings = operations.filter((op) => op.category === "binding" && !op.implemented);
+  const resourceLifecycleOps = operations.filter((op) => op.category === "resource-lifecycle");
+  const eventSourceOps = operations.filter((op) => op.category === "event-source");
+  const helperCandidates = operations.filter((op) => op.category === "helper-candidate");
   const internalOps = operations.filter((op) => op.category === "internal");
 
   // Infer resources and helpers
   const canonicalResources = inferCanonicalResources(operations, alchemyFiles);
   const suggestedHelpers = suggestHelpers(operations, serviceName);
-  const leastPrivilegeWarnings = await getLeastPrivilegeWarnings(
-    alchemyPath,
-    operations,
-  );
+  const leastPrivilegeWarnings = await getLeastPrivilegeWarnings(alchemyPath, operations);
 
   // Find registration gaps
   const registrationGaps: RegistrationGap[] = [];
 
-  const implementedButNotInIndex = implementedBindings.filter(
-    (op) => !op.registeredInIndex,
-  );
+  const implementedButNotInIndex = implementedBindings.filter((op) => !op.registeredInIndex);
   if (implementedButNotInIndex.length > 0) {
     registrationGaps.push({
       type: "index",
@@ -1135,9 +1060,7 @@ async function auditService(serviceName: string): Promise<AuditReport> {
     registrationGaps.push({
       type: "policy",
       file: providersPath,
-      missing: implementedButNotInProviders.map(
-        (op) => `${op.pascalCase}PolicyLive`,
-      ),
+      missing: implementedButNotInProviders.map((op) => `${op.pascalCase}PolicyLive`),
     });
   }
 
@@ -1185,22 +1108,14 @@ function formatReport(report: AuditReport): string {
   lines.push(`${"─".repeat(80)}`);
   lines.push("SUMMARY");
   lines.push(`${"─".repeat(80)}`);
-  lines.push(
-    `  Implemented bindings:     ${report.implementedBindings.length}`,
-  );
+  lines.push(`  Implemented bindings:     ${report.implementedBindings.length}`);
   lines.push(`  Missing bindings:         ${report.missingBindings.length}`);
-  lines.push(
-    `  Resource lifecycle ops:   ${report.resourceLifecycleOps.length}`,
-  );
+  lines.push(`  Resource lifecycle ops:   ${report.resourceLifecycleOps.length}`);
   lines.push(`  Event source ops:         ${report.eventSourceOps.length}`);
   lines.push(`  Helper candidates:        ${report.helperCandidates.length}`);
   lines.push(`  Internal ops (skip):      ${report.internalOps.length}`);
-  lines.push(
-    `  Missing binding tests:    ${report.missingBindingTests.length}`,
-  );
-  lines.push(
-    `  Least-privilege warnings: ${report.leastPrivilegeWarnings.length}`,
-  );
+  lines.push(`  Missing binding tests:    ${report.missingBindingTests.length}`);
+  lines.push(`  Least-privilege warnings: ${report.leastPrivilegeWarnings.length}`);
   lines.push("");
 
   // Implemented bindings
@@ -1210,9 +1125,7 @@ function formatReport(report: AuditReport): string {
     lines.push(`${"─".repeat(80)}`);
     for (const op of report.implementedBindings) {
       const arity = `[${formatArity(op.resourceArity)}]`;
-      const regStatus = op.registeredInProviders
-        ? "✓ registered"
-        : "⚠ NOT in Providers.ts";
+      const regStatus = op.registeredInProviders ? "✓ registered" : "⚠ NOT in Providers.ts";
       lines.push(`  ✓ ${op.pascalCase}.ts ${arity} ${regStatus}`);
     }
     lines.push("");
@@ -1225,18 +1138,10 @@ function formatReport(report: AuditReport): string {
     lines.push(`${"─".repeat(80)}`);
 
     // Group by arity
-    const arity1 = report.missingBindings.filter(
-      (op) => op.resourceArity === 1,
-    );
-    const arity0 = report.missingBindings.filter(
-      (op) => op.resourceArity === 0,
-    );
-    const arity2 = report.missingBindings.filter(
-      (op) => op.resourceArity === 2,
-    );
-    const arityN = report.missingBindings.filter(
-      (op) => op.resourceArity === "n",
-    );
+    const arity1 = report.missingBindings.filter((op) => op.resourceArity === 1);
+    const arity0 = report.missingBindings.filter((op) => op.resourceArity === 0);
+    const arity2 = report.missingBindings.filter((op) => op.resourceArity === 2);
+    const arityN = report.missingBindings.filter((op) => op.resourceArity === "n");
 
     if (arity1.length > 0) {
       lines.push("  Single-resource bindings (arity=1):");
@@ -1357,9 +1262,7 @@ function formatReport(report: AuditReport): string {
     lines.push(`${"─".repeat(80)}`);
     for (const op of report.helperCandidates) {
       const impl = op.implemented ? "✓" : "○";
-      lines.push(
-        `  ${impl} ${op.camelCase} [${formatArity(op.resourceArity)}]`,
-      );
+      lines.push(`  ${impl} ${op.camelCase} [${formatArity(op.resourceArity)}]`);
     }
     lines.push("");
   }

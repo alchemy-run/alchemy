@@ -40,7 +40,6 @@ export interface ListSubscriptionRequests extends Binding.Service<
     >
   >
 > {}
-export const ListSubscriptionRequests =
-  Binding.Service<ListSubscriptionRequests>(
-    "AWS.DataZone.ListSubscriptionRequests",
-  );
+export const ListSubscriptionRequests = Binding.Service<ListSubscriptionRequests>(
+  "AWS.DataZone.ListSubscriptionRequests",
+);

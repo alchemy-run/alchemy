@@ -1,19 +1,16 @@
 import { generateKeyPairSync } from "node:crypto";
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -28,17 +25,12 @@ const generatePublicKey = (comment: string) =>
       buf.writeUInt32BE(n);
       return buf;
     };
-    const payload = Buffer.concat([
-      u32(type.length),
-      type,
-      u32(raw.length),
-      raw,
-    ]);
+    const payload = Buffer.concat([u32(type.length), type, u32(raw.length), raw]);
     return `ssh-ed25519 ${payload.toString("base64")} ${comment}`;
   });
 
 const waitUntilGone = (id: number) =>
-  Services.sshKeys.getSshKey({ id }).pipe(
+  sshKeys.getSshKey({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -72,7 +64,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.created).toEqual(expect.any(String));
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* Services.sshKeys.getSshKey({ id: created.id });
+      const fetched = yield* sshKeys.getSshKey({ id: created.id });
       expect(fetched.ssh_key.id).toEqual(created.id);
       expect(fetched.ssh_key.name).toEqual(created.name);
       expect(fetched.ssh_key.fingerprint).toEqual(created.fingerprint);
@@ -93,7 +85,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(updated.name).toEqual(`${created.name.slice(0, 55)}-renamed`);
       expect(updated.labels).toMatchObject({ env: "prod", role: "deploy" });
 
-      const refetched = yield* Services.sshKeys.getSshKey({ id: updated.id });
+      const refetched = yield* sshKeys.getSshKey({ id: updated.id });
       expect(refetched.ssh_key.name).toEqual(updated.name);
       expect(refetched.ssh_key.labels.env).toEqual("prod");
       expect(refetched.ssh_key.labels.role).toEqual("deploy");
@@ -103,7 +95,10 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:sshkey", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -138,7 +133,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(replaced.fingerprint).not.toEqual(created.fingerprint);
       expect(replaced.name).toEqual(created.name);
 
-      const fetched = yield* Services.sshKeys.getSshKey({ id: replaced.id });
+      const fetched = yield* sshKeys.getSshKey({ id: replaced.id });
       expect(fetched.ssh_key.id).toEqual(replaced.id);
       expect(fetched.ssh_key.fingerprint).toEqual(replaced.fingerprint);
 
@@ -150,7 +145,10 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:sshkey", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -179,5 +177,8 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:sshkey", "live"],
+    timeout: 120_000,
+  },
 );

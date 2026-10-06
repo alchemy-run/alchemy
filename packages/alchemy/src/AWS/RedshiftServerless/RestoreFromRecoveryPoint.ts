@@ -28,17 +28,13 @@ export interface RestoreFromRecoveryPoint extends Binding.Service<
     namespace: Namespace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        serverless.RestoreFromRecoveryPointRequest,
-        "namespaceName"
-      >,
+      request: Omit<serverless.RestoreFromRecoveryPointRequest, "namespaceName">,
     ) => Effect.Effect<
       serverless.RestoreFromRecoveryPointResponse,
       serverless.RestoreFromRecoveryPointError
     >
   >
 > {}
-export const RestoreFromRecoveryPoint =
-  Binding.Service<RestoreFromRecoveryPoint>(
-    "AWS.RedshiftServerless.RestoreFromRecoveryPoint",
-  );
+export const RestoreFromRecoveryPoint = Binding.Service<RestoreFromRecoveryPoint>(
+  "AWS.RedshiftServerless.RestoreFromRecoveryPoint",
+);

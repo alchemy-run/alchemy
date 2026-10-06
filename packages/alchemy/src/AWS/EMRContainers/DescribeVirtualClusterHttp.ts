@@ -36,11 +36,11 @@ export const DescribeVirtualClusterHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(
-        `AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster.LogicalId})`,
-      )(function* () {
-        return yield* op({ id: yield* VirtualClusterId });
-      });
+      return Effect.fn(`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster.LogicalId})`)(
+        function* () {
+          return yield* op({ id: yield* VirtualClusterId });
+        },
+      );
     });
   }),
 );

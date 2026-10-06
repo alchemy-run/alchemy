@@ -13,9 +13,7 @@ import {
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
-export interface AstroProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -97,6 +95,13 @@ export interface AstroProps<
    */
   assets?: AssetsConfig;
 }
+
+// These options are inspected while constructing the Worker. Resolve them in
+// the outer props Effect; pass-through properties can remain deferred Inputs.
+type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
+  AstroProps<Bindings>,
+  "sessionKVBindingName" | "astro" | "env"
+>;
 
 /**
  * A Cloudflare Worker deployed from an [Astro](https://astro.build)
@@ -247,43 +252,45 @@ export const Astro: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
-      propsEff?:
-        | InputProps<AstroProps<Bindings>>
-        | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
+      propsEff?: AstroInput<Bindings> | Effect.Effect<AstroInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
-    propsEff?:
-      | InputProps<AstroProps<Bindings>>
-      | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
+    propsEff?: AstroInput<Bindings> | Effect.Effect<AstroInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?: AstroInput<Bindings> | Effect.Effect<AstroInput<Bindings>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Astro(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?: AstroInput<Bindings> | Effect.Effect<AstroInput<Bindings>, never, Req>,
+      ) => effectClass(Astro(id, propsEff))
     : Worker(
         id,
         Effect.gen(function* () {
-          const props: any =
-            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          const props = (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
           const session = props.sessionKVBindingName;
-          const sessionBindingName =
-            typeof session === "string" ? session : "SESSION";
-          let env = props.env;
+          const sessionBindingName = typeof session === "string" ? session : "SESSION";
+          let env: WorkerBindingProps | undefined = props.env;
           // Auto-provision the KV namespace backing Astro's session API
           // unless the user opted out (`sessionKVBindingName: false`) or
           // already bound their own namespace under the session name.
@@ -325,10 +332,7 @@ export const Astro: {
                 // is `"static"`, which would prerender every page at
                 // build time inside workerd — where the Worker's bindings
                 // don't exist.
-                astro: {
-                  ...props.astro,
-                  output: props.astro?.output ?? "server",
-                },
+                astro: { ...props.astro, output: props.astro?.output ?? "server" },
                 config: props.config,
               },
             },

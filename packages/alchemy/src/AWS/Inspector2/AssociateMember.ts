@@ -30,12 +30,7 @@ export interface AssociateMember extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.AssociateMemberRequest,
-    ) => Effect.Effect<
-      inspector2.AssociateMemberResponse,
-      inspector2.AssociateMemberError
-    >
+    ) => Effect.Effect<inspector2.AssociateMemberResponse, inspector2.AssociateMemberError>
   >
 > {}
-export const AssociateMember = Binding.Service<AssociateMember>(
-  "AWS.Inspector2.AssociateMember",
-);
+export const AssociateMember = Binding.Service<AssociateMember>("AWS.Inspector2.AssociateMember");

@@ -1,5 +1,11 @@
-import { projectServices as fetchProjectServices } from "./GraphQL.ts";
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import {
+  Railway,
+  type Project as RailwayProject,
+  type Service as RailwayService,
+  type Template as RailwayTemplate,
+  type TemplateDeployV2Input,
+} from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -9,6 +15,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment } from "./Environment.ts";
+import { projectServices as fetchProjectServices } from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {
   createProject,
@@ -18,57 +25,35 @@ import {
 } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
-const selection = {
-  id: true,
-  code: true,
-  name: true,
-  serializedConfig: true,
-} as const satisfies railway.Selection<"Template">;
-const projectSelection = {
-  id: true,
-  name: true,
-  description: true,
-  workspaceId: true,
-  primaryEnvironmentId: true,
-  baseEnvironmentId: true,
-  deletedAt: true,
-} as const satisfies railway.Selection<"Project">;
-const serviceSelection = {
-  id: true,
-  name: true,
-  deletedAt: true,
-  templateId: true,
-} as const satisfies railway.Selection<"Service">;
-type CreateProjectResponse = railway.Result<
-  "Project!",
-  typeof projectSelection
->;
-type ProjectResponse = railway.Result<"Project!", typeof projectSelection>;
-type UpdateProjectResponse = railway.Result<
-  "Project!",
-  typeof projectSelection
->;
-type ProjectsResponseEdgesItemNode = railway.Result<
-  "Project!",
-  typeof projectSelection
->;
-type ServiceResponse = railway.Result<"Service!", typeof serviceSelection>;
-type ProjectResponseServicesEdgesItemNode = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
-type TemplateResponse = railway.Result<"Template!", typeof selection>;
-type CloneTemplateResponse = railway.Result<"Template!", typeof selection>;
-type GenerateTemplateResponse = railway.Result<"Template!", typeof selection>;
-type PublishTemplateResponse = railway.Result<"Template!", typeof selection>;
-type TemplateSourceForProjectResponse = railway.Result<
-  "Template!",
-  typeof selection
->;
-type TemplatesResponseEdgesItemNode = railway.Result<
-  "Template!",
-  typeof selection
->;
+const templateFields = <E>(template: Query<RailwayTemplate, E>) => ({
+  id: template.id,
+  code: template.code,
+  name: template.name,
+  serializedConfig: template.serializedConfig,
+});
+const templateSummaryFields = <E>(template: Query<RailwayTemplate, E>) => ({
+  id: template.id,
+  code: template.code,
+  name: template.name,
+});
+const projectFields = <E>(project: Query<RailwayProject, E>) => ({
+  id: project.id,
+  name: project.name,
+  description: project.description,
+  workspaceId: project.workspaceId,
+  primaryEnvironmentId: project.primaryEnvironmentId,
+  baseEnvironmentId: project.baseEnvironmentId,
+  deletedAt: project.deletedAt,
+});
+const serviceFields = <E>(service: Query<RailwayService, E>) => ({
+  id: service.id,
+  name: service.name,
+  deletedAt: service.deletedAt,
+  templateId: service.templateId,
+});
+type CloudTemplate = UnwrapPlan<ReturnType<typeof templateFields>>;
+type CloudProject = UnwrapPlan<ReturnType<typeof projectFields>>;
+type CloudService = UnwrapPlan<ReturnType<typeof serviceFields>>;
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -91,9 +76,7 @@ export type TemplateProject = {
  * `Railway.Project` (its primary environment), a `Railway.Environment`,
  * or an `{ environmentId }` stub.
  */
-export type TemplateEnvironment = {
-  readonly environmentId: string;
-};
+export type TemplateEnvironment = { readonly environmentId: string };
 
 export interface TemplateProps {
   /**
@@ -165,21 +148,13 @@ const resolveTemplateProps = (
       resolved.project === undefined
         ? undefined
         : Effect.isEffect(resolved.project)
-          ? yield* resolved.project as Effect.Effect<
-              TemplateProject,
-              never,
-              Providers
-            >
+          ? yield* resolved.project as Effect.Effect<TemplateProject, never, Providers>
           : resolved.project;
     const environment =
       resolved.environment === undefined
         ? undefined
         : Effect.isEffect(resolved.environment)
-          ? yield* resolved.environment as Effect.Effect<
-              TemplateEnvironment,
-              never,
-              Providers
-            >
+          ? yield* resolved.environment as Effect.Effect<TemplateEnvironment, never, Providers>
           : resolved.environment;
     return { ...resolved, project, environment };
   });
@@ -270,37 +245,28 @@ const TemplateResource = Resource<Template>("Railway.Template");
  * ```
  *
  * @resource
+ * @product Project
  */
 export const Template: typeof TemplateResource = Object.assign(
-  (
-    id: string,
-    props: TemplateProps | Effect.Effect<TemplateProps, never, Providers>,
-  ) => TemplateResource(id, resolveTemplateProps(props)),
+  (id: string, props: TemplateProps | Effect.Effect<TemplateProps, never, Providers>) =>
+    TemplateResource(id, resolveTemplateProps(props)),
   TemplateResource,
 );
 
-export class TemplateNotFound extends Data.TaggedError(
-  "Railway.TemplateNotFound",
-)<{
+export class TemplateNotFound extends Data.TaggedError("Railway.TemplateNotFound")<{
   templateId: string;
 }> {}
 
-export class TemplateNotCreated extends Data.TaggedError(
-  "Railway.TemplateNotCreated",
-)<{
+export class TemplateNotCreated extends Data.TaggedError("Railway.TemplateNotCreated")<{
   templateId: string;
   projectId: string;
 }> {}
 
-export class TemplateConfigRequired extends Data.TaggedError(
-  "Railway.TemplateConfigRequired",
-)<{
+export class TemplateConfigRequired extends Data.TaggedError("Railway.TemplateConfigRequired")<{
   templateId: string;
 }> {}
 
-export class TemplateWorkflowFailed extends Data.TaggedError(
-  "Railway.TemplateWorkflowFailed",
-)<{
+export class TemplateWorkflowFailed extends Data.TaggedError("Railway.TemplateWorkflowFailed")<{
   workflowId: string;
   error: string;
 }> {}
@@ -310,30 +276,12 @@ class TemplatePending extends Data.TaggedError("Railway.TemplatePending")<{
   state: string;
 }> {}
 
-type CloudTemplate =
-  | TemplateResponse
-  | CloneTemplateResponse
-  | GenerateTemplateResponse
-  | PublishTemplateResponse
-  | TemplateSourceForProjectResponse
-  | TemplatesResponseEdgesItemNode;
-
-type CloudProject =
-  | ProjectResponse
-  | CreateProjectResponse
-  | UpdateProjectResponse
-  | ProjectsResponseEdgesItemNode;
-
-type CloudService = ProjectResponseServicesEdgesItemNode | ServiceResponse;
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -366,8 +314,7 @@ const currentWorkspaceId = Effect.fn(function* () {
   return env.workspaceId;
 });
 
-const environmentIdFromProject = (project: CloudProject) =>
-  projectEnvironmentId(project);
+const environmentIdFromProject = (project: CloudProject) => projectEnvironmentId(project);
 
 const toAttrs = (input: {
   template: { id: string; code?: string; name?: string };
@@ -390,49 +337,50 @@ const toAttrs = (input: {
   url: `https://railway.com/project/${input.project.id}`,
 });
 
+const readProject = Query.fn((id: string) => projectFields(Railway.project({ id })));
+
 const getProject = (projectId: string) =>
-  railway.project({ id: projectId }, projectSelection).pipe(
+  readProject(projectId).pipe(
     Effect.map((project) => (isGoneProject(project) ? undefined : project)),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
+
+const readTemplateById = Query.fn((id: string) => templateFields(Railway.template({ id })));
+
+const readTemplateByCode = Query.fn((code: string) => templateFields(Railway.template({ code })));
+
+const readTemplateSummary = Query.fn((id: string) =>
+  templateSummaryFields(Railway.template({ id })),
+);
 
 const getTemplateById = (id: string) =>
-  railway.template({ id }, selection).pipe(
-    Effect.map((value) => value ?? undefined),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
-  );
+  readTemplateById(id).pipe(Effect.map((template): CloudTemplate | undefined => template));
 
 const getTemplateByCode = (code: string) =>
-  railway.template({ code }, selection).pipe(
-    Effect.map((value) => value ?? undefined),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
-  );
+  readTemplateByCode(code).pipe(Effect.map((template): CloudTemplate | undefined => template));
 
 const findPublished = (needle: string) =>
-  railway.templates.items({ first: 50 }, { id: true, code: true }).pipe(
-    Stream.filter(
-      (template) => template.id === needle || template.code === needle,
+  Query.items(
+    Railway.templates({ first: 50 }).pipe(
+      Query.map((template) => ({ id: template.id, code: template.code })),
     ),
+  ).pipe(
+    Stream.filter((template) => template.id === needle || template.code === needle),
     Stream.take(1),
     Stream.runHead,
     Effect.flatMap((option) =>
-      option._tag === "Some"
-        ? getTemplateByCode(option.value.code)
-        : Effect.succeed(undefined),
+      option._tag === "Some" ? getTemplateByCode(option.value.code) : Effect.succeed(undefined),
     ),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
 const resolveMarketplaceTemplate = (templateId: string) =>
   Effect.gen(function* () {
     const primary = UUID.test(templateId)
       ? yield* getTemplateById(templateId).pipe(
-          railway.catchTags("RailwayForbidden", (_error, failure) =>
+          Effect.catchTag("RailwayForbidden", (failure) =>
             findPublished(templateId).pipe(
               Effect.flatMap((template) =>
-                template === undefined
-                  ? Effect.fail(failure)
-                  : Effect.succeed(template),
+                template === undefined ? Effect.fail(failure) : Effect.succeed(template),
               ),
             ),
           ),
@@ -446,51 +394,44 @@ const resolveMarketplaceTemplate = (templateId: string) =>
     return yield* findPublished(templateId);
   });
 
-const sourceForProject = (projectId: string) =>
-  railway
-    .templateSourceForProject(
-      { projectId },
-      { id: true, code: true, name: true },
-    )
-    .pipe(
-      Effect.map((value) => value ?? undefined),
-      railway.catchTags(["RailwayNotFound", "RailwayForbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+const readSourceForProject = Query.fn((projectId: string) =>
+  Railway.templateSourceForProject({ projectId }).pipe(
+    Query.map((source) => ({ id: source.id, code: source.code, name: source.name })),
+  ),
+);
 
-const listProjectServices = (projectId: string) =>
-  fetchProjectServices(projectId, serviceSelection).pipe(
-    Effect.map((services) => services.filter((node) => !isGoneService(node))),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
-    ),
+const sourceForProject = (projectId: string) =>
+  readSourceForProject(projectId).pipe(
+    Effect.map((value) => value ?? undefined),
+    Effect.catchTag("RailwayForbidden", () => Effect.succeed(undefined)),
   );
 
+const listProjectServices = (projectId: string) =>
+  fetchProjectServices(projectId, serviceFields).pipe(
+    Effect.map((services) => services.filter((node) => !isGoneService(node))),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudService[])),
+  );
+
+const readService = Query.fn((id: string) => serviceFields(Railway.service({ id })));
+
 const hydrateService = (serviceId: string) =>
-  railway.service({ id: serviceId }, serviceSelection).pipe(
+  readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 const hydrateServices = (services: readonly CloudService[]) =>
-  Effect.forEach(services, (service) => hydrateService(service.id), {
-    concurrency: 4,
-  }).pipe(
-    Effect.map((rows) =>
-      rows.filter((row): row is ServiceResponse => row !== undefined),
-    ),
+  Effect.forEach(services, (service) => hydrateService(service.id), { concurrency: 4 }).pipe(
+    Effect.map((rows) => rows.filter((row): row is CloudService => row !== undefined)),
   );
 
 const matchingServices = (input: {
-  services: readonly ServiceResponse[];
+  services: readonly CloudService[];
   templateId: string;
   sourceId: string | undefined;
   ownsProject: boolean;
-}): ServiceResponse[] => {
-  const byTemplate = input.services.filter(
-    (service) => service.templateId === input.templateId,
-  );
+}): CloudService[] => {
+  const byTemplate = input.services.filter((service) => service.templateId === input.templateId);
   if (byTemplate.length > 0) return byTemplate;
   if (input.sourceId === input.templateId || input.ownsProject) {
     return [...input.services];
@@ -543,18 +484,14 @@ const normalizeConfig = (config: unknown): unknown => {
   return { ...config, services };
 };
 
+const readWorkflowStatus = Query.fn((workflowId: string) => {
+  const result = Railway.workflowStatus({ workflowId });
+  return { status: result.status, error: result.error };
+});
+
 const waitForWorkflow = (workflowId: string, projectId: string) =>
   Effect.gen(function* () {
-    const result = yield* railway
-      .workflowStatus({ workflowId }, { status: true, error: true })
-      .pipe(
-        railway.catchTags(["RailwayNotFound"], () =>
-          Effect.succeed({
-            status: "NotFound",
-            error: null,
-          } as const),
-        ),
-      );
+    const result = yield* readWorkflowStatus(workflowId);
     if (result.status === "Complete") return result;
     if (result.status === "Error") {
       return yield* new TemplateWorkflowFailed({
@@ -562,10 +499,7 @@ const waitForWorkflow = (workflowId: string, projectId: string) =>
         error: result.error ?? "template deploy failed",
       });
     }
-    return yield* new TemplatePending({
-      projectId,
-      state: result.status,
-    });
+    return yield* new TemplatePending({ projectId, state: result.status });
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.TemplatePending",
@@ -590,12 +524,7 @@ const waitForServices = (input: {
         ownsProject: input.ownsProject,
       });
       if (matched.length === 0) {
-        return Effect.fail(
-          new TemplatePending({
-            projectId: input.projectId,
-            state: "services",
-          }),
-        );
+        return Effect.fail(new TemplatePending({ projectId: input.projectId, state: "services" }));
       }
       return Effect.succeed(matched);
     }),
@@ -611,12 +540,7 @@ const waitUntilServiceGone = (serviceId: string, projectId: string) =>
     Effect.flatMap((service) =>
       service === undefined
         ? Effect.void
-        : Effect.fail(
-            new TemplatePending({
-              projectId,
-              state: `service ${serviceId} deletion`,
-            }),
-          ),
+        : Effect.fail(new TemplatePending({ projectId, state: `service ${serviceId} deletion` })),
     ),
     Effect.retry({
       schedule: Schedule.spaced("1 second"),
@@ -630,9 +554,7 @@ const waitUntilProjectGone = (projectId: string) =>
     Effect.flatMap((project) =>
       project === undefined
         ? Effect.void
-        : Effect.fail(
-            new TemplatePending({ projectId, state: "project deletion" }),
-          ),
+        : Effect.fail(new TemplatePending({ projectId, state: "project deletion" })),
     ),
     Effect.retry({
       schedule: Schedule.spaced("1 second"),
@@ -640,6 +562,15 @@ const waitUntilProjectGone = (projectId: string) =>
       times: 8,
     }),
   );
+
+const templateDeploy = Query.fn((input: TemplateDeployV2Input) => {
+  const deployed = Railway.templateDeployV2({ input });
+  return { projectId: deployed.projectId, workflowId: deployed.workflowId };
+});
+
+const serviceDelete = Query.fn((id: string) => Railway.serviceDelete({ id }));
+
+const projectDelete = Query.fn((id: string) => Railway.projectDelete({ id }));
 
 const observeDeployment = Effect.fn(function* (input: {
   projectId: string;
@@ -671,14 +602,11 @@ export const TemplateProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const templateChanged =
-        news.templateId !== output.templateId &&
-        news.templateId !== output.code;
+        news.templateId !== output.templateId && news.templateId !== output.code;
       const nextProject = projectIdOf(news.project);
-      const projectChanged =
-        nextProject !== undefined && nextProject !== output.projectId;
+      const projectChanged = nextProject !== undefined && nextProject !== output.projectId;
       const nextEnv = environmentIdOf(news.environment);
-      const environmentChanged =
-        nextEnv !== undefined && nextEnv !== output.environmentId;
+      const environmentChanged = nextEnv !== undefined && nextEnv !== output.environmentId;
       if (templateChanged || projectChanged || environmentChanged) {
         return { action: "replace" as const };
       }
@@ -693,15 +621,10 @@ export const TemplateProvider = () =>
       const marketplace = yield* resolveMarketplaceTemplate(templateRef);
       const templateId = marketplace?.id ?? output?.templateId ?? templateRef;
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       if (projectId === undefined) return undefined;
       const ownsProject = output?.ownsProject ?? olds?.project === undefined;
-      const observed = yield* observeDeployment({
-        projectId,
-        templateId,
-        ownsProject,
-      });
+      const observed = yield* observeDeployment({ projectId, templateId, ownsProject });
       if (observed === undefined || observed.services.length === 0) {
         return undefined;
       }
@@ -727,22 +650,16 @@ export const TemplateProvider = () =>
         ownsProject,
       });
       if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(observed.project.name)
-        ? attrs
-        : Unowned(attrs);
+      return matchesAlchemyPhysicalName(observed.project.name) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const live = yield* railway
-            .project({ id: project.projectId }, projectSelection)
-            .pipe(
-              railway.catchTags(["RailwayNotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+          const live = yield* readProject(project.projectId).pipe(
+            Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+          );
           if (live === undefined || live.deletedAt != null) {
             return [] as Template["Attributes"][];
           }
@@ -761,17 +678,9 @@ export const TemplateProvider = () =>
               const template =
                 source?.id === templateId
                   ? source
-                  : yield* railway
-                      .template(
-                        { id: templateId },
-                        { id: true, code: true, name: true },
-                      )
-                      .pipe(
-                        railway.catchTags(
-                          ["RailwayNotFound", "RailwayForbidden"],
-                          () => Effect.succeed({ id: templateId }),
-                        ),
-                      );
+                  : yield* readTemplateSummary(templateId).pipe(
+                      Effect.catchTag("RailwayForbidden", () => Effect.succeed({ id: templateId })),
+                    );
               return toAttrs({
                 template: template ?? { id: templateId },
                 project: live,
@@ -815,24 +724,15 @@ export const TemplateProvider = () =>
         environmentIdOf(props.project) ??
         output?.environmentId;
       let workspaceId =
-        workspaceIdOf(props.project) ??
-        output?.workspaceId ??
-        (yield* currentWorkspaceId());
+        workspaceIdOf(props.project) ?? output?.workspaceId ?? (yield* currentWorkspaceId());
 
       let current: CloudProject | undefined =
-        projectId !== undefined && projectId.length > 0
-          ? yield* getProject(projectId)
-          : undefined;
+        projectId !== undefined && projectId.length > 0 ? yield* getProject(projectId) : undefined;
 
       if (current === undefined && !providedProject) {
         const name = yield* createRailwayName(id);
-        const created = yield* createProject({
-          name,
-          workspaceId,
-        }).pipe(
-          railway.catchTags("RailwayValidationError", () =>
-            Effect.succeed(undefined),
-          ),
+        const created = yield* createProject({ name, workspaceId }).pipe(
+          Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)),
         );
         current = created;
         ownsProject = true;
@@ -861,33 +761,22 @@ export const TemplateProvider = () =>
       let workflowId = output?.workflowId;
 
       if (services.length === 0) {
-        const rawConfig =
-          props.serializedConfig ?? marketplace.serializedConfig;
+        const rawConfig = props.serializedConfig ?? marketplace.serializedConfig;
         if (rawConfig == null) {
-          return yield* new TemplateConfigRequired({
-            templateId: marketplace.id,
-          });
+          return yield* new TemplateConfigRequired({ templateId: marketplace.id });
         }
         const parsed = yield* parseConfig(rawConfig);
         const serializedConfig = normalizeConfig(parsed);
-        const deployed = yield* railway.templateDeployV2(
-          {
-            input: {
-              templateId: marketplace.id,
-              serializedConfig,
-              projectId,
-              ...(environmentId.length > 0 ? { environmentId } : {}),
-              workspaceId,
-            },
-          },
-          { projectId: true, workflowId: true },
-        );
+        const deployed = yield* templateDeploy({
+          templateId: marketplace.id,
+          serializedConfig,
+          projectId,
+          ...(environmentId.length > 0 ? { environmentId } : {}),
+          workspaceId,
+        });
         projectId = deployed.projectId || projectId;
         workflowId = deployed.workflowId ?? workflowId;
-        if (
-          deployed.projectId.length > 0 &&
-          deployed.projectId !== current.id
-        ) {
+        if (deployed.projectId.length > 0 && deployed.projectId !== current.id) {
           const created = yield* getProject(deployed.projectId);
           if (created !== undefined) current = created;
         }
@@ -904,10 +793,7 @@ export const TemplateProvider = () =>
       }
 
       if (services.length === 0) {
-        return yield* new TemplateNotCreated({
-          templateId: marketplace.id,
-          projectId,
-        });
+        return yield* new TemplateNotCreated({ templateId: marketplace.id, projectId });
       }
 
       const live = (yield* getProject(projectId)) ?? current;
@@ -930,17 +816,13 @@ export const TemplateProvider = () =>
       const serviceIds = output.serviceIds ?? [];
       for (const serviceId of serviceIds) {
         if (serviceId.length === 0) continue;
-        yield* railway
-          .deleteService({ id: serviceId })
-          .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+        yield* serviceDelete(serviceId).pipe(Effect.catchTag("RailwayNotFound", () => Effect.void));
         yield* waitUntilServiceGone(serviceId, output.projectId);
       }
       if (!output.ownsProject) return;
       const projectId = output.projectId;
       if (projectId.length === 0) return;
-      yield* railway
-        .deleteProject({ id: projectId })
-        .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+      yield* projectDelete(projectId).pipe(Effect.catchTag("RailwayNotFound", () => Effect.void));
       yield* waitUntilProjectGone(projectId);
     }),
   });

@@ -37,17 +37,13 @@ export interface UpdateWorkspaceAuthentication extends Binding.Service<
     workspace: Workspace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        grafana.UpdateWorkspaceAuthenticationRequest,
-        "workspaceId"
-      >,
+      request: Omit<grafana.UpdateWorkspaceAuthenticationRequest, "workspaceId">,
     ) => Effect.Effect<
       grafana.UpdateWorkspaceAuthenticationResponse,
       grafana.UpdateWorkspaceAuthenticationError
     >
   >
 > {}
-export const UpdateWorkspaceAuthentication =
-  Binding.Service<UpdateWorkspaceAuthentication>(
-    "AWS.Grafana.UpdateWorkspaceAuthentication",
-  );
+export const UpdateWorkspaceAuthentication = Binding.Service<UpdateWorkspaceAuthentication>(
+  "AWS.Grafana.UpdateWorkspaceAuthentication",
+);

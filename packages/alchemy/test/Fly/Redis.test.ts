@@ -1,31 +1,22 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Redacted from "effect/Redacted";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import RedisApi, {
-  Cache,
-  REDIS_VALUE,
-  RedisIp,
-  RedisSite,
-} from "./fixtures/redis-api.ts";
+import RedisApi, { Cache, REDIS_VALUE, RedisIp, RedisSite } from "./fixtures/redis-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilRedisGone = (redisId: string, name: string) =>
   Fly.findRedisAddOn({ id: redisId, name }).pipe(
-    Effect.map((row) =>
-      row === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((row) => (row === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -53,14 +44,11 @@ test.provider(
       expect(plans.length).toBeGreaterThan(0);
       const cheapest = plans
         .slice()
-        .sort(
-          (left, right) =>
-            (left.pricePerMonth ?? 0) - (right.pricePerMonth ?? 0),
-        )[0];
+        .sort((left, right) => (left.pricePerMonth ?? 0) - (right.pricePerMonth ?? 0))[0];
       expect(cheapest?.id).toEqual(expect.any(String));
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -81,6 +69,7 @@ test.provider(
       expect(created.name.length).toBeGreaterThan(0);
       expect(created.primaryRegion).toEqual("iad");
       expect(created.planName).toEqual(expect.any(String));
+      expect(Redacted.isRedacted(created.url)).toEqual(true);
 
       const fetched = yield* Fly.findRedisAddOn({
         id: created.redisId,
@@ -107,6 +96,7 @@ test.provider(
       expect(updated.redisId).toEqual(created.redisId);
       expect(updated.name).toEqual(created.name);
       expect(updated.eviction).toEqual(true);
+      expect(Redacted.isRedacted(updated.url)).toEqual(true);
 
       const refetched = yield* Fly.findRedisAddOn({
         id: updated.redisId,
@@ -121,7 +111,7 @@ test.provider(
       const gone = yield* waitUntilRedisGone(created.redisId, created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -136,8 +126,7 @@ test.provider(
         }),
       );
 
-      const nextName =
-        created.name.slice(0, -1) + (created.name.endsWith("z") ? "y" : "z");
+      const nextName = created.name.slice(0, -1) + (created.name.endsWith("z") ? "y" : "z");
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
@@ -164,7 +153,7 @@ test.provider(
       const gone = yield* waitUntilRedisGone(replaced.redisId, replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -205,7 +194,7 @@ test.provider(
       const gone = yield* waitUntilRedisGone(replaced.redisId, replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -225,17 +214,13 @@ test.provider(
       );
 
       expect(deployed.cache.redisId).toEqual(expect.any(String));
-      expect(deployed.api.url).toEqual(
-        `https://${deployed.app.appName}.fly.dev`,
-      );
+      expect(deployed.api.url).toEqual(`https://${deployed.app.appName}.fly.dev`);
 
       const secrets = yield* machines.listSecrets({
         app_name: deployed.app.appName,
         show_secrets: false,
       });
-      const redisUrl = (secrets.secrets ?? []).find(
-        (secret) => secret.name === Fly.REDIS_URL_ENV,
-      );
+      const redisUrl = (secrets.secrets ?? []).find((secret) => secret.name === Fly.REDIS_URL_ENV);
       expect(redisUrl).toBeDefined();
       expect(redisUrl?.digest).toEqual(expect.any(String));
 
@@ -250,21 +235,18 @@ test.provider(
       const ping = yield* untilOk(
         HttpClient.get(`${deployed.api.url}/`).pipe(
           Effect.flatMap((res) =>
-            res.status === 200
-              ? res.json
-              : Effect.fail(new Error(`api returned ${res.status}`)),
+            res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
           ),
-          Effect.map((value) => value as { pong: boolean }),
+          Effect.map((value) => value as { pong: boolean; hasOutputUrl: boolean }),
         ),
       );
       expect(ping.pong).toEqual(true);
+      expect(ping.hasOutputUrl).toEqual(true);
 
       const written = yield* untilOk(
         HttpClient.get(`${deployed.api.url}/set`).pipe(
           Effect.flatMap((res) =>
-            res.status === 200
-              ? res.json
-              : Effect.fail(new Error(`api returned ${res.status}`)),
+            res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
           ),
           Effect.map((value) => value as { ok: boolean }),
         ),
@@ -274,9 +256,7 @@ test.provider(
       const read = yield* untilOk(
         HttpClient.get(`${deployed.api.url}/get`).pipe(
           Effect.flatMap((res) =>
-            res.status === 200
-              ? res.json
-              : Effect.fail(new Error(`api returned ${res.status}`)),
+            res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
           ),
           Effect.map((value) => value as { ok: boolean; value: string }),
         ),
@@ -286,15 +266,23 @@ test.provider(
 
       yield* stack.destroy();
 
-      const redisGone = yield* waitUntilRedisGone(
-        deployed.cache.redisId,
-        deployed.cache.name,
-      );
+      const redisGone = yield* waitUntilRedisGone(deployed.cache.redisId, deployed.cache.name);
       expect(redisGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:redis",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -322,5 +310,5 @@ test.provider(
       const gone = yield* waitUntilRedisGone(created.redisId, created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );

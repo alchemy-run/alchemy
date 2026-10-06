@@ -24,9 +24,7 @@ export const toTagRecord = (
   );
 
 /** Convert a plain record into the CodeConnections wire tag list. */
-export const toTagList = (
-  tags: Record<string, string>,
-): { Key: string; Value: string }[] =>
+export const toTagList = (tags: Record<string, string>): { Key: string; Value: string }[] =>
   Object.entries(tags).map(([Key, Value]) => ({ Key, Value }));
 
 /** Read the observed cloud tags for a CodeConnections resource ARN. */

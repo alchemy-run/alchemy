@@ -33,12 +33,7 @@ export interface GetSessionAction extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<deadline.GetSessionActionRequest, "farmId" | "queueId">,
-    ) => Effect.Effect<
-      deadline.GetSessionActionResponse,
-      deadline.GetSessionActionError
-    >
+    ) => Effect.Effect<deadline.GetSessionActionResponse, deadline.GetSessionActionError>
   >
 > {}
-export const GetSessionAction = Binding.Service<GetSessionAction>(
-  "AWS.Deadline.GetSessionAction",
-);
+export const GetSessionAction = Binding.Service<GetSessionAction>("AWS.Deadline.GetSessionAction");

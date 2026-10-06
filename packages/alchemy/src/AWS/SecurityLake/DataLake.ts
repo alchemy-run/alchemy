@@ -9,11 +9,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readSecurityLakeTags,
-  retryWhileConflict,
-  toTagList,
-} from "./internal.ts";
+import { readSecurityLakeTags, retryWhileConflict, toTagList } from "./internal.ts";
 
 /**
  * Encryption settings for a Security Lake Region.
@@ -181,9 +177,7 @@ export { DataLakeResource as DataLake };
 /**
  * The data lake failed to reach `COMPLETED` in one of the configured Regions.
  */
-export class DataLakeCreateFailed extends Data.TaggedError(
-  "DataLakeCreateFailed",
-)<{
+export class DataLakeCreateFailed extends Data.TaggedError("DataLakeCreateFailed")<{
   readonly region: string;
   readonly reason: string | undefined;
   readonly code: string | undefined;
@@ -201,12 +195,10 @@ const toWireConfiguration = (
         expiration: config.lifecycleConfiguration.expiration
           ? { days: toWireDays(config.lifecycleConfiguration.expiration.days) }
           : undefined,
-        transitions: config.lifecycleConfiguration.transitions?.map(
-          (transition) => ({
-            storageClass: transition.storageClass,
-            days: toWireDays(transition.days),
-          }),
-        ),
+        transitions: config.lifecycleConfiguration.transitions?.map((transition) => ({
+          storageClass: transition.storageClass,
+          days: toWireDays(transition.days),
+        })),
       }
     : undefined,
   replicationConfiguration: config.replicationConfiguration,
@@ -224,28 +216,19 @@ const normalizeConfig = (config: {
     expirationDays: config.lifecycleConfiguration?.expiration?.days,
     transitions: [...(config.lifecycleConfiguration?.transitions ?? [])]
       .map((t) => ({ storageClass: t.storageClass, days: t.days }))
-      .sort((l, r) =>
-        (l.storageClass ?? "").localeCompare(r.storageClass ?? ""),
-      ),
-    replicationRegions: [
-      ...(config.replicationConfiguration?.regions ?? []),
-    ].sort(),
+      .sort((l, r) => (l.storageClass ?? "").localeCompare(r.storageClass ?? "")),
+    replicationRegions: [...(config.replicationConfiguration?.regions ?? [])].sort(),
     replicationRoleArn: config.replicationConfiguration?.roleArn,
   });
 
-const buildRegionAttrs = (
-  lake: securitylake.DataLakeResource,
-): DataLakeRegionAttributes => ({
+const buildRegionAttrs = (lake: securitylake.DataLakeResource): DataLakeRegionAttributes => ({
   dataLakeArn: lake.dataLakeArn,
   region: lake.region,
   s3BucketArn: lake.s3BucketArn,
   createStatus: lake.createStatus,
 });
 
-const buildAttrs = (
-  lakes: securitylake.DataLakeResource[],
-  currentRegion: string,
-) => {
+const buildAttrs = (lakes: securitylake.DataLakeResource[], currentRegion: string) => {
   const sorted = [...lakes].sort((l, r) => l.region.localeCompare(r.region));
   const current = sorted.find((lake) => lake.region === currentRegion);
   return {
@@ -282,8 +265,7 @@ export const DataLakeProvider = () =>
         for (let attempt = 0; attempt < 18; attempt++) {
           lakes = yield* observeDataLakes;
           const failed = lakes.find(
-            (lake) =>
-              regions.includes(lake.region) && lake.createStatus === "FAILED",
+            (lake) => regions.includes(lake.region) && lake.createStatus === "FAILED",
           );
           if (failed) {
             return yield* Effect.fail(
@@ -295,10 +277,7 @@ export const DataLakeProvider = () =>
             );
           }
           const allReady = regions.every((region) =>
-            lakes.some(
-              (lake) =>
-                lake.region === region && lake.createStatus === "COMPLETED",
-            ),
+            lakes.some((lake) => lake.region === region && lake.createStatus === "COMPLETED"),
           );
           if (allReady) return lakes;
           yield* Effect.sleep("5 seconds");
@@ -333,17 +312,13 @@ export const DataLakeProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative.
           let lakes = yield* observeDataLakes;
-          const observedByRegion = new Map(
-            lakes.map((lake) => [lake.region, lake]),
-          );
+          const observedByRegion = new Map(lakes.map((lake) => [lake.region, lake]));
 
           // 2. ENSURE — createDataLake is additive per Region, so enabling
           // missing Regions covers both greenfield onboarding and Region
           // expansion. A ConflictException is a race with a concurrent
           // enable — fall through to observation.
-          const missing = desiredConfigs.filter(
-            (config) => !observedByRegion.has(config.region),
-          );
+          const missing = desiredConfigs.filter((config) => !observedByRegion.has(config.region));
           if (missing.length > 0) {
             yield* securitylake
               .createDataLake({
@@ -351,18 +326,13 @@ export const DataLakeProvider = () =>
                 metaStoreManagerRoleArn: news.metaStoreManagerRoleArn,
                 tags: toTagList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () => Effect.succeed({})),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed({})));
           }
 
           // 3. SYNC per-Region settings — observed ↔ desired delta only.
           const changed = desiredConfigs.filter((config) => {
             const observed = observedByRegion.get(config.region);
-            return (
-              observed !== undefined &&
-              normalizeConfig(config) !== normalizeConfig(observed)
-            );
+            return observed !== undefined && normalizeConfig(config) !== normalizeConfig(observed);
           });
           if (changed.length > 0) {
             yield* securitylake.updateDataLake({
@@ -375,14 +345,10 @@ export const DataLakeProvider = () =>
           // managed (recorded in output) are disabled; foreign Regions that
           // happen to be enabled are left alone.
           const staleRegions = (output?.regions ?? []).filter(
-            (managed) =>
-              !desiredRegions.includes(managed) &&
-              observedByRegion.has(managed),
+            (managed) => !desiredRegions.includes(managed) && observedByRegion.has(managed),
           );
           if (staleRegions.length > 0) {
-            yield* securitylake
-              .deleteDataLake({ regions: staleRegions })
-              .pipe(retryWhileConflict);
+            yield* securitylake.deleteDataLake({ regions: staleRegions }).pipe(retryWhileConflict);
           }
 
           // 3c. Wait (bounded) for onboarding to complete in every Region.
@@ -396,13 +362,8 @@ export const DataLakeProvider = () =>
               }),
             );
           }
-          const managed = lakes.filter((lake) =>
-            desiredRegions.includes(lake.region),
-          );
-          const attrs = buildAttrs(
-            managed.length > 0 ? managed : lakes,
-            region,
-          );
+          const managed = lakes.filter((lake) => desiredRegions.includes(lake.region));
+          const attrs = buildAttrs(managed.length > 0 ? managed : lakes, region);
 
           // 3d. SYNC tags — diff against OBSERVED cloud tags.
           const observedTags = yield* readSecurityLakeTags(attrs.dataLakeArn);

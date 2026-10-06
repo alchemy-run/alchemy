@@ -6,17 +6,15 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as EffectHttp from "effect/http/HttpEffect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as EffectHttp from "effect/unstable/http/HttpEffect";
-import {
-  makeEntrypointLayer,
-  reifyBoundConfigProvider,
-} from "../../Runtime.ts";
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "../../Runtime.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import { StackContext } from "../../StackContext.ts";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
@@ -30,6 +28,7 @@ import {
   encodeRpcError,
   toRpcStream,
 } from "./Rpc.ts";
+import type { Worker } from "./Worker.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
@@ -37,7 +36,6 @@ import {
   deferredExecutionContext,
   fromExecutionContext,
 } from "./WorkerRuntime.ts";
-import type { Worker } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
 /**
@@ -49,6 +47,7 @@ import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
  */
 export interface WorkerBuild<Export = any> {
   readonly context: Context.Context<any>;
+  readonly runtimeContext: WorkerRuntimeContext;
   readonly export: Export;
   readonly shape: () => Record<string, any>;
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
@@ -59,22 +58,9 @@ export interface WorkerBuild<Export = any> {
  */
 export const makeWorkerBridge = (
   Base: typeof WorkerEntrypoint | typeof DurableObject,
-  {
-    stack,
-    entrypoint,
-  }: {
-    stack: {
-      name: string;
-      stage: string;
-    };
-    entrypoint: any;
-  },
+  { stack, entrypoint }: { stack: { name: string; stage: string }; entrypoint: any },
 ) => {
-  const { build } = getWorkerExport({
-    entrypoint,
-    stack,
-    exportName: "default",
-  });
+  const { build } = getWorkerExport({ entrypoint, stack, exportName: "default" });
 
   const processEvent = <T>(
     makeEffect: (
@@ -82,10 +68,7 @@ export const makeWorkerBridge = (
     ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
     ctx: cf.ExecutionContext,
     env: Record<string, unknown> | undefined,
-    onExit: (
-      exit: Exit.Exit<any, any>,
-      scope: Scope.Closeable,
-    ) => T | Promise<T>,
+    onExit: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
@@ -102,11 +85,9 @@ export const makeWorkerBridge = (
             // `ctx.waitUntil` below).
             Effect.provide(
               Layer.mergeAll(
-                Layer.succeed(
-                  WorkerExecutionContext,
-                  fromExecutionContext(ctx, env),
-                ),
+                Layer.succeed(WorkerExecutionContext, fromExecutionContext(ctx, env)),
                 Layer.succeed(Scope.Scope, scope),
+                Layer.succeed(RuntimeContext, built.runtimeContext),
                 // The configured telemetry exporters. Constructed as part
                 // of this per-event layer, but `buildEventTelemetry`
                 // attaches their batching fibers and flush finalizers to
@@ -114,9 +95,7 @@ export const makeWorkerBridge = (
                 // so buffered telemetry flushes when the scope closes into
                 // `ctx.waitUntil` below — never on workerd's ephemeral
                 // isolate scope.
-                Layer.effectContext(
-                  buildEventTelemetry(built.context, scope, built.telemetry()),
-                ),
+                Layer.effectContext(buildEventTelemetry(built.context, scope, built.telemetry())),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(built.context)),
@@ -219,9 +198,7 @@ export const makeWorkerBridge = (
   for (const method of ExportedHandlerMethods) {
     Object.defineProperty(WorkerBridge.prototype, method, {
       value: function () {
-        throw new Error(
-          `Bridge method '${method}' was called before instance setup`,
-        );
+        throw new Error(`Bridge method '${method}' was called before instance setup`);
       },
       writable: true,
       configurable: true,
@@ -243,10 +220,7 @@ const sharedBuilds = new WeakMap<
   (pin: (promise: Promise<unknown>) => unknown) => Promise<Context.Context<any>>
 >();
 
-const getSharedBuild = (
-  entrypoint: any,
-  stack: { name: string; stage: string },
-) => {
+const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string }) => {
   let shared = sharedBuilds.get(entrypoint);
   if (shared !== undefined) {
     return shared;
@@ -254,9 +228,7 @@ const getSharedBuild = (
 
   const tag = Self as any as Context.Service<
     never,
-    Worker & {
-      RuntimeContext: WorkerRuntimeContext;
-    }
+    Worker & { RuntimeContext: WorkerRuntimeContext }
   >;
 
   const layer = makeEntrypointLayer(tag, entrypoint);
@@ -313,25 +285,16 @@ const getSharedBuild = (
           // top-level closure (and Layers); its RuntimeContext-colored
           // methods defer to the real per-event context provided by
           // `processEvent`.
-          Layer.provideMerge(
-            Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
-          ),
+          Layer.provideMerge(Layer.succeed(WorkerExecutionContext, deferredExecutionContext)),
           Layer.provideMerge(
             Layer.succeed(
               CloudflareEnvironment,
               // TODO(sam): fix this with maybe a CloudflareAccountId Effect service
               // @ts-expect-error - this is hacky, but we only need and have this property
-              Effect.succeed({
-                account: (env as any).ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
-              }),
+              Effect.succeed({ account: (env as any).ALCHEMY_CLOUDFLARE_ACCOUNT_ID }),
             ),
           ),
-          Layer.provideMerge(
-            Layer.succeed(
-              MinimumLogLevel,
-              (env as any).DEBUG ? "Debug" : "Info",
-            ),
-          ),
+          Layer.provideMerge(Layer.succeed(MinimumLogLevel, (env as any).DEBUG ? "Debug" : "Info")),
         ),
       ),
     ),
@@ -386,9 +349,7 @@ export const getWorkerExport = <Export = any>({
 }) => {
   const tag = Self as any as Context.Service<
     never,
-    Worker & {
-      RuntimeContext: WorkerRuntimeContext;
-    }
+    Worker & { RuntimeContext: WorkerRuntimeContext }
   >;
 
   const runtimeContext = tag.pipe(Effect.map((func) => func.RuntimeContext));
@@ -410,15 +371,14 @@ export const getWorkerExport = <Export = any>({
    * listener assembly and the captured services context resolve once per
    * export. Same success-only memoization contract as the shared build.
    */
-  const build = (
-    pin: (promise: Promise<unknown>) => unknown,
-  ): Promise<WorkerBuild<Export>> => {
+  const build = (pin: (promise: Promise<unknown>) => unknown): Promise<WorkerBuild<Export>> => {
     const promise = (built ??= sharedBuild(pin)
       .then((context) =>
         Effect.runPromise(
           Effect.all([exported, runtimeContext]).pipe(
             Effect.map(([exp, rc]): WorkerBuild<Export> => ({
               context,
+              runtimeContext: rc,
               export: exp,
               shape: rc.shape,
               telemetry: () => rc.telemetry,
@@ -441,9 +401,7 @@ export const getWorkerExport = <Export = any>({
 export const makeRpcProxy = (
   self: any,
   userShape: Effect.Effect<any>,
-  processEvent: (
-    eff: Effect.Effect<[Effect.Effect<any>, Context.Context<never>]>,
-  ) => Promise<any>,
+  processEvent: (eff: Effect.Effect<[Effect.Effect<any>, Context.Context<never>]>) => Promise<any>,
 ) =>
   new Proxy(self, {
     get: (target, prop) => {
@@ -481,10 +439,7 @@ export const makeRpcProxy = (
     },
   });
 
-export const handleRpcExit = async (
-  exit: Exit.Exit<any, any>,
-  scope?: Scope.Closeable,
-) => {
+export const handleRpcExit = async (exit: Exit.Exit<any, any>, scope?: Scope.Closeable) => {
   if (exit._tag === "Success") {
     if (Stream.isStream(exit.value)) {
       let stream = exit.value as Stream.Stream<any, any, any>;
@@ -495,25 +450,16 @@ export const handleRpcExit = async (
         // the stream settles instead — mirroring `scopeTransferToStream` on
         // the fetch path.
         EffectHttp.scopeDisableClose(scope);
-        stream = stream.pipe(
-          Stream.onExit((streamExit) => Scope.close(scope, streamExit)),
-        );
+        stream = stream.pipe(Stream.onExit((streamExit) => Scope.close(scope, streamExit)));
       }
-      return await Effect.runPromise(
-        toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>,
-      );
+      return await Effect.runPromise(toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>);
     }
     return exit.value;
   }
   const failReason = exit.cause.reasons.find(Cause.isFailReason);
   if (failReason) {
-    return {
-      _tag: ErrorTag,
-      error: encodeRpcError(failReason.error),
-    } satisfies RpcErrorEnvelope;
+    return { _tag: ErrorTag, error: encodeRpcError(failReason.error) } satisfies RpcErrorEnvelope;
   }
   const dieReason = exit.cause.reasons.find(Cause.isDieReason);
-  throw (
-    dieReason?.defect ?? new Error("RPC method failed with an unexpected cause")
-  );
+  throw dieReason?.defect ?? new Error("RPC method failed with an unexpected cause");
 };

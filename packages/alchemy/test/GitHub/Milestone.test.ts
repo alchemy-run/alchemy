@@ -1,3 +1,5 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { GitHubCredentials } from "@/GitHub/Credentials.ts";
 import * as GitHub from "@/GitHub/index.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
@@ -5,22 +7,17 @@ import * as Output from "@/Output.ts";
 import * as Provider from "@/Provider.ts";
 import { destroy } from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (!["alchemy-run-test", "alchemy-run-test-2"].includes(owner)) {
-  throw new Error(
-    "GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2",
-  );
+  throw new Error("GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2");
 }
 
 const { test } = Test.make({
   providers: GitHub.providers({ baseUrl: "github.com" }),
 });
 
-const repositoryName = (fixture: string) =>
-  `alchemy-pr-1566-milestone-${fixture}`;
+const repositoryName = (fixture: string) => `alchemy-pr-1566-milestone-${fixture}`;
 
 // Repositories are retained because the test token does not have delete_repo.
 const repository = (name: string) =>
@@ -31,19 +28,13 @@ const repository = (name: string) =>
     autoInit: true,
   });
 
-const fixture = (
-  name: string,
-  props: Omit<GitHub.MilestoneProps, "owner" | "repository">,
-) =>
+const fixture = (name: string, props: Omit<GitHub.MilestoneProps, "owner" | "repository">) =>
   Effect.gen(function* () {
     const repo = yield* repository(name);
     return yield* GitHub.Milestone("Milestone", {
       ...props,
       owner,
-      repository: Output.map(
-        repo.fullName,
-        (fullName) => fullName.split("/")[1]!,
-      ),
+      repository: Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!),
     }).pipe(destroy());
   });
 
@@ -99,7 +90,10 @@ test.provider(
       yield* verifyDeleted("update");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:milestone", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -130,7 +124,10 @@ test.provider(
       yield* verifyDeleted("state");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:milestone", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -154,14 +151,15 @@ test.provider(
       expect(replaced.title).toBe("Q1 2027");
       expect(replaced.milestoneNumber).not.toBe(created.milestoneNumber);
       const observed = yield* listMilestones("replace");
-      expect(observed.map((milestone) => milestone.number)).toEqual([
-        replaced.milestoneNumber,
-      ]);
+      expect(observed.map((milestone) => milestone.number)).toEqual([replaced.milestoneNumber]);
       yield* stack.deploy(repository("replace"));
       yield* verifyDeleted("replace");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:milestone", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -178,7 +176,11 @@ test.provider(
       const credentials = yield* yield* GitHubCredentials;
       const client = credentials.octokit({ baseUrl: undefined });
       client.hook.before("request", (options) => {
-        if (options.url === "/user/repos") options.url = `/orgs/${owner}/repos`;
+        const url = new URL(options.url, "https://api.github.com");
+        if (url.pathname === "/user/repos") {
+          url.pathname = `/orgs/${owner}/repos`;
+          options.url = url.toString();
+        }
       });
       const provider = yield* Provider.findProvider(GitHub.Milestone);
       const allMilestones = yield* provider
@@ -189,9 +191,7 @@ test.provider(
             Effect.succeed({ ...credentials, octokit: () => client }),
           ),
         );
-      const found = allMilestones.find(
-        (milestone) => milestone.nodeId === created.nodeId,
-      );
+      const found = allMilestones.find((milestone) => milestone.nodeId === created.nodeId);
       expect(found).toBeDefined();
       expect(found?.title).toBe(created.title);
       expect(found?.htmlUrl).toBe(created.htmlUrl);
@@ -199,7 +199,10 @@ test.provider(
       yield* verifyDeleted("list");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:milestone", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -221,7 +224,10 @@ test.provider(
       yield* verifyDeleted("duedate");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:milestone", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -237,9 +243,7 @@ test.provider(
           dueOn: "2027-12-31",
         }),
       );
-      const updated = yield* stack.deploy(
-        fixture("defaults", { title: "Defaults" }),
-      );
+      const updated = yield* stack.deploy(fixture("defaults", { title: "Defaults" }));
       expect(updated.milestoneNumber).toBe(created.milestoneNumber);
       expect(updated.state).toBe("open");
       expect(updated.description ?? "").toBe("");
@@ -252,5 +256,8 @@ test.provider(
       yield* verifyDeleted("defaults");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:github", "provider:github:milestone", "provider:github:repository", "live"],
+    timeout: 120_000,
+  },
 );

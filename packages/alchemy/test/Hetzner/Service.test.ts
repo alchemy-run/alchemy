@@ -1,26 +1,24 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as servers from "@distilled.cloud/hetzner/servers";
+import * as volumes from "@distilled.cloud/hetzner/volumes";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import Api from "./fixtures/api.ts";
 import { Data, MARKER } from "./fixtures/shared.ts";
 import Worker from "./fixtures/worker.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
-  Services.servers.getServer({ id }).pipe(
+  servers.getServer({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -53,13 +51,13 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(deployed.api.code.hash).toEqual(expect.any(String));
       expect(deployed.worker.unitName).not.toEqual(deployed.api.unitName);
 
-      const fetched = yield* Services.servers.getServer({
+      const fetched = yield* servers.getServer({
         id: deployed.api.serverId,
       });
       expect(fetched.server?.id).toEqual(deployed.api.serverId);
       expect(fetched.server?.public_net.ipv4?.ip).toEqual(deployed.api.ipv4);
 
-      const liveVolume = yield* Services.volumes.getVolume({
+      const liveVolume = yield* volumes.getVolume({
         id: deployed.volume.id,
       });
       expect(liveVolume.volume.server).toEqual(deployed.api.serverId);
@@ -67,9 +65,7 @@ test.provider.skipIf(!hasHetznerCreds)(
 
       const body = yield* HttpClient.get(deployed.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("2 seconds"),
@@ -85,5 +81,16 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.api.serverId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:mountvolume",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "provider:hetzner:volume",
+      "live",
+    ],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );

@@ -31,12 +31,7 @@ export interface RebootDBInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<neptune.RebootDBInstanceMessage, "DBInstanceIdentifier">,
-    ) => Effect.Effect<
-      neptune.RebootDBInstanceResult,
-      neptune.RebootDBInstanceError
-    >
+    ) => Effect.Effect<neptune.RebootDBInstanceResult, neptune.RebootDBInstanceError>
   >
 > {}
-export const RebootDBInstance = Binding.Service<RebootDBInstance>(
-  "AWS.Neptune.RebootDBInstance",
-);
+export const RebootDBInstance = Binding.Service<RebootDBInstance>("AWS.Neptune.RebootDBInstance");

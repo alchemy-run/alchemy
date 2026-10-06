@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { DBCluster, DBInstance, DBSubnetGroup } from "@/AWS/DocDB";
-import * as Test from "@/Test/Alchemy";
 import * as docdb from "@distilled.cloud/aws/docdb";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { DBCluster, DBInstance, DBSubnetGroup } from "@/AWS/DocDB";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -24,6 +24,7 @@ test.provider(
       );
       expect(error._tag).toBe("DBClusterNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:docdb", "live"] },
 );
 
 test.provider(
@@ -37,6 +38,7 @@ test.provider(
       );
       expect(error._tag).toBe("DBInstanceNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:docdb", "live"] },
 );
 
 test.provider(
@@ -50,6 +52,7 @@ test.provider(
       );
       expect(error._tag).toBe("DBSubnetGroupNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:docdb", "live"] },
 );
 
 // Resolve two default-for-AZ subnets and the default security group.
@@ -86,26 +89,17 @@ const defaultNetwork = Effect.gen(function* () {
 // it would push the test into its timeout.
 const assertClusterDeleting = (identifier: string) =>
   Effect.gen(function* () {
-    const status = yield* docdb
-      .describeDBClusters({ DBClusterIdentifier: identifier })
-      .pipe(
-        Effect.map((r) => r.DBClusters?.[0]?.Status ?? "gone"),
-        Effect.catchTag("DBClusterNotFoundFault", () =>
-          Effect.succeed("gone" as const),
-        ),
-      );
+    const status = yield* docdb.describeDBClusters({ DBClusterIdentifier: identifier }).pipe(
+      Effect.map((r) => r.DBClusters?.[0]?.Status ?? "gone"),
+      Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed("gone" as const)),
+    );
     if (status !== "gone" && status !== "deleting") {
       return yield* Effect.fail(
         new Error(`cluster '${identifier}' still exists (status: ${status})`),
       );
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // A DocumentDB cluster + instance take ~5-10 minutes to provision and bill per
@@ -167,9 +161,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const describedInstance = yield* docdb.describeDBInstances({
         DBInstanceIdentifier: instance.dbInstanceIdentifier,
       });
-      expect(describedInstance.DBInstances?.[0]?.DBInstanceStatus).toBe(
-        "available",
-      );
+      expect(describedInstance.DBInstances?.[0]?.DBInstanceStatus).toBe("available");
 
       // Destroy immediately — instances bill while they exist — and verify
       // cluster deletion was initiated out-of-band.
@@ -177,5 +169,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertClusterDeleting(cluster.dbClusterIdentifier);
     }),
   // cluster + instance create (~5-10 min) + delete initiation, one test.
-  { timeout: 1_500_000 },
+  { tags: ["provider:aws", "provider:aws:docdb", "provider:aws:ec2", "live"], timeout: 1_500_000 },
 );

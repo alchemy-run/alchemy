@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker-runtime";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,7 +31,10 @@ test.provider(
         expect(result.failure._tag).toBe("ValidationError");
       }
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:aws", "provider:aws:sagemakerruntime", "live"],
+    timeout: 60_000,
+  },
 );
 
 test.provider(
@@ -42,8 +45,7 @@ test.provider(
         sagemaker.invokeEndpointAsync({
           EndpointName: "alchemy-nonexistent-endpoint-probe",
           ContentType: "application/json",
-          InputLocation:
-            "s3://alchemy-nonexistent-bucket-probe/input/request.json",
+          InputLocation: "s3://alchemy-nonexistent-bucket-probe/input/request.json",
         }),
       );
 
@@ -52,7 +54,10 @@ test.provider(
         expect(result.failure._tag).toBe("ValidationError");
       }
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:aws", "provider:aws:sagemakerruntime", "live"],
+    timeout: 60_000,
+  },
 );
 
 test.provider(
@@ -72,5 +77,8 @@ test.provider(
         expect(result.failure._tag).toBe("ValidationError");
       }
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:aws", "provider:aws:sagemakerruntime", "live"],
+    timeout: 60_000,
+  },
 );

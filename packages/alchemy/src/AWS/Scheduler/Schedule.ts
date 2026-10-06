@@ -132,9 +132,7 @@ export const ScheduleProvider = () =>
     Schedule,
     Effect.gen(function* () {
       const toName = (id: string, props: ScheduleProps) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
       return {
         stables: ["scheduleArn", "scheduleName", "groupName"],
@@ -149,22 +147,15 @@ export const ScheduleProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const scheduleName =
-            output?.scheduleName ?? (yield* toName(id, olds));
+          const scheduleName = output?.scheduleName ?? (yield* toName(id, olds));
           const groupName =
-            output?.groupName ??
-            (olds.groupName as string | undefined) ??
-            "default";
+            output?.groupName ?? (olds.groupName as string | undefined) ?? "default";
           const described = yield* scheduler
             .getSchedule({
               Name: scheduleName,
               GroupName: groupName !== "default" ? groupName : undefined,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
@@ -178,14 +169,10 @@ export const ScheduleProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const scheduleName =
-            output?.scheduleName ?? (yield* toName(id, news));
+          const scheduleName = output?.scheduleName ?? (yield* toName(id, news));
           const groupName =
-            output?.groupName ??
-            (news.groupName as string | undefined) ??
-            "default";
-          const groupNameParam =
-            groupName !== "default" ? groupName : undefined;
+            output?.groupName ?? (news.groupName as string | undefined) ?? "default";
+          const groupNameParam = groupName !== "default" ? groupName : undefined;
 
           const desiredConfig = {
             ScheduleExpression: news.scheduleExpression,
@@ -207,11 +194,7 @@ export const ScheduleProvider = () =>
           // Observe — fetch live schedule.
           let observed = yield* scheduler
             .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create if missing. EventBridge Scheduler does not support
           // tagging individual schedules (only schedule groups), so ownership
@@ -231,11 +214,7 @@ export const ScheduleProvider = () =>
               );
             observed = yield* scheduler
               .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
 
           if (!observed?.Arn) {
@@ -277,8 +256,7 @@ export const ScheduleProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.Schedules ?? []).filter(
-                    (s): s is scheduler.ScheduleSummary & { Name: string } =>
-                      s.Name != null,
+                    (s): s is scheduler.ScheduleSummary & { Name: string } => s.Name != null,
                   ),
                 ),
               ),
@@ -306,28 +284,21 @@ export const ScheduleProvider = () =>
                           }
                         : undefined,
                     ),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
               },
               { concurrency: 10 },
             );
 
-            return rows.filter(
-              (row): row is Schedule["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Schedule["Attributes"] => row !== undefined);
           }),
         delete: Effect.fn(function* ({ output }) {
           yield* scheduler
             .deleteSchedule({
               Name: output.scheduleName,
-              GroupName:
-                output.groupName !== "default" ? output.groupName : undefined,
+              GroupName: output.groupName !== "default" ? output.groupName : undefined,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -24,6 +24,7 @@ export interface RetrieveIssuingCardholderRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Issuing
  */
 export interface RetrieveIssuingCardholder extends Binding.Service<
   RetrieveIssuingCardholder,
@@ -33,15 +34,10 @@ export interface RetrieveIssuingCardholder extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveIssuingCardholderRequest,
-    ) => Effect.Effect<
-      StripeIssuingCardholder,
-      GetIssuingCardholderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeIssuingCardholder, GetIssuingCardholderError, RuntimeContext>
   >
 > {}
 
-export const RetrieveIssuingCardholder =
-  Binding.Service<RetrieveIssuingCardholder>(
-    "Stripe.RetrieveIssuingCardholder",
-  );
+export const RetrieveIssuingCardholder = Binding.Service<RetrieveIssuingCardholder>(
+  "Stripe.RetrieveIssuingCardholder",
+);

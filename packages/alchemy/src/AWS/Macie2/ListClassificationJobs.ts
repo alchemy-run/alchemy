@@ -27,10 +27,7 @@ export interface ListClassificationJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.ListClassificationJobsRequest,
-    ) => Effect.Effect<
-      macie2.ListClassificationJobsResponse,
-      macie2.ListClassificationJobsError
-    >
+    ) => Effect.Effect<macie2.ListClassificationJobsResponse, macie2.ListClassificationJobsError>
   >
 > {}
 export const ListClassificationJobs = Binding.Service<ListClassificationJobs>(

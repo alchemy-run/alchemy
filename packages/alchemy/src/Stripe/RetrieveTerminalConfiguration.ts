@@ -24,6 +24,7 @@ export interface RetrieveTerminalConfigurationRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Terminal
  */
 export interface RetrieveTerminalConfiguration extends Binding.Service<
   RetrieveTerminalConfiguration,
@@ -41,7 +42,6 @@ export interface RetrieveTerminalConfiguration extends Binding.Service<
   >
 > {}
 
-export const RetrieveTerminalConfiguration =
-  Binding.Service<RetrieveTerminalConfiguration>(
-    "Stripe.RetrieveTerminalConfiguration",
-  );
+export const RetrieveTerminalConfiguration = Binding.Service<RetrieveTerminalConfiguration>(
+  "Stripe.RetrieveTerminalConfiguration",
+);
