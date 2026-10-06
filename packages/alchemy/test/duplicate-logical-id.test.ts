@@ -19,9 +19,11 @@ describe("logical ids", { tags: ["unit", "local"] }, () => {
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
         const defects = exit.cause.reasons.flatMap((reason) =>
-          reason._tag === "Die" ? [reason.defect as DuplicateLogicalIdError] : [],
+          reason._tag === "Die" && reason.defect instanceof DuplicateLogicalIdError
+            ? [reason.defect]
+            : [],
         );
-        const duplicate = defects.find((defect) => defect?._tag === "DuplicateLogicalIdError");
+        const duplicate = defects.find((defect) => defect._tag === "DuplicateLogicalIdError");
         expect(duplicate?.fqn).toEqual("Thing");
         expect(duplicate?.existingType).toEqual("Test.Bucket");
         expect(duplicate?.conflictingType).toEqual("Test.Queue");
