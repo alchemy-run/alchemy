@@ -300,8 +300,7 @@ export interface FunctionCommonProps extends PlatformProps {
    * `{ retention: "forever" }`. When set, Alchemy creates (or adopts) the
    * log group so the policy applies before the first invocation, and
    * deletes it with the function. When omitted the log group is left to
-   * Lambda, which creates it on first invoke with no expiry. Not applied on
-   * the local emulator, which has no CloudWatch Logs.
+   * Lambda, which creates it on first invoke with no expiry.
    */
   logging?: LogRetentionConfig;
 }
@@ -2365,7 +2364,7 @@ export const FunctionProvider = () =>
           // Lambda only auto-creates the log group on first invoke and with
           // no expiry, so create (or adopt) it here to give the retention
           // policy a group to attach to. The delete path already reaps it.
-          if (news.logging?.retention !== undefined && !(yield* AWSEnvironment.isLocalEmulator)) {
+          if (news.logging?.retention !== undefined) {
             const logGroupName = `/aws/lambda/${functionName}`;
             yield* logs
               .createLogGroup({ logGroupName, tags: yield* createInternalTags(id) })
