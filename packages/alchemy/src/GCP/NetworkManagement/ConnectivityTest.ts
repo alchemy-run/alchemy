@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -38,9 +33,7 @@ import {
 const COLLECTION = "connectivityTests";
 const DEFAULT_PROTOCOL = "TCP";
 
-export type ConnectivityTestNetworkType =
-  | networkmanagement.EndpointNetworkTypeEnum
-  | (string & {});
+export type ConnectivityTestNetworkType = networkmanagement.EndpointNetworkTypeEnum | (string & {});
 
 export type ConnectivityTestEndpoint = {
   /** IP address of the endpoint (internal or external). */
@@ -260,9 +253,7 @@ const toEndpoint = (
     redisCluster: endpoint.redisCluster,
     gkePod: endpoint.gkePod,
     dmsPrivateConnection: endpoint.dmsPrivateConnection,
-    cloudFunction: endpoint.cloudFunction
-      ? { uri: endpoint.cloudFunction.uri }
-      : undefined,
+    cloudFunction: endpoint.cloudFunction ? { uri: endpoint.cloudFunction.uri } : undefined,
     appEngineVersion: endpoint.appEngineVersion
       ? { uri: endpoint.appEngineVersion.uri }
       : undefined,
@@ -280,9 +271,7 @@ const toEndpoint = (
   return next;
 };
 
-const endpointKey = (
-  endpoint: ConnectivityTestEndpoint | undefined,
-): unknown => {
+const endpointKey = (endpoint: ConnectivityTestEndpoint | undefined): unknown => {
   if (endpoint === undefined) return undefined;
   return {
     ipAddress: endpoint.ipAddress ?? "",
@@ -344,11 +333,7 @@ export const ConnectivityTestProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.testId ?? output?.testId;
       const nextId = news.testId
-        ? rfc1035(
-            news.testId,
-            "connectivity-test",
-            MAX_CONNECTIVITY_TEST_ID_LENGTH,
-          )
+        ? rfc1035(news.testId, "connectivity-test", MAX_CONNECTIVITY_TEST_ID_LENGTH)
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
@@ -359,9 +344,7 @@ export const ConnectivityTestProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -378,17 +361,12 @@ export const ConnectivityTestProvider = () =>
         "connectivity-test",
         MAX_CONNECTIVITY_TEST_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
       const name = output?.name ?? resourceName(env.project, location, testId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -415,10 +393,7 @@ export const ConnectivityTestProvider = () =>
         "connectivity-test",
         MAX_CONNECTIVITY_TEST_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, testId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -444,8 +419,7 @@ export const ConnectivityTestProvider = () =>
               source,
               destination,
               protocol,
-              relatedProjects:
-                relatedProjects.length > 0 ? relatedProjects : undefined,
+              relatedProjects: relatedProjects.length > 0 ? relatedProjects : undefined,
               roundTrip,
               bypassFirewallChecks,
             },
@@ -467,8 +441,7 @@ export const ConnectivityTestProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const sourceChanged = !sameJson(
         endpointKey(toEndpoint(current.source, env.project)),
         endpointKey(source),
@@ -478,15 +451,10 @@ export const ConnectivityTestProvider = () =>
         endpointKey(destination),
       );
       const protocolChanged =
-        (current.protocol ?? DEFAULT_PROTOCOL).toUpperCase() !==
-        protocol.toUpperCase();
-      const relatedChanged = !sameStringList(
-        current.relatedProjects,
-        relatedProjects,
-      );
+        (current.protocol ?? DEFAULT_PROTOCOL).toUpperCase() !== protocol.toUpperCase();
+      const relatedChanged = !sameStringList(current.relatedProjects, relatedProjects);
       const roundTripChanged = (current.roundTrip === true) !== roundTrip;
-      const bypassChanged =
-        (current.bypassFirewallChecks === true) !== bypassFirewallChecks;
+      const bypassChanged = (current.bypassFirewallChecks === true) !== bypassFirewallChecks;
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -500,29 +468,23 @@ export const ConnectivityTestProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkmanagement.patchProjectsLocationsGlobalConnectivityTests(
-            {
-              name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                source,
-                destination,
-                protocol,
-                relatedProjects,
-                roundTrip,
-                bypassFirewallChecks,
-              },
-            },
-          );
+        const operation = yield* networkmanagement.patchProjectsLocationsGlobalConnectivityTests({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            name: current.name ?? name,
+            labels: desiredLabels,
+            description: news.description,
+            source,
+            destination,
+            protocol,
+            relatedProjects,
+            roundTrip,
+            bypassFirewallChecks,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

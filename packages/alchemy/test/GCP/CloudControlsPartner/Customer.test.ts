@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudcontrolspartner from "@distilled.cloud/gcp/cloudcontrolspartner_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const location = "us-central1";
 
 const organizationOf = () =>
@@ -21,12 +18,9 @@ const organizationOf = () =>
     const { project } = yield* GcpEnvironment.current;
 
     const fromEnv =
-      process.env.GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION ??
-      process.env.GOOGLE_ORGANIZATION_ID;
+      process.env.GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION ?? process.env.GOOGLE_ORGANIZATION_ID;
     if (fromEnv && fromEnv.length > 0) {
-      return fromEnv.startsWith("organizations/")
-        ? fromEnv
-        : `organizations/${fromEnv}`;
+      return fromEnv.startsWith("organizations/") ? fromEnv : `organizations/${fromEnv}`;
     }
     let current: string | undefined = `projects/${project}`;
     for (let i = 0; i < 8; i++) {
@@ -58,9 +52,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const customerOrgId = (
-  process.env.GOOGLE_CLOUDCONTROLSPARTNER_CUSTOMER_ID ?? ""
-).trim();
+const customerOrgId = (process.env.GOOGLE_CLOUDCONTROLSPARTNER_CUSTOMER_ID ?? "").trim();
 
 // Cloud Controls Partner is for allow-listed Sovereign Cloud partners: without
 // partner permissions on the organization every call answers 403 ("Permission
@@ -142,10 +134,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.displayName).toEqual("Acme Corp");
       expect(created.location).toEqual(location);
 
-      const fetched =
-        yield* cloudcontrolspartner.getOrganizationsLocationsCustomers({
-          name: created.name,
-        });
+      const fetched = yield* cloudcontrolspartner.getOrganizationsLocationsCustomers({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.displayName).toContain("[alchemy ");
       expect(fetched.displayName).toContain("Acme Corp");

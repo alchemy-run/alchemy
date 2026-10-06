@@ -106,11 +106,7 @@ export class EnvironmentsKeyvaluemapNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organizationId: string,
-  environmentId: string,
-  keyvaluemapId: string,
-) =>
+const resourceName = (organizationId: string, environmentId: string, keyvaluemapId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/keyvaluemaps/${keyvaluemapId}`;
 
 const toAttrs = (
@@ -152,8 +148,7 @@ export const EnvironmentsKeyvaluemapProvider = () =>
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -169,18 +164,11 @@ export const EnvironmentsKeyvaluemapProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
-      const keyvaluemapId = yield* toResourceId(
-        id,
-        olds?.keyvaluemapId,
-        output?.keyvaluemapId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
-      const name =
-        output?.name ??
-        resourceName(organizationId, environmentId, keyvaluemapId);
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
+      const keyvaluemapId = yield* toResourceId(id, olds?.keyvaluemapId, output?.keyvaluemapId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
+      const name = output?.name ?? resourceName(organizationId, environmentId, keyvaluemapId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, organizationId, environmentId);
@@ -192,12 +180,9 @@ export const EnvironmentsKeyvaluemapProvider = () =>
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(news.organization, project);
       const environmentId = environmentIdOf(news.environment);
-      const keyvaluemapId = yield* toResourceId(
-        id,
-        news.keyvaluemapId,
-        output?.keyvaluemapId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
+      const keyvaluemapId = yield* toResourceId(id, news.keyvaluemapId, output?.keyvaluemapId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
       const parent = environmentNameOf(organizationId, environmentId);
       const name = resourceName(organizationId, environmentId, keyvaluemapId);
       const desiredMasked = news.maskedValues === true;
@@ -239,11 +224,6 @@ export const EnvironmentsKeyvaluemapProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsEnvironmentsKeyvaluemaps({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

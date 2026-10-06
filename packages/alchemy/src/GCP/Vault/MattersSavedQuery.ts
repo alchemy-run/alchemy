@@ -108,9 +108,7 @@ export type MattersSavedQuery = Resource<
  * @resource
  * @category Vault
  */
-export const MattersSavedQuery = Resource<MattersSavedQuery>(
-  "GCP.Vault.MattersSavedQuery",
-);
+export const MattersSavedQuery = Resource<MattersSavedQuery>("GCP.Vault.MattersSavedQuery");
 
 export class MattersSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Vault.MattersSavedQueryNotResolved",
@@ -155,10 +153,7 @@ export const MattersSavedQueryProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousQuery = olds?.query ?? output?.query;
-      if (
-        previousQuery !== undefined &&
-        !jsonEqual(previousQuery, news.query)
-      ) {
+      if (previousQuery !== undefined && !jsonEqual(previousQuery, news.query)) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -183,9 +178,7 @@ export const MattersSavedQueryProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -211,26 +204,14 @@ export const MattersSavedQueryProvider = () =>
       const env = yield* GcpEnvironment.current;
       const matterId = news.matterId;
       const ownership = yield* ownershipLabels(id);
-      const generated = yield* toGeneratedName(
-        id,
-        news.displayName,
-        output?.displayName,
-        40,
-      );
-      const displayName = encodeOwnershipLine(
-        ownership,
-        generated,
-        MAX_SAVED_QUERY_NAME_LENGTH,
-      );
+      const generated = yield* toGeneratedName(id, news.displayName, output?.displayName, 40);
+      const displayName = encodeOwnershipLine(ownership, generated, MAX_SAVED_QUERY_NAME_LENGTH);
       const desired: vault.SavedQuery = {
         displayName,
         query: news.query,
       };
 
-      let current = yield* getSavedQuery(
-        matterId,
-        news.savedQueryId ?? output?.savedQueryId ?? "",
-      );
+      let current = yield* getSavedQuery(matterId, news.savedQueryId ?? output?.savedQueryId ?? "");
       if (current === undefined) {
         current = yield* findSavedQueryByName(matterId, displayName);
       }
@@ -244,19 +225,14 @@ export const MattersSavedQueryProvider = () =>
             matterId,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findSavedQueryByName(matterId, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findSavedQueryByName(matterId, displayName)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new MattersSavedQueryNotResolved({
           matterId,
-          savedQueryId:
-            news.savedQueryId ?? output?.savedQueryId ?? displayName,
+          savedQueryId: news.savedQueryId ?? output?.savedQueryId ?? displayName,
         });
       }
 

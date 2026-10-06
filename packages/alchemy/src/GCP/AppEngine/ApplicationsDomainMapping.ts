@@ -30,9 +30,7 @@ export type ApplicationsDomainMappingSslSettings = {
    * certificate. `MANUAL` requires `certificateId`.
    * @default "AUTOMATIC"
    */
-  sslManagementType?:
-    | appengine.SslSettingsSslManagementTypeEnum
-    | (string & {});
+  sslManagementType?: appengine.SslSettingsSslManagementTypeEnum | (string & {});
   /**
    * AuthorizedCertificate id to serve for `MANUAL` SSL. Clearing it
    * removes SSL support.
@@ -175,8 +173,7 @@ const toAttrs = (
     applicationsId: parsed.applicationsId ?? applicationsId,
     sslManagementType: mapping.sslSettings?.sslManagementType,
     certificateId: mapping.sslSettings?.certificateId,
-    pendingManagedCertificateId:
-      mapping.sslSettings?.pendingManagedCertificateId,
+    pendingManagedCertificateId: mapping.sslSettings?.pendingManagedCertificateId,
     resourceRecords: (mapping.resourceRecords ?? []).map((record) => ({
       type: record.type,
       name: record.name,
@@ -215,10 +212,8 @@ const desiredSsl = (news: ApplicationsDomainMappingProps) => {
   } satisfies appengine.SslSettings;
 };
 
-const mappingOwned = (
-  mapping: appengine.DomainMapping,
-  ownedIds: ReadonlySet<string>,
-) => domainIsOwned(mapping.id, ownedIds, mapping);
+const mappingOwned = (mapping: appengine.DomainMapping, ownedIds: ReadonlySet<string>) =>
+  domainIsOwned(mapping.id, ownedIds, mapping);
 
 export const ApplicationsDomainMappingProvider = () =>
   Provider.succeed(ApplicationsDomainMapping, {
@@ -246,11 +241,7 @@ export const ApplicationsDomainMappingProvider = () =>
       }
       const previousApp = olds?.applicationsId ?? output?.applicationsId;
       const nextApp = news.applicationsId ?? previousApp;
-      if (
-        previousApp !== undefined &&
-        nextApp !== undefined &&
-        nextApp !== previousApp
-      ) {
+      if (previousApp !== undefined && nextApp !== undefined && nextApp !== previousApp) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousDomain = olds?.domain ?? output?.domain;
@@ -267,26 +258,13 @@ export const ApplicationsDomainMappingProvider = () =>
         output?.applicationsId ?? output?.project,
       );
       const project = olds?.project ?? output?.project ?? env.project;
-      const location = yield* resolveLocation(
-        olds?.location,
-        output?.location,
-        applicationsId,
-      );
+      const location = yield* resolveLocation(olds?.location, output?.location, applicationsId);
       const domain = olds?.domain ?? output?.domain ?? "";
-      const existing = yield* getByDomain(
-        project,
-        location,
-        applicationsId,
-        domain,
-      );
+      const existing = yield* getByDomain(project, location, applicationsId, domain);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, project, location, applicationsId);
       const ownedIds = ownedCertificateIds(
-        yield* listApplicationsAuthorizedCertificates(
-          project,
-          location,
-          applicationsId,
-        ),
+        yield* listApplicationsAuthorizedCertificates(project, location, applicationsId),
       );
       return mappingOwned(existing, ownedIds) ? attrs : Unowned(attrs);
     }),
@@ -294,28 +272,14 @@ export const ApplicationsDomainMappingProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const location = yield* resolveLocation(
-          undefined,
-          undefined,
-          env.project,
-        );
+        const location = yield* resolveLocation(undefined, undefined, env.project);
         const ownedIds = ownedCertificateIds(
-          yield* listApplicationsAuthorizedCertificates(
-            env.project,
-            location,
-            env.project,
-          ),
+          yield* listApplicationsAuthorizedCertificates(env.project, location, env.project),
         );
-        const mappings = yield* listApplicationsDomainMappings(
-          env.project,
-          location,
-          env.project,
-        );
+        const mappings = yield* listApplicationsDomainMappings(env.project, location, env.project);
         return mappings
           .filter((mapping) => mappingOwned(mapping, ownedIds))
-          .map((mapping) =>
-            toAttrs(mapping, env.project, location, env.project),
-          );
+          .map((mapping) => toAttrs(mapping, env.project, location, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -325,20 +289,11 @@ export const ApplicationsDomainMappingProvider = () =>
         output?.applicationsId ?? output?.project,
       );
       const project = news.project ?? output?.project ?? env.project;
-      const location = yield* resolveLocation(
-        news.location,
-        output?.location,
-        applicationsId,
-      );
+      const location = yield* resolveLocation(news.location, output?.location, applicationsId);
       const domain = news.domain;
       const sslSettings = desiredSsl(news);
 
-      let current = yield* getByDomain(
-        project,
-        location,
-        applicationsId,
-        domain,
-      );
+      let current = yield* getByDomain(project, location, applicationsId, domain);
 
       if (current === undefined) {
         const operation = yield* appengine
@@ -353,9 +308,7 @@ export const ApplicationsDomainMappingProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<appengine.Operation>({ done: true }),
-            ),
+            Effect.catchTag("Conflict", () => Effect.succeed<appengine.Operation>({ done: true })),
           );
         if (operation.done !== true || operation.name !== undefined) {
           yield* waitForOperation(operation, { appsId: applicationsId });
@@ -370,31 +323,19 @@ export const ApplicationsDomainMappingProvider = () =>
       }
 
       const observedSsl = current.sslSettings;
-      const typeChanged = !sameText(
-        observedSsl?.sslManagementType,
-        sslSettings.sslManagementType,
-      );
-      const certChanged = !sameText(
-        observedSsl?.certificateId,
-        sslSettings.certificateId,
-      );
-      if (
-        (typeChanged || certChanged) &&
-        !jsonEqual(observedSsl, sslSettings)
-      ) {
-        const operation =
-          yield* appengine.patchProjectsLocationsApplicationsDomainMappings({
-            projectsId: project,
-            locationsId: location,
-            applicationsId,
-            domainMappingsId: domain,
-            updateMask: updateMaskOf("sslSettings"),
-            body: { sslSettings },
-          });
+      const typeChanged = !sameText(observedSsl?.sslManagementType, sslSettings.sslManagementType);
+      const certChanged = !sameText(observedSsl?.certificateId, sslSettings.certificateId);
+      if ((typeChanged || certChanged) && !jsonEqual(observedSsl, sslSettings)) {
+        const operation = yield* appengine.patchProjectsLocationsApplicationsDomainMappings({
+          projectsId: project,
+          locationsId: location,
+          applicationsId,
+          domainMappingsId: domain,
+          updateMask: updateMaskOf("sslSettings"),
+          body: { sslSettings },
+        });
         yield* waitForOperation(operation, { appsId: applicationsId });
-        current =
-          (yield* getByDomain(project, location, applicationsId, domain)) ??
-          current;
+        current = (yield* getByDomain(project, location, applicationsId, domain)) ?? current;
       }
 
       return toAttrs(current, project, location, applicationsId);

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Configuration } from "@/AWS/MQ";
-import * as Test from "@/Test/Alchemy";
 import * as mq from "@distilled.cloud/aws/mq";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Configuration } from "@/AWS/MQ";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +15,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        mq.describeBroker({
-          BrokerId: "b-00000000-0000-0000-0000-000000000000",
-        }),
+        mq.describeBroker({ BrokerId: "b-00000000-0000-0000-0000-000000000000" }),
       );
       expect(error._tag).toBe("NotFoundException");
     }),
@@ -29,9 +27,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        mq.describeConfiguration({
-          ConfigurationId: "c-00000000-0000-0000-0000-000000000000",
-        }),
+        mq.describeConfiguration({ ConfigurationId: "c-00000000-0000-0000-0000-000000000000" }),
       );
       expect(error._tag).toBe("NotFoundException");
     }),
@@ -40,23 +36,15 @@ test.provider(
 
 const assertConfigurationGone = (configurationId: string) =>
   Effect.gen(function* () {
-    const status = yield* mq
-      .describeConfiguration({ ConfigurationId: configurationId })
-      .pipe(
-        Effect.map(() => "PRESENT" as const),
-        Effect.catchTag("NotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
-      );
+    const status = yield* mq.describeConfiguration({ ConfigurationId: configurationId }).pipe(
+      Effect.map(() => "PRESENT" as const),
+      Effect.catchTag("NotFoundException", () => Effect.succeed("GONE" as const)),
+    );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`MQ configuration ${configurationId} still exists`),
-      );
+      return yield* Effect.fail(new Error(`MQ configuration ${configurationId} still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]) }),
   );
 
 const configDataV1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -88,11 +76,8 @@ test.provider(
 
       // Pick a valid ActiveMQ engine version from the live API so the test
       // never breaks when AWS retires a hardcoded version.
-      const engines = yield* mq.describeBrokerEngineTypes({
-        EngineType: "ACTIVEMQ",
-      });
-      const engineVersion =
-        engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
+      const engines = yield* mq.describeBrokerEngineTypes({ EngineType: "ACTIVEMQ" });
+      const engineVersion = engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
       expect(engineVersion).toBeDefined();
 
       const created = yield* stack.deploy(
@@ -133,9 +118,7 @@ test.provider(
         }),
       );
       expect(updated.configurationId).toBe(created.configurationId);
-      expect(updated.configurationRevision).toBeGreaterThan(
-        created.configurationRevision,
-      );
+      expect(updated.configurationRevision).toBeGreaterThan(created.configurationRevision);
 
       yield* stack.destroy();
       yield* assertConfigurationGone(created.configurationId);

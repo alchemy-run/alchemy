@@ -29,15 +29,9 @@ export type RoutineSparkOptions = bigquery.SparkOptions;
 export type RoutineRemoteFunctionOptions = bigquery.RemoteFunctionOptions;
 export type RoutinePythonOptions = bigquery.PythonOptions;
 export type RoutineExternalRuntimeOptions = bigquery.ExternalRuntimeOptions;
-export type RoutineDeterminismLevel =
-  | bigquery.RoutineDeterminismLevelEnum
-  | (string & {});
-export type RoutineSecurityMode =
-  | bigquery.RoutineSecurityModeEnum
-  | (string & {});
-export type RoutineDataGovernanceType =
-  | bigquery.RoutineDataGovernanceTypeEnum
-  | (string & {});
+export type RoutineDeterminismLevel = bigquery.RoutineDeterminismLevelEnum | (string & {});
+export type RoutineSecurityMode = bigquery.RoutineSecurityModeEnum | (string & {});
+export type RoutineDataGovernanceType = bigquery.RoutineDataGovernanceTypeEnum | (string & {});
 
 export type RoutineProps = {
   /**
@@ -261,9 +255,7 @@ export type Routine = Resource<
  */
 export const Routine = Resource<Routine>("GCP.BigQuery.Routine");
 
-export class RoutineNotResolved extends Data.TaggedError(
-  "GCP.BigQuery.RoutineNotResolved",
-)<{
+export class RoutineNotResolved extends Data.TaggedError("GCP.BigQuery.RoutineNotResolved")<{
   name: string;
 }> {}
 
@@ -306,12 +298,9 @@ const stable = (value: unknown): unknown => {
 };
 
 const jsonEqual = (left: unknown, right: unknown) =>
-  JSON.stringify(stable(left ?? null)) ===
-  JSON.stringify(stable(right ?? null));
+  JSON.stringify(stable(left ?? null)) === JSON.stringify(stable(right ?? null));
 
-const canonType = (
-  type: RoutineDataType | undefined,
-): RoutineDataType | undefined => {
+const canonType = (type: RoutineDataType | undefined): RoutineDataType | undefined => {
   if (type === undefined) return undefined;
   return {
     typeKind: type.typeKind,
@@ -413,10 +402,7 @@ const getByRef = (projectId: string, datasetId: string, routineId: string) =>
 const defaultLanguage = (news: RoutineProps, observed?: bigquery.Routine) => {
   if (news.language !== undefined) return news.language;
   if (observed?.language !== undefined) return observed.language;
-  if (
-    news.remoteFunctionOptions !== undefined ||
-    observed?.remoteFunctionOptions !== undefined
-  ) {
+  if (news.remoteFunctionOptions !== undefined || observed?.remoteFunctionOptions !== undefined) {
     return undefined;
   }
   return DEFAULT_LANGUAGE;
@@ -447,24 +433,15 @@ const toRoutineBody = (
   if (returnType !== undefined) body.returnType = returnType;
   const returnTableType = pick(news.returnTableType, observed?.returnTableType);
   if (returnTableType !== undefined) body.returnTableType = returnTableType;
-  const importedLibraries = pick(
-    news.importedLibraries,
-    observed?.importedLibraries,
-  );
+  const importedLibraries = pick(news.importedLibraries, observed?.importedLibraries);
   if (importedLibraries !== undefined) {
     body.importedLibraries = importedLibraries;
   }
-  const determinismLevel = pick(
-    news.determinismLevel,
-    observed?.determinismLevel,
-  );
+  const determinismLevel = pick(news.determinismLevel, observed?.determinismLevel);
   if (determinismLevel !== undefined) body.determinismLevel = determinismLevel;
   const securityMode = pick(news.securityMode, observed?.securityMode);
   if (securityMode !== undefined) body.securityMode = securityMode;
-  const dataGovernanceType = pick(
-    news.dataGovernanceType,
-    observed?.dataGovernanceType,
-  );
+  const dataGovernanceType = pick(news.dataGovernanceType, observed?.dataGovernanceType);
   if (dataGovernanceType !== undefined) {
     body.dataGovernanceType = dataGovernanceType;
   }
@@ -472,10 +449,7 @@ const toRoutineBody = (
   if (strictMode !== undefined) body.strictMode = strictMode;
   const sparkOptions = pick(news.sparkOptions, observed?.sparkOptions);
   if (sparkOptions !== undefined) body.sparkOptions = sparkOptions;
-  const remoteFunctionOptions = pick(
-    news.remoteFunctionOptions,
-    observed?.remoteFunctionOptions,
-  );
+  const remoteFunctionOptions = pick(news.remoteFunctionOptions, observed?.remoteFunctionOptions);
   if (remoteFunctionOptions !== undefined) {
     body.remoteFunctionOptions = remoteFunctionOptions;
   }
@@ -517,22 +491,12 @@ const inputSnapshot = (routine: bigquery.Routine) => ({
   externalRuntimeOptions: routine.externalRuntimeOptions,
 });
 
-const hasAlchemyDatasetLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyDatasetLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 export const RoutineProvider = () =>
   Provider.succeed(Routine, {
-    stables: [
-      "name",
-      "id",
-      "routineId",
-      "datasetId",
-      "project",
-      "routineType",
-      "creationTime",
-    ],
+    stables: ["name", "id", "routineId", "datasetId", "project", "routineType", "creationTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -546,17 +510,11 @@ export const RoutineProvider = () =>
       const previousDataset = olds?.datasetId ?? output?.datasetId;
       const nextDataset = datasetIdOf(news.datasetId);
       const datasetChanged =
-        previousDataset !== undefined &&
-        datasetIdOf(previousDataset) !== nextDataset;
+        previousDataset !== undefined && datasetIdOf(previousDataset) !== nextDataset;
 
-      const previousType = (
-        olds?.routineType ??
-        output?.routineType ??
-        ""
-      ).toUpperCase();
+      const previousType = (olds?.routineType ?? output?.routineType ?? "").toUpperCase();
       const typeChanged =
-        previousType.length > 0 &&
-        news.routineType.toUpperCase() !== previousType;
+        previousType.length > 0 && news.routineType.toUpperCase() !== previousType;
 
       if (!routineIdChanged && !datasetChanged && !typeChanged) {
         return undefined;
@@ -580,10 +538,7 @@ export const RoutineProvider = () =>
       const existing = yield* getByRef(env.project, datasetId, routineId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseDescription(existing.description).labels,
-      ))
+      return (yield* hasAlchemyLabels(id, parseDescription(existing.description).labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -621,12 +576,8 @@ export const RoutineProvider = () =>
                 readMask: "description,routineType,language",
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.routines ?? []),
-                ),
-                Stream.filter((routine) =>
-                  hasOwnershipMarker(routine.description),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.routines ?? [])),
+                Stream.filter((routine) => hasOwnershipMarker(routine.description)),
                 Stream.map((routine) => toAttrs(routine, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
@@ -652,19 +603,9 @@ export const RoutineProvider = () =>
         news.description !== undefined
           ? news.description
           : parseDescription(current?.description).description;
-      const encodedDescription = encodeDescription(
-        internalLabels,
-        userDescription,
-      );
+      const encodedDescription = encodeDescription(internalLabels, userDescription);
       const bodyOf = (observed?: bigquery.Routine) =>
-        toRoutineBody(
-          env.project,
-          datasetId,
-          routineId,
-          news,
-          encodedDescription,
-          observed,
-        );
+        toRoutineBody(env.project, datasetId, routineId, news, encodedDescription, observed);
 
       if (current === undefined) {
         const created = yield* bigquery
@@ -673,11 +614,7 @@ export const RoutineProvider = () =>
             datasetId,
             body: bodyOf(),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByRef(env.project, datasetId, routineId),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, routineId)));
         current = created ?? undefined;
       }
 
@@ -686,10 +623,7 @@ export const RoutineProvider = () =>
       }
 
       const desired = bodyOf(current);
-      const metadataChanged = !jsonEqual(
-        inputSnapshot(desired),
-        inputSnapshot(current),
-      );
+      const metadataChanged = !jsonEqual(inputSnapshot(desired), inputSnapshot(current));
 
       if (metadataChanged) {
         current = yield* bigquery
@@ -708,9 +642,7 @@ export const RoutineProvider = () =>
                   body: bodyOf(),
                 })
                 .pipe(
-                  Effect.catchTag("Conflict", () =>
-                    getByRef(env.project, datasetId, routineId),
-                  ),
+                  Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, routineId)),
                 ),
             ),
           );

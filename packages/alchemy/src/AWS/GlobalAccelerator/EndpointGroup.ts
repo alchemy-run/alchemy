@@ -185,14 +185,11 @@ export interface EndpointGroup extends Resource<
  *
  * @resource
  */
-export const EndpointGroup = Resource<EndpointGroup>(
-  "AWS.GlobalAccelerator.EndpointGroup",
-);
+export const EndpointGroup = Resource<EndpointGroup>("AWS.GlobalAccelerator.EndpointGroup");
 
 // Endpoint-group ARNs embed the parent listener ARN:
 // arn:...:accelerator/{id}/listener/{id}/endpoint-group/{id}
-const listenerArnOf = (endpointGroupArn: string) =>
-  endpointGroupArn.split("/endpoint-group/")[0]!;
+const listenerArnOf = (endpointGroupArn: string) => endpointGroupArn.split("/endpoint-group/")[0]!;
 
 const toAttributes = (g: ga.EndpointGroup, endpointGroupArn: string) => ({
   endpointGroupArn,
@@ -243,48 +240,29 @@ const normalizeOverrides = (overrides: ga.PortOverride[] | undefined) =>
 // Compare observed cloud state against the desired props for every aspect we
 // manage. Fields the user never specified (healthCheckPort/path) fall back to
 // service-computed defaults and are only compared when explicitly desired.
-const hasDrift = (
-  live: ga.EndpointGroup,
-  news: EndpointGroupProps,
-): boolean => {
-  if (
-    (live.TrafficDialPercentage ?? 100) !== (news.trafficDialPercentage ?? 100)
-  ) {
+const hasDrift = (live: ga.EndpointGroup, news: EndpointGroupProps): boolean => {
+  if ((live.TrafficDialPercentage ?? 100) !== (news.trafficDialPercentage ?? 100)) {
     return true;
   }
-  if (
-    (live.HealthCheckProtocol ?? "TCP") !== (news.healthCheckProtocol ?? "TCP")
-  ) {
+  if ((live.HealthCheckProtocol ?? "TCP") !== (news.healthCheckProtocol ?? "TCP")) {
     return true;
   }
-  if (
-    (live.HealthCheckIntervalSeconds ?? 30) !==
-    (toWireSeconds(news.healthCheckInterval) ?? 30)
-  ) {
+  if ((live.HealthCheckIntervalSeconds ?? 30) !== (toWireSeconds(news.healthCheckInterval) ?? 30)) {
     return true;
   }
   if ((live.ThresholdCount ?? 3) !== (news.thresholdCount ?? 3)) return true;
-  if (
-    news.healthCheckPort !== undefined &&
-    live.HealthCheckPort !== news.healthCheckPort
-  ) {
+  if (news.healthCheckPort !== undefined && live.HealthCheckPort !== news.healthCheckPort) {
+    return true;
+  }
+  if (news.healthCheckPath !== undefined && live.HealthCheckPath !== news.healthCheckPath) {
     return true;
   }
   if (
-    news.healthCheckPath !== undefined &&
-    live.HealthCheckPath !== news.healthCheckPath
+    normalizeOverrides(live.PortOverrides) !== normalizeOverrides(desiredConfig(news).PortOverrides)
   ) {
     return true;
   }
-  if (
-    normalizeOverrides(live.PortOverrides) !==
-    normalizeOverrides(desiredConfig(news).PortOverrides)
-  ) {
-    return true;
-  }
-  const observed = new Map(
-    (live.EndpointDescriptions ?? []).map((d) => [d.EndpointId ?? "", d]),
-  );
+  const observed = new Map((live.EndpointDescriptions ?? []).map((d) => [d.EndpointId ?? "", d]));
   const desired = news.endpoints ?? [];
   if (observed.size !== desired.length) return true;
   for (const e of desired) {
@@ -302,13 +280,9 @@ const hasDrift = (
 };
 
 const describeEndpointGroup = Effect.fn(function* (endpointGroupArn: string) {
-  return yield* withGaRegion(
-    ga.describeEndpointGroup({ EndpointGroupArn: endpointGroupArn }),
-  ).pipe(
+  return yield* withGaRegion(ga.describeEndpointGroup({ EndpointGroupArn: endpointGroupArn })).pipe(
     Effect.map((r) => r.EndpointGroup),
-    Effect.catchTag("EndpointGroupNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("EndpointGroupNotFoundException", () => Effect.succeed(undefined)),
   );
 });
 
@@ -320,14 +294,10 @@ const findEndpointGroup = Effect.fn(function* (
 ) {
   if (!listenerArn || !region) return undefined;
   const groups = yield* withGaRegion(
-    ga.listEndpointGroups
-      .items({ ListenerArn: listenerArn })
-      .pipe(Stream.runCollect),
+    ga.listEndpointGroups.items({ ListenerArn: listenerArn }).pipe(Stream.runCollect),
   ).pipe(
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("ListenerNotFoundException", () =>
-      Effect.succeed([] as ga.EndpointGroup[]),
-    ),
+    Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([] as ga.EndpointGroup[])),
   );
   return groups.find((g) => g.EndpointGroupRegion === region);
 });
@@ -343,10 +313,7 @@ export const EndpointGroupProvider = () =>
         const live = yield* describeEndpointGroup(output.endpointGroupArn);
         if (live) return toAttributes(live, output.endpointGroupArn);
       }
-      const found = yield* findEndpointGroup(
-        olds?.listenerArn,
-        olds?.endpointGroupRegion,
-      );
+      const found = yield* findEndpointGroup(olds?.listenerArn, olds?.endpointGroupRegion);
       if (!found?.EndpointGroupArn) return undefined;
       return toAttributes(found, found.EndpointGroupArn);
     }),
@@ -366,10 +333,7 @@ export const EndpointGroupProvider = () =>
         ? yield* describeEndpointGroup(output.endpointGroupArn)
         : undefined;
       if (!live?.EndpointGroupArn) {
-        live = yield* findEndpointGroup(
-          news.listenerArn,
-          news.endpointGroupRegion,
-        );
+        live = yield* findEndpointGroup(news.listenerArn, news.endpointGroupRegion);
       }
 
       // Ensure — create if missing; a concurrent create for the same
@@ -390,9 +354,7 @@ export const EndpointGroupProvider = () =>
         );
       }
       if (!live?.EndpointGroupArn) {
-        return yield* Effect.die(
-          new Error("CreateEndpointGroup returned no endpoint group"),
-        );
+        return yield* Effect.die(new Error("CreateEndpointGroup returned no endpoint group"));
       }
       const endpointGroupArn = live.EndpointGroupArn;
 
@@ -417,8 +379,6 @@ export const EndpointGroupProvider = () =>
             EndpointGroupArn: output.endpointGroupArn,
           }),
         ),
-      ).pipe(
-        Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void),
-      );
+      ).pipe(Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void));
     }),
   });

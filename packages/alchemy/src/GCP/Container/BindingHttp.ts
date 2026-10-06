@@ -1,19 +1,15 @@
 import * as Effect from "effect/Effect";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { ClustersNodePool } from "./ClustersNodePool.ts";
 import type { NodePool } from "./NodePool.ts";
-import { bindGcpHost } from "../Host.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for GKE cluster and node pool bindings.
  * NOT exported from index.ts.
  */
-export const makeContainerClusterHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeContainerClusterHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -38,11 +34,7 @@ export const makeContainerClusterHttpBinding = <
     });
   });
 
-export const makeContainerNodePoolHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeContainerNodePoolHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -96,10 +88,7 @@ export const makeContainerClustersNodePoolHttpBinding = <
       const clusterId = yield* nodePool.clusterId;
       const nodePoolId = yield* nodePool.nodePoolId;
       return Effect.fn(`${options.tag}(${nodePool.LogicalId})`)(function* (
-        request?: Omit<
-          I,
-          "projectId" | "zone" | "clusterId" | "nodePoolId" | "name"
-        >,
+        request?: Omit<I, "projectId" | "zone" | "clusterId" | "nodePoolId" | "name">,
       ) {
         return yield* run({
           ...(request as I),

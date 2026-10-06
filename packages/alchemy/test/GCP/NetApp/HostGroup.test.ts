@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   netapp.getProjectsLocationsHostGroups({ name }).pipe(
@@ -83,10 +80,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* GCP.NetApp.HostGroup("Initiators", {
             hostGroupId: created.hostGroupId,
-            hosts: [
-              "iqn.1993-08.org.debian:01:alchemy",
-              "iqn.1993-08.org.debian:01:alchemy2",
-            ],
+            hosts: ["iqn.1993-08.org.debian:01:alchemy", "iqn.1993-08.org.debian:01:alchemy2"],
             description: "alchemy-prod-hosts",
             labels: { env: "prod", role: "iscsi" },
           });

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -117,9 +112,7 @@ export type ServiceBinding = Resource<
  * @resource
  * @category NetworkServices
  */
-export const ServiceBinding = Resource<ServiceBinding>(
-  "GCP.NetworkServices.ServiceBinding",
-);
+export const ServiceBinding = Resource<ServiceBinding>("GCP.NetworkServices.ServiceBinding");
 
 const toService = (service: string | undefined) => {
   const trimmed = canonicalizeLink(service);
@@ -177,13 +170,9 @@ export const ServiceBindingProvider = () =>
       const previousService = linkKey(olds?.service ?? output?.service);
       const nextService = linkKey(news.service);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
-        (previousService.length > 0 &&
-          nextService.length > 0 &&
-          previousService !== nextService)
+        (previousService.length > 0 && nextService.length > 0 && previousService !== nextService)
       ) {
         return { action: "replace" as const };
       }
@@ -198,19 +187,13 @@ export const ServiceBindingProvider = () =>
         output?.serviceBindingId,
         "service-binding",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, serviceBindingId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, serviceBindingId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -236,16 +219,8 @@ export const ServiceBindingProvider = () =>
         output?.serviceBindingId,
         "service-binding",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        serviceBindingId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, serviceBindingId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -284,28 +259,21 @@ export const ServiceBindingProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const updateMask = changedFields([
         ["labels", labelsChanged],
-        [
-          "description",
-          (current.description ?? "") !== (news.description ?? ""),
-        ],
+        ["description", (current.description ?? "") !== (news.description ?? "")],
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsServiceBindings({
+        const operation = yield* networkservices.patchProjectsLocationsServiceBindings({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

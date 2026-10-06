@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -150,10 +145,9 @@ export type MirroringEndpointGroupAssociation = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const MirroringEndpointGroupAssociation =
-  Resource<MirroringEndpointGroupAssociation>(
-    "GCP.NetworkSecurity.MirroringEndpointGroupAssociation",
-  );
+export const MirroringEndpointGroupAssociation = Resource<MirroringEndpointGroupAssociation>(
+  "GCP.NetworkSecurity.MirroringEndpointGroupAssociation",
+);
 
 export class MirroringEndpointGroupAssociationNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupAssociationNotResolved",
@@ -201,9 +195,7 @@ const toAttrs = (
     location: parsed.location || DEFAULT_LOCATION,
     mirroringEndpointGroup: association.mirroringEndpointGroup,
     network: association.network,
-    networkName: association.network
-      ? lastSegment(association.network)
-      : undefined,
+    networkName: association.network ? lastSegment(association.network) : undefined,
     labels: userLabels(association.labels),
     state: association.state,
     reconciling: association.reconciling === true,
@@ -222,9 +214,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (
-        association,
-      ): association is networksecurity.MirroringEndpointGroupAssociation =>
+      (association): association is networksecurity.MirroringEndpointGroupAssociation =>
         association !== undefined,
       () => new MirroringEndpointGroupAssociationNotResolved({ name }),
     ),
@@ -242,8 +232,7 @@ const waitUntilReady = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.NetworkSecurity.MirroringEndpointGroupAssociationNotResolved",
+        error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupAssociationNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -254,14 +243,11 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((association) =>
       association === undefined
         ? Effect.void
-        : Effect.fail(
-            new MirroringEndpointGroupAssociationStillExists({ name }),
-          ),
+        : Effect.fail(new MirroringEndpointGroupAssociationStillExists({ name })),
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.NetworkSecurity.MirroringEndpointGroupAssociationStillExists",
+        error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupAssociationStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -274,13 +260,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.mirroringEndpointGroupAssociations ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.mirroringEndpointGroupAssociations ?? [])),
       Stream.filter((association) =>
-        Object.keys(association.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(association.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((association) => toAttrs(association, project)),
       Stream.runCollect,
@@ -303,15 +285,10 @@ export const MirroringEndpointGroupAssociationProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId =
-        olds?.mirroringEndpointGroupAssociationId ??
-        output?.mirroringEndpointGroupAssociationId;
+        olds?.mirroringEndpointGroupAssociationId ?? output?.mirroringEndpointGroupAssociationId;
       const nextId = news.mirroringEndpointGroupAssociationId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousGroup = lastSegment(
         olds?.mirroringEndpointGroup ?? output?.mirroringEndpointGroup ?? "",
       );
@@ -321,9 +298,7 @@ export const MirroringEndpointGroupAssociationProvider = () =>
       );
       const nextNetwork = lastSegment(news.network);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousGroup.length > 0 && previousGroup !== nextGroup) ||
         (previousNetwork.length > 0 && previousNetwork !== nextNetwork);
@@ -342,18 +317,11 @@ export const MirroringEndpointGroupAssociationProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
         output?.name ??
-        resourceName(
-          env.project,
-          location,
-          COLLECTION,
-          mirroringEndpointGroupAssociationId,
-        );
+        resourceName(env.project, location, COLLECTION, mirroringEndpointGroupAssociationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -377,9 +345,7 @@ export const MirroringEndpointGroupAssociationProvider = () =>
         COLLECTION,
         mirroringEndpointGroupAssociationId,
       );
-      const mirroringEndpointGroup = toResourcePath(
-        news.mirroringEndpointGroup,
-      );
+      const mirroringEndpointGroup = toResourcePath(news.mirroringEndpointGroup);
       const network = toNetworkResource(env.project, news.network);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -425,16 +391,14 @@ export const MirroringEndpointGroupAssociationProvider = () =>
 
       if (labelsChanged) {
         const operation =
-          yield* networksecurity.patchProjectsLocationsMirroringEndpointGroupAssociations(
-            {
+          yield* networksecurity.patchProjectsLocationsMirroringEndpointGroupAssociations({
+            name: current.name ?? name,
+            updateMask: "labels",
+            body: {
               name: current.name ?? name,
-              updateMask: "labels",
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-              },
+              labels: desiredLabels,
             },
-          );
+          });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

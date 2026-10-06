@@ -35,6 +35,5 @@ export const CAPACITY_ZONE_2 = "us-west1-c";
 const gkeClusterSlots = Semaphore.makeUnsafe(3);
 
 /** Run a cluster-creating test body while holding one GKE cluster slot. */
-export const withGkeClusterSlot = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> => gkeClusterSlots.withPermits(1)(self);
+export const withGkeClusterSlot = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  gkeClusterSlots.withPermits(1)(self);

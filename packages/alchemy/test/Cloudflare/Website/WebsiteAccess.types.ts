@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 /**
  * Type-level pin: the `access` prop is part of the shared Worker props and
  * must stay accepted by every `Cloudflare.Website.*` framework — a future
@@ -5,7 +6,6 @@
  * drop it. Compile-only; never executed.
  */
 import * as Cloudflare from "@/Cloudflare";
-import * as Effect from "effect/Effect";
 
 const App = Cloudflare.Access.Application("TypesApp", {
   type: "self_hosted",
@@ -17,9 +17,7 @@ const App = Cloudflare.Access.Application("TypesApp", {
 const access = App;
 
 const dedicated = {
-  policies: [
-    { decision: "allow" as const, include: [{ emailDomain: "example.com" }] },
-  ],
+  policies: [{ decision: "allow" as const, include: [{ emailDomain: "example.com" }] }],
 };
 
 export const websites = Effect.gen(function* () {

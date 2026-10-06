@@ -1,13 +1,12 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import * as GCP from "@/GCP";
 
 export const INCOMING_PREFIX = "incoming/";
 
 /** Marker object the consumer writes for one delivered event. */
-export const markerFor = (object: string) =>
-  `markers/${object.replaceAll("/", "_")}.json`;
+export const markerFor = (object: string) => `markers/${object.replaceAll("/", "_")}.json`;
 
 /** Bucket whose `incoming/` uploads trigger the consumer. */
 export const Uploads = GCP.Storage.Bucket("Uploads", {
@@ -31,26 +30,23 @@ export default class BucketEventsService extends GCP.Function<BucketEventsServic
     const bucket = yield* Uploads;
     const putObject = yield* GCP.Storage.PutObject(bucket);
 
-    yield* GCP.Storage.consumeBucketEvents(
-      bucket,
-      { prefix: INCOMING_PREFIX },
-      (events) =>
-        events.pipe(
-          Stream.runForEach((event) =>
-            putObject({
-              name: markerFor(event.object),
-              body: JSON.stringify({
-                eventType: event.eventType,
-                bucket: event.bucket,
-                object: event.object,
-                generation: event.generation,
-                eventTime: event.eventTime,
-                size: event.metadata.size,
-                contentType: event.metadata.contentType,
-              }),
-            }).pipe(Effect.orDie),
-          ),
+    yield* GCP.Storage.consumeBucketEvents(bucket, { prefix: INCOMING_PREFIX }, (events) =>
+      events.pipe(
+        Stream.runForEach((event) =>
+          putObject({
+            name: markerFor(event.object),
+            body: JSON.stringify({
+              eventType: event.eventType,
+              bucket: event.bucket,
+              object: event.object,
+              generation: event.generation,
+              eventTime: event.eventTime,
+              size: event.metadata.size,
+              contentType: event.metadata.contentType,
+            }),
+          }).pipe(Effect.orDie),
         ),
+      ),
     );
 
     return {

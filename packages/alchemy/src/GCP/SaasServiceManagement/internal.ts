@@ -8,15 +8,11 @@ import { stripInternalLabels } from "../Labels.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.SaasServiceManagement.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.SaasServiceManagement.NotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.SaasServiceManagement.StillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.SaasServiceManagement.StillExists")<{
   name: string;
 }> {}
 
@@ -26,11 +22,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const rfc1035 = (
-  name: string,
-  fallback = "saas",
-  maxLength = MAX_NAME_LENGTH,
-): string => {
+export const rfc1035 = (name: string, fallback = "saas", maxLength = MAX_NAME_LENGTH): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -48,18 +40,13 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+export const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `${parentOf(project, location)}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `${parentOf(project, location)}/${collection}/${id}`;
 
 export const parseName = (name: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -67,14 +54,9 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -117,8 +99,7 @@ export const userAnnotations = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(annotations ?? {}).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[1].length > 0,
+      (entry): entry is [string, string] => entry[1] !== undefined && entry[1].length > 0,
     ),
   );
 
@@ -147,13 +128,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameRef = (left: string | undefined, right: string | undefined) =>
   lastSegment(left ?? "") === lastSegment(right ?? "");
@@ -199,12 +177,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
     Effect.asVoid,
   );
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>
@@ -213,8 +186,7 @@ export const collectPages = <
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchIf(
-      (error): error is Extract<E, { readonly _tag: "NotFound" }> =>
-        error._tag === "NotFound",
+      (error): error is Extract<E, { readonly _tag: "NotFound" }> => error._tag === "NotFound",
       () => Effect.succeed([] as Item[]),
     ),
   );

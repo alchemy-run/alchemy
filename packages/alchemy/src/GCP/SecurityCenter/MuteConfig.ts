@@ -22,10 +22,7 @@ import {
   updateMaskOf,
 } from "./internal.ts";
 
-export type MuteConfigType =
-  | "MUTE_CONFIG_TYPE_UNSPECIFIED"
-  | "STATIC"
-  | "DYNAMIC";
+export type MuteConfigType = "MUTE_CONFIG_TYPE_UNSPECIFIED" | "STATIC" | "DYNAMIC";
 
 export type MuteConfigProps = {
   /**
@@ -128,10 +125,7 @@ export class MuteConfigNotResolved extends Data.TaggedError(
 const resourceName = (project: string, muteConfigId: string) =>
   `projects/${project}/muteConfigs/${muteConfigId}`;
 
-const toAttrs = (
-  config: scc.GoogleCloudSecuritycenterV1MuteConfig,
-  project: string,
-) => {
+const toAttrs = (config: scc.GoogleCloudSecuritycenterV1MuteConfig, project: string) => {
   const name = config.name ?? "";
   const parsed = parseOwnership(config.description);
   return {
@@ -162,29 +156,19 @@ export const MuteConfigProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       return (
-        replaceOn(
-          olds?.muteConfigId ?? output?.muteConfigId,
-          news.muteConfigId,
-        ) ??
+        replaceOn(olds?.muteConfigId ?? output?.muteConfigId, news.muteConfigId) ??
         replaceOn(olds?.type ?? output?.type ?? "STATIC", news.type ?? "STATIC")
       );
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const muteConfigId = yield* toResourceId(
-        id,
-        olds?.muteConfigId,
-        output?.muteConfigId,
-        "m",
-      );
+      const muteConfigId = yield* toResourceId(id, olds?.muteConfigId, output?.muteConfigId, "m");
       const name = output?.name ?? resourceName(env.project, muteConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -208,12 +192,7 @@ export const MuteConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const muteConfigId = yield* toResourceId(
-        id,
-        news.muteConfigId,
-        output?.muteConfigId,
-        "m",
-      );
+      const muteConfigId = yield* toResourceId(id, news.muteConfigId, output?.muteConfigId, "m");
       const name = resourceName(env.project, muteConfigId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

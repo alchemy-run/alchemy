@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,30 +9,15 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
-export type SslPolicyMinTlsVersion =
-  | "TLS_1_0"
-  | "TLS_1_1"
-  | "TLS_1_2"
-  | "TLS_1_3";
+export type SslPolicyMinTlsVersion = "TLS_1_0" | "TLS_1_1" | "TLS_1_2" | "TLS_1_3";
 
-export type SslPolicyProfile =
-  | "COMPATIBLE"
-  | "MODERN"
-  | "RESTRICTED"
-  | "FIPS_202205"
-  | "CUSTOM";
+export type SslPolicyProfile = "COMPATIBLE" | "MODERN" | "RESTRICTED" | "FIPS_202205" | "CUSTOM";
 
-export type SslPolicyPostQuantumKeyExchange =
-  | "DEFAULT"
-  | "ENABLED"
-  | "DEFERRED";
+export type SslPolicyPostQuantumKeyExchange = "DEFAULT" | "ENABLED" | "DEFERRED";
 
 export type SslPolicyProps = {
   /**
@@ -152,9 +136,7 @@ export type SslPolicy = Resource<
  */
 export const SslPolicy = Resource<SslPolicy>("GCP.Compute.SslPolicy");
 
-export class SslPolicyNotResolved extends Data.TaggedError(
-  "GCP.Compute.SslPolicyNotResolved",
-)<{
+export class SslPolicyNotResolved extends Data.TaggedError("GCP.Compute.SslPolicyNotResolved")<{
   sslPolicyName: string;
 }> {}
 
@@ -243,16 +225,10 @@ const asMinTlsVersion = (value: string | undefined): SslPolicyMinTlsVersion => {
   }
 };
 
-const featuresOf = (features: readonly string[] | undefined): string[] => [
-  ...(features ?? []),
-];
+const featuresOf = (features: readonly string[] | undefined): string[] => [...(features ?? [])];
 
-const sameFeatures = (
-  observed?: readonly string[],
-  desired?: readonly string[],
-) =>
-  [...(observed ?? [])].sort().join("\0") ===
-  [...(desired ?? [])].sort().join("\0");
+const sameFeatures = (observed?: readonly string[], desired?: readonly string[]) =>
+  [...(observed ?? [])].sort().join("\0") === [...(desired ?? [])].sort().join("\0");
 
 const toBody = (
   sslPolicyName: string,
@@ -267,16 +243,12 @@ const toBody = (
     description: encodeDescription(ownership, props.description),
     profile,
     minTlsVersion: props.minTlsVersion ?? DEFAULT_MIN_TLS,
-    customFeatures:
-      profile === "CUSTOM" ? featuresOf(props.customFeatures) : [],
+    customFeatures: profile === "CUSTOM" ? featuresOf(props.customFeatures) : [],
     postQuantumKeyExchange: props.postQuantumKeyExchange,
   };
 };
 
-const toAttrs = (
-  policy: compute.SslPolicy,
-  project: string,
-): SslPolicy["Attributes"] => {
+const toAttrs = (policy: compute.SslPolicy, project: string): SslPolicy["Attributes"] => {
   const parsed = parseDescription(policy.description);
   return {
     sslPolicyName: policy.name ?? policy.id ?? "",
@@ -295,16 +267,10 @@ const toAttrs = (
   };
 };
 
-const needsUpdate = (
-  current: compute.SslPolicy,
-  desired: compute.SslPolicy,
-) => {
+const needsUpdate = (current: compute.SslPolicy, desired: compute.SslPolicy) => {
   if ((current.description ?? "") !== (desired.description ?? "")) return true;
   if (asProfile(current.profile) !== asProfile(desired.profile)) return true;
-  if (
-    asMinTlsVersion(current.minTlsVersion) !==
-    asMinTlsVersion(desired.minTlsVersion)
-  ) {
+  if (asMinTlsVersion(current.minTlsVersion) !== asMinTlsVersion(desired.minTlsVersion)) {
     return true;
   }
   if (!sameFeatures(current.customFeatures, desired.customFeatures)) {
@@ -312,8 +278,7 @@ const needsUpdate = (
   }
   if (
     desired.postQuantumKeyExchange !== undefined &&
-    (current.postQuantumKeyExchange ?? "DEFAULT") !==
-      desired.postQuantumKeyExchange
+    (current.postQuantumKeyExchange ?? "DEFAULT") !== desired.postQuantumKeyExchange
   ) {
     return true;
   }
@@ -336,23 +301,13 @@ const awaitResource = (project: string, sslPolicyName: string) =>
 
 export const SslPolicyProvider = () =>
   Provider.succeed(SslPolicy, {
-    stables: [
-      "sslPolicyName",
-      "project",
-      "sslPolicyId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["sslPolicyName", "project", "sslPolicyId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousName = olds?.sslPolicyName ?? output?.sslPolicyName;
       const nextName = news.sslPolicyName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -360,11 +315,7 @@ export const SslPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sslPolicyName = yield* toName(
-        id,
-        olds?.sslPolicyName,
-        output?.sslPolicyName,
-      );
+      const sslPolicyName = yield* toName(id, olds?.sslPolicyName, output?.sslPolicyName);
       const existing = yield* getByName(env.project, sslPolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -375,28 +326,20 @@ export const SslPolicyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* compute.listSslPolicies
-          .items({ project: env.project, maxResults: 500 })
-          .pipe(
-            Stream.filter((policy) => {
-              const { labels } = parseDescription(policy.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
-            }),
-            Stream.map((policy) => toAttrs(policy, env.project)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        return yield* compute.listSslPolicies.items({ project: env.project, maxResults: 500 }).pipe(
+          Stream.filter((policy) => {
+            const { labels } = parseDescription(policy.description);
+            return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
+          }),
+          Stream.map((policy) => toAttrs(policy, env.project)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sslPolicyName = yield* toName(
-        id,
-        news.sslPolicyName,
-        output?.sslPolicyName,
-      );
+      const sslPolicyName = yield* toName(id, news.sslPolicyName, output?.sslPolicyName);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(sslPolicyName, news, ownership);
 
@@ -409,9 +352,7 @@ export const SslPolicyProvider = () =>
             body: desired,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* awaitResource(env.project, sslPolicyName);
@@ -428,11 +369,7 @@ export const SslPolicyProvider = () =>
             sslPolicy: sslPolicyName,
             body: toBody(sslPolicyName, news, ownership, current.fingerprint),
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, sslPolicyName);
         if (current === undefined) {
           return yield* new SslPolicyNotResolved({ sslPolicyName });

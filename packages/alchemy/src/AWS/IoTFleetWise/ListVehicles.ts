@@ -29,12 +29,7 @@ export interface ListVehicles extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iotfleetwise.ListVehiclesRequest,
-    ) => Effect.Effect<
-      iotfleetwise.ListVehiclesResponse,
-      iotfleetwise.ListVehiclesError
-    >
+    ) => Effect.Effect<iotfleetwise.ListVehiclesResponse, iotfleetwise.ListVehiclesError>
   >
 > {}
-export const ListVehicles = Binding.Service<ListVehicles>(
-  "AWS.IoTFleetWise.ListVehicles",
-);
+export const ListVehicles = Binding.Service<ListVehicles>("AWS.IoTFleetWise.ListVehicles");

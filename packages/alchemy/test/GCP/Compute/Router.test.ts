@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, region: string, routerName: string) =>
   compute.getRouters({ project, region, router: routerName }).pipe(
@@ -47,9 +44,7 @@ test.provider(
       expect(created.encryptedInterconnectRouter).toEqual(false);
       expect(created.bgp?.asn).toEqual(65001);
       expect(created.bgp?.advertiseMode).toEqual("DEFAULT");
-      expect(created.network).toEqual(
-        expect.stringContaining("networks/default"),
-      );
+      expect(created.network).toEqual(expect.stringContaining("networks/default"));
 
       const fetched = yield* compute.getRouters({
         project: created.project,
@@ -73,9 +68,7 @@ test.provider(
               asn: 65001,
               advertiseMode: "CUSTOM",
               advertisedGroups: ["ALL_SUBNETS"],
-              advertisedIpRanges: [
-                { range: "10.0.0.0/8", description: "rfc1918" },
-              ],
+              advertisedIpRanges: [{ range: "10.0.0.0/8", description: "rfc1918" }],
               keepaliveInterval: 30,
             },
           });
@@ -114,9 +107,7 @@ test.provider(
               asn: 65001,
               advertiseMode: "CUSTOM",
               advertisedGroups: ["ALL_SUBNETS"],
-              advertisedIpRanges: [
-                { range: "10.0.0.0/8", description: "rfc1918" },
-              ],
+              advertisedIpRanges: [{ range: "10.0.0.0/8", description: "rfc1918" }],
               keepaliveInterval: 30,
             },
           });
@@ -136,11 +127,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.project,
-        created.region,
-        created.routerName,
-      );
+      const gone = yield* waitUntilGone(created.project, created.region, created.routerName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },

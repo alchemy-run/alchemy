@@ -1,7 +1,7 @@
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as crypto from "node:crypto";
 import { listSqlFiles, splitSqlStatements } from "../SqlFile.ts";
 import { detectLayout } from "./Detect.ts";
 import { MigrationError, type MigrationRecord } from "./Format.ts";
@@ -53,9 +53,7 @@ export const readDrizzleDirRecords = (dir: string) =>
       names.sort((a, b) => a.localeCompare(b));
       const records: MigrationRecord[] = [];
       for (const name of names) {
-        const sql = yield* fs.readFileString(
-          path.join(dir, name, "migration.sql"),
-        );
+        const sql = yield* fs.readFileString(path.join(dir, name, "migration.sql"));
         records.push({
           name,
           hash: yield* sha256(sql),

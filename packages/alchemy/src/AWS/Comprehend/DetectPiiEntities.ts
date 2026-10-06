@@ -33,10 +33,7 @@ export interface DetectPiiEntities extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.DetectPiiEntitiesRequest,
-    ) => Effect.Effect<
-      comprehend.DetectPiiEntitiesResponse,
-      comprehend.DetectPiiEntitiesError
-    >
+    ) => Effect.Effect<comprehend.DetectPiiEntitiesResponse, comprehend.DetectPiiEntitiesError>
   >
 > {}
 export const DetectPiiEntities = Binding.Service<DetectPiiEntities>(

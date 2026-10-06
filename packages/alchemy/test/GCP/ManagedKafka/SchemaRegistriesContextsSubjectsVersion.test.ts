@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withKafkaClusterSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -15,10 +15,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 // cluster first and make the registry depend on it. Clusters take ~30 minutes.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const AVRO = JSON.stringify({
   type: "record",
@@ -28,25 +25,19 @@ const AVRO = JSON.stringify({
 });
 
 const waitUntilGone = (name: string) =>
-  kafka
-    .getProjectsLocationsSchemaRegistriesContextsSubjectsVersions({ name })
-    .pipe(
-      Effect.as("found" as const),
-      // Once the parent registry is deleted too, the path itself is invalid.
-      Effect.catchTag(
-        [
-          "NotFound",
-          "SchemaRegistryRequiresCluster",
-          "SchemaRegistryPathNotFound",
-        ],
-        () => Effect.succeed("gone" as const),
-      ),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  kafka.getProjectsLocationsSchemaRegistriesContextsSubjectsVersions({ name }).pipe(
+    Effect.as("found" as const),
+    // Once the parent registry is deleted too, the path itself is invalid.
+    Effect.catchTag(
+      ["NotFound", "SchemaRegistryRequiresCluster", "SchemaRegistryPathNotFound"],
+      () => Effect.succeed("gone" as const),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsSchemaRegistriesContextsSubjectsVersions on a missing version fails with a typed tag",
@@ -63,9 +54,7 @@ test.provider(
       );
       // Without a cluster in the region every call is refused; with one
       // (other suites create them concurrently) the registry is just missing.
-      expect(["SchemaRegistryRequiresCluster", "NotFound"]).toContain(
-        error._tag,
-      );
+      expect(["SchemaRegistryRequiresCluster", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -89,17 +78,16 @@ test.provider.skipIf(!runLifecycle)(
           const registry = yield* GCP.ManagedKafka.SchemaRegistry("Schemas", {
             location: cluster.location,
           });
-          const version =
-            yield* GCP.ManagedKafka.SchemaRegistriesContextsSubjectsVersion(
-              "ShipSchema",
-              {
-                schemaRegistry: registry.name,
-                context: "dev",
-                subject: "shipments",
-                schemaType: "AVRO",
-                schema: AVRO,
-              },
-            );
+          const version = yield* GCP.ManagedKafka.SchemaRegistriesContextsSubjectsVersion(
+            "ShipSchema",
+            {
+              schemaRegistry: registry.name,
+              context: "dev",
+              subject: "shipments",
+              schemaType: "AVRO",
+              schema: AVRO,
+            },
+          );
           return { registry, version };
         }),
       );
@@ -109,10 +97,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.version.subject).toEqual("shipments");
       expect(created.version.version).toBeGreaterThan(0);
 
-      const fetched =
-        yield* kafka.getProjectsLocationsSchemaRegistriesContextsSubjectsVersions(
-          { name: created.version.name },
-        );
+      const fetched = yield* kafka.getProjectsLocationsSchemaRegistriesContextsSubjectsVersions({
+        name: created.version.name,
+      });
       // The API qualifies context-scoped subjects as `:.{context}:{subject}`.
       expect(fetched.subject).toEqual(":.dev:shipments");
 

@@ -169,10 +169,7 @@ export class EventThreatDetectionSettingsCustomModuleNotResolved extends Data.Ta
 const resourceName = (project: string, moduleId: string) =>
   `projects/${project}/eventThreatDetectionSettings/customModules/${moduleId}`;
 
-const toAttrs = (
-  module: scc.EventThreatDetectionCustomModule,
-  project: string,
-) => {
+const toAttrs = (module: scc.EventThreatDetectionCustomModule, project: string) => {
   const name = module.name ?? "";
   const parsed = parseOwnership(module.description);
   return {
@@ -206,9 +203,7 @@ const listModules = (project: string) =>
     }),
     (page) => page.eventThreatDetectionCustomModules,
   ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as scc.EventThreatDetectionCustomModule[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as scc.EventThreatDetectionCustomModule[])),
   );
 
 const observe = (project: string, id: string, name: string) =>
@@ -234,14 +229,11 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const moduleId = olds?.moduleId ?? output?.moduleId;
-      const name =
-        output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
+      const name = output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
       const existing = yield* observe(env.project, id, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -257,8 +249,7 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = etdSettingsParent(`projects/${env.project}`);
       const moduleId = news.moduleId ?? output?.moduleId;
-      const name =
-        output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
+      const name = output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const enablementState = news.enablementState ?? "ENABLED";
@@ -283,11 +274,10 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
       let current = yield* observe(env.project, id, name);
 
       if (current === undefined) {
-        const created =
-          yield* scc.createProjectsEventThreatDetectionSettingsCustomModules({
-            parent,
-            body,
-          });
+        const created = yield* scc.createProjectsEventThreatDetectionSettingsCustomModules({
+          parent,
+          body,
+        });
         current = created;
       }
 
@@ -300,10 +290,7 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const enablementChanged = !sameText(
-        current.enablementState,
-        enablementState,
-      );
+      const enablementChanged = !sameText(current.enablementState, enablementState);
       const configChanged = !jsonEqual(current.config, news.config);
       const updateMask = updateMaskOf(
         displayChanged ? "display_name" : undefined,
@@ -313,17 +300,16 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
       );
 
       if (updateMask.length > 0) {
-        current =
-          yield* scc.patchProjectsEventThreatDetectionSettingsCustomModules({
-            name: currentName,
-            updateMask,
-            body: {
-              displayName,
-              description,
-              enablementState,
-              config: news.config,
-            },
-          });
+        current = yield* scc.patchProjectsEventThreatDetectionSettingsCustomModules({
+          name: currentName,
+          updateMask,
+          body: {
+            displayName,
+            description,
+            enablementState,
+            config: news.config,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

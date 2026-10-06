@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,26 +9,13 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
-export type HealthCheckType =
-  | "TCP"
-  | "SSL"
-  | "HTTP"
-  | "HTTPS"
-  | "HTTP2"
-  | "GRPC"
-  | "GRPC_WITH_TLS";
+export type HealthCheckType = "TCP" | "SSL" | "HTTP" | "HTTPS" | "HTTP2" | "GRPC" | "GRPC_WITH_TLS";
 
-export type HealthCheckPortSpecification =
-  | "USE_FIXED_PORT"
-  | "USE_NAMED_PORT"
-  | "USE_SERVING_PORT";
+export type HealthCheckPortSpecification = "USE_FIXED_PORT" | "USE_NAMED_PORT" | "USE_SERVING_PORT";
 
 export type HealthCheckProxyHeader = "NONE" | "PROXY_V1";
 
@@ -236,9 +222,7 @@ export type HealthCheck = Resource<
  */
 export const HealthCheck = Resource<HealthCheck>("GCP.Compute.HealthCheck");
 
-export class HealthCheckNotResolved extends Data.TaggedError(
-  "GCP.Compute.HealthCheckNotResolved",
-)<{
+export class HealthCheckNotResolved extends Data.TaggedError("GCP.Compute.HealthCheckNotResolved")<{
   healthCheckName: string;
 }> {}
 
@@ -414,9 +398,7 @@ const asPortSpecification = (
   }
 };
 
-const asProxyHeader = (
-  value: string | undefined,
-): HealthCheckProxyHeader | undefined => {
+const asProxyHeader = (value: string | undefined): HealthCheckProxyHeader | undefined => {
   switch (value) {
     case "NONE":
     case "PROXY_V1":
@@ -427,11 +409,7 @@ const asProxyHeader = (
 };
 
 const toHttpProbe = (
-  check:
-    | compute.HTTPHealthCheck
-    | compute.HTTPSHealthCheck
-    | compute.HTTP2HealthCheck
-    | undefined,
+  check: compute.HTTPHealthCheck | compute.HTTPSHealthCheck | compute.HTTP2HealthCheck | undefined,
 ): HttpHealthCheck | undefined => {
   if (check === undefined) return undefined;
   return {
@@ -471,10 +449,7 @@ const toGrpcProbe = (
   };
 };
 
-const toAttrs = (
-  check: compute.HealthCheck,
-  project: string,
-): HealthCheck["Attributes"] => {
+const toAttrs = (check: compute.HealthCheck, project: string): HealthCheck["Attributes"] => {
   const parsed = parseDescription(check.description);
   return {
     healthCheckName: check.name ?? check.id ?? "",
@@ -492,12 +467,8 @@ const toAttrs = (
     sslHealthCheck: toTcpProbe(check.sslHealthCheck),
     grpcHealthCheck: toGrpcProbe(check.grpcHealthCheck),
     grpcTlsHealthCheck: toGrpcProbe(check.grpcTlsHealthCheck),
-    logConfig:
-      check.logConfig === undefined
-        ? undefined
-        : { enable: check.logConfig.enable },
-    sourceRegions:
-      check.sourceRegions === undefined ? undefined : [...check.sourceRegions],
+    logConfig: check.logConfig === undefined ? undefined : { enable: check.logConfig.enable },
+    sourceRegions: check.sourceRegions === undefined ? undefined : [...check.sourceRegions],
     selfLink: check.selfLink,
     healthCheckId: check.id,
     creationTimestamp: check.creationTimestamp,
@@ -518,9 +489,7 @@ const subsetEqual = (
   return true;
 };
 
-const asRecord = (
-  value: object | undefined,
-): Record<string, unknown> | undefined => {
+const asRecord = (value: object | undefined): Record<string, unknown> | undefined => {
   if (value === undefined) return undefined;
   const record: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -548,17 +517,10 @@ const protocolConfig = (check: compute.HealthCheck, type: HealthCheckType) => {
   }
 };
 
-const sameRegions = (
-  observed?: readonly string[],
-  desired?: readonly string[],
-) =>
-  JSON.stringify([...(observed ?? [])].sort()) ===
-  JSON.stringify([...(desired ?? [])].sort());
+const sameRegions = (observed?: readonly string[], desired?: readonly string[]) =>
+  JSON.stringify([...(observed ?? [])].sort()) === JSON.stringify([...(desired ?? [])].sort());
 
-const needsUpdate = (
-  current: compute.HealthCheck,
-  desired: compute.HealthCheck,
-) => {
+const needsUpdate = (current: compute.HealthCheck, desired: compute.HealthCheck) => {
   const currentType = asType(current.type);
   const desiredType = asType(desired.type);
   if (currentType !== desiredType) return true;
@@ -568,15 +530,11 @@ const needsUpdate = (
   ) {
     return true;
   }
-  if (
-    (current.timeoutSec ?? DEFAULT_TIMEOUT) !==
-    (desired.timeoutSec ?? DEFAULT_TIMEOUT)
-  ) {
+  if ((current.timeoutSec ?? DEFAULT_TIMEOUT) !== (desired.timeoutSec ?? DEFAULT_TIMEOUT)) {
     return true;
   }
   if (
-    (current.healthyThreshold ?? DEFAULT_HEALTHY) !==
-    (desired.healthyThreshold ?? DEFAULT_HEALTHY)
+    (current.healthyThreshold ?? DEFAULT_HEALTHY) !== (desired.healthyThreshold ?? DEFAULT_HEALTHY)
   ) {
     return true;
   }
@@ -587,10 +545,7 @@ const needsUpdate = (
     return true;
   }
   if ((current.description ?? "") !== (desired.description ?? "")) return true;
-  if (
-    (current.logConfig?.enable === true) !==
-    (desired.logConfig?.enable === true)
-  ) {
+  if ((current.logConfig?.enable === true) !== (desired.logConfig?.enable === true)) {
     return true;
   }
   if (!sameRegions(current.sourceRegions, desired.sourceRegions)) return true;
@@ -616,34 +571,22 @@ const awaitResource = (project: string, healthCheckName: string) =>
 
 export const HealthCheckProvider = () =>
   Provider.succeed(HealthCheck, {
-    stables: [
-      "healthCheckName",
-      "project",
-      "healthCheckId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["healthCheckName", "project", "healthCheckId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousName = olds?.healthCheckName ?? output?.healthCheckName;
       const nextName = news.healthCheckName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const };
       }
-      const previousType =
-        (olds !== undefined ? inferType(olds) : undefined) ?? output?.type;
+      const previousType = (olds !== undefined ? inferType(olds) : undefined) ?? output?.type;
       const nextType = inferType(news);
       if (previousType !== undefined && previousType !== nextType) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            (nextName === undefined || nextName === previousName),
+            previousName !== undefined && (nextName === undefined || nextName === previousName),
         };
       }
       return undefined;
@@ -651,11 +594,7 @@ export const HealthCheckProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const healthCheckName = yield* toName(
-        id,
-        olds?.healthCheckName,
-        output?.healthCheckName,
-      );
+      const healthCheckName = yield* toName(id, olds?.healthCheckName, output?.healthCheckName);
       const existing = yield* getByName(env.project, healthCheckName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -666,28 +605,20 @@ export const HealthCheckProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* compute.listHealthChecks
-          .items({ project: env.project })
-          .pipe(
-            Stream.filter((check) => {
-              const { labels } = parseDescription(check.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
-            }),
-            Stream.map((check) => toAttrs(check, env.project)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        return yield* compute.listHealthChecks.items({ project: env.project }).pipe(
+          Stream.filter((check) => {
+            const { labels } = parseDescription(check.description);
+            return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
+          }),
+          Stream.map((check) => toAttrs(check, env.project)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const healthCheckName = yield* toName(
-        id,
-        news.healthCheckName,
-        output?.healthCheckName,
-      );
+      const healthCheckName = yield* toName(id, news.healthCheckName, output?.healthCheckName);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(healthCheckName, news, ownership);
 
@@ -700,9 +631,7 @@ export const HealthCheckProvider = () =>
             body: desired,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* awaitResource(env.project, healthCheckName);
@@ -719,11 +648,7 @@ export const HealthCheckProvider = () =>
             healthCheck: healthCheckName,
             body: desired,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, healthCheckName);
         if (current === undefined) {
           return yield* new HealthCheckNotResolved({ healthCheckName });

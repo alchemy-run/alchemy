@@ -129,10 +129,7 @@ export class RagCorporaNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  corpus: aiplatform.GoogleCloudAiplatformV1RagCorpus,
-  project: string,
-) => {
+const toAttrs = (corpus: aiplatform.GoogleCloudAiplatformV1RagCorpus, project: string) => {
   const name = corpus.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   const description = parseDescription(corpus.description);
@@ -157,8 +154,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (corpus): corpus is aiplatform.GoogleCloudAiplatformV1RagCorpus =>
-        corpus !== undefined,
+      (corpus): corpus is aiplatform.GoogleCloudAiplatformV1RagCorpus => corpus !== undefined,
       () => new AiPlatformNotResolved({ name }),
     ),
     Effect.retry({
@@ -206,29 +202,15 @@ export const RagCorporaProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const encryptionChanged =
-        (news.encryptionSpec?.kmsKeyName ?? "") !==
-        (olds?.encryptionSpec?.kmsKeyName ?? "");
-      const searchChanged = !jsonEqual(
-        news.vertexAiSearchConfig,
-        olds?.vertexAiSearchConfig,
-      );
-      const vectorChanged = !jsonEqual(
-        news.vectorDbConfig,
-        olds?.vectorDbConfig,
-      );
+        (news.encryptionSpec?.kmsKeyName ?? "") !== (olds?.encryptionSpec?.kmsKeyName ?? "");
+      const searchChanged = !jsonEqual(news.vertexAiSearchConfig, olds?.vertexAiSearchConfig);
+      const vectorChanged = !jsonEqual(news.vectorDbConfig, olds?.vectorDbConfig);
       const replace =
         previousLocation !== nextLocation ||
-        (olds !== undefined &&
-          (encryptionChanged || searchChanged || vectorChanged));
+        (olds !== undefined && (encryptionChanged || searchChanged || vectorChanged));
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -238,10 +220,7 @@ export const RagCorporaProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const existing =
         output?.name !== undefined
@@ -250,23 +229,19 @@ export const RagCorporaProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) =>
-            collectPages(
-              aiplatform.listProjectsLocationsRagCorpora.pages({
-                parent: locationParent(env.project, location),
-                pageSize: 100,
-              }),
-            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
+        const pages = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          collectPages(
+            aiplatform.listProjectsLocationsRagCorpora.pages({
+              parent: locationParent(env.project, location),
+              pageSize: 100,
+            }),
+          ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.ragCorpora ?? [])
@@ -277,10 +252,7 @@ export const RagCorporaProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const internal = yield* createInternalLabels(id);
       const stampedDescription = encodeDescription(internal, news.description);
@@ -319,8 +291,7 @@ export const RagCorporaProvider = () =>
       const observedName = current.name;
       const observed = parseDescription(current.description);
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (observed.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (observed.description ?? "") !== (news.description ?? "");
 
       if (displayChanged || descriptionChanged) {
         const patched = yield* aiplatform.patchProjectsLocationsRagCorpora({

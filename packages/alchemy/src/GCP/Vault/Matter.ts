@@ -118,9 +118,7 @@ export type Matter = Resource<
  */
 export const Matter = Resource<Matter>("GCP.Vault.Matter");
 
-export class MatterNotResolved extends Data.TaggedError(
-  "GCP.Vault.MatterNotResolved",
-)<{
+export class MatterNotResolved extends Data.TaggedError("GCP.Vault.MatterNotResolved")<{
   matterId: string;
 }> {}
 
@@ -165,11 +163,7 @@ export const MatterProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.matterId ?? output?.matterId;
-      if (
-        previousId !== undefined &&
-        news.matterId !== undefined &&
-        news.matterId !== previousId
-      ) {
+      if (previousId !== undefined && news.matterId !== undefined && news.matterId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousRegion = olds?.matterRegion ?? output?.matterRegion;
@@ -194,9 +188,7 @@ export const MatterProvider = () =>
         return undefined;
       }
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -211,12 +203,7 @@ export const MatterProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const ownership = yield* ownershipLabels(id);
-      const name = yield* toGeneratedName(
-        id,
-        news.name,
-        output?.name,
-        MAX_MATTER_NAME_LENGTH,
-      );
+      const name = yield* toGeneratedName(id, news.name, output?.name, MAX_MATTER_NAME_LENGTH);
       const description = encodeOwnership(ownership, news.description);
       const desired: vault.Matter = {
         name,

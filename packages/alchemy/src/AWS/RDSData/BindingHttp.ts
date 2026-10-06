@@ -60,37 +60,26 @@ export const makeRDSDataHttpBinding = <Req, I, A, E, R>(options: {
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* (
-      cluster: DBCluster,
-      bindOptions: RDSDataBindingOptions,
-    ) {
+    return Effect.fn(function* (cluster: DBCluster, bindOptions: RDSDataBindingOptions) {
       const resourceArn = yield* cluster.dbClusterArn;
       const secretArn = yield* bindOptions.secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}, ${bindOptions.secret}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [options.action],
-                  Resource: [
-                    cluster.dbClusterArn,
-                    bindOptions.secret.secretArn,
-                  ],
-                },
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "secretsmanager:GetSecretValue",
-                    "secretsmanager:DescribeSecret",
-                  ],
-                  Resource: [bindOptions.secret.secretArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}, ${bindOptions.secret}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [options.action],
+                Resource: [cluster.dbClusterArn, bindOptions.secret.secretArn],
+              },
+              {
+                Effect: "Allow",
+                Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                Resource: [bindOptions.secret.secretArn],
+              },
+            ],
+          });
         }
       }
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (

@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_DISPLAY_NAME_LENGTH = 256;
 export const DIRECT_CHILDREN = "DIRECT_CHILDREN";
@@ -46,8 +42,7 @@ export const sameJson = (left: unknown, right: unknown) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  sameJson([...(left ?? [])].slice().sort(), [...(right ?? [])].slice().sort());
+) => sameJson([...(left ?? [])].slice().sort(), [...(right ?? [])].slice().sort());
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -79,12 +74,7 @@ export const replaceOnIdentity = (input: {
   return undefined;
 };
 
-const markerOf = (
-  _labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (_labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -92,10 +82,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -116,10 +103,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -147,14 +131,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -164,18 +144,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -195,9 +166,7 @@ export const toDisplayName = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `s${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `s${generated}`.slice(0, maxLength);
     return next.length > 0 ? next : "s";
   });
 
@@ -218,14 +187,10 @@ export const toSerialNumber = (
     return serial.length > 0 ? serial.toUpperCase() : "SN1";
   });
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.SasPortal.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.SasPortal.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -252,15 +217,9 @@ const emptyList = <A>() => Effect.succeed([] as A[]);
 
 const isMissing = <E extends { readonly _tag: string }>(
   error: E,
-): error is Extract<E, { readonly _tag: "NotFound" }> =>
-  error._tag === "NotFound";
+): error is Extract<E, { readonly _tag: "NotFound" }> => error._tag === "NotFound";
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -272,10 +231,7 @@ export const collectPages = <
   );
 
 export const listCustomers = () =>
-  collectPages(
-    sasportal.listCustomers.pages({ pageSize: 100 }),
-    (page) => page.customers,
-  );
+  collectPages(sasportal.listCustomers.pages({ pageSize: 100 }), (page) => page.customers);
 
 export const listCustomerDeployments = (parent: string) =>
   parent.length === 0
@@ -449,22 +405,16 @@ export const walkNodes = () =>
     const customers = yield* listCustomers();
     const located: LocatedNode[] = [];
     const seen = new Set<string>();
-    const queue: Array<{ parent: string; underCustomer: boolean }> =
-      customers.flatMap((customer) =>
-        customer.name ? [{ parent: customer.name, underCustomer: true }] : [],
-      );
+    const queue: Array<{ parent: string; underCustomer: boolean }> = customers.flatMap(
+      (customer) => (customer.name ? [{ parent: customer.name, underCustomer: true }] : []),
+    );
     while (queue.length > 0) {
       const batch = queue.splice(0, queue.length);
       const pages = yield* Effect.forEach(
         batch,
         (item) =>
-          (item.underCustomer
-            ? listCustomerNodes(item.parent)
-            : listNodeNodes(item.parent)
-          ).pipe(
-            Effect.map((nodes) =>
-              nodes.map((node) => ({ node, parent: item.parent })),
-            ),
+          (item.underCustomer ? listCustomerNodes(item.parent) : listNodeNodes(item.parent)).pipe(
+            Effect.map((nodes) => nodes.map((node) => ({ node, parent: item.parent }))),
           ),
         { concurrency: 4 },
       );
@@ -479,9 +429,8 @@ export const walkNodes = () =>
     return located;
   });
 
-const catchMissing = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) => effect.pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+const catchMissing = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
 
 export const getCustomerDeployment = (name: string) =>
   name.length === 0
@@ -499,14 +448,10 @@ export const getCustomerNode = (name: string) =>
     : catchMissing(sasportal.getCustomersNodes({ name }));
 
 export const getNodeDevice = (name: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(sasportal.getNodesDevices({ name }));
+  name.length === 0 ? Effect.succeed(undefined) : catchMissing(sasportal.getNodesDevices({ name }));
 
 export const getNodeNode = (name: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(sasportal.getNodesNodes({ name }));
+  name.length === 0 ? Effect.succeed(undefined) : catchMissing(sasportal.getNodesNodes({ name }));
 
 export const getDeploymentDevice = (name: string) =>
   name.length === 0
@@ -732,9 +677,7 @@ export const walkCustomerDeployments = () =>
         return parent.length === 0
           ? Effect.succeed([] as LocatedDeployment[])
           : listCustomerDeployments(parent).pipe(
-              Effect.map((rows) =>
-                rows.map((deployment) => ({ deployment, parent })),
-              ),
+              Effect.map((rows) => rows.map((deployment) => ({ deployment, parent }))),
             );
       },
       { concurrency: 4 },
@@ -770,9 +713,7 @@ export const walkNodeDeployments = () =>
         return parent.length === 0
           ? Effect.succeed([] as LocatedDeployment[])
           : listNodeDeployments(parent).pipe(
-              Effect.map((rows) =>
-                rows.map((deployment) => ({ deployment, parent })),
-              ),
+              Effect.map((rows) => rows.map((deployment) => ({ deployment, parent }))),
             );
       },
       { concurrency: 4 },
@@ -817,17 +758,12 @@ const scanFirst = <A, E, R>(
     return undefined;
   });
 
-export const scanOwnedCustomerDeploymentDevice = (
-  id: string,
-  parent?: string,
-) =>
+export const scanOwnedCustomerDeploymentDevice = (id: string, parent?: string) =>
   scanFirst(
     parent,
     (next) => findOwnedCustomerDeploymentDevice(id, next),
     walkCustomerDeployments().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.deployment.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.deployment.name ?? "" }))),
     ),
   );
 
@@ -836,9 +772,7 @@ export const scanOwnedCustomerNodeDeployment = (id: string, parent?: string) =>
     parent,
     (next) => findOwnedCustomerNodeDeployment(id, next),
     walkCustomerNodes().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.node.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.node.name ?? "" }))),
     ),
   );
 
@@ -847,9 +781,7 @@ export const scanOwnedCustomerNodeDevice = (id: string, parent?: string) =>
     parent,
     (next) => findOwnedCustomerNodeDevice(id, next),
     walkCustomerNodes().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.node.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.node.name ?? "" }))),
     ),
   );
 
@@ -858,9 +790,7 @@ export const scanOwnedCustomerNodeNode = (id: string, parent?: string) =>
     parent,
     (next) => findOwnedCustomerNodeNode(id, next),
     walkCustomerNodes().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.node.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.node.name ?? "" }))),
     ),
   );
 
@@ -868,11 +798,7 @@ export const scanOwnedNodeDeployment = (id: string, parent?: string) =>
   scanFirst(
     parent,
     (next) => findOwnedNodeDeployment(id, next),
-    walkNodes().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.node.name ?? "" })),
-      ),
-    ),
+    walkNodes().pipe(Effect.map((rows) => rows.map((entry) => ({ name: entry.node.name ?? "" })))),
   );
 
 export const scanOwnedNodeDeploymentDevice = (id: string, parent?: string) =>
@@ -880,9 +806,7 @@ export const scanOwnedNodeDeploymentDevice = (id: string, parent?: string) =>
     parent,
     (next) => findOwnedNodeDeploymentDevice(id, next),
     walkNodeDeployments().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.deployment.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.deployment.name ?? "" }))),
     ),
   );
 
@@ -891,9 +815,7 @@ export const scanOwnedNodeNodeDeployment = (id: string, parent?: string) =>
     parent,
     (next) => findOwnedNodeNodeDeployment(id, next),
     walkNodeChildren().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.node.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.node.name ?? "" }))),
     ),
   );
 
@@ -902,9 +824,7 @@ export const scanOwnedNodeNodeDevice = (id: string, parent?: string) =>
     parent,
     (next) => findOwnedNodeNodeDevice(id, next),
     walkNodeChildren().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.node.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.node.name ?? "" }))),
     ),
   );
 
@@ -913,9 +833,7 @@ export const scanOwnedNodeNodeNode = (id: string, parent?: string) =>
     parent,
     (next) => findOwnedNodeNodeNode(id, next),
     walkNodeChildren().pipe(
-      Effect.map((rows) =>
-        rows.map((entry) => ({ name: entry.node.name ?? "" })),
-      ),
+      Effect.map((rows) => rows.map((entry) => ({ name: entry.node.name ?? "" }))),
     ),
   );
 

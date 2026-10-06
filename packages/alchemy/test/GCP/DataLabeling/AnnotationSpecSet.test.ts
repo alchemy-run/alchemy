@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datalabeling from "@distilled.cloud/gcp/datalabeling_v1beta1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  logLevel,
-  probe,
-  currentProject,
-  runLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, probe, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -56,10 +50,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.name).toContain("/annotationSpecSets/");
       expect(created.displayName).toEqual("pets");
       expect(created.description).toEqual("companion animals");
-      expect(created.annotationSpecs.map((spec) => spec.displayName)).toEqual([
-        "dog",
-        "cat",
-      ]);
+      expect(created.annotationSpecs.map((spec) => spec.displayName)).toEqual(["dog", "cat"]);
 
       const fetched = yield* datalabeling.getProjectsAnnotationSpecSets({
         name: created.name,

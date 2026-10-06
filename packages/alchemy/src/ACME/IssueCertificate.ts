@@ -76,9 +76,7 @@ export interface IssueCertificate extends Binding.Service<
   (account: Account) => Effect.Effect<IssueCertificateClient>
 > {}
 
-export const IssueCertificate = Binding.Service<IssueCertificate>(
-  "ACME.IssueCertificate",
-);
+export const IssueCertificate = Binding.Service<IssueCertificate>("ACME.IssueCertificate");
 
 /** Runtime issuance client bound to one account. */
 export interface IssueCertificateClient {
@@ -87,7 +85,5 @@ export interface IssueCertificateClient {
     request: IssueRequest<R>,
   ): Effect.Effect<IssuedCertificate, IssueError, RuntimeContext | R>;
   /** Revoke a certificate (`AcmeAlreadyRevoked` counts as success). */
-  revoke(
-    request: RevokeRequest,
-  ): Effect.Effect<void, RevokeError, RuntimeContext>;
+  revoke(request: RevokeRequest): Effect.Effect<void, RevokeError, RuntimeContext>;
 }

@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import BigQueryBindingsHost, {
   Analytics,
@@ -59,8 +59,7 @@ const runQuery = (sql: string) =>
  * Seed one row with DML: committed storage is immediately visible to
  * tabledata.list (streamed rows may still sit in the buffer).
  */
-const seed = (table: string) =>
-  runQuery(`INSERT INTO ${table} (id) VALUES ('seed')`);
+const seed = (table: string) => runQuery(`INSERT INTO ${table} (id) VALUES ('seed')`);
 
 /** Every project-level role (and its IAM Condition) `account` holds. */
 const projectGrantsOf = (account: string) =>
@@ -72,9 +71,7 @@ const projectGrantsOf = (account: string) =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${account}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
           .map((binding) => ({
             role: binding.role,
             condition: binding.condition?.expression,
@@ -95,9 +92,7 @@ const tableRolesOf = (table: string, account: string) =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${account}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
           .map((binding) => binding.role),
       ),
     );
@@ -157,14 +152,9 @@ describe.skipIf(!dockerAvailable)(
         (_stack) =>
           Effect.gen(function* () {
             yield* seed("queried");
-            const response = yield* expectProbe<bigquery.QueryResponse>(
-              baseUrl,
-              "query",
-            );
+            const response = yield* expectProbe<bigquery.QueryResponse>(baseUrl, "query");
             expect(response.jobComplete).toEqual(true);
-            expect((response.rows ?? []).map((row) => row.f?.[0]?.v)).toEqual([
-              "seed",
-            ]);
+            expect((response.rows ?? []).map((row) => row.f?.[0]?.v)).toEqual(["seed"]);
 
             const live = yield* bigquery.getDatasets({
               projectId: dataset.project,
@@ -192,9 +182,7 @@ describe.skipIf(!dockerAvailable)(
               insertErrors?: unknown[];
             }>(baseUrl, "insertAll");
             expect(response.insertErrors ?? []).toEqual([]);
-            expect(yield* runQuery("SELECT id FROM inserted")).toEqual([
-              "insert-all",
-            ]);
+            expect(yield* runQuery("SELECT id FROM inserted")).toEqual(["insert-all"]);
             expect(yield* tableRolesOf(tables.inserted, hostAccount)).toEqual([
               "roles/bigquery.dataEditor",
             ]);
@@ -212,13 +200,8 @@ describe.skipIf(!dockerAvailable)(
         (_stack) =>
           Effect.gen(function* () {
             yield* seed("listed");
-            const page = yield* expectProbe<bigquery.TableDataList>(
-              baseUrl,
-              "listTabledata",
-            );
-            expect((page.rows ?? []).map((row) => row.f?.[0]?.v)).toEqual([
-              "seed",
-            ]);
+            const page = yield* expectProbe<bigquery.TableDataList>(baseUrl, "listTabledata");
+            expect((page.rows ?? []).map((row) => row.f?.[0]?.v)).toEqual(["seed"]);
             expect(yield* tableRolesOf(tables.listed, hostAccount)).toEqual([
               "roles/bigquery.dataViewer",
             ]);
@@ -260,9 +243,7 @@ describe.skipIf(!dockerAvailable)(
         (_stack) =>
           Effect.gen(function* () {
             yield* expectProbe(baseUrl, "writeTable");
-            expect(yield* runQuery("SELECT id FROM written")).toEqual([
-              "written",
-            ]);
+            expect(yield* runQuery("SELECT id FROM written")).toEqual(["written"]);
             expect(yield* tableRolesOf(tables.written, hostAccount)).toEqual([
               "roles/bigquery.dataEditor",
             ]);
@@ -279,14 +260,9 @@ describe.skipIf(!dockerAvailable)(
         "inserts and reads back a row as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const rows = yield* expectProbe<Array<{ id: string }>>(
-              baseUrl,
-              "readWriteTable",
-            );
+            const rows = yield* expectProbe<Array<{ id: string }>>(baseUrl, "readWriteTable");
             expect(rows).toEqual([{ id: "read-write" }]);
-            expect(yield* runQuery("SELECT id FROM read_write")).toEqual([
-              "read-write",
-            ]);
+            expect(yield* runQuery("SELECT id FROM read_write")).toEqual(["read-write"]);
             expect(yield* tableRolesOf(tables.readWrite, hostAccount)).toEqual([
               "roles/bigquery.dataEditor",
             ]);

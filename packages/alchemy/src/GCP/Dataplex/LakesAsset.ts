@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
@@ -195,27 +190,19 @@ export type LakesAsset = Resource<
  */
 export const LakesAsset = Resource<LakesAsset>("GCP.Dataplex.LakesAsset");
 
-export class LakesAssetNotResolved extends Data.TaggedError(
-  "GCP.Dataplex.LakesAssetNotResolved",
-)<{
+export class LakesAssetNotResolved extends Data.TaggedError("GCP.Dataplex.LakesAssetNotResolved")<{
   name: string;
 }> {}
 
-export class LakesAssetStillExists extends Data.TaggedError(
-  "GCP.Dataplex.LakesAssetStillExists",
-)<{
+export class LakesAssetStillExists extends Data.TaggedError("GCP.Dataplex.LakesAssetStillExists")<{
   name: string;
 }> {}
 
 const zoneOf = (zone: string) => zone;
 
-const resourceNameOf = (zone: string, assetId: string) =>
-  `${zone}/assets/${assetId}`;
+const resourceNameOf = (zone: string, assetId: string) => `${zone}/assets/${assetId}`;
 
-const toAttrs = (
-  asset: dataplex.GoogleCloudDataplexV1Asset,
-  project: string,
-) => {
+const toAttrs = (asset: dataplex.GoogleCloudDataplexV1Asset, project: string) => {
   const name = asset.name ?? "";
   const parsed = parseResourceName(name, "assets");
   return {
@@ -247,8 +234,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (asset): asset is dataplex.GoogleCloudDataplexV1Asset =>
-        asset !== undefined,
+      (asset): asset is dataplex.GoogleCloudDataplexV1Asset => asset !== undefined,
       () => new LakesAssetNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -269,9 +255,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((asset) =>
-      asset === undefined
-        ? Effect.void
-        : Effect.fail(new LakesAssetStillExists({ name })),
+      asset === undefined ? Effect.void : Effect.fail(new LakesAssetStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakesAssetStillExists",
@@ -312,22 +296,14 @@ export const LakesAssetProvider = () =>
       const nextId = news.assetId ?? previousId;
       const previousZone = olds?.zone ?? output?.zone;
       const nextZone = news.zone ?? previousZone;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousType = (
-        olds?.resourceSpec?.type ??
-        output?.resourceType ??
-        ""
-      ).toUpperCase();
+      const previousType = (olds?.resourceSpec?.type ?? output?.resourceType ?? "").toUpperCase();
       const nextType = (news.resourceSpec.type ?? previousType).toUpperCase();
-      const previousResource =
-        olds?.resourceSpec?.name ?? output?.resourceName ?? "";
+      const previousResource = olds?.resourceSpec?.name ?? output?.resourceName ?? "";
       const nextResource = news.resourceSpec.name ?? previousResource;
       if (
         replaceIfChanged(previousId, nextId) ||
@@ -351,18 +327,12 @@ export const LakesAssetProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = zoneOf(olds?.zone ?? output?.zone ?? "");
-      const assetId = yield* toPhysicalRfc1035(
-        id,
-        olds?.assetId,
-        output?.assetId,
-      );
+      const assetId = yield* toPhysicalRfc1035(id, olds?.assetId, output?.assetId);
       const name = output?.name ?? resourceNameOf(zone, assetId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -377,11 +347,7 @@ export const LakesAssetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = zoneOf(news.zone);
-      const assetId = yield* toPhysicalRfc1035(
-        id,
-        news.assetId,
-        output?.assetId,
-      );
+      const assetId = yield* toPhysicalRfc1035(id, news.assetId, output?.assetId);
       const name = output?.name ?? resourceNameOf(zone, assetId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -432,16 +398,13 @@ export const LakesAssetProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const discoveryChanged =
         discoverySpec !== undefined &&
         fingerprint(current.discoverySpec) !== fingerprint(discoverySpec);
       const readModeChanged =
-        (news.resourceSpec.readAccessMode ?? "") !==
-        (current.resourceSpec?.readAccessMode ?? "");
+        (news.resourceSpec.readAccessMode ?? "") !== (current.resourceSpec?.readAccessMode ?? "");
 
       if (
         labelsChanged ||
@@ -457,18 +420,17 @@ export const LakesAssetProvider = () =>
           discoveryChanged ? "discovery_spec" : undefined,
           readModeChanged ? "resource_spec.read_access_mode" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* dataplex.patchProjectsLocationsLakesZonesAssets({
-            name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              displayName: news.displayName,
-              description: news.description,
-              labels: desiredLabels,
-              resourceSpec,
-              discoverySpec,
-            },
-          });
+        const operation = yield* dataplex.patchProjectsLocationsLakesZonesAssets({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            displayName: news.displayName,
+            description: news.description,
+            labels: desiredLabels,
+            resourceSpec,
+            discoverySpec,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

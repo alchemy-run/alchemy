@@ -32,11 +32,6 @@ export interface StopFlow extends Binding.Service<
   "AWS.MediaConnect.StopFlow",
   (
     flow: Flow,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      mediaconnect.StopFlowResponse,
-      mediaconnect.StopFlowError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<mediaconnect.StopFlowResponse, mediaconnect.StopFlowError>>
 > {}
 export const StopFlow = Binding.Service<StopFlow>("AWS.MediaConnect.StopFlow");

@@ -41,6 +41,4 @@ export interface GetInstance extends Binding.Service<
   >
 > {}
 
-export const GetInstance = Binding.Service<GetInstance>(
-  "GCP.AlloyDB.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("GCP.AlloyDB.GetInstance");

@@ -84,8 +84,7 @@ const transientWriteSchedule = Schedule.max([
   Schedule.recurs(6),
 ]);
 const isEmptyUpdateError = (error: { _tag: string; message?: string }) =>
-  error._tag === "ValidationError" &&
-  (error.message?.includes("No updates are defined") ?? false);
+  error._tag === "ValidationError" && (error.message?.includes("No updates are defined") ?? false);
 
 const isTransientWriteError = (error: {
   _tag: "ValidationError" | "ConcurrentModificationException" | (string & {});
@@ -95,9 +94,7 @@ const isTransientWriteError = (error: {
   (error._tag === "ValidationError" && !isEmptyUpdateError(error));
 
 const toName = (id: string, props: { name?: string }) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 128 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
 export const SAMLProviderProvider = () =>
   Provider.succeed(SAMLProvider, {
@@ -113,20 +110,12 @@ export const SAMLProviderProvider = () =>
         return undefined;
       }
       const response = yield* iam
-        .getSAMLProvider({
-          SAMLProviderArn: output.samlProviderArn,
-        })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .getSAMLProvider({ SAMLProviderArn: output.samlProviderArn })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       if (!response) {
         return undefined;
       }
-      const tags = yield* iam.listSAMLProviderTags({
-        SAMLProviderArn: output.samlProviderArn,
-      });
+      const tags = yield* iam.listSAMLProviderTags({ SAMLProviderArn: output.samlProviderArn });
       return {
         samlProviderArn: output.samlProviderArn,
         name: output.name,
@@ -141,19 +130,13 @@ export const SAMLProviderProvider = () =>
       // account but only returns the ARN, so hydrate each via
       // `getSAMLProvider` + `listSAMLProviderTags` for the full Attributes.
       const { SAMLProviderList } = yield* iam.listSAMLProviders({});
-      const arns = (SAMLProviderList ?? []).flatMap((entry) =>
-        entry.Arn ? [entry.Arn] : [],
-      );
+      const arns = (SAMLProviderList ?? []).flatMap((entry) => (entry.Arn ? [entry.Arn] : []));
       const rows = yield* Effect.forEach(
         arns,
         (samlProviderArn) =>
           Effect.gen(function* () {
-            const response = yield* iam.getSAMLProvider({
-              SAMLProviderArn: samlProviderArn,
-            });
-            const tags = yield* iam.listSAMLProviderTags({
-              SAMLProviderArn: samlProviderArn,
-            });
+            const response = yield* iam.getSAMLProvider({ SAMLProviderArn: samlProviderArn });
+            const tags = yield* iam.listSAMLProviderTags({ SAMLProviderArn: samlProviderArn });
             return {
               samlProviderArn,
               name: samlProviderArn.split("saml-provider/").pop() ?? "",
@@ -164,9 +147,7 @@ export const SAMLProviderProvider = () =>
             };
           }).pipe(
             // A provider can disappear between listing, reading and tag lookup.
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -174,25 +155,17 @@ export const SAMLProviderProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const internalTags = yield* createInternalTags(id);
-      const desiredTags = {
-        ...internalTags,
-        ...news.tags,
-      };
+      const desiredTags = { ...internalTags, ...news.tags };
       const name = output?.name ?? (yield* toName(id, news));
       const accountId = (yield* AWSEnvironment.current).accountId;
       const samlProviderArn =
-        output?.samlProviderArn ??
-        `arn:aws:iam::${accountId}:saml-provider/${name}`;
+        output?.samlProviderArn ?? `arn:aws:iam::${accountId}:saml-provider/${name}`;
 
       // Observe — `getSAMLProvider` returns the metadata, encryption
       // mode, and UUID; absence is `NoSuchEntityException`.
       let observed = yield* iam
         .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
 
       // Ensure — create when missing. Race with a peer is recovered by
       // verifying alchemy ownership tags on the existing provider.
@@ -205,16 +178,10 @@ export const SAMLProviderProvider = () =>
             AddPrivateKey: news.addPrivateKey
               ? unwrapRedactedString(news.addPrivateKey)
               : undefined,
-            Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-              Key,
-              Value,
-            })),
+            Tags: Object.entries(desiredTags).map(([Key, Value]) => ({ Key, Value })),
           })
           .pipe(
-            Effect.retry({
-              while: isTransientWriteError,
-              schedule: transientWriteSchedule,
-            }),
+            Effect.retry({ while: isTransientWriteError, schedule: transientWriteSchedule }),
             Effect.catchTag("EntityAlreadyExistsException", () =>
               Effect.gen(function* () {
                 const existingTags = yield* iam.listSAMLProviderTags({
@@ -241,35 +208,23 @@ export const SAMLProviderProvider = () =>
         // (greenfield adopt of a leftover provider, or a tags-only
         // reconcile).
         const metadataChanged =
-          (observed.SAMLMetadataDocument ?? undefined) !==
-          news.samlMetadataDocument;
+          (observed.SAMLMetadataDocument ?? undefined) !== news.samlMetadataDocument;
         const encryptionChanged =
           news.assertionEncryptionMode !== undefined &&
           observed.AssertionEncryptionMode !== news.assertionEncryptionMode;
         const addPrivateKey = news.addPrivateKey
           ? unwrapRedactedString(news.addPrivateKey)
           : undefined;
-        if (
-          metadataChanged ||
-          encryptionChanged ||
-          addPrivateKey !== undefined
-        ) {
+        if (metadataChanged || encryptionChanged || addPrivateKey !== undefined) {
           yield* iam
             .updateSAMLProvider({
               SAMLProviderArn: samlProviderArn,
-              SAMLMetadataDocument: metadataChanged
-                ? news.samlMetadataDocument
-                : undefined,
-              AssertionEncryptionMode: encryptionChanged
-                ? news.assertionEncryptionMode
-                : undefined,
+              SAMLMetadataDocument: metadataChanged ? news.samlMetadataDocument : undefined,
+              AssertionEncryptionMode: encryptionChanged ? news.assertionEncryptionMode : undefined,
               AddPrivateKey: addPrivateKey,
             })
             .pipe(
-              Effect.retry({
-                while: isTransientWriteError,
-                schedule: transientWriteSchedule,
-              }),
+              Effect.retry({ while: isTransientWriteError, schedule: transientWriteSchedule }),
               Effect.catchIf(isEmptyUpdateError, () => Effect.void),
             );
         }
@@ -282,24 +237,17 @@ export const SAMLProviderProvider = () =>
       const observedTags = toTagRecord(observedTagsResp.Tags);
       const { removed, upsert } = diffTags(observedTags, desiredTags);
       if (upsert.length > 0) {
-        yield* iam.tagSAMLProvider({
-          SAMLProviderArn: samlProviderArn,
-          Tags: upsert,
-        });
+        yield* iam.tagSAMLProvider({ SAMLProviderArn: samlProviderArn, Tags: upsert });
       }
       if (removed.length > 0) {
-        yield* iam.untagSAMLProvider({
-          SAMLProviderArn: samlProviderArn,
-          TagKeys: removed,
-        });
+        yield* iam.untagSAMLProvider({ SAMLProviderArn: samlProviderArn, TagKeys: removed });
       }
 
       yield* session.note(samlProviderArn);
       return {
         samlProviderArn,
         name,
-        samlProviderUUID:
-          observed?.SAMLProviderUUID ?? output?.samlProviderUUID,
+        samlProviderUUID: observed?.SAMLProviderUUID ?? output?.samlProviderUUID,
         samlMetadataDocument: news.samlMetadataDocument,
         assertionEncryptionMode: news.assertionEncryptionMode,
         tags: desiredTags,
@@ -307,9 +255,7 @@ export const SAMLProviderProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* iam
-        .deleteSAMLProvider({
-          SAMLProviderArn: output.samlProviderArn,
-        })
+        .deleteSAMLProvider({ SAMLProviderArn: output.samlProviderArn })
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
     }),
   });

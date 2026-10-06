@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { type Probe, serveProbes } from "../../bindingHost.ts";
 import { region, runVersionLifecycle } from "../common.ts";
 

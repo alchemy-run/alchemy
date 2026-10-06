@@ -10,15 +10,11 @@ export const DEFAULT_ANCESTOR = "NONE";
 export const DEFAULT_DIRECTION = "ASCENDING";
 export const MAX_KIND_LENGTH = 63;
 
-export class IndexNotResolved extends Data.TaggedError(
-  "GCP.Datastore.IndexNotResolved",
-)<{
+export class IndexNotResolved extends Data.TaggedError("GCP.Datastore.IndexNotResolved")<{
   indexId: string;
 }> {}
 
-export class IndexStillExists extends Data.TaggedError(
-  "GCP.Datastore.IndexStillExists",
-)<{
+export class IndexStillExists extends Data.TaggedError("GCP.Datastore.IndexStillExists")<{
   indexId: string;
 }> {}
 
@@ -30,10 +26,7 @@ export const stringFromMap = (
   if (typeof value === "string" && value.length > 0) return value;
   if (value !== null && typeof value === "object") {
     const record = value as { stringValue?: unknown };
-    if (
-      typeof record.stringValue === "string" &&
-      record.stringValue.length > 0
-    ) {
+    if (typeof record.stringValue === "string" && record.stringValue.length > 0) {
       return record.stringValue;
     }
   }
@@ -56,11 +49,7 @@ export const rfc1035Kind = (name: string, maxLength = MAX_KIND_LENGTH) => {
   return next.slice(0, maxLength);
 };
 
-export const toKind = (
-  id: string,
-  kind: string | undefined,
-  existing?: string,
-) =>
+export const toKind = (id: string, kind: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (kind !== undefined && kind.length > 0) return kind;
     if (existing !== undefined && existing.length > 0) return existing;
@@ -80,9 +69,7 @@ export type IndexedProperty = {
    * Sort direction.
    * @default "ASCENDING"
    */
-  direction?:
-    | datastore.GoogleDatastoreAdminV1IndexedPropertyDirectionEnum
-    | (string & {});
+  direction?: datastore.GoogleDatastoreAdminV1IndexedPropertyDirectionEnum | (string & {});
 };
 
 export const propertyOf = (
@@ -122,15 +109,11 @@ export const matchesDesired = (
     (index.kind ?? "") === desired.kind &&
     normalizeEnum(index.ancestor, DEFAULT_ANCESTOR) ===
       normalizeEnum(desired.ancestor, DEFAULT_ANCESTOR) &&
-    propertiesKey(index.properties ?? []) ===
-      propertiesKey(desired.properties ?? [])
+    propertiesKey(index.properties ?? []) === propertiesKey(desired.properties ?? [])
   );
 };
 
-export const toAttrs = (
-  index: datastore.GoogleDatastoreAdminV1Index,
-  project: string,
-) => {
+export const toAttrs = (index: datastore.GoogleDatastoreAdminV1Index, project: string) => {
   const indexId = index.indexId ?? "";
   return {
     name:
@@ -158,20 +141,14 @@ export const listIndexes = (projectId: string) =>
     })
     .pipe(
       Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.indexes ?? []),
-      ),
+      Effect.map((pages) => Array.from(pages).flatMap((page) => page.indexes ?? [])),
     );
 
 /** Wait for a Datastore admin operation (index builds can take minutes). */
-export const waitForOperation = (
-  operation: datastore.GoogleLongrunningOperation,
-) =>
-  waitForGcpOperation(
-    operation,
-    (name) => datastore.getProjectsOperations({ name }),
-    { budget: "20 minutes" },
-  ).pipe(
+export const waitForOperation = (operation: datastore.GoogleLongrunningOperation) =>
+  waitForGcpOperation(operation, (name) => datastore.getProjectsOperations({ name }), {
+    budget: "20 minutes",
+  }).pipe(
     // ALREADY_EXISTS (6): an identical index already exists.
     Effect.catchIf(
       (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
@@ -199,9 +176,7 @@ export const indexIdFromOperation = (
 export const waitUntilExists = (projectId: string, indexId: string) =>
   getById(projectId, indexId).pipe(
     Effect.flatMap((index) =>
-      index
-        ? Effect.succeed(index)
-        : Effect.fail(new IndexNotResolved({ indexId })),
+      index ? Effect.succeed(index) : Effect.fail(new IndexNotResolved({ indexId })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Datastore.IndexNotResolved",

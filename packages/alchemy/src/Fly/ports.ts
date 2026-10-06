@@ -11,9 +11,7 @@ export interface PublishedPort {
   forceHttps: boolean;
 }
 
-export class ServicePortConflict extends Data.TaggedError(
-  "Fly.ServicePortConflict",
-)<{
+export class ServicePortConflict extends Data.TaggedError("Fly.ServicePortConflict")<{
   appName: string;
   port: number;
   protocol: string;
@@ -75,9 +73,7 @@ export const portsOfProps = (
 ): PublishedPort[] =>
   services !== undefined
     ? services.flatMap((service) =>
-        (service.ports ?? []).flatMap((port) =>
-          normalize({ protocol: service.protocol, ...port }),
-        ),
+        (service.ports ?? []).flatMap((port) => normalize({ protocol: service.protocol, ...port })),
       )
     : isPublic
       ? [
@@ -123,9 +119,7 @@ export const bindingPortOf = (
   bindingPort: number,
 ): { port: number; added: boolean } | undefined => {
   if (ports.length === 0) return undefined;
-  const others = ports.filter(
-    (port) => !(isPlainHttp(port) && port.start === bindingPort),
-  );
+  const others = ports.filter((port) => !(isPlainHttp(port) && port.start === bindingPort));
   const plain = others.find(isPlainHttp);
   if (plain !== undefined) return { port: plain.start, added: false };
   return { port: bindingPort, added: true };
@@ -153,9 +147,7 @@ export const withBindingPort = (
 };
 
 const overlaps = (left: PublishedPort, right: PublishedPort) =>
-  left.protocol === right.protocol &&
-  left.start <= right.end &&
-  right.start <= left.end;
+  left.protocol === right.protocol && left.start <= right.end && right.start <= left.end;
 
 /**
  * The first port two publishers share, if any. A publisher that lists the

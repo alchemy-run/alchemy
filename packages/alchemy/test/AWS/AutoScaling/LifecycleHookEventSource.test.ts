@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import LifecycleTestFunctionLive, {
   LifecycleTestFunction,
   lifecycleFleetAsgName,
@@ -17,10 +17,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AutoScalingLifecycle");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -61,9 +58,7 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -79,9 +74,7 @@ describe(
         // explicitly for the out-of-band distilled call.
         const remaining = yield* Core.withProviders(
           autoscaling
-            .describeAutoScalingGroups({
-              AutoScalingGroupNames: [lifecycleFleetAsgName],
-            } as any)
+            .describeAutoScalingGroups({ AutoScalingGroupNames: [lifecycleFleetAsgName] } as any)
             .pipe(
               Effect.map((r) => (r.AutoScalingGroups ?? []).length),
               Effect.repeat({
@@ -108,9 +101,7 @@ describe(
           } as any);
           const hook = hooks.LifecycleHooks?.[0];
           expect(hook?.LifecycleHookName).toEqual(lifecycleHookName);
-          expect(hook?.LifecycleTransition).toEqual(
-            "autoscaling:EC2_INSTANCE_LAUNCHING",
-          );
+          expect(hook?.LifecycleTransition).toEqual("autoscaling:EC2_INSTANCE_LAUNCHING");
           expect(hook?.HeartbeatTimeout).toEqual(300);
         }),
     );
@@ -128,9 +119,7 @@ describe(
             Effect.flatMap((response) =>
               response.status === 200
                 ? response.json
-                : Effect.fail(
-                    new Error(`Function not ready: ${response.status}`),
-                  ),
+                : Effect.fail(new Error(`Function not ready: ${response.status}`)),
             ),
             Effect.map((json) => json as { ok: boolean; tag: string }),
             // `repeat` only re-runs successes: a transient 502 from the
@@ -138,8 +127,7 @@ describe(
             // too, the way the /health probe is.
             Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
             Effect.repeat({
-              until: (b) =>
-                b.tag !== "AccessDenied" && b.tag !== "AccessDeniedException",
+              until: (b) => b.tag !== "AccessDenied" && b.tag !== "AccessDeniedException",
               schedule: Schedule.spaced("3 seconds"),
               times: 10,
             }),
@@ -147,9 +135,7 @@ describe(
           // The SDK call reached AWS with valid credentials/policy: either it
           // succeeded, or it failed for a resource reason (no active lifecycle
           // action) — never an authorization failure.
-          expect(["AccessDenied", "AccessDeniedException"]).not.toContain(
-            body.tag,
-          );
+          expect(["AccessDenied", "AccessDeniedException"]).not.toContain(body.tag);
         }),
       { timeout: 60_000 },
     );

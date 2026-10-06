@@ -100,9 +100,7 @@ export interface EventarcEventSource extends Binding.Service<
   EventarcEventSourceService
 > {}
 
-export const EventarcEventSource = Binding.Service<EventarcEventSource>(
-  "GCP.Eventarc.EventSource",
-);
+export const EventarcEventSource = Binding.Service<EventarcEventSource>("GCP.Eventarc.EventSource");
 
 /**
  * Subscribe an Effect handler to Eventarc events matching `eventFilters`.

@@ -103,11 +103,7 @@ export class DomainNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  domain: gmailpostmastertools.Domain,
-  project: string,
-  fallbackId?: string,
-) => {
+const toAttrs = (domain: gmailpostmastertools.Domain, project: string, fallbackId?: string) => {
   const name = domain.name ?? (fallbackId ? toDomainName(fallbackId) : "");
   return {
     name,
@@ -144,9 +140,7 @@ export const DomainProvider = () =>
       const existing = yield* getDomain(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, domainId);
-      return output !== undefined || isAlchemyDomain(existing.name)
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || isAlchemyDomain(existing.name) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -158,11 +152,7 @@ export const DomainProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const domainId = yield* toGeneratedDomainId(
-        id,
-        news.domainId,
-        output?.domainId,
-      );
+      const domainId = yield* toGeneratedDomainId(id, news.domainId, output?.domainId);
       const name = toDomainName(domainId);
 
       let current = yield* getDomain(output?.name || name);

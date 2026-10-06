@@ -6,11 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   catchMissing,
@@ -222,9 +218,7 @@ const toChecks = (
 ): BranchRuleCheck[] =>
   (checks ?? [])
     .map((check) => ({ context: check.context }))
-    .sort((left, right) =>
-      (left.context ?? "").localeCompare(right.context ?? ""),
-    );
+    .sort((left, right) => (left.context ?? "").localeCompare(right.context ?? ""));
 
 const toAttrs = (item: ssm.BranchRule, project: string, region: string) => {
   const name = item.name ?? "";
@@ -270,23 +264,13 @@ const listOnRepository = (repository: string) =>
 const listOwned = (project: string, region: string) =>
   forEachRepository(project, region, (repository) =>
     listOnRepository(repository).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.annotations)),
-      ),
+      Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.annotations))),
     ),
   );
 
 export const RepositoriesBranchRuleProvider = () =>
   Provider.succeed(RepositoriesBranchRule, {
-    stables: [
-      "name",
-      "branchRuleId",
-      "repository",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "branchRuleId", "repository", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -300,18 +284,10 @@ export const RepositoriesBranchRuleProvider = () =>
         nextId: news.branchRuleId
           ? rfc1035(news.branchRuleId, "branchrule")
           : (olds?.branchRuleId ?? output?.branchRuleId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.repository ?? output?.repository,
-        nextParent: expandName(
-          news.repository,
-          env.project,
-          location,
-          "repositories",
-        ),
+        nextParent: expandName(news.repository, env.project, location, "repositories"),
       });
     }),
 
@@ -323,10 +299,7 @@ export const RepositoriesBranchRuleProvider = () =>
         output?.branchRuleId,
         "branchrule",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const repository = expandName(
         olds?.repository ?? output?.repository ?? "",
         env.project,
@@ -334,8 +307,7 @@ export const RepositoriesBranchRuleProvider = () =>
         "repositories",
       );
       const name =
-        output?.name ??
-        (repository.length > 0 ? resourceName(repository, branchRuleId) : "");
+        output?.name ?? (repository.length > 0 ? resourceName(repository, branchRuleId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -348,9 +320,7 @@ export const RepositoriesBranchRuleProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item: ssm.BranchRule) =>
-          toAttrs(item, env.project, env.region),
-        );
+        return items.map((item: ssm.BranchRule) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -361,16 +331,8 @@ export const RepositoriesBranchRuleProvider = () =>
         output?.branchRuleId,
         "branchrule",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandName(
-        news.repository,
-        env.project,
-        location,
-        "repositories",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandName(news.repository, env.project, location, "repositories");
       const name = resourceName(repository, branchRuleId);
       const ownership = yield* createInternalLabels(id);
       const annotations = desiredAnnotations(news.annotations, ownership);
@@ -387,22 +349,15 @@ export const RepositoriesBranchRuleProvider = () =>
             body: {
               includePattern,
               disabled: news.disabled === true ? true : undefined,
-              requirePullRequest:
-                news.requirePullRequest === true ? true : undefined,
+              requirePullRequest: news.requirePullRequest === true ? true : undefined,
               minimumApprovalsCount: news.minimumApprovalsCount,
               minimumReviewsCount: news.minimumReviewsCount,
-              allowStaleReviews:
-                news.allowStaleReviews === true ? true : undefined,
-              requireLinearHistory:
-                news.requireLinearHistory === true ? true : undefined,
-              requireCommentsResolved:
-                news.requireCommentsResolved === true ? true : undefined,
-              requireCodeOwnerApproval:
-                news.requireCodeOwnerApproval === true ? true : undefined,
+              allowStaleReviews: news.allowStaleReviews === true ? true : undefined,
+              requireLinearHistory: news.requireLinearHistory === true ? true : undefined,
+              requireCommentsResolved: news.requireCommentsResolved === true ? true : undefined,
+              requireCodeOwnerApproval: news.requireCodeOwnerApproval === true ? true : undefined,
               requiredStatusChecks:
-                requiredStatusChecks.length > 0
-                  ? requiredStatusChecks
-                  : undefined,
+                requiredStatusChecks.length > 0 ? requiredStatusChecks : undefined,
               annotations,
             },
           })
@@ -423,50 +378,43 @@ export const RepositoriesBranchRuleProvider = () =>
         (upsert.length > 0 || removed.length > 0) && "annotations",
         !sameText(current.includePattern, includePattern) && "includePattern",
         (current.disabled === true) !== (news.disabled === true) && "disabled",
-        (current.requirePullRequest === true) !==
-          (news.requirePullRequest === true) && "requirePullRequest",
-        current.minimumApprovalsCount !== news.minimumApprovalsCount &&
-          "minimumApprovalsCount",
-        current.minimumReviewsCount !== news.minimumReviewsCount &&
-          "minimumReviewsCount",
-        (current.allowStaleReviews === true) !==
-          (news.allowStaleReviews === true) && "allowStaleReviews",
-        (current.requireLinearHistory === true) !==
-          (news.requireLinearHistory === true) && "requireLinearHistory",
-        (current.requireCommentsResolved === true) !==
-          (news.requireCommentsResolved === true) && "requireCommentsResolved",
-        (current.requireCodeOwnerApproval === true) !==
-          (news.requireCodeOwnerApproval === true) &&
+        (current.requirePullRequest === true) !== (news.requirePullRequest === true) &&
+          "requirePullRequest",
+        current.minimumApprovalsCount !== news.minimumApprovalsCount && "minimumApprovalsCount",
+        current.minimumReviewsCount !== news.minimumReviewsCount && "minimumReviewsCount",
+        (current.allowStaleReviews === true) !== (news.allowStaleReviews === true) &&
+          "allowStaleReviews",
+        (current.requireLinearHistory === true) !== (news.requireLinearHistory === true) &&
+          "requireLinearHistory",
+        (current.requireCommentsResolved === true) !== (news.requireCommentsResolved === true) &&
+          "requireCommentsResolved",
+        (current.requireCodeOwnerApproval === true) !== (news.requireCodeOwnerApproval === true) &&
           "requireCodeOwnerApproval",
-        fingerprint(toChecks(current.requiredStatusChecks)) !==
-          fingerprint(requiredStatusChecks) && "requiredStatusChecks",
+        fingerprint(toChecks(current.requiredStatusChecks)) !== fingerprint(requiredStatusChecks) &&
+          "requiredStatusChecks",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* ssm.patchProjectsLocationsRepositoriesBranchRules({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              includePattern,
-              disabled: news.disabled === true,
-              requirePullRequest: news.requirePullRequest === true,
-              minimumApprovalsCount: news.minimumApprovalsCount,
-              minimumReviewsCount: news.minimumReviewsCount,
-              allowStaleReviews: news.allowStaleReviews === true,
-              requireLinearHistory: news.requireLinearHistory === true,
-              requireCommentsResolved: news.requireCommentsResolved === true,
-              requireCodeOwnerApproval: news.requireCodeOwnerApproval === true,
-              requiredStatusChecks,
-              annotations,
-            },
-          });
+        const operation = yield* ssm.patchProjectsLocationsRepositoriesBranchRules({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            includePattern,
+            disabled: news.disabled === true,
+            requirePullRequest: news.requirePullRequest === true,
+            minimumApprovalsCount: news.minimumApprovalsCount,
+            minimumReviewsCount: news.minimumReviewsCount,
+            allowStaleReviews: news.allowStaleReviews === true,
+            requireLinearHistory: news.requireLinearHistory === true,
+            requireCommentsResolved: news.requireCommentsResolved === true,
+            requireCodeOwnerApproval: news.requireCodeOwnerApproval === true,
+            requiredStatusChecks,
+            annotations,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

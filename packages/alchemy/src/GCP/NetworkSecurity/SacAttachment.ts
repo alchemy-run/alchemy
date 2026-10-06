@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   lastSegment,
@@ -128,9 +123,7 @@ export type SacAttachment = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const SacAttachment = Resource<SacAttachment>(
-  "GCP.NetworkSecurity.SacAttachment",
-);
+export const SacAttachment = Resource<SacAttachment>("GCP.NetworkSecurity.SacAttachment");
 
 export class SacAttachmentNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SacAttachmentNotResolved",
@@ -144,11 +137,7 @@ export class SacAttachmentStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  attachment: networksecurity.SACAttachment,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (attachment: networksecurity.SACAttachment, project: string, region: string) => {
   const name = attachment.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -173,13 +162,11 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (attachment): attachment is networksecurity.SACAttachment =>
-        attachment !== undefined,
+      (attachment): attachment is networksecurity.SACAttachment => attachment !== undefined,
       () => new SacAttachmentNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.SacAttachmentNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.SacAttachmentNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -188,13 +175,10 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((attachment) =>
-      attachment === undefined
-        ? Effect.void
-        : Effect.fail(new SacAttachmentStillExists({ name })),
+      attachment === undefined ? Effect.void : Effect.fail(new SacAttachmentStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.SacAttachmentStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.SacAttachmentStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -209,9 +193,7 @@ const listOwned = (project: string, region: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.sacAttachments ?? [])),
       Stream.filter((attachment) =>
-        Object.keys(attachment.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(attachment.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((attachment) => toAttrs(attachment, project, region)),
       Stream.runCollect,
@@ -236,30 +218,21 @@ export const SacAttachmentProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.sacAttachmentId ?? output?.sacAttachmentId;
       const nextId = news.sacAttachmentId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousRealm = lastSegment(
-        olds?.sacRealm ?? output?.sacRealm ?? "",
-      );
+      const previousRealm = lastSegment(olds?.sacRealm ?? output?.sacRealm ?? "");
       const nextRealm = lastSegment(news.sacRealm);
-      const previousGateway = lastSegment(
-        olds?.nccGateway ?? output?.nccGateway ?? "",
-      );
+      const previousGateway = lastSegment(olds?.nccGateway ?? output?.nccGateway ?? "");
       const nextGateway = lastSegment(news.nccGateway);
       const previousLabels = { ...toLabels(olds?.labels) };
       const nextLabels = { ...toLabels(news.labels) };
       const { upsert, removed } = diffLabels(previousLabels, nextLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousRealm.length > 0 && previousRealm !== nextRealm) ||
         (previousGateway.length > 0 && previousGateway !== nextGateway) ||
@@ -276,19 +249,12 @@ export const SacAttachmentProvider = () =>
         output?.sacAttachmentId,
         "saca",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, sacAttachmentId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, sacAttachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -305,16 +271,8 @@ export const SacAttachmentProvider = () =>
         output?.sacAttachmentId,
         "saca",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        sacAttachmentId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, sacAttachmentId);
       const sacRealm = toResourcePath(news.sacRealm);
       const nccGateway = toResourcePath(news.nccGateway);
       const desiredLabels = {

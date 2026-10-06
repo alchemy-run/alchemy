@@ -44,6 +44,4 @@ export interface GetReservation extends Binding.Service<
   >
 > {}
 
-export const GetReservation = Binding.Service<GetReservation>(
-  "GCP.PubSubLite.GetReservation",
-);
+export const GetReservation = Binding.Service<GetReservation>("GCP.PubSubLite.GetReservation");

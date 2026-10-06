@@ -124,16 +124,12 @@ export type PrivateCloudsExternalAddress = Resource<
  * @resource
  * @category VMwareEngine
  */
-export const PrivateCloudsExternalAddress =
-  Resource<PrivateCloudsExternalAddress>(
-    "GCP.VMwareEngine.PrivateCloudsExternalAddress",
-  );
+export const PrivateCloudsExternalAddress = Resource<PrivateCloudsExternalAddress>(
+  "GCP.VMwareEngine.PrivateCloudsExternalAddress",
+);
 
-const parentCloudName = (
-  project: string,
-  location: string,
-  privateCloud: string,
-) => expandName(privateCloud, project, location, PARENT_COLLECTION);
+const parentCloudName = (project: string, location: string, privateCloud: string) =>
+  expandName(privateCloud, project, location, PARENT_COLLECTION);
 
 const resourceNameOf = (parent: string, externalAddressId: string) =>
   `${parent}/${COLLECTION}/${externalAddressId}`;
@@ -177,10 +173,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       return replaceOnIdentity({
         previousId: olds?.externalAddressId ?? output?.externalAddressId,
         nextId: news.externalAddressId
@@ -188,8 +181,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
           : (olds?.externalAddressId ?? output?.externalAddressId),
         previousLocation,
         nextLocation: normalizeLocation(
-          news.location ??
-            locationFromName(news.privateCloud, previousLocation),
+          news.location ?? locationFromName(news.privateCloud, previousLocation),
           DEFAULT_ZONE,
         ),
         previousParent: olds?.privateCloud ?? output?.privateCloud,
@@ -202,9 +194,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          (olds?.privateCloud
-            ? locationFromName(olds.privateCloud, DEFAULT_ZONE)
-            : undefined),
+          (olds?.privateCloud ? locationFromName(olds.privateCloud, DEFAULT_ZONE) : undefined),
         DEFAULT_ZONE,
       );
       const parent = parentCloudName(
@@ -229,28 +219,23 @@ export const PrivateCloudsExternalAddressProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clouds = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsPrivateClouds.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.privateClouds,
-            ),
+        const clouds = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsPrivateClouds.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.privateClouds,
+          ),
         );
         const nested = yield* Effect.forEach(
           clouds.filter((cloud) => (cloud.name ?? "").length > 0),
           (cloud) =>
             collectPages(
-              vmwareengine.listProjectsLocationsPrivateCloudsExternalAddresses.pages(
-                {
-                  parent: cloud.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              vmwareengine.listProjectsLocationsPrivateCloudsExternalAddresses.pages({
+                parent: cloud.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.externalAddresses,
             ),
           { concurrency: 4 },
@@ -264,9 +249,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromName(news.privateCloud, DEFAULT_ZONE),
+        news.location ?? output?.location ?? locationFromName(news.privateCloud, DEFAULT_ZONE),
         DEFAULT_ZONE,
       );
       const parent = parentCloudName(env.project, location, news.privateCloud);
@@ -316,8 +299,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
         (item) => item.state,
       );
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const ipChanged = (current.internalIp ?? "") !== news.internalIp;
       const updateMask = changedFields([
         ["description", descriptionChanged],
@@ -325,18 +307,15 @@ export const PrivateCloudsExternalAddressProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsPrivateCloudsExternalAddresses(
-            {
-              name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                description: desiredDescription,
-                internalIp: news.internalIp,
-              },
-            },
-          );
+        const operation = yield* vmwareengine.patchProjectsLocationsPrivateCloudsExternalAddresses({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            name: current.name ?? name,
+            description: desiredDescription,
+            internalIp: news.internalIp,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

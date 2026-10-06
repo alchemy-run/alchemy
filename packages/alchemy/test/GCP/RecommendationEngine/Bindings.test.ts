@@ -1,23 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import { currentProject, entitled } from "./common.ts";
-import RecommendationEngineBindingsHost, {
-  Shirt,
-  TITLE,
-} from "./fixtures/bindings-host.ts";
+import RecommendationEngineBindingsHost, { Shirt, TITLE } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "RecommendationEngineBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "RecommendationEngineBindings");
 
 let baseUrl: string;
 let member: string;
@@ -28,12 +22,7 @@ let itemId: string;
 describe.skipIf(!dockerAvailable || !entitled || !!process.env.FAST)(
   "RecommendationEngine Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:recommendationengine",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:recommendationengine", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(

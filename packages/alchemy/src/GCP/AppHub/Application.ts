@@ -156,11 +156,8 @@ export type Application = Resource<
  */
 export const Application = Resource<Application>("GCP.AppHub.Application");
 
-const resourceName = (
-  project: string,
-  location: string,
-  applicationId: string,
-) => `${locationParent(project, location)}/applications/${applicationId}`;
+const resourceName = (project: string, location: string, applicationId: string) =>
+  `${locationParent(project, location)}/applications/${applicationId}`;
 
 const toAttrs = (item: apphub.Application, project: string, region: string) => {
   const name = item.name ?? "";
@@ -203,14 +200,7 @@ const listOwned = (project: string, region: string) =>
 
 export const ApplicationProvider = () =>
   Provider.succeed(Application, {
-    stables: [
-      "name",
-      "applicationId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "applicationId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -219,20 +209,14 @@ export const ApplicationProvider = () =>
       const nextScope = news.scope?.type ?? previousScope;
       return replaceOnIdentity({
         previousId: olds?.applicationId ?? output?.applicationId,
-        nextId:
-          news.applicationId ?? olds?.applicationId ?? output?.applicationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.applicationId ?? olds?.applicationId ?? output?.applicationId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
-          previousScope !== undefined &&
-          nextScope !== undefined &&
-          previousScope !== nextScope,
+          previousScope !== undefined && nextScope !== undefined && previousScope !== nextScope,
       });
     }),
 
@@ -244,18 +228,12 @@ export const ApplicationProvider = () =>
         output?.applicationId,
         "app",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, applicationId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, applicationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -273,10 +251,7 @@ export const ApplicationProvider = () =>
         output?.applicationId,
         "app",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, applicationId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

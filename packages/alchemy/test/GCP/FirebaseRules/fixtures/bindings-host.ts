@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 const denyRules = `rules_version = '2';
@@ -33,9 +33,7 @@ export default class FirebaseRulesBindingsHost extends GCP.Function<FirebaseRule
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const testRuleset = yield* GCP.FirebaseRules.TestRuleset(yield* DenyAll);
-    const getExecutable = yield* GCP.FirebaseRules.GetReleaseExecutable(
-      yield* Live,
-    );
+    const getExecutable = yield* GCP.FirebaseRules.GetReleaseExecutable(yield* Live);
 
     return {
       fetch: serveProbes({

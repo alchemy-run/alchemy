@@ -25,9 +25,7 @@ const MAX_NAME_LENGTH = 63;
 
 export type SpokeState = networkconnectivity.SpokeStateEnum | (string & {});
 export type SpokeType = networkconnectivity.SpokeSpokeTypeEnum | (string & {});
-export type SpokeGatewayCapacity =
-  | networkconnectivity.GatewayCapacityEnum
-  | (string & {});
+export type SpokeGatewayCapacity = networkconnectivity.GatewayCapacityEnum | (string & {});
 
 export type SpokeStateReason = {
   /** Reason code (`PENDING_REVIEW`, `REJECTED`, `FAILED`, …). */
@@ -340,22 +338,16 @@ export type Spoke = Resource<
  */
 export const Spoke = Resource<Spoke>("GCP.NetworkConnectivity.Spoke");
 
-export class SpokeNotResolved extends Data.TaggedError(
-  "GCP.NetworkConnectivity.SpokeNotResolved",
-)<{
+export class SpokeNotResolved extends Data.TaggedError("GCP.NetworkConnectivity.SpokeNotResolved")<{
   name: string;
 }> {}
 
-export class SpokeFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.SpokeFailed",
-)<{
+export class SpokeFailed extends Data.TaggedError("GCP.NetworkConnectivity.SpokeFailed")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class SpokeStillExists extends Data.TaggedError(
-  "GCP.NetworkConnectivity.SpokeStillExists",
-)<{
+export class SpokeStillExists extends Data.TaggedError("GCP.NetworkConnectivity.SpokeStillExists")<{
   name: string;
 }> {}
 
@@ -385,8 +377,7 @@ const normalizeLocation = (location: string | undefined) =>
 const resourceName = (project: string, location: string, spokeId: string) =>
   `projects/${project}/locations/${location}/spokes/${spokeId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -394,16 +385,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    spokeId:
-      spokesAt >= 0 && parts[spokesAt + 1]
-        ? parts[spokesAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    spokeId: spokesAt >= 0 && parts[spokesAt + 1] ? parts[spokesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -425,9 +410,7 @@ const toId = (id: string, spokeId: string | undefined, existing?: string) =>
   });
 
 const resolveHub = (hub: string, project: string) =>
-  hub.includes("/")
-    ? hub
-    : `projects/${project}/locations/${DEFAULT_LOCATION}/hubs/${hub}`;
+  hub.includes("/") ? hub : `projects/${project}/locations/${DEFAULT_LOCATION}/hubs/${hub}`;
 
 const rangesKey = (ranges: ReadonlyArray<string> | undefined) =>
   JSON.stringify([...(ranges ?? [])].slice().sort());
@@ -440,9 +423,7 @@ const resourceKey = (uri: string | undefined) => {
 const resourceKeys = (uris: ReadonlyArray<string> | undefined) =>
   JSON.stringify([...(uris ?? [])].map(resourceKey).sort());
 
-const instancesKey = (
-  instances: ReadonlyArray<RouterApplianceInstance> | undefined,
-) =>
+const instancesKey = (instances: ReadonlyArray<RouterApplianceInstance> | undefined) =>
   JSON.stringify(
     [...(instances ?? [])]
       .map((instance) => ({
@@ -450,9 +431,7 @@ const instancesKey = (
         ip: instance.ipAddress,
       }))
       .sort((left, right) =>
-        left.vm === right.vm
-          ? left.ip.localeCompare(right.ip)
-          : left.vm.localeCompare(right.vm),
+        left.vm === right.vm ? left.ip.localeCompare(right.ip) : left.vm.localeCompare(right.vm),
       ),
   );
 
@@ -486,9 +465,7 @@ const linkedIdentity = (props: {
     }`;
   }
   if (props.linkedRouterApplianceInstances) {
-    return `appliance:${
-      props.linkedRouterApplianceInstances.siteToSiteDataTransfer === true
-    }`;
+    return `appliance:${props.linkedRouterApplianceInstances.siteToSiteDataTransfer === true}`;
   }
   if (props.linkedProducerVpcNetwork) {
     return `producer:${resourceKey(props.linkedProducerVpcNetwork.network)}:${
@@ -501,9 +478,7 @@ const linkedIdentity = (props: {
   return "";
 };
 
-const toReasons = (
-  reasons: networkconnectivity.StateReasonList | undefined,
-): SpokeStateReason[] =>
+const toReasons = (reasons: networkconnectivity.StateReasonList | undefined): SpokeStateReason[] =>
   (reasons ?? []).map((reason) => ({
     code: reason.code,
     message: reason.message,
@@ -564,9 +539,7 @@ const toLinkedAppliances = (
       ): instance is networkconnectivity.RouterApplianceInstance & {
         virtualMachine: string;
         ipAddress: string;
-      } =>
-        typeof instance.virtualMachine === "string" &&
-        typeof instance.ipAddress === "string",
+      } => typeof instance.virtualMachine === "string" && typeof instance.ipAddress === "string",
     )
     .map((instance) => ({
       virtualMachine: instance.virtualMachine,
@@ -599,9 +572,7 @@ const toLinkedProducer = (
   };
 };
 
-const toGateway = (
-  value: networkconnectivity.Gateway | undefined,
-): SpokeGateway | undefined => {
+const toGateway = (value: networkconnectivity.Gateway | undefined): SpokeGateway | undefined => {
   if (value === undefined) return undefined;
   const ipRangeReservations = (value.ipRangeReservations ?? [])
     .filter(
@@ -621,8 +592,7 @@ const toGateway = (
   }
   return {
     capacity: value.capacity,
-    ipRangeReservations:
-      ipRangeReservations.length > 0 ? ipRangeReservations : undefined,
+    ipRangeReservations: ipRangeReservations.length > 0 ? ipRangeReservations : undefined,
   };
 };
 
@@ -640,12 +610,8 @@ const toAttrs = (spoke: networkconnectivity.Spoke, project: string) => {
     labels: userLabels(spoke.labels),
     linkedVpcNetwork: toLinkedVpc(spoke.linkedVpcNetwork),
     linkedVpnTunnels: toLinkedVpn(spoke.linkedVpnTunnels),
-    linkedInterconnectAttachments: toLinkedInterconnect(
-      spoke.linkedInterconnectAttachments,
-    ),
-    linkedRouterApplianceInstances: toLinkedAppliances(
-      spoke.linkedRouterApplianceInstances,
-    ),
+    linkedInterconnectAttachments: toLinkedInterconnect(spoke.linkedInterconnectAttachments),
+    linkedRouterApplianceInstances: toLinkedAppliances(spoke.linkedRouterApplianceInstances),
     linkedProducerVpcNetwork: toLinkedProducer(spoke.linkedProducerVpcNetwork),
     gateway: toGateway(spoke.gateway),
     spokeType: spoke.spokeType,
@@ -657,35 +623,19 @@ const toAttrs = (spoke: networkconnectivity.Spoke, project: string) => {
   };
 };
 
-const fromLinkedVpc = (
-  value: LinkedVpcNetwork,
-): networkconnectivity.LinkedVpcNetwork => ({
+const fromLinkedVpc = (value: LinkedVpcNetwork): networkconnectivity.LinkedVpcNetwork => ({
   uri: value.uri,
-  excludeExportRanges: value.excludeExportRanges
-    ? [...value.excludeExportRanges]
-    : undefined,
-  includeExportRanges: value.includeExportRanges
-    ? [...value.includeExportRanges]
-    : undefined,
+  excludeExportRanges: value.excludeExportRanges ? [...value.excludeExportRanges] : undefined,
+  includeExportRanges: value.includeExportRanges ? [...value.includeExportRanges] : undefined,
 });
 
-const fromLinkedVpn = (
-  value: LinkedVpnTunnels,
-): networkconnectivity.LinkedVpnTunnels => ({
+const fromLinkedVpn = (value: LinkedVpnTunnels): networkconnectivity.LinkedVpnTunnels => ({
   uris: [...value.uris],
   siteToSiteDataTransfer: value.siteToSiteDataTransfer,
-  includeImportRanges: value.includeImportRanges
-    ? [...value.includeImportRanges]
-    : undefined,
-  excludeImportRanges: value.excludeImportRanges
-    ? [...value.excludeImportRanges]
-    : undefined,
-  includeExportRanges: value.includeExportRanges
-    ? [...value.includeExportRanges]
-    : undefined,
-  excludeExportRanges: value.excludeExportRanges
-    ? [...value.excludeExportRanges]
-    : undefined,
+  includeImportRanges: value.includeImportRanges ? [...value.includeImportRanges] : undefined,
+  excludeImportRanges: value.excludeImportRanges ? [...value.excludeImportRanges] : undefined,
+  includeExportRanges: value.includeExportRanges ? [...value.includeExportRanges] : undefined,
+  excludeExportRanges: value.excludeExportRanges ? [...value.excludeExportRanges] : undefined,
 });
 
 const fromLinkedInterconnect = (
@@ -693,18 +643,10 @@ const fromLinkedInterconnect = (
 ): networkconnectivity.LinkedInterconnectAttachments => ({
   uris: [...value.uris],
   siteToSiteDataTransfer: value.siteToSiteDataTransfer,
-  includeImportRanges: value.includeImportRanges
-    ? [...value.includeImportRanges]
-    : undefined,
-  excludeImportRanges: value.excludeImportRanges
-    ? [...value.excludeImportRanges]
-    : undefined,
-  includeExportRanges: value.includeExportRanges
-    ? [...value.includeExportRanges]
-    : undefined,
-  excludeExportRanges: value.excludeExportRanges
-    ? [...value.excludeExportRanges]
-    : undefined,
+  includeImportRanges: value.includeImportRanges ? [...value.includeImportRanges] : undefined,
+  excludeImportRanges: value.excludeImportRanges ? [...value.excludeImportRanges] : undefined,
+  includeExportRanges: value.includeExportRanges ? [...value.includeExportRanges] : undefined,
+  excludeExportRanges: value.excludeExportRanges ? [...value.excludeExportRanges] : undefined,
 });
 
 const fromLinkedAppliances = (
@@ -715,18 +657,10 @@ const fromLinkedAppliances = (
     ipAddress: instance.ipAddress,
   })),
   siteToSiteDataTransfer: value.siteToSiteDataTransfer,
-  includeImportRanges: value.includeImportRanges
-    ? [...value.includeImportRanges]
-    : undefined,
-  excludeImportRanges: value.excludeImportRanges
-    ? [...value.excludeImportRanges]
-    : undefined,
-  includeExportRanges: value.includeExportRanges
-    ? [...value.includeExportRanges]
-    : undefined,
-  excludeExportRanges: value.excludeExportRanges
-    ? [...value.excludeExportRanges]
-    : undefined,
+  includeImportRanges: value.includeImportRanges ? [...value.includeImportRanges] : undefined,
+  excludeImportRanges: value.excludeImportRanges ? [...value.excludeImportRanges] : undefined,
+  includeExportRanges: value.includeExportRanges ? [...value.includeExportRanges] : undefined,
+  excludeExportRanges: value.excludeExportRanges ? [...value.excludeExportRanges] : undefined,
 });
 
 const fromLinkedProducer = (
@@ -734,12 +668,8 @@ const fromLinkedProducer = (
 ): networkconnectivity.LinkedProducerVpcNetwork => ({
   network: value.network,
   peering: value.peering,
-  excludeExportRanges: value.excludeExportRanges
-    ? [...value.excludeExportRanges]
-    : undefined,
-  includeExportRanges: value.includeExportRanges
-    ? [...value.includeExportRanges]
-    : undefined,
+  excludeExportRanges: value.excludeExportRanges ? [...value.excludeExportRanges] : undefined,
+  includeExportRanges: value.includeExportRanges ? [...value.includeExportRanges] : undefined,
 });
 
 const fromGateway = (value: SpokeGateway): networkconnectivity.Gateway => ({
@@ -758,12 +688,8 @@ const desiredSpokeBody = (
   group: news.group,
   description: news.description,
   labels,
-  linkedVpcNetwork: news.linkedVpcNetwork
-    ? fromLinkedVpc(news.linkedVpcNetwork)
-    : undefined,
-  linkedVpnTunnels: news.linkedVpnTunnels
-    ? fromLinkedVpn(news.linkedVpnTunnels)
-    : undefined,
+  linkedVpcNetwork: news.linkedVpcNetwork ? fromLinkedVpc(news.linkedVpcNetwork) : undefined,
+  linkedVpnTunnels: news.linkedVpnTunnels ? fromLinkedVpn(news.linkedVpnTunnels) : undefined,
   linkedInterconnectAttachments: news.linkedInterconnectAttachments
     ? fromLinkedInterconnect(news.linkedInterconnectAttachments)
     : undefined,
@@ -810,8 +736,7 @@ const waitUntilReady = (name: string) =>
       () => new SpokeNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.SpokeNotResolved",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeNotResolved",
       times: 120,
       schedule: Schedule.spaced("10 seconds"),
     }),
@@ -820,13 +745,10 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((spoke) =>
-      spoke === undefined
-        ? Effect.void
-        : Effect.fail(new SpokeStillExists({ name })),
+      spoke === undefined ? Effect.void : Effect.fail(new SpokeStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
       times: 60,
       schedule: Schedule.spaced("10 seconds"),
     }),
@@ -841,24 +763,16 @@ const waitUntilHubDropsSpoke = (hub: string, spokeName: string) =>
     .pipe(
       Effect.flatMap((page) => {
         const still = (page.spokes ?? []).some(
-          (spoke) =>
-            spoke.name === spokeName ||
-            resourceKey(spoke.name) === resourceKey(spokeName),
+          (spoke) => spoke.name === spokeName || resourceKey(spoke.name) === resourceKey(spokeName),
         );
-        return still
-          ? Effect.fail(new SpokeStillExists({ name: spokeName }))
-          : Effect.void;
+        return still ? Effect.fail(new SpokeStillExists({ name: spokeName })) : Effect.void;
       }),
       Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
+        while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
         times: 8,
         schedule: Schedule.spaced("3 seconds"),
       }),
-      Effect.catchTag(
-        "GCP.NetworkConnectivity.SpokeStillExists",
-        () => Effect.void,
-      ),
+      Effect.catchTag("GCP.NetworkConnectivity.SpokeStillExists", () => Effect.void),
       Effect.catchTag("NotFound", () => Effect.void),
     );
 
@@ -869,20 +783,14 @@ const waitUntilHubDropsVpc = (hub: string, networkKey: string) => {
       const still = (hubResource.routingVpcs ?? []).some(
         (vpc) => resourceKey(vpc.uri) === networkKey,
       );
-      return still
-        ? Effect.fail(new SpokeStillExists({ name: hub }))
-        : Effect.void;
+      return still ? Effect.fail(new SpokeStillExists({ name: hub })) : Effect.void;
     }),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
       times: 8,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag(
-      "GCP.NetworkConnectivity.SpokeStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.NetworkConnectivity.SpokeStillExists", () => Effect.void),
     Effect.catchTag("NotFound", () => Effect.void),
   );
 };
@@ -896,9 +804,7 @@ const listOwnedSpokes = (project: string, location: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.spokes ?? [])),
       Stream.filter((spoke) =>
-        Object.keys(spoke.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(spoke.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((spoke) => toAttrs(spoke, project)),
       Stream.runCollect,
@@ -906,10 +812,7 @@ const listOwnedSpokes = (project: string, location: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
-const rangeFieldsChanged = (
-  current: ReturnType<typeof toAttrs>,
-  news: SpokeProps,
-) => {
+const rangeFieldsChanged = (current: ReturnType<typeof toAttrs>, news: SpokeProps) => {
   const masks: string[] = [];
   if (news.linkedVpcNetwork) {
     const observed = current.linkedVpcNetwork;
@@ -1033,35 +936,21 @@ const rangeFieldsChanged = (
 
 export const SpokeProvider = () =>
   Provider.succeed(Spoke, {
-    stables: [
-      "name",
-      "spokeId",
-      "project",
-      "location",
-      "hub",
-      "uniqueId",
-      "createTime",
-    ],
+    stables: ["name", "spokeId", "project", "location", "hub", "uniqueId", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.spokeId ?? output?.spokeId;
       const nextId = news.spokeId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
       const nextLocation = normalizeLocation(news.location ?? output?.location);
       const locationChanged = previousLocation !== nextLocation;
 
       const previousHub = resourceKey(olds?.hub ?? output?.hub);
       const nextHub = resourceKey(news.hub);
-      const hubChanged =
-        previousHub.length > 0 && nextHub.length > 0 && previousHub !== nextHub;
+      const hubChanged = previousHub.length > 0 && nextHub.length > 0 && previousHub !== nextHub;
 
       const previousGroup = resourceKey(olds?.group ?? output?.group);
       const nextGroup = resourceKey(news.group);
@@ -1075,36 +964,24 @@ export const SpokeProvider = () =>
         linkedVpcNetwork: olds?.linkedVpcNetwork ?? output?.linkedVpcNetwork,
         linkedVpnTunnels: olds?.linkedVpnTunnels ?? output?.linkedVpnTunnels,
         linkedInterconnectAttachments:
-          olds?.linkedInterconnectAttachments ??
-          output?.linkedInterconnectAttachments,
+          olds?.linkedInterconnectAttachments ?? output?.linkedInterconnectAttachments,
         linkedRouterApplianceInstances:
-          olds?.linkedRouterApplianceInstances ??
-          output?.linkedRouterApplianceInstances,
+          olds?.linkedRouterApplianceInstances ?? output?.linkedRouterApplianceInstances,
         linkedProducerVpcNetwork:
           olds?.linkedProducerVpcNetwork ?? output?.linkedProducerVpcNetwork,
         gateway: olds?.gateway ?? output?.gateway,
       });
       const nextLinked = linkedIdentity(news);
       const linkedChanged =
-        nextLinked.length > 0 &&
-        previousLinked.length > 0 &&
-        nextLinked !== previousLinked;
+        nextLinked.length > 0 && previousLinked.length > 0 && nextLinked !== previousLinked;
 
-      if (
-        !idChanged &&
-        !locationChanged &&
-        !hubChanged &&
-        !groupChanged &&
-        !linkedChanged
-      ) {
+      if (!idChanged && !locationChanged && !hubChanged && !groupChanged && !linkedChanged) {
         return undefined;
       }
       return {
         action: "replace" as const,
         deleteFirst:
-          !idChanged &&
-          !locationChanged &&
-          (hubChanged || groupChanged || linkedChanged),
+          !idChanged && !locationChanged && (hubChanged || groupChanged || linkedChanged),
       };
     }),
 
@@ -1116,9 +993,7 @@ export const SpokeProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -1171,8 +1046,7 @@ export const SpokeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const rangeMasks = rangeFieldsChanged(attrs, news);
 
       if (labelsChanged || descriptionChanged || rangeMasks.length > 0) {
@@ -1182,16 +1056,15 @@ export const SpokeProvider = () =>
           ...rangeMasks,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networkconnectivity.patchProjectsLocationsSpokes({
+        const operation = yield* networkconnectivity.patchProjectsLocationsSpokes({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              ...body,
-            },
-          });
+            etag: current.etag,
+            ...body,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }
@@ -1216,10 +1089,7 @@ export const SpokeProvider = () =>
       yield* waitUntilGone(output.name);
       if (output.hub) {
         yield* waitUntilHubDropsSpoke(output.hub, output.name);
-        yield* waitUntilHubDropsVpc(
-          output.hub,
-          resourceKey(output.linkedVpcNetwork?.uri),
-        );
+        yield* waitUntilHubDropsVpc(output.hub, resourceKey(output.linkedVpcNetwork?.uri));
       }
     }),
   });

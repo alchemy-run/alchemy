@@ -20,27 +20,25 @@ export const DescribeAutoScalingGroupHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, AWS.AutoScaling.DescribeAutoScalingGroup(${group}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["autoscaling:DescribeAutoScalingGroups"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.AutoScaling.DescribeAutoScalingGroup(${group}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["autoscaling:DescribeAutoScalingGroups"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.AutoScaling.DescribeAutoScalingGroup(${group.LogicalId})`,
-      )(function* () {
-        const result = yield* describe({
-          AutoScalingGroupNames: [yield* AutoScalingGroupName],
-        });
-        return result.AutoScalingGroups?.[0];
-      });
+      return Effect.fn(`AWS.AutoScaling.DescribeAutoScalingGroup(${group.LogicalId})`)(
+        function* () {
+          const result = yield* describe({
+            AutoScalingGroupNames: [yield* AutoScalingGroupName],
+          });
+          return result.AutoScalingGroups?.[0];
+        },
+      );
     });
   }),
 );

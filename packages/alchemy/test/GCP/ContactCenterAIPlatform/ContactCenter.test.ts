@@ -1,25 +1,21 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The Contact Center AI Platform API is not enabled in the testing project.
 // Set GCP_TEST_CONTACT_CENTER_AI_PLATFORM=1 on a project where it is; the
 // lifecycle also needs GCP_TEST_SLOW (instances take 30–45 minutes).
 const entitled = !!process.env.GCP_TEST_CONTACT_CENTER_AI_PLATFORM;
-const runLifecycle =
-  entitled && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = entitled && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   ccaip.getProjectsLocationsContactCenters({ name }).pipe(
@@ -50,9 +46,7 @@ test.provider.skipIf(!entitled)(
         parent,
         pageSize: 10,
       });
-      expect(
-        (page.contactCenters ?? []).map((item) => item.name),
-      ).not.toContain(missingName);
+      expect((page.contactCenters ?? []).map((item) => item.name)).not.toContain(missingName);
 
       yield* stack.destroy();
     }).pipe(logLevel),

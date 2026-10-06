@@ -9,8 +9,8 @@
 //   rendered with the section's style (`data-copy-style`) until the page's
 //   own renderer catches up.
 
-import config from "virtual:copy-editor/config";
 import { marked } from "marked";
+import config from "virtual:copy-editor/config";
 import type { MarkdownStyle } from "./index.ts";
 
 const SAVE_ENDPOINT = "/__copy-editor/save";
@@ -70,14 +70,10 @@ const notify = (message: string, error = false) => {
   toast.toggleAttribute("data-error", error);
   toast.setAttribute("data-show", "");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(
-    () => toast.removeAttribute("data-show"),
-    error ? 6000 : 1800,
-  );
+  toastTimer = setTimeout(() => toast.removeAttribute("data-show"), error ? 6000 : 1800);
 };
 
-const isMarkdown = (el: HTMLElement) =>
-  el.dataset.copyFormat === "markdown" || isInline(el);
+const isMarkdown = (el: HTMLElement) => el.dataset.copyFormat === "markdown" || isInline(el);
 /** Template copy edited as one line of inline markdown. */
 const isInline = (el: HTMLElement) => el.dataset.copyFormat === "inline";
 
@@ -140,16 +136,14 @@ const claimMarkers = (root: Node) => {
 const enableWithin = (root: ParentNode) => {
   claimMarkers(root as Node);
   if (root instanceof HTMLElement && root.matches(SELECTOR)) makeEditable(root);
-  for (const el of root.querySelectorAll<HTMLElement>(SELECTOR))
-    makeEditable(el);
+  for (const el of root.querySelectorAll<HTMLElement>(SELECTOR)) makeEditable(el);
 };
 enableWithin(document);
 
 // Elements rendered later (client routing, framework HMR) become editable too.
 const observer = new MutationObserver((records) => {
   for (const record of records) {
-    if (record.type === "attributes")
-      enableWithin(record.target as HTMLElement);
+    if (record.type === "attributes") enableWithin(record.target as HTMLElement);
     for (const node of record.addedNodes) {
       if (node instanceof HTMLElement) enableWithin(node);
       else if (node.nodeType === Node.COMMENT_NODE) {
@@ -168,9 +162,7 @@ observer.observe(document.body, {
 });
 
 const target = (event: Event) =>
-  event.target instanceof Element
-    ? event.target.closest<HTMLElement>(SELECTOR)
-    : null;
+  event.target instanceof Element ? event.target.closest<HTMLElement>(SELECTOR) : null;
 
 const post = async (url: string, body: object) => {
   const res = await fetch(url, {
@@ -201,9 +193,7 @@ const textNodes = (el: HTMLElement): string[] => {
 
 /** Browsers type spaces as non-breaking ones at run edges; keep real ones. */
 const plainSpaces = (after: string[], before: string[]) =>
-  after.map((text, i) =>
-    before[i]?.includes("\u00a0") ? text : text.replace(/\u00a0/g, " "),
-  );
+  after.map((text, i) => (before[i]?.includes("\u00a0") ? text : text.replace(/\u00a0/g, " ")));
 
 interface Snapshot {
   html: string;
@@ -260,10 +250,7 @@ const BLOCK_TAGS = new Set([
   "PRE",
 ]);
 /** Sections showing a preview until the page's renderer catches up. */
-const previews = new Map<
-  HTMLElement,
-  { staleHtml: string; attempts: number }
->();
+const previews = new Map<HTMLElement, { staleHtml: string; attempts: number }>();
 /** An edit changed the page's structure; reload once the server has it. */
 let reloadPending = false;
 /** The server has it, but an edit was in progress. */
@@ -279,8 +266,7 @@ const needsReload = (before?: Promise<string>) => {
   reloadPending = true;
   servedBefore ??= before ?? fetchPage();
 };
-const busy = () =>
-  document.querySelector("[data-copy-editing], [data-copy-draft]") !== null;
+const busy = () => document.querySelector("[data-copy-editing], [data-copy-draft]") !== null;
 
 /**
  * Moves stylesheets out of a section before its content is replaced:
@@ -288,14 +274,10 @@ const busy = () =>
  * first block that needs them.
  */
 const hoistStyles = (el: HTMLElement) => {
-  for (const node of el.querySelectorAll<HTMLElement>(
-    'link[rel="stylesheet"], style',
-  )) {
+  for (const node of el.querySelectorAll<HTMLElement>('link[rel="stylesheet"], style')) {
     const href = node.getAttribute("href");
     const present = href
-      ? document.head.querySelector(
-          `link[rel="stylesheet"][href="${CSS.escape(href)}"]`,
-        )
+      ? document.head.querySelector(`link[rel="stylesheet"][href="${CSS.escape(href)}"]`)
       : null;
     if (!present) document.head.append(node.cloneNode(true));
   }
@@ -310,11 +292,7 @@ const codeText = (pre: Element) =>
     ""
   ).replace(/\s+/g, "");
 
-const renderPreview = (
-  source: string,
-  styleName: string | undefined,
-  rendered?: string,
-) => {
+const renderPreview = (source: string, styleName: string | undefined, rendered?: string) => {
   const preset = styleName ? styles[styleName] : undefined;
   let markdown = source;
   for (const [pattern, replacement] of preset?.rewrite ?? []) {
@@ -326,8 +304,7 @@ const renderPreview = (
     const selector = tag === "code" ? "code:not(pre code)" : tag;
     for (const node of template.content.querySelectorAll(selector)) {
       for (const [name, value] of Object.entries(attrs ?? {})) {
-        if (name === "class")
-          node.classList.add(...value.split(/\s+/).filter(Boolean));
+        if (name === "class") node.classList.add(...value.split(/\s+/).filter(Boolean));
         else node.setAttribute(name, value);
       }
     }
@@ -355,8 +332,7 @@ const renderPreview = (
 const caretContext = (el: HTMLElement) => {
   const selection = getSelection();
   const node = selection?.anchorNode;
-  if (!node || node.nodeType !== Node.TEXT_NODE || !el.contains(node))
-    return "";
+  if (!node || node.nodeType !== Node.TEXT_NODE || !el.contains(node)) return "";
   return (node as Text).data.slice(0, selection!.anchorOffset);
 };
 
@@ -503,9 +479,7 @@ const refresh = async () => {
     else location.reload();
     return;
   }
-  const res = await fetch(location.href, { cache: "no-store" }).catch(
-    () => undefined,
-  );
+  const res = await fetch(location.href, { cache: "no-store" }).catch(() => undefined);
   if (!res?.ok) return;
   const fresh = new DOMParser().parseFromString(await res.text(), "text/html");
   claimMarkers(fresh.body);
@@ -562,8 +536,7 @@ listen("keydown", (event) => {
       event.preventDefault();
       // Markdown sections: Enter adds a line, Ctrl/Cmd+Enter saves.
       // One-line copy: Enter saves, Shift+Enter adds a line break (<br>).
-      const save =
-        event.metaKey || event.ctrlKey || (isInline(el) && !event.shiftKey);
+      const save = event.metaKey || event.ctrlKey || (isInline(el) && !event.shiftKey);
       if (save) el.blur();
       else document.execCommand("insertLineBreak");
     } else if (event.key === "Tab") {
@@ -596,10 +569,7 @@ listen(
 // Editable elements are plain text: no bold/italic shortcuts or rich drops.
 listen("beforeinput", (event) => {
   if (!target(event)) return;
-  if (
-    event.inputType.startsWith("format") ||
-    event.inputType === "insertFromDrop"
-  ) {
+  if (event.inputType.startsWith("format") || event.inputType === "insertFromDrop") {
     event.preventDefault();
   }
 });
@@ -608,11 +578,7 @@ listen("beforeinput", (event) => {
 listen("paste", (event) => {
   if (!target(event) || !event.clipboardData) return;
   event.preventDefault();
-  document.execCommand(
-    "insertText",
-    false,
-    event.clipboardData.getData("text/plain"),
-  );
+  document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
 });
 
 listen("focusout", async (event) => {

@@ -1,5 +1,5 @@
-import { isStateStoreCredentialsStale } from "@/Cloudflare/StateStore/CredentialsFile.ts";
 import { describe, expect, it } from "alchemy-test";
+import { isStateStoreCredentialsStale } from "@/Cloudflare/StateStore/CredentialsFile.ts";
 
 const ACCOUNT_A = "c8eeff0e4f5ebeeedc8d9af2013d7997";
 const ACCOUNT_B = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
@@ -13,23 +13,12 @@ const ACCOUNT_B = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
  */
 describe(
   "isStateStoreCredentialsStale",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:statestore",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"] },
   () => {
     it("is fresh when the cached account matches the current account", () => {
       expect(
         isStateStoreCredentialsStale(
-          {
-            url: "https://s.workers.dev",
-            authToken: "t",
-            accountId: ACCOUNT_A,
-          },
+          { url: "https://s.workers.dev", authToken: "t", accountId: ACCOUNT_A },
           ACCOUNT_A,
         ),
       ).toBe(false);
@@ -38,11 +27,7 @@ describe(
     it("is stale when the cached account differs from the current account", () => {
       expect(
         isStateStoreCredentialsStale(
-          {
-            url: "https://s.workers.dev",
-            authToken: "t",
-            accountId: ACCOUNT_A,
-          },
+          { url: "https://s.workers.dev", authToken: "t", accountId: ACCOUNT_A },
           ACCOUNT_B,
         ),
       ).toBe(true);
@@ -50,10 +35,7 @@ describe(
 
     it("is stale for a legacy cache with no accountId", () => {
       expect(
-        isStateStoreCredentialsStale(
-          { url: "https://s.workers.dev", authToken: "t" },
-          ACCOUNT_A,
-        ),
+        isStateStoreCredentialsStale({ url: "https://s.workers.dev", authToken: "t" }, ACCOUNT_A),
       ).toBe(true);
     });
   },

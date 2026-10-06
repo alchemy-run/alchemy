@@ -29,38 +29,27 @@ import type {
   SourceRepositoryCreateInput,
 } from "./Types.ts";
 
-const withClient = <A, E, R>(
-  f: (client: PrismaManagementClient) => Effect.Effect<A, E, R>,
-) => Effect.flatMap(PrismaClient, f);
+const withClient = <A, E, R>(f: (client: PrismaManagementClient) => Effect.Effect<A, E, R>) =>
+  Effect.flatMap(PrismaClient, f);
 
-export const listWorkspaces = (query?: {
-  cursor?: string | null;
-  limit?: number;
-}) => withClient((client) => client.listWorkspaces(query));
-export const getWorkspace = (id: string) =>
-  withClient((client) => client.getWorkspace(id));
-export const getCurrentPrincipal = () =>
-  withClient((client) => client.getCurrentPrincipal());
+export const listWorkspaces = (query?: { cursor?: string | null; limit?: number }) =>
+  withClient((client) => client.listWorkspaces(query));
+export const getWorkspace = (id: string) => withClient((client) => client.getWorkspace(id));
+export const getCurrentPrincipal = () => withClient((client) => client.getCurrentPrincipal());
 
 export const listRegions = (query?: { product?: "postgres" | "accelerate" }) =>
   withClient((client) => client.listRegions(query));
-export const listPostgresRegions = () =>
-  withClient((client) => client.listPostgresRegions());
-export const listAccelerateRegions = () =>
-  withClient((client) => client.listAccelerateRegions());
+export const listPostgresRegions = () => withClient((client) => client.listPostgresRegions());
+export const listAccelerateRegions = () => withClient((client) => client.listAccelerateRegions());
 
-export const listProjects = (query?: {
-  cursor?: string | null;
-  limit?: number;
-}) => withClient((client) => client.listProjects(query));
-export const getProject = (id: string) =>
-  withClient((client) => client.getProject(id));
+export const listProjects = (query?: { cursor?: string | null; limit?: number }) =>
+  withClient((client) => client.listProjects(query));
+export const getProject = (id: string) => withClient((client) => client.getProject(id));
 export const createProject = (input: ProjectCreateInput) =>
   withClient((client) => client.createProject(input));
 export const updateProject = (id: string, input: ProjectUpdateInput) =>
   withClient((client) => client.updateProject(id, input));
-export const deleteProject = (id: string) =>
-  withClient((client) => client.deleteProject(id));
+export const deleteProject = (id: string) => withClient((client) => client.deleteProject(id));
 export const transferProject = (id: string, input: ProjectTransferInput) =>
   withClient((client) => client.transferProject(id, input));
 
@@ -75,24 +64,18 @@ export const listProjectDatabases = (
   projectId: string,
   query?: { cursor?: string | null; limit?: number },
 ) => withClient((client) => client.listProjectDatabases(projectId, query));
-export const getDatabase = (id: string) =>
-  withClient((client) => client.getDatabase(id));
+export const getDatabase = (id: string) => withClient((client) => client.getDatabase(id));
 export const createDatabase = (input: DatabaseCreateInput) =>
   withClient((client) => client.createDatabase(input));
-export const createProjectDatabase = (
-  projectId: string,
-  input: ProjectDatabaseCreateInput,
-) => withClient((client) => client.createProjectDatabase(projectId, input));
+export const createProjectDatabase = (projectId: string, input: ProjectDatabaseCreateInput) =>
+  withClient((client) => client.createProjectDatabase(projectId, input));
 export const updateDatabase = (id: string, input: DatabaseUpdateInput) =>
   withClient((client) => client.updateDatabase(id, input));
-export const deleteDatabase = (id: string) =>
-  withClient((client) => client.deleteDatabase(id));
+export const deleteDatabase = (id: string) => withClient((client) => client.deleteDatabase(id));
 export const listBackups = (databaseId: string, query?: { limit?: number }) =>
   withClient((client) => client.listBackups(databaseId, query));
-export const restoreDatabase = (
-  targetDatabaseId: string,
-  input: RestoreDatabaseInput,
-) => withClient((client) => client.restoreDatabase(targetDatabaseId, input));
+export const restoreDatabase = (targetDatabaseId: string, input: RestoreDatabaseInput) =>
+  withClient((client) => client.restoreDatabase(targetDatabaseId, input));
 export const getDatabaseUsage = (
   databaseId: string,
   query?: { startDate?: string; endDate?: string },
@@ -107,18 +90,15 @@ export const listDatabaseConnections = (
   databaseId: string,
   query?: { cursor?: string | null; limit?: number },
 ) => withClient((client) => client.listDatabaseConnections(databaseId, query));
-export const getConnection = (id: string) =>
-  withClient((client) => client.getConnection(id));
+export const getConnection = (id: string) => withClient((client) => client.getConnection(id));
 export const createConnection = (input: ConnectionCreateInput) =>
   withClient((client) => client.createConnection(input));
 export const createDatabaseConnection = (
   databaseId: string,
   input: DatabaseConnectionCreateInput,
 ) => withClient((client) => client.createDatabaseConnection(databaseId, input));
-export const deleteConnection = (id: string) =>
-  withClient((client) => client.deleteConnection(id));
-export const rotateConnection = (id: string) =>
-  withClient((client) => client.rotateConnection(id));
+export const deleteConnection = (id: string) => withClient((client) => client.deleteConnection(id));
+export const rotateConnection = (id: string) => withClient((client) => client.rotateConnection(id));
 
 export const listBranches = (
   projectId: string,
@@ -129,14 +109,12 @@ export const listBranches = (
     gitNameContains?: string;
   },
 ) => withClient((client) => client.listBranches(projectId, query));
-export const getBranch = (id: string) =>
-  withClient((client) => client.getBranch(id));
+export const getBranch = (id: string) => withClient((client) => client.getBranch(id));
 export const createBranch = (projectId: string, input: BranchCreateInput) =>
   withClient((client) => client.createBranch(projectId, input));
 export const updateBranch = (id: string, input: BranchUpdateInput) =>
   withClient((client) => client.updateBranch(id, input));
-export const deleteBranch = (id: string) =>
-  withClient((client) => client.deleteBranch(id));
+export const deleteBranch = (id: string) => withClient((client) => client.deleteBranch(id));
 
 export const listBuckets = (query?: {
   cursor?: string | null;
@@ -145,25 +123,20 @@ export const listBuckets = (query?: {
   branchId?: PrismaBranchIdFilter;
   branchGitName?: string;
 }) => withClient((client) => client.listBuckets(query));
-export const getBucket = (id: string) =>
-  withClient((client) => client.getBucket(id));
+export const getBucket = (id: string) => withClient((client) => client.getBucket(id));
 export const createBucket = (input: BucketCreateInput) =>
   withClient((client) => client.createBucket(input));
-export const deleteBucket = (id: string) =>
-  withClient((client) => client.deleteBucket(id));
+export const deleteBucket = (id: string) => withClient((client) => client.deleteBucket(id));
 export const listBucketKeys = (
   bucketId: string,
   query?: { cursor?: string | null; limit?: number },
 ) => withClient((client) => client.listBucketKeys(bucketId, query));
-export const createBucketKey = (
-  bucketId: string,
-  input: BucketKeyCreateInput,
-) => withClient((client) => client.createBucketKey(bucketId, input));
+export const createBucketKey = (bucketId: string, input: BucketKeyCreateInput) =>
+  withClient((client) => client.createBucketKey(bucketId, input));
 export const deleteBucketKey = (bucketId: string, keyId: string) =>
   withClient((client) => client.deleteBucketKey(bucketId, keyId));
 
-export const getCustomDomain = (id: string) =>
-  withClient((client) => client.getCustomDomain(id));
+export const getCustomDomain = (id: string) => withClient((client) => client.getCustomDomain(id));
 export const deleteCustomDomain = (id: string) =>
   withClient((client) => client.deleteCustomDomain(id));
 export const retryCustomDomain = (id: string) =>
@@ -177,42 +150,30 @@ export const listApps = (query?: {
   branchGitName?: string;
 }) => withClient((client) => client.listApps(query));
 export const getApp = (id: string) => withClient((client) => client.getApp(id));
-export const createApp = (input: AppCreateInput) =>
-  withClient((client) => client.createApp(input));
+export const createApp = (input: AppCreateInput) => withClient((client) => client.createApp(input));
 export const updateApp = (id: string, input: AppUpdateInput) =>
   withClient((client) => client.updateApp(id, input));
-export const deleteApp = (id: string) =>
-  withClient((client) => client.deleteApp(id));
+export const deleteApp = (id: string) => withClient((client) => client.deleteApp(id));
 export const promoteApp = (id: string, target: AppDeploymentTarget) =>
   withClient((client) => client.promoteApp(id, target));
 export const rollbackApp = (id: string, target: AppDeploymentTarget) =>
   withClient((client) => client.rollbackApp(id, target));
 export const listAppDomains = (appId: string) =>
   withClient((client) => client.listAppDomains(appId));
-export const createAppDomain = (
-  appId: string,
-  input: CustomDomainCreateInput,
-) => withClient((client) => client.createAppDomain(appId, input));
+export const createAppDomain = (appId: string, input: CustomDomainCreateInput) =>
+  withClient((client) => client.createAppDomain(appId, input));
 export const listAppDeployments = (
   appId: string,
   query?: { cursor?: string | null; limit?: number },
 ) => withClient((client) => client.listAppDeployments(appId, query));
-export const createAppDeployment = (
-  appId: string,
-  input?: DeploymentCreateInput,
-) => withClient((client) => client.createAppDeployment(appId, input));
-export const getDeployment = (id: string) =>
-  withClient((client) => client.getDeployment(id));
-export const deleteDeployment = (id: string) =>
-  withClient((client) => client.deleteDeployment(id));
-export const startDeployment = (id: string) =>
-  withClient((client) => client.startDeployment(id));
-export const stopDeployment = (id: string) =>
-  withClient((client) => client.stopDeployment(id));
-export const getDeploymentLogsRequest = (
-  id: string,
-  query?: DeploymentLogsQuery,
-) => LogsClient.getDeploymentLogsRequest(id, query);
+export const createAppDeployment = (appId: string, input?: DeploymentCreateInput) =>
+  withClient((client) => client.createAppDeployment(appId, input));
+export const getDeployment = (id: string) => withClient((client) => client.getDeployment(id));
+export const deleteDeployment = (id: string) => withClient((client) => client.deleteDeployment(id));
+export const startDeployment = (id: string) => withClient((client) => client.startDeployment(id));
+export const stopDeployment = (id: string) => withClient((client) => client.stopDeployment(id));
+export const getDeploymentLogsRequest = (id: string, query?: DeploymentLogsQuery) =>
+  LogsClient.getDeploymentLogsRequest(id, query);
 export const getBuildLogsRequest = (buildId: string, query?: BuildLogsQuery) =>
   LogsClient.getBuildLogsRequest(buildId, query);
 
@@ -226,13 +187,10 @@ export const listEnvironmentVariables = (query?: {
 }) => withClient((client) => client.listEnvironmentVariables(query));
 export const getEnvironmentVariable = (id: string) =>
   withClient((client) => client.getEnvironmentVariable(id));
-export const createEnvironmentVariable = (
-  input: EnvironmentVariableCreateInput,
-) => withClient((client) => client.createEnvironmentVariable(input));
-export const updateEnvironmentVariable = (
-  id: string,
-  input: EnvironmentVariableUpdateInput,
-) => withClient((client) => client.updateEnvironmentVariable(id, input));
+export const createEnvironmentVariable = (input: EnvironmentVariableCreateInput) =>
+  withClient((client) => client.createEnvironmentVariable(input));
+export const updateEnvironmentVariable = (id: string, input: EnvironmentVariableUpdateInput) =>
+  withClient((client) => client.updateEnvironmentVariable(id, input));
 export const deleteEnvironmentVariable = (id: string) =>
   withClient((client) => client.deleteEnvironmentVariable(id));
 
@@ -244,19 +202,12 @@ export const listIntegrations = (query: {
 export const listWorkspaceIntegrations = (
   workspaceId: string,
   query?: { cursor?: string | null; limit?: number },
-) =>
-  withClient((client) => client.listWorkspaceIntegrations(workspaceId, query));
-export const getIntegration = (id: string) =>
-  withClient((client) => client.getIntegration(id));
+) => withClient((client) => client.listWorkspaceIntegrations(workspaceId, query));
+export const getIntegration = (id: string) => withClient((client) => client.getIntegration(id));
 export const deleteIntegration = (id: string) =>
   withClient((client) => client.deleteIntegration(id));
-export const revokeWorkspaceIntegration = (
-  workspaceId: string,
-  clientId: string,
-) =>
-  withClient((client) =>
-    client.revokeWorkspaceIntegration(workspaceId, clientId),
-  );
+export const revokeWorkspaceIntegration = (workspaceId: string, clientId: string) =>
+  withClient((client) => client.revokeWorkspaceIntegration(workspaceId, clientId));
 
 export const listScmInstallations = (query: {
   workspaceId: string;
@@ -268,10 +219,7 @@ export const createScmInstallIntent = (input: ScmInstallIntentCreateInput) =>
 export const listScmInstallationRepositories = (
   installationId: string,
   query?: { cursor?: string | null; limit?: number },
-) =>
-  withClient((client) =>
-    client.listScmInstallationRepositories(installationId, query),
-  );
+) => withClient((client) => client.listScmInstallationRepositories(installationId, query));
 
 export const listSourceRepositories = (query: {
   projectId: string;

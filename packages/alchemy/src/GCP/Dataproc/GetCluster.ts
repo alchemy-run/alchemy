@@ -33,14 +33,8 @@ export interface GetCluster extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetClusterRequest,
-    ) => Effect.Effect<
-      dataproc.Cluster,
-      dataproc.GetProjectsRegionsClustersError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<dataproc.Cluster, dataproc.GetProjectsRegionsClustersError, RuntimeContext>
   >
 > {}
 
-export const GetCluster = Binding.Service<GetCluster>(
-  "GCP.Dataproc.GetCluster",
-);
+export const GetCluster = Binding.Service<GetCluster>("GCP.Dataproc.GetCluster");

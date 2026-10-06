@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   probeAccountName,
@@ -71,9 +71,7 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
-      expect(created.name.startsWith(`${probeAccountName}/customers/`)).toEqual(
-        true,
-      );
+      expect(created.name.startsWith(`${probeAccountName}/customers/`)).toEqual(true);
       expect(created.customerId.length).toBeGreaterThan(0);
       expect(created.orgDisplayName).toEqual("Acme Corp");
       expect(created.domain).toEqual(expect.any(String));

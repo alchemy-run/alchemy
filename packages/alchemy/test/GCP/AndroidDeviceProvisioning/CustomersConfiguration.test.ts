@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as androiddeviceprovisioning from "@distilled.cloud/gcp/androiddeviceprovisioning_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   customerName,
   logLevel,
@@ -76,18 +76,15 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AndroidDeviceProvisioning.CustomersConfiguration(
-            "Sales",
-            {
-              parent,
-              dpcResourcePath,
-              companyName: "Alchemy",
-              contactEmail: "alchemy-test@example.com",
-              contactPhone: "+1 555 0100",
-              configurationName: "Sales team",
-              isDefault: false,
-            },
-          );
+          return yield* GCP.AndroidDeviceProvisioning.CustomersConfiguration("Sales", {
+            parent,
+            dpcResourcePath,
+            companyName: "Alchemy",
+            contactEmail: "alchemy-test@example.com",
+            contactPhone: "+1 555 0100",
+            configurationName: "Sales team",
+            isDefault: false,
+          });
         }),
       );
 
@@ -99,29 +96,25 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.contactEmail).toEqual("alchemy-test@example.com");
       expect(created.isDefault).toEqual(false);
 
-      const fetched =
-        yield* androiddeviceprovisioning.getCustomersConfigurations({
-          name: created.name,
-        });
+      const fetched = yield* androiddeviceprovisioning.getCustomersConfigurations({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.configurationName).toContain("[alchemy ");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AndroidDeviceProvisioning.CustomersConfiguration(
-            "Sales",
-            {
-              parent: created.parent,
-              configurationId: created.configurationId,
-              dpcResourcePath: created.dpcResourcePath ?? dpcResourcePath,
-              companyName: created.companyName ?? "Alchemy",
-              contactEmail: "help@example.com",
-              contactPhone: created.contactPhone ?? "+1 555 0100",
-              configurationName: "Field sales",
-              customMessage: "Contact IT for setup help.",
-              isDefault: false,
-            },
-          );
+          return yield* GCP.AndroidDeviceProvisioning.CustomersConfiguration("Sales", {
+            parent: created.parent,
+            configurationId: created.configurationId,
+            dpcResourcePath: created.dpcResourcePath ?? dpcResourcePath,
+            companyName: created.companyName ?? "Alchemy",
+            contactEmail: "help@example.com",
+            contactPhone: created.contactPhone ?? "+1 555 0100",
+            configurationName: "Field sales",
+            customMessage: "Contact IT for setup help.",
+            isDefault: false,
+          });
         }),
       );
 
@@ -130,10 +123,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.contactEmail).toEqual("help@example.com");
       expect(updated.customMessage).toEqual("Contact IT for setup help.");
 
-      const fetchedUpdate =
-        yield* androiddeviceprovisioning.getCustomersConfigurations({
-          name: updated.name,
-        });
+      const fetchedUpdate = yield* androiddeviceprovisioning.getCustomersConfigurations({
+        name: updated.name,
+      });
       expect(fetchedUpdate.configurationName).toContain("Field sales");
       expect(fetchedUpdate.contactEmail).toEqual("help@example.com");
 

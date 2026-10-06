@@ -41,7 +41,6 @@ export interface GetManagedNotificationChildEvent extends Binding.Service<
   >
 > {}
 
-export const GetManagedNotificationChildEvent =
-  Binding.Service<GetManagedNotificationChildEvent>(
-    "AWS.Notifications.GetManagedNotificationChildEvent",
-  );
+export const GetManagedNotificationChildEvent = Binding.Service<GetManagedNotificationChildEvent>(
+  "AWS.Notifications.GetManagedNotificationChildEvent",
+);

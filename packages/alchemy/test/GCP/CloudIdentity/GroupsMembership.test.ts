@@ -1,16 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudidentity from "@distilled.cloud/gcp/cloudidentity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  customer,
-  domain,
-  logLevel,
-  memberEmail,
-  runMembershipLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { customer, domain, logLevel, memberEmail, runMembershipLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -94,9 +88,7 @@ test.provider.skipIf(!runMembershipLifecycle)(
 
       expect(created.membership.name).toContain("/memberships/");
       expect(created.membership.memberKeyId).toEqual(memberEmail);
-      expect(
-        created.membership.roles.some((role) => role.name === "MEMBER"),
-      ).toEqual(true);
+      expect(created.membership.roles.some((role) => role.name === "MEMBER")).toEqual(true);
 
       const fetched = yield* cloudidentity.getGroupsMemberships({
         name: created.membership.name,
@@ -120,9 +112,7 @@ test.provider.skipIf(!runMembershipLifecycle)(
       );
 
       expect(updated.membership.name).toEqual(created.membership.name);
-      expect(
-        updated.membership.roles.some((role) => role.name === "MANAGER"),
-      ).toEqual(true);
+      expect(updated.membership.roles.some((role) => role.name === "MANAGER")).toEqual(true);
 
       yield* stack.destroy();
 

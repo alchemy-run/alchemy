@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -268,11 +263,8 @@ export type StoragePool = Resource<
  */
 export const StoragePool = Resource<StoragePool>("GCP.NetApp.StoragePool");
 
-const resourceName = (
-  project: string,
-  location: string,
-  storagePoolId: string,
-) => `projects/${project}/locations/${location}/storagePools/${storagePoolId}`;
+const resourceName = (project: string, location: string, storagePoolId: string) =>
+  `projects/${project}/locations/${location}/storagePools/${storagePoolId}`;
 
 const toAttrs = (item: netapp.StoragePool, project: string, region: string) => {
   const name = item.name ?? "";
@@ -346,17 +338,12 @@ export const StoragePoolProvider = () =>
       const previousLdap = olds?.ldapEnabled ?? output?.ldapEnabled;
       const previousType = olds?.type ?? output?.type;
       const previousMode = olds?.mode ?? output?.mode;
-      const previousCustom =
-        olds?.customPerformanceEnabled ?? output?.customPerformanceEnabled;
+      const previousCustom = olds?.customPerformanceEnabled ?? output?.customPerformanceEnabled;
       const previousScale = olds?.scaleType ?? output?.scaleType;
       return replaceOnIdentity({
         previousId: olds?.storagePoolId ?? output?.storagePoolId,
-        nextId:
-          news.storagePoolId ?? olds?.storagePoolId ?? output?.storagePoolId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.storagePoolId ?? olds?.storagePoolId ?? output?.storagePoolId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -369,9 +356,7 @@ export const StoragePoolProvider = () =>
           (previousLevel !== undefined &&
             news.serviceLevel !== undefined &&
             news.serviceLevel !== previousLevel) ||
-          (previousZone !== undefined &&
-            news.zone !== undefined &&
-            news.zone !== previousZone) ||
+          (previousZone !== undefined && news.zone !== undefined && news.zone !== previousZone) ||
           (previousReplica !== undefined &&
             news.replicaZone !== undefined &&
             news.replicaZone !== previousReplica) ||
@@ -381,12 +366,8 @@ export const StoragePoolProvider = () =>
           (previousLdap !== undefined &&
             news.ldapEnabled !== undefined &&
             news.ldapEnabled !== previousLdap) ||
-          (previousType !== undefined &&
-            news.type !== undefined &&
-            news.type !== previousType) ||
-          (previousMode !== undefined &&
-            news.mode !== undefined &&
-            news.mode !== previousMode) ||
+          (previousType !== undefined && news.type !== undefined && news.type !== previousType) ||
+          (previousMode !== undefined && news.mode !== undefined && news.mode !== previousMode) ||
           (previousCustom !== undefined &&
             news.customPerformanceEnabled !== undefined &&
             news.customPerformanceEnabled !== previousCustom) ||
@@ -404,18 +385,12 @@ export const StoragePoolProvider = () =>
         output?.storagePoolId,
         "storagepool",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, storagePoolId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, storagePoolId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -433,10 +408,7 @@ export const StoragePoolProvider = () =>
         output?.storagePoolId,
         "storagepool",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, storagePoolId);
       const network = networkName(env.project, news.network);
       const serviceLevel = news.serviceLevel ?? DEFAULT_SERVICE_LEVEL;
@@ -448,12 +420,7 @@ export const StoragePoolProvider = () =>
       const activeDirectory =
         news.activeDirectory === undefined
           ? undefined
-          : expandParent(
-              news.activeDirectory,
-              env.project,
-              location,
-              "activeDirectories",
-            );
+          : expandParent(news.activeDirectory, env.project, location, "activeDirectories");
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -512,29 +479,22 @@ export const StoragePoolProvider = () =>
       const desiredAd = activeDirectory ?? current.activeDirectory;
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.description ?? "") !== (news.description ?? "") &&
-          "description",
+        (current.description ?? "") !== (news.description ?? "") && "description",
         (current.capacityGib ?? "") !== (capacityGib ?? "") && "capacityGib",
-        (current.activeDirectory ?? "") !== (desiredAd ?? "") &&
-          "activeDirectory",
+        (current.activeDirectory ?? "") !== (desiredAd ?? "") && "activeDirectory",
         (current.allowAutoTiering ?? false) !==
-          (news.allowAutoTiering ?? current.allowAutoTiering ?? false) &&
-          "allowAutoTiering",
-        (current.qosType ?? "") !== (news.qosType ?? current.qosType ?? "") &&
-          "qosType",
+          (news.allowAutoTiering ?? current.allowAutoTiering ?? false) && "allowAutoTiering",
+        (current.qosType ?? "") !== (news.qosType ?? current.qosType ?? "") && "qosType",
         (current.totalThroughputMibps ?? "") !==
-          (gibOf(news.totalThroughputMibps) ??
-            current.totalThroughputMibps ??
-            "") && "totalThroughputMibps",
-        (current.totalIops ?? "") !==
-          (gibOf(news.totalIops) ?? current.totalIops ?? "") && "totalIops",
+          (gibOf(news.totalThroughputMibps) ?? current.totalThroughputMibps ?? "") &&
+          "totalThroughputMibps",
+        (current.totalIops ?? "") !== (gibOf(news.totalIops) ?? current.totalIops ?? "") &&
+          "totalIops",
         (current.hotTierSizeGib ?? "") !==
-          (gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib ?? "") &&
-          "hotTierSizeGib",
+          (gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib ?? "") && "hotTierSizeGib",
         (current.enableHotTierAutoResize ?? true) !==
-          (news.enableHotTierAutoResize ??
-            current.enableHotTierAutoResize ??
-            true) && "enableHotTierAutoResize",
+          (news.enableHotTierAutoResize ?? current.enableHotTierAutoResize ?? true) &&
+          "enableHotTierAutoResize",
       ]);
 
       if (mask.length > 0) {
@@ -549,11 +509,9 @@ export const StoragePoolProvider = () =>
             activeDirectory: desiredAd,
             allowAutoTiering: news.allowAutoTiering ?? current.allowAutoTiering,
             qosType: news.qosType ?? current.qosType,
-            totalThroughputMibps:
-              gibOf(news.totalThroughputMibps) ?? current.totalThroughputMibps,
+            totalThroughputMibps: gibOf(news.totalThroughputMibps) ?? current.totalThroughputMibps,
             totalIops: gibOf(news.totalIops) ?? current.totalIops,
-            hotTierSizeGib:
-              gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib,
+            hotTierSizeGib: gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib,
             enableHotTierAutoResize:
               news.enableHotTierAutoResize ?? current.enableHotTierAutoResize,
           },

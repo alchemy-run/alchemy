@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface StartJobRequest extends Omit<
-  amplify.StartJobRequest,
-  "appId"
-> {}
+export interface StartJobRequest extends Omit<amplify.StartJobRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:StartJob`.
@@ -40,9 +37,7 @@ export interface StartJob extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: StartJobRequest,
-    ) => Effect.Effect<amplify.StartJobResult, amplify.StartJobError>
+    (request: StartJobRequest) => Effect.Effect<amplify.StartJobResult, amplify.StartJobError>
   >
 > {}
 

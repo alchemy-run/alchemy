@@ -1,7 +1,7 @@
-import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import * as Layer from "effect/Layer";
+import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { makeCollectorHttpBinding } from "./BindingHttp.ts";
 import { RegisterCollector } from "./RegisterCollector.ts";
 

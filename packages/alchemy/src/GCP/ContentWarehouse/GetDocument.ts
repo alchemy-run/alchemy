@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Document } from "./Document.ts";
 
-export interface GetDocumentRequest extends Omit<
-  cw.GetProjectsLocationsDocumentsRequest,
-  "name"
-> {}
+export interface GetDocumentRequest extends Omit<cw.GetProjectsLocationsDocumentsRequest, "name"> {}
 
 /**
  * Runtime binding for Document AI Warehouse `documents.get`.
@@ -41,6 +38,4 @@ export interface GetDocument extends Binding.Service<
   >
 > {}
 
-export const GetDocument = Binding.Service<GetDocument>(
-  "GCP.ContentWarehouse.GetDocument",
-);
+export const GetDocument = Binding.Service<GetDocument>("GCP.ContentWarehouse.GetDocument");

@@ -164,11 +164,7 @@ export class CustomersDeploymentsDeviceNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  device: sasportal.SasPortalDevice,
-  parent: string,
-  project: string,
-) => {
+const toAttrs = (device: sasportal.SasPortalDevice, parent: string, project: string) => {
   const name = device.name ?? "";
   return {
     name,
@@ -202,9 +198,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
           (news.serialNumber !== undefined &&
             output?.serialNumber !== undefined &&
             news.serialNumber !== output.serialNumber) ||
-          (news.fccId !== undefined &&
-            output?.fccId !== undefined &&
-            news.fccId !== output.fccId),
+          (news.fccId !== undefined && output?.fccId !== undefined && news.fccId !== output.fccId),
       });
     }),
 
@@ -213,9 +207,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
       const parent = expandPath(olds?.parent ?? output?.parent ?? "");
       const name = olds?.name ?? output?.name ?? "";
       let existing = yield* getDeploymentDevice(name);
-      let locatedParent = existing
-        ? parentOf(existing.name ?? "") || parent
-        : parent;
+      let locatedParent = existing ? parentOf(existing.name ?? "") || parent : parent;
       if (existing === undefined) {
         const found =
           (yield* findOwnedCustomerDeploymentDevice(id, parent)) ??
@@ -225,9 +217,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, locatedParent, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -262,11 +252,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
         yield* toDisplayName(id, news.displayName, output?.displayName),
         MAX_DISPLAY_NAME_LENGTH,
       );
-      const serialNumber = yield* toSerialNumber(
-        id,
-        news.serialNumber,
-        output?.serialNumber,
-      );
+      const serialNumber = yield* toSerialNumber(id, news.serialNumber, output?.serialNumber);
       const desired = deviceBody({
         displayName,
         serialNumber,
@@ -292,9 +278,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              findOwnedCustomerDeploymentDevice(id, parent).pipe(
-                Effect.map((found) => found?.row),
-              ),
+              findOwnedCustomerDeploymentDevice(id, parent).pipe(Effect.map((found) => found?.row)),
             ),
           );
         current = created ?? undefined;
@@ -311,35 +295,19 @@ export const CustomersDeploymentsDeviceProvider = () =>
       const nameChanged = !sameText(current.displayName, displayName);
       const allowlistsChanged =
         news.grantRangeAllowlists !== undefined &&
-        !sameJson(
-          frequencyRangesOf(current.grantRangeAllowlists),
-          news.grantRangeAllowlists,
-        );
+        !sameJson(frequencyRangesOf(current.grantRangeAllowlists), news.grantRangeAllowlists);
       const configChanged =
         news.preloadedConfig !== undefined &&
-        !sameJson(
-          deviceConfigOf(current.preloadedConfig),
-          news.preloadedConfig,
-        );
+        !sameJson(deviceConfigOf(current.preloadedConfig), news.preloadedConfig);
       const metadataChanged =
         news.deviceMetadata !== undefined &&
-        !sameJson(
-          deviceMetadataOf(current.deviceMetadata),
-          news.deviceMetadata,
-        );
-      if (
-        nameChanged ||
-        allowlistsChanged ||
-        configChanged ||
-        metadataChanged
-      ) {
+        !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
+      if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchDeploymentsDevices({
           name,
           updateMask: updateMaskOf(
             "displayName",
-            news.grantRangeAllowlists !== undefined
-              ? "grantRangeAllowlists"
-              : undefined,
+            news.grantRangeAllowlists !== undefined ? "grantRangeAllowlists" : undefined,
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
@@ -352,9 +320,9 @@ export const CustomersDeploymentsDeviceProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryDelete(
-        sasportal.deleteDeploymentsDevices({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryDelete(sasportal.deleteDeploymentsDevices({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getDeploymentDevice(output.name));
     }),
   });

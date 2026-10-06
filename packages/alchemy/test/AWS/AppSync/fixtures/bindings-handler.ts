@@ -1,13 +1,13 @@
-import * as AppSync from "@/AWS/AppSync";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import path from "pathe";
+import * as AppSync from "@/AWS/AppSync";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -111,9 +111,7 @@ export default AppSyncBindingsFunction.make(
               : {
                   flushed: false,
                   reason: outcome.failure._tag,
-                  message: String(
-                    (outcome.failure as { message?: string }).message ?? "",
-                  ),
+                  message: String((outcome.failure as { message?: string }).message ?? ""),
                 },
           );
         }
@@ -121,9 +119,7 @@ export default AppSyncBindingsFunction.make(
         if (request.method === "GET" && pathname === "/schema") {
           // The introspected schema arrives as a streaming body.
           const response = yield* getSchema({ format: "SDL" });
-          const sdl = yield* Stream.mkString(
-            Stream.decodeText(response.schema!),
-          );
+          const sdl = yield* Stream.mkString(Stream.decodeText(response.schema!));
           return yield* HttpServerResponse.json({ sdl });
         }
 

@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListRetrievedTracesRequest
-  extends xray.ListRetrievedTracesRequest {}
+export interface ListRetrievedTracesRequest extends xray.ListRetrievedTracesRequest {}
 
 /**
  * Retrieve the traces fetched by a Transaction Search retrieval job.
@@ -37,10 +36,7 @@ export interface ListRetrievedTraces extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListRetrievedTracesRequest,
-    ) => Effect.Effect<
-      xray.ListRetrievedTracesResult,
-      xray.ListRetrievedTracesError
-    >
+    ) => Effect.Effect<xray.ListRetrievedTracesResult, xray.ListRetrievedTracesError>
   >
 > {}
 export const ListRetrievedTraces = Binding.Service<ListRetrievedTraces>(

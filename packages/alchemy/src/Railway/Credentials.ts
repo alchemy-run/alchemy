@@ -2,7 +2,6 @@ import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, toConfig } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import {
   deferUntilFirstUse,
   orDieCredentialsUnavailable,
@@ -39,15 +38,14 @@ export const fromAuthProvider = () =>
     Effect.gen(function* () {
       // Defer profile lookup and credential resolution until first use, so
       // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<
-        RailwayAuthConfig,
-        RailwayResolvedCredentials
-      >(RAILWAY_AUTH_PROVIDER_NAME).pipe(
+      const resolve = yield* resolveProviderConfig<RailwayAuthConfig, RailwayResolvedCredentials>(
+        RAILWAY_AUTH_PROVIDER_NAME,
+      ).pipe(
         Effect.flatMap(({ profileName, resolve }) =>
           resolve.pipe(
             Effect.map((creds) =>
               toConfig({
-                token: Redacted.value(creds.token),
+                token: creds.token,
                 tokenKind: creds.tokenKind,
                 apiBaseUrl: creds.apiBaseUrl,
               }),

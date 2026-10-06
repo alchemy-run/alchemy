@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsTensorboardsExperimentsRuns({ name }).pipe(
@@ -60,14 +57,11 @@ test.provider(
             displayName: "alchemy-run-board",
             labels: { env: "test" },
           });
-          const experiment = yield* GCP.AIPlatform.TensorboardsExperiment(
-            "Group",
-            {
-              parent: board.name,
-              displayName: "run-group",
-              labels: { env: "test" },
-            },
-          );
+          const experiment = yield* GCP.AIPlatform.TensorboardsExperiment("Group", {
+            parent: board.name,
+            displayName: "run-group",
+            labels: { env: "test" },
+          });
           return yield* GCP.AIPlatform.TensorboardsExperimentsRun("Pass", {
             parent: experiment.name,
             displayName: "pass-1",
@@ -80,10 +74,9 @@ test.provider(
       expect(created.name).toContain("/runs/");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsTensorboardsExperimentsRuns({
-          name: created.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsTensorboardsExperimentsRuns({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       const updated = yield* stack.deploy(
@@ -93,14 +86,11 @@ test.provider(
             displayName: "alchemy-run-board",
             labels: { env: "test" },
           });
-          const experiment = yield* GCP.AIPlatform.TensorboardsExperiment(
-            "Group",
-            {
-              parent: board.name,
-              displayName: "run-group",
-              labels: { env: "test" },
-            },
-          );
+          const experiment = yield* GCP.AIPlatform.TensorboardsExperiment("Group", {
+            parent: board.name,
+            displayName: "run-group",
+            labels: { env: "test" },
+          });
           return yield* GCP.AIPlatform.TensorboardsExperimentsRun("Pass", {
             parent: experiment.name,
             runId: created.runId,

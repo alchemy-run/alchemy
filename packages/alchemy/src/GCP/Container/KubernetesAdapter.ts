@@ -31,12 +31,12 @@
 import * as container from "@distilled.cloud/gcp/container_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
-import type { HttpClient } from "effect/http/HttpClient";
 import {
   ClusterAdapter,
   ClusterNotFoundError,
@@ -53,10 +53,7 @@ import type { Connection } from "../../Kubernetes/Connection.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
-import {
-  makeImageSource,
-  type ImageSourceLike,
-} from "../ArtifactRegistry/ImageSource.ts";
+import { makeImageSource, type ImageSourceLike } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   projectNumber,
@@ -204,8 +201,7 @@ export const workloadIdentityPrincipal = (options: {
 
 const WORKLOAD_IDENTITY_USER = "roles/iam.workloadIdentityUser";
 
-const gsaResourceName = (email: string) =>
-  `projects/-/serviceAccounts/${email}`;
+const gsaResourceName = (email: string) => `projects/-/serviceAccounts/${email}`;
 
 /** Binding channels a GKE workload can materialize. */
 const GKE_BINDING_KEYS = new Set(["env", "iam"]);
@@ -213,15 +209,10 @@ const GKE_BINDING_KEYS = new Set(["env", "iam"]);
 /** Narrow persisted identity state (possibly a legacy shape). */
 const identityStateOf = (state: Record<string, unknown> | undefined) => ({
   member: typeof state?.member === "string" ? state.member : undefined,
-  iamGrants: Array.isArray(state?.iamGrants)
-    ? (state.iamGrants as AppliedIamGrant[])
-    : [],
+  iamGrants: Array.isArray(state?.iamGrants) ? (state.iamGrants as AppliedIamGrant[]) : [],
   gcpServiceAccount:
-    typeof state?.gcpServiceAccount === "string"
-      ? state.gcpServiceAccount
-      : undefined,
-  impersonator:
-    typeof state?.impersonator === "string" ? state.impersonator : undefined,
+    typeof state?.gcpServiceAccount === "string" ? state.gcpServiceAccount : undefined,
+  impersonator: typeof state?.impersonator === "string" ? state.impersonator : undefined,
 });
 
 /**
@@ -272,17 +263,10 @@ export const gkeConnectionOf = (options: {
 const narrowGkeAuth = (connection: Connection) =>
   connection.auth.kind === "gcp-gke"
     ? Effect.succeed(connection.auth)
-    : Effect.die(
-        new Error(
-          `gcp-gke adapter received auth kind '${connection.auth.kind}'`,
-        ),
-      );
+    : Effect.die(new Error(`gcp-gke adapter received auth kind '${connection.auth.kind}'`));
 
-const clusterResourceName = (
-  project: string,
-  location: string,
-  clusterId: string,
-) => `projects/${project}/locations/${location}/clusters/${clusterId}`;
+const clusterResourceName = (project: string, location: string, clusterId: string) =>
+  `projects/${project}/locations/${location}/clusters/${clusterId}`;
 
 const createRepositoryName = (id: string) =>
   createPhysicalName({
@@ -471,11 +455,7 @@ export const GkeKubernetesAdapter = () =>
         const cluster = yield* Effect.gen(function* () {
           const env = yield* GcpEnvironment.current;
           const project = auth.project ?? env.project;
-          const name = clusterResourceName(
-            project,
-            auth.location,
-            auth.clusterId,
-          );
+          const name = clusterResourceName(project, auth.location, auth.clusterId);
           return yield* container
             .getProjectsLocationsClusters({ name })
             .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -521,9 +501,7 @@ export const GkeKubernetesAdapter = () =>
           ),
         );
 
-      const identityReconcile = Effect.fn(function* (
-        options: WorkloadIdentityReconcileOptions,
-      ) {
+      const identityReconcile = Effect.fn(function* (options: WorkloadIdentityReconcileOptions) {
         const auth = yield* narrowGkeAuth(options.connection);
         const bindings = options.bindings.filter(
           (
@@ -536,10 +514,7 @@ export const GkeKubernetesAdapter = () =>
           ...new Set(
             bindings.flatMap((binding) =>
               Object.entries(binding.data ?? {})
-                .filter(
-                  ([key, value]) =>
-                    value !== undefined && !GKE_BINDING_KEYS.has(key),
-                )
+                .filter(([key, value]) => value !== undefined && !GKE_BINDING_KEYS.has(key))
                 .map(([key]) => key),
             ),
           ),
@@ -564,9 +539,7 @@ export const GkeKubernetesAdapter = () =>
             serviceAccount: options.serviceAccount,
           });
           const gcpServiceAccount = options.options?.gcpServiceAccount;
-          const member = gcpServiceAccount
-            ? `serviceAccount:${gcpServiceAccount}`
-            : principal;
+          const member = gcpServiceAccount ? `serviceAccount:${gcpServiceAccount}` : principal;
           const previous = identityStateOf(options.state);
 
           // Let the KSA impersonate the user-supplied GSA.
@@ -647,10 +620,7 @@ export const GkeKubernetesAdapter = () =>
               grants: state.iamGrants,
             });
           }
-          if (
-            state.gcpServiceAccount !== undefined &&
-            state.impersonator !== undefined
-          ) {
+          if (state.gcpServiceAccount !== undefined && state.impersonator !== undefined) {
             yield* revokeIamMembership({
               kind: "iam.serviceAccount",
               name: gsaResourceName(state.gcpServiceAccount),
@@ -667,15 +637,13 @@ export const GkeKubernetesAdapter = () =>
         Effect.gen(function* () {
           const state = options.state;
           const env = yield* GcpEnvironment.current;
-          const location =
-            typeof state?.location === "string" ? state.location : env.region;
+          const location = typeof state?.location === "string" ? state.location : env.region;
           const repositoryName =
             typeof state?.repositoryName === "string"
               ? state.repositoryName
               : yield* createRepositoryName(options.id);
           const repositoryUri =
-            typeof state?.repositoryUri === "string" &&
-            state.repositoryName === repositoryName
+            typeof state?.repositoryUri === "string" && state.repositoryName === repositoryName
               ? state.repositoryUri
               : undefined;
           const resolved = yield* imageSource.resolve({
@@ -700,21 +668,12 @@ export const GkeKubernetesAdapter = () =>
               repositoryUri: resolved.repositoryUri,
               location,
               name:
-                typeof state?.name === "string" &&
-                state.repositoryName === repositoryName
+                typeof state?.name === "string" && state.repositoryName === repositoryName
                   ? state.name
-                  : imageSource.resourceName(
-                      env.project,
-                      location,
-                      resolved.repositoryName,
-                    ),
+                  : imageSource.resourceName(env.project, location, resolved.repositoryName),
             },
           } satisfies ImageRegistryResult;
-        }).pipe(withGcp) as Effect.Effect<
-          ImageRegistryResult,
-          any,
-          AdapterLifecycleServices
-        >;
+        }).pipe(withGcp) as Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
 
       const registryHash = Effect.fn(function* (options: {
         source: ImageSourceLike;
@@ -742,9 +701,7 @@ export const GkeKubernetesAdapter = () =>
           yield* imageSource.destroyRepository(options.state.name);
         }).pipe(withGcp) as Effect.Effect<void, any, AdapterLifecycleServices>;
 
-      const loadBalancerDefaults = Effect.fn(function* (_options: {
-        connection: Connection;
-      }) {
+      const loadBalancerDefaults = Effect.fn(function* (_options: { connection: Connection }) {
         return {
           loadBalancerClass: undefined,
           annotations: {

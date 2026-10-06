@@ -1,5 +1,3 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
@@ -7,6 +5,8 @@ import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 /**
  * Host IAM plumbing without a container build: image-only hosts whose
@@ -18,10 +18,7 @@ import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const HELLO_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 
@@ -38,10 +35,7 @@ class IamService extends GCP.Function<IamService>()(
     yield* GCP.PubSub.Publish(Events);
     yield* GCP.Storage.GetObject(Blobs);
     return {};
-  }).pipe(
-    Effect.provide(GCP.PubSub.PublishHttp),
-    Effect.provide(GCP.Storage.GetObjectHttp),
-  ),
+  }).pipe(Effect.provide(GCP.PubSub.PublishHttp), Effect.provide(GCP.Storage.GetObjectHttp)),
 ) {}
 
 class IamServicePublishOnly extends GCP.Function<IamServicePublishOnly>()(
@@ -132,15 +126,10 @@ test.provider(
       const topicPolicy = yield* pubsub.getIamPolicyProjectsTopics({
         resource: out.topic,
       });
-      expect(membersOf(topicPolicy, service)).toEqual([
-        "roles/pubsub.publisher",
-      ]);
+      expect(membersOf(topicPolicy, service)).toEqual(["roles/pubsub.publisher"]);
       expect(membersOf(topicPolicy, job)).toEqual(["roles/pubsub.publisher"]);
       expect(
-        membersOf(
-          yield* storage.getIamPolicyBuckets({ bucket: out.bucket }),
-          service,
-        ),
+        membersOf(yield* storage.getIamPolicyBuckets({ bucket: out.bucket }), service),
       ).toEqual(["roles/storage.objectViewer"]);
       expect(out.grants.map((grant) => grant.kind).sort()).toEqual([
         "pubsub.topic",
@@ -151,16 +140,10 @@ test.provider(
       expect(next.serviceAccount).toEqual(out.serviceAccount);
       expect(next.grants.map((grant) => grant.kind)).toEqual(["pubsub.topic"]);
       expect(
-        membersOf(
-          yield* storage.getIamPolicyBuckets({ bucket: out.bucket }),
-          service,
-        ),
+        membersOf(yield* storage.getIamPolicyBuckets({ bucket: out.bucket }), service),
       ).toEqual([]);
       expect(
-        membersOf(
-          yield* pubsub.getIamPolicyProjectsTopics({ resource: out.topic }),
-          service,
-        ),
+        membersOf(yield* pubsub.getIamPolicyProjectsTopics({ resource: out.topic }), service),
       ).toEqual(["roles/pubsub.publisher"]);
 
       yield* stack.destroy();

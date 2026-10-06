@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -18,13 +18,7 @@ import {
 const { test } = Test.make({ providers: GCP.providers() });
 
 const fixtureDir = awsFixture("waku-app");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "tsconfig.json",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "tsconfig.json", "src", "public"];
 
 test.provider.skipIf(!dockerAvailable)(
   "Waku: deploy, GET page, RSC and SSG routes, destroy, gone",
@@ -59,14 +53,10 @@ test.provider.skipIf(!dockerAvailable)(
         timeout: "180 seconds",
         label: "Waku /",
       });
-      yield* expectUrlContains(
-        `${url}/echo?echo=roundtrip`,
-        "WAKU_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "Waku /echo?echo=roundtrip",
-        },
-      );
+      yield* expectUrlContains(`${url}/echo?echo=roundtrip`, "WAKU_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "Waku /echo?echo=roundtrip",
+      });
       yield* expectUrlContains(`${url}/about`, "WAKU_AWS_STATIC_MARKER", {
         timeout: "30 seconds",
         label: "Waku /about",

@@ -2,23 +2,14 @@ import * as vault from "@distilled.cloud/gcp/vault_v1";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_MATTER_NAME_LENGTH = 100;
 export const MAX_HOLD_NAME_LENGTH = 100;
 export const MAX_EXPORT_NAME_LENGTH = 100;
 export const MAX_SAVED_QUERY_NAME_LENGTH = 100;
 
-const markerOf = (
-  _labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (_labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -26,10 +17,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -59,10 +47,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -90,14 +75,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -107,18 +88,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -148,9 +120,7 @@ export const toGeneratedName = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `v${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `v${generated}`.slice(0, maxLength);
     return next.length >= 4 ? next : `${next}xxxx`.slice(0, maxLength);
   });
 
@@ -161,8 +131,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -172,8 +141,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -194,10 +162,7 @@ export const listMatters = () =>
 export const listActiveMatters = () =>
   listMatters().pipe(
     Effect.map((matters) =>
-      matters.filter(
-        (matter) =>
-          matter.state !== "DELETED" && (matter.matterId ?? "").length > 0,
-      ),
+      matters.filter((matter) => matter.state !== "DELETED" && (matter.matterId ?? "").length > 0),
     ),
   );
 
@@ -245,26 +210,20 @@ export const getHold = (matterId: string, holdId: string) =>
 export const listHolds = (matterId: string) =>
   matterId.length === 0
     ? emptyList<vault.Hold>()
-    : vault.listMattersHolds
-        .pages({ matterId, pageSize: 100, view: "FULL_HOLD" })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.holds ?? [])),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () => emptyList<vault.Hold>()),
-        );
+    : vault.listMattersHolds.pages({ matterId, pageSize: 100, view: "FULL_HOLD" }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.holds ?? [])),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("NotFound", () => emptyList<vault.Hold>()),
+      );
 
 export const findHoldByName = (matterId: string, name: string) =>
-  listHolds(matterId).pipe(
-    Effect.map((holds) => holds.find((hold) => hold.name === name)),
-  );
+  listHolds(matterId).pipe(Effect.map((holds) => holds.find((hold) => hold.name === name)));
 
 export const findOwnedHold = (id: string, matterId?: string) =>
   Effect.gen(function* () {
     const parents =
-      matterId !== undefined && matterId.length > 0
-        ? [{ matterId }]
-        : yield* listActiveMatters();
+      matterId !== undefined && matterId.length > 0 ? [{ matterId }] : yield* listActiveMatters();
     for (const parent of parents) {
       const parentId = parent.matterId ?? "";
       const holds = yield* listHolds(parentId);
@@ -293,16 +252,12 @@ export const listExports = (matterId: string) =>
       );
 
 export const findExportByName = (matterId: string, name: string) =>
-  listExports(matterId).pipe(
-    Effect.map((items) => items.find((item) => item.name === name)),
-  );
+  listExports(matterId).pipe(Effect.map((items) => items.find((item) => item.name === name)));
 
 export const findOwnedExport = (id: string, matterId?: string) =>
   Effect.gen(function* () {
     const parents =
-      matterId !== undefined && matterId.length > 0
-        ? [{ matterId }]
-        : yield* listActiveMatters();
+      matterId !== undefined && matterId.length > 0 ? [{ matterId }] : yield* listActiveMatters();
     for (const parent of parents) {
       const parentId = parent.matterId ?? "";
       const items = yield* listExports(parentId);
@@ -332,17 +287,13 @@ export const listSavedQueries = (matterId: string) =>
 
 export const findSavedQueryByName = (matterId: string, displayName: string) =>
   listSavedQueries(matterId).pipe(
-    Effect.map((items) =>
-      items.find((item) => item.displayName === displayName),
-    ),
+    Effect.map((items) => items.find((item) => item.displayName === displayName)),
   );
 
 export const findOwnedSavedQuery = (id: string, matterId?: string) =>
   Effect.gen(function* () {
     const parents =
-      matterId !== undefined && matterId.length > 0
-        ? [{ matterId }]
-        : yield* listActiveMatters();
+      matterId !== undefined && matterId.length > 0 ? [{ matterId }] : yield* listActiveMatters();
     for (const parent of parents) {
       const parentId = parent.matterId ?? "";
       const items = yield* listSavedQueries(parentId);

@@ -207,26 +207,15 @@ const detailsOf = (
 
 export const ApisVersionsOperationProvider = () =>
   Provider.succeed(ApisVersionsOperation, {
-    stables: [
-      "name",
-      "apiOperationId",
-      "version",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "apiOperationId", "version", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.apiOperationId ?? output?.apiOperationId,
-        nextId:
-          news.apiOperationId ?? olds?.apiOperationId ?? output?.apiOperationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.apiOperationId ?? olds?.apiOperationId ?? output?.apiOperationId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -239,26 +228,18 @@ export const ApisVersionsOperationProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const version = olds?.version ?? output?.version ?? "";
-      const apiOperationId = yield* toPhysicalId(
-        id,
-        olds?.apiOperationId,
-        output?.apiOperationId,
-      );
+      const apiOperationId = yield* toPhysicalId(id, olds?.apiOperationId, output?.apiOperationId);
       const name = output?.name ?? resourceName(version, apiOperationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.details?.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.details?.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const apis = yield* listApis(
-          `projects/${env.project}/locations/${env.region}`,
-        );
+        const apis = yield* listApis(`projects/${env.project}/locations/${env.region}`);
         const versions = yield* listChildResources(apis, listVersions);
         const operations = yield* listChildResources(versions, listOperations);
         return operations
@@ -269,11 +250,7 @@ export const ApisVersionsOperationProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const version = news.version.replace(/\/+$/, "");
-      const apiOperationId = yield* toPhysicalId(
-        id,
-        news.apiOperationId,
-        output?.apiOperationId,
-      );
+      const apiOperationId = yield* toPhysicalId(id, news.apiOperationId, output?.apiOperationId);
       const name = output?.name ?? resourceName(version, apiOperationId);
       const ownership = yield* createOwnership(id);
       const description = encodeOwnership(ownership, news.details.description);
@@ -300,14 +277,8 @@ export const ApisVersionsOperationProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      const descriptionChanged = !sameText(
-        current.details?.description,
-        description,
-      );
-      const docsChanged = !sameJson(
-        current.details?.documentation,
-        news.details.documentation,
-      );
+      const descriptionChanged = !sameText(current.details?.description, description);
+      const docsChanged = !sameJson(current.details?.documentation, news.details.documentation);
       const pathChanged = !sameJson(
         current.details?.httpOperation?.path,
         news.details.httpOperation?.path,
@@ -317,12 +288,8 @@ export const ApisVersionsOperationProvider = () =>
         news.details.httpOperation?.method,
       );
       const deprecatedChanged =
-        (current.details?.deprecated === true) !==
-        (news.details.deprecated === true);
-      const mcpChanged = !sameJson(
-        current.details?.mcpTool,
-        news.details.mcpTool,
-      );
+        (current.details?.deprecated === true) !== (news.details.deprecated === true);
+      const mcpChanged = !sameJson(current.details?.mcpTool, news.details.mcpTool);
       const attributesChanged = !sameJson(current.attributes, news.attributes);
 
       if (

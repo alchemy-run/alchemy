@@ -161,14 +161,11 @@ export type AppsGuardrail = Resource<
  */
 export const AppsGuardrail = Resource<AppsGuardrail>("GCP.CES.AppsGuardrail");
 
-export class AppsGuardrailNotResolved extends Data.TaggedError(
-  "GCP.CES.AppsGuardrailNotResolved",
-)<{
+export class AppsGuardrailNotResolved extends Data.TaggedError("GCP.CES.AppsGuardrailNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (app: string, guardrailId: string) =>
-  `${app}/guardrails/${guardrailId}`;
+const resourceName = (app: string, guardrailId: string) => `${app}/guardrails/${guardrailId}`;
 
 const defaultFilter = (news: AppsGuardrailProps) => {
   if (
@@ -183,20 +180,13 @@ const defaultFilter = (news: AppsGuardrailProps) => {
   return DEFAULT_CONTENT_FILTER;
 };
 
-const toAttrs = (
-  guardrail: ces.Guardrail,
-  project: string,
-  region: string,
-  appHint?: string,
-) => {
+const toAttrs = (guardrail: ces.Guardrail, project: string, region: string, appHint?: string) => {
   const name = guardrail.name ?? "";
   const parsed = parseResourceName(name, "guardrails", region);
   return {
     name,
     guardrailId: parsed.id,
-    app: name.includes("/guardrails/")
-      ? parsed.app
-      : (appHint ?? parsed.parent),
+    app: name.includes("/guardrails/") ? parsed.app : (appHint ?? parsed.parent),
     location: parsed.location,
     project: parsed.project || project,
     displayName: guardrail.displayName,
@@ -235,14 +225,7 @@ const listAt = (parent: string, project: string, region: string) =>
 
 export const AppsGuardrailProvider = () =>
   Provider.succeed(AppsGuardrail, {
-    stables: [
-      "name",
-      "guardrailId",
-      "app",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "guardrailId", "app", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -256,27 +239,14 @@ export const AppsGuardrailProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const app = olds?.app
-        ? expandApp(olds.app, env.project, location)
-        : output?.app;
-      const guardrailId = yield* toPhysicalId(
-        id,
-        olds?.guardrailId,
-        output?.guardrailId,
-      );
-      const name =
-        output?.name ??
-        (app !== undefined ? resourceName(app, guardrailId) : "");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const app = olds?.app ? expandApp(olds.app, env.project, location) : output?.app;
+      const guardrailId = yield* toPhysicalId(id, olds?.guardrailId, output?.guardrailId);
+      const name = output?.name ?? (app !== undefined ? resourceName(app, guardrailId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, app);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -291,16 +261,9 @@ export const AppsGuardrailProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const app = expandApp(news.app, env.project, location);
-      const guardrailId = yield* toPhysicalId(
-        id,
-        news.guardrailId,
-        output?.guardrailId,
-      );
+      const guardrailId = yield* toPhysicalId(id, news.guardrailId, output?.guardrailId);
       const name = output?.name ?? resourceName(app, guardrailId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -341,15 +304,9 @@ export const AppsGuardrailProvider = () =>
       const enabledChanged = (current.enabled !== false) !== enabled;
       const filterChanged = !sameJson(current.contentFilter, contentFilter);
       const policyChanged = !sameJson(current.llmPolicy, news.llmPolicy);
-      const promptChanged = !sameJson(
-        current.llmPromptSecurity,
-        news.llmPromptSecurity,
-      );
+      const promptChanged = !sameJson(current.llmPromptSecurity, news.llmPromptSecurity);
       const safetyChanged = !sameJson(current.modelSafety, news.modelSafety);
-      const callbackChanged = !sameJson(
-        current.codeCallback,
-        news.codeCallback,
-      );
+      const callbackChanged = !sameJson(current.codeCallback, news.codeCallback);
       const actionChanged = !sameJson(current.action, news.action);
 
       if (
@@ -398,9 +355,9 @@ export const AppsGuardrailProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       // `force: true` makes guardrail deletes fail with 500 INTERNAL.
-      yield* retryTransient(
-        ces.deleteProjectsLocationsAppsGuardrails({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryTransient(ces.deleteProjectsLocationsAppsGuardrails({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name));
     }),
   });

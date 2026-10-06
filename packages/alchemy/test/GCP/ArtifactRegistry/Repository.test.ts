@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   artifactregistry.getProjectsLocationsRepositories({ name }).pipe(
@@ -59,11 +56,10 @@ test.provider(
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("test docker repository");
 
-      const images =
-        yield* artifactregistry.listProjectsLocationsRepositoriesDockerImages({
-          parent: created.name,
-          pageSize: 10,
-        });
+      const images = yield* artifactregistry.listProjectsLocationsRepositoriesDockerImages({
+        parent: created.name,
+        pageSize: 10,
+      });
       expect(images.dockerImages ?? []).toEqual([]);
 
       const updated = yield* stack.deploy(
@@ -86,10 +82,9 @@ test.provider(
       expect(updated.immutableTags).toEqual(true);
       expect(updated.cleanupPolicyDryRun).toEqual(true);
 
-      const refetched =
-        yield* artifactregistry.getProjectsLocationsRepositories({
-          name: created.name,
-        });
+      const refetched = yield* artifactregistry.getProjectsLocationsRepositories({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("prod docker repository");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("images");

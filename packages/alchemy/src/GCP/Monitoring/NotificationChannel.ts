@@ -150,25 +150,16 @@ const channelLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => tagRecord(labels);
 
-const recordsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) => {
+const recordsEqual = (left: Record<string, string>, right: Record<string, string>) => {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && left[key] === right[key],
-    )
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
   );
 };
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       displayName ??
@@ -209,13 +200,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.notificationChannels ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.notificationChannels ?? [])),
       Stream.filter((channel) =>
-        Object.keys(channel.userLabels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(channel.userLabels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((channel) => toAttrs(channel, project)),
       Stream.runCollect,
@@ -231,9 +218,7 @@ const findOwned = (project: string, id: string) =>
         pageSize: 1000,
       })
       .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.notificationChannels ?? []),
-        ),
+        Stream.flatMap((page) => Stream.fromIterable(page.notificationChannels ?? [])),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -273,9 +258,7 @@ export const NotificationChannelProvider = () =>
       const existing = yield* observe(env.project, id, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -286,11 +269,7 @@ export const NotificationChannelProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredUserLabels = {
         ...toLabels(news.userLabels),
         ...(yield* createInternalLabels(id)),
@@ -329,18 +308,11 @@ export const NotificationChannelProvider = () =>
 
       const name = current.name ?? output?.name ?? "";
       const observedUserLabels = tagRecord(current.userLabels);
-      const { upsert, removed } = diffLabels(
-        observedUserLabels,
-        desiredUserLabels,
-      );
+      const { upsert, removed } = diffLabels(observedUserLabels, desiredUserLabels);
       const userLabelsChanged = upsert.length > 0 || removed.length > 0;
-      const labelsChanged = !recordsEqual(
-        channelLabels(current.labels),
-        desiredLabels,
-      );
+      const labelsChanged = !recordsEqual(channelLabels(current.labels), desiredLabels);
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const enabledChanged = (current.enabled !== false) !== desiredEnabled;
 
       const updateMask = [

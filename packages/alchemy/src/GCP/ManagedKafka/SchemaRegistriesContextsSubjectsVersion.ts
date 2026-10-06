@@ -220,10 +220,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const schemaChanged =
         (olds?.schema ?? output?.schema ?? "") !== news.schema ||
         (olds?.schemaType ?? output?.schemaType ?? "") !==
@@ -248,10 +245,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const subject = yield* toSubjectId(id, olds?.subject, output?.subject);
       const context = olds?.context ?? output?.context ?? "";
       const schemaRegistry =
@@ -262,10 +256,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
       const name =
         output?.name ??
         (schemaRegistry.length > 0 && context.length > 0
-          ? versionName(
-              subjectParent(schemaRegistry, subject, context),
-              version,
-            )
+          ? versionName(subjectParent(schemaRegistry, subject, context), version)
           : "");
       const existing = yield* getContextSchemaVersion(name);
       if (existing === undefined) return undefined;
@@ -273,17 +264,8 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
         subjectParent(schemaRegistry, existing.subject ?? subject, context),
         existing.version ?? version,
       );
-      const attrs = toAttrs(
-        existing,
-        schemaRegistry,
-        context,
-        env.project,
-        location,
-        resolvedName,
-      );
-      return output !== undefined || olds !== undefined
-        ? attrs
-        : Unowned(attrs);
+      const attrs = toAttrs(existing, schemaRegistry, context, env.project, location, resolvedName);
+      return output !== undefined || olds !== undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -294,17 +276,12 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
           registries.filter((registry) => (registry.name ?? "").length > 0),
           (registry) =>
             schemaRegistryOwnership(registry.name!).pipe(
-              Effect.map((labels) =>
-                hasAlchemyLabelMap(labels) ? registry : undefined,
-              ),
+              Effect.map((labels) => (hasAlchemyLabelMap(labels) ? registry : undefined)),
             ),
           { concurrency: 4 },
         );
         const versions = yield* Effect.forEach(
-          owned.filter(
-            (registry): registry is kafka.SchemaRegistry =>
-              registry !== undefined,
-          ),
+          owned.filter((registry): registry is kafka.SchemaRegistry => registry !== undefined),
           (registry) =>
             Effect.gen(function* () {
               const contexts = (registry.contexts ?? []).filter(
@@ -322,17 +299,15 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
                         parent: contextName,
                       })
                       .pipe(
-                        Effect.catchTag(
-                          ["NotFound", "SchemaRegistryRequiresCluster"],
-                          () => Effect.succeed<kafka.HttpBody>({}),
+                        Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () =>
+                          Effect.succeed<kafka.HttpBody>({}),
                         ),
                       );
                     const subjects = (yield* parseHttpJson(body)) as unknown;
                     const names = Array.isArray(subjects)
                       ? subjects.filter(
                           (item): item is string =>
-                            typeof item === "string" &&
-                            item !== OWNERSHIP_SUBJECT,
+                            typeof item === "string" && item !== OWNERSHIP_SUBJECT,
                         )
                       : [];
                     const contextId = parseName(contextName, "contexts").id;
@@ -341,34 +316,21 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
                       (subject) =>
                         Effect.gen(function* () {
                           const listed = yield* kafka
-                            .listProjectsLocationsSchemaRegistriesContextsSubjectsVersions(
-                              {
-                                parent: subjectParent(
-                                  registry.name!,
-                                  subject,
-                                  contextId,
-                                ),
-                              },
-                            )
+                            .listProjectsLocationsSchemaRegistriesContextsSubjectsVersions({
+                              parent: subjectParent(registry.name!, subject, contextId),
+                            })
                             .pipe(
-                              Effect.catchTag(
-                                ["NotFound", "SchemaRegistryRequiresCluster"],
-                                () => Effect.succeed<kafka.HttpBody>({}),
+                              Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () =>
+                                Effect.succeed<kafka.HttpBody>({}),
                               ),
                             );
-                          const ids = parseVersionList(
-                            yield* parseHttpJson(listed),
-                          );
+                          const ids = parseVersionList(yield* parseHttpJson(listed));
                           return yield* Effect.forEach(
                             ids,
                             (version) =>
                               getContextSchemaVersion(
                                 versionName(
-                                  subjectParent(
-                                    registry.name!,
-                                    subject,
-                                    contextId,
-                                  ),
+                                  subjectParent(registry.name!, subject, contextId),
                                   version,
                                 ),
                               ).pipe(
@@ -379,16 +341,9 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
                                         registry.name!,
                                         contextId,
                                         env.project,
-                                        parseName(
-                                          registry.name!,
-                                          "schemaRegistries",
-                                        ).location,
+                                        parseName(registry.name!, "schemaRegistries").location,
                                         versionName(
-                                          subjectParent(
-                                            registry.name!,
-                                            subject,
-                                            contextId,
-                                          ),
+                                          subjectParent(registry.name!, subject, contextId),
                                           version,
                                         ),
                                       )
@@ -408,22 +363,13 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
         );
         return versions
           .flat(3)
-          .filter(
-            (item): item is NonNullable<typeof item> => item !== undefined,
-          );
+          .filter((item): item is NonNullable<typeof item> => item !== undefined);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const schemaRegistry = registryOf(
-        news.schemaRegistry,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const schemaRegistry = registryOf(news.schemaRegistry, env.project, location);
       const subject = yield* toSubjectId(id, news.subject, output?.subject);
       const context = news.context;
       const parent = subjectParent(schemaRegistry, subject, context);
@@ -461,9 +407,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
           .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
         current =
           lookedUp ??
-          (yield* getContextSchemaVersion(
-            versionName(parent, news.version ?? "latest"),
-          ));
+          (yield* getContextSchemaVersion(versionName(parent, news.version ?? "latest")));
         void created;
       }
 
@@ -481,14 +425,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
         ),
         current.version ?? versionHint ?? "latest",
       );
-      return toAttrs(
-        current,
-        schemaRegistry,
-        context,
-        env.project,
-        location,
-        resolved,
-      );
+      return toAttrs(current, schemaRegistry, context, env.project, location, resolved);
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -499,11 +436,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            [
-              "NotFound",
-              "SchemaRegistryRequiresCluster",
-              "SchemaRegistryPathNotFound",
-            ],
+            ["NotFound", "SchemaRegistryRequiresCluster", "SchemaRegistryPathNotFound"],
             () => Effect.void,
           ),
         );
@@ -514,11 +447,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            [
-              "NotFound",
-              "SchemaRegistryRequiresCluster",
-              "SchemaRegistryPathNotFound",
-            ],
+            ["NotFound", "SchemaRegistryRequiresCluster", "SchemaRegistryPathNotFound"],
             () => Effect.void,
           ),
         );

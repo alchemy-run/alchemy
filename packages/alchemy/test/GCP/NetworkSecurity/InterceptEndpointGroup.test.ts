@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsInterceptEndpointGroups({ name }).pipe(
@@ -60,19 +57,15 @@ test.provider.skipIf(!!process.env.FAST)(
             autoCreateSubnetworks: false,
             description: "intercept endpoint vpc",
           });
-          const collectors =
-            yield* GCP.NetworkSecurity.InterceptDeploymentGroup("Inspect", {
-              network: vpc.selfLink.as<string>(),
-              description: "collectors",
-            });
-          const group = yield* GCP.NetworkSecurity.InterceptEndpointGroup(
-            "Front",
-            {
-              interceptDeploymentGroup: collectors.name,
-              description: "intercept eg a",
-              labels: { env: "test" },
-            },
-          );
+          const collectors = yield* GCP.NetworkSecurity.InterceptDeploymentGroup("Inspect", {
+            network: vpc.selfLink.as<string>(),
+            description: "collectors",
+          });
+          const group = yield* GCP.NetworkSecurity.InterceptEndpointGroup("Front", {
+            interceptDeploymentGroup: collectors.name,
+            description: "intercept eg a",
+            labels: { env: "test" },
+          });
           return { vpc, collectors, group };
         }),
       );
@@ -81,22 +74,17 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.group.location).toEqual("global");
       expect(created.group.description).toEqual("intercept eg a");
       expect(created.group.labels).toMatchObject({ env: "test" });
-      expect(created.group.interceptDeploymentGroup).toEqual(
-        created.collectors.name,
-      );
+      expect(created.group.interceptDeploymentGroup).toEqual(created.collectors.name);
 
-      const fetched =
-        yield* networksecurity.getProjectsLocationsInterceptEndpointGroups({
-          name: created.group.name,
-        });
+      const fetched = yield* networksecurity.getProjectsLocationsInterceptEndpointGroups({
+        name: created.group.name,
+      });
       expect(fetched.name).toEqual(created.group.name);
       expect(fetched.description).toEqual("intercept eg a");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -105,22 +93,17 @@ test.provider.skipIf(!!process.env.FAST)(
             autoCreateSubnetworks: false,
             description: "intercept endpoint vpc",
           });
-          const collectors =
-            yield* GCP.NetworkSecurity.InterceptDeploymentGroup("Inspect", {
-              interceptDeploymentGroupId:
-                created.collectors.interceptDeploymentGroupId,
-              network: vpc.selfLink.as<string>(),
-              description: "collectors",
-            });
-          const group = yield* GCP.NetworkSecurity.InterceptEndpointGroup(
-            "Front",
-            {
-              interceptEndpointGroupId: created.group.interceptEndpointGroupId,
-              interceptDeploymentGroup: collectors.name,
-              description: "intercept eg b",
-              labels: { env: "prod", role: "nsi" },
-            },
-          );
+          const collectors = yield* GCP.NetworkSecurity.InterceptDeploymentGroup("Inspect", {
+            interceptDeploymentGroupId: created.collectors.interceptDeploymentGroupId,
+            network: vpc.selfLink.as<string>(),
+            description: "collectors",
+          });
+          const group = yield* GCP.NetworkSecurity.InterceptEndpointGroup("Front", {
+            interceptEndpointGroupId: created.group.interceptEndpointGroupId,
+            interceptDeploymentGroup: collectors.name,
+            description: "intercept eg b",
+            labels: { env: "prod", role: "nsi" },
+          });
           return { vpc, collectors, group };
         }),
       );
@@ -132,10 +115,9 @@ test.provider.skipIf(!!process.env.FAST)(
         role: "nsi",
       });
 
-      const refetched =
-        yield* networksecurity.getProjectsLocationsInterceptEndpointGroups({
-          name: created.group.name,
-        });
+      const refetched = yield* networksecurity.getProjectsLocationsInterceptEndpointGroups({
+        name: created.group.name,
+      });
       expect(refetched.description).toEqual("intercept eg b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("nsi");

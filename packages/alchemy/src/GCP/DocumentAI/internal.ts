@@ -5,13 +5,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
+import { isTransientGcpError } from "../Errors.ts";
 import {
   alchemyLabelKeys,
   createInternalLabels,
   hasAlchemyLabels,
   stripInternalLabels,
 } from "../Labels.ts";
-import { isTransientGcpError } from "../Errors.ts";
 
 // Document AI is only served from the `us` / `eu` multi-region deployments, so the
 // default stays `us` rather than following `GCP.Region`.
@@ -27,28 +27,20 @@ export const MAX_PROCESSOR_DISPLAY_NAME_LENGTH = 64;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const DEFAULT_PROCESSOR_TYPE = "OCR_PROCESSOR";
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.DocumentAI.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.DocumentAI.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.DocumentAI.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.DocumentAI.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ProcessorPending extends Data.TaggedError(
-  "GCP.DocumentAI.ProcessorPending",
-)<{
+export class ProcessorPending extends Data.TaggedError("GCP.DocumentAI.ProcessorPending")<{
   name: string;
   state: string;
 }> {}
 
-export class ProcessorFailed extends Data.TaggedError(
-  "GCP.DocumentAI.ProcessorFailed",
-)<{
+export class ProcessorFailed extends Data.TaggedError("GCP.DocumentAI.ProcessorFailed")<{
   name: string;
   state: string;
 }> {}
@@ -71,16 +63,10 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -122,11 +108,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -135,9 +119,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 const compactMarkerOf = (stack: string, stage: string, id: string) =>
   `[alc ${stack} ${stage} ${id}]`;
@@ -151,10 +134,7 @@ const shrinkMarker = (
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = build(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -174,10 +154,7 @@ export const encodeOwnershipLine = (
 ): string => {
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   const suffix = trimmed && trimmed.length > 0 ? ` ${trimmed}` : "";
-  const markerMax = Math.min(
-    maxLength,
-    Math.max(12, maxLength - suffix.length),
-  );
+  const markerMax = Math.min(maxLength, Math.max(12, maxLength - suffix.length));
   const marker = shrinkMarker(labels, markerMax, compactMarkerOf);
   return `${marker}${suffix}`.slice(0, maxLength);
 };
@@ -216,14 +193,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -233,18 +206,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -331,9 +295,7 @@ export const collectPages = <Page, Item, E, R>(
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
 export const listLocationParents = (project: string) =>
-  Effect.succeed(
-    LIST_LOCATIONS.map((location) => locationParent(project, location)),
-  );
+  Effect.succeed(LIST_LOCATIONS.map((location) => locationParent(project, location)));
 
 export const listProcessorsAt = (parent: string) =>
   parent.length === 0
@@ -345,9 +307,7 @@ export const listProcessorsAt = (parent: string) =>
         }),
         (page) => page.processors,
       ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<documentai.GoogleCloudDocumentaiV1Processor>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<documentai.GoogleCloudDocumentaiV1Processor>()),
       );
 
 export const listSchemasAt = (parent: string) =>
@@ -414,9 +374,7 @@ export const listProjectSchemas = (project: string) =>
     return schemas;
   });
 
-export const findOwnedByDisplayName = <
-  T extends { name?: string; displayName?: string },
->(
+export const findOwnedByDisplayName = <T extends { name?: string; displayName?: string }>(
   id: string,
   items: readonly T[],
 ) =>

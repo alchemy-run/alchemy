@@ -89,9 +89,7 @@ export type SpecialistPool = Resource<
  * @resource
  * @category AIPlatform
  */
-export const SpecialistPool = Resource<SpecialistPool>(
-  "GCP.AIPlatform.SpecialistPool",
-);
+export const SpecialistPool = Resource<SpecialistPool>("GCP.AIPlatform.SpecialistPool");
 
 export class SpecialistPoolNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.SpecialistPoolNotResolved",
@@ -102,15 +100,10 @@ export class SpecialistPoolNotResolved extends Data.TaggedError(
 const sorted = (values: readonly string[] | undefined) =>
   [...(values ?? [])].sort((left, right) => left.localeCompare(right));
 
-const sameEmails = (
-  left: readonly string[] | undefined,
-  right: readonly string[] | undefined,
-) => JSON.stringify(sorted(left)) === JSON.stringify(sorted(right));
+const sameEmails = (left: readonly string[] | undefined, right: readonly string[] | undefined) =>
+  JSON.stringify(sorted(left)) === JSON.stringify(sorted(right));
 
-const toAttrs = (
-  pool: aiplatform.GoogleCloudAiplatformV1SpecialistPool,
-  project: string,
-) => {
+const toAttrs = (pool: aiplatform.GoogleCloudAiplatformV1SpecialistPool, project: string) => {
   const name = pool.name ?? "";
   const parsed = parseOwnership(pool.displayName);
   return {
@@ -136,42 +129,33 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool
-        ? Effect.succeed(pool)
-        : Effect.fail(new SpecialistPoolNotResolved({ name })),
+      pool ? Effect.succeed(pool) : Effect.fail(new SpecialistPoolNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.SpecialistPoolNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.SpecialistPoolNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
 const listAt = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsSpecialistPools
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.specialistPools ?? [])),
-      Stream.filter((pool) => hasOwnershipMarker(pool.displayName)),
-      Stream.map((pool) => toAttrs(pool, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsSpecialistPools.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.specialistPools ?? [])),
+    Stream.filter((pool) => hasOwnershipMarker(pool.displayName)),
+    Stream.map((pool) => toAttrs(pool, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  aiplatform.listProjectsLocationsSpecialistPools
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.specialistPools ?? [])),
-      Stream.filter((pool) => pool.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  aiplatform.listProjectsLocationsSpecialistPools.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.specialistPools ?? [])),
+    Stream.filter((pool) => pool.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const SpecialistPoolProvider = () =>
   Provider.succeed(SpecialistPool, {
@@ -192,9 +176,7 @@ export const SpecialistPoolProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing !== undefined) {
         const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.displayName))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
       }
       const location = olds?.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
@@ -203,9 +185,7 @@ export const SpecialistPoolProvider = () =>
       const found = yield* findByDisplayName(parent, displayName);
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
-      return (yield* ownedByAlchemy(id, found.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, found.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -263,34 +243,26 @@ export const SpecialistPoolProvider = () =>
 
       const name = current.name ?? "";
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const managersChanged = !sameEmails(
-        current.specialistManagerEmails,
-        managers,
-      );
-      const workersChanged = !sameEmails(
-        current.specialistWorkerEmails,
-        workers,
-      );
+      const managersChanged = !sameEmails(current.specialistManagerEmails, managers);
+      const workersChanged = !sameEmails(current.specialistWorkerEmails, workers);
 
       if (displayChanged || managersChanged || workersChanged) {
-        const patched = yield* aiplatform.patchProjectsLocationsSpecialistPools(
-          {
+        const patched = yield* aiplatform.patchProjectsLocationsSpecialistPools({
+          name,
+          updateMask: [
+            displayChanged ? "displayName" : undefined,
+            managersChanged ? "specialistManagerEmails" : undefined,
+            workersChanged ? "specialistWorkerEmails" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name,
-            updateMask: [
-              displayChanged ? "displayName" : undefined,
-              managersChanged ? "specialistManagerEmails" : undefined,
-              workersChanged ? "specialistWorkerEmails" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name,
-              displayName,
-              specialistManagerEmails: managers,
-              specialistWorkerEmails: workers,
-            },
+            displayName,
+            specialistManagerEmails: managers,
+            specialistWorkerEmails: workers,
           },
-        );
+        });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);
       }

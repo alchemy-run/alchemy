@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { RecordingConfiguration } from "@/AWS/IVS";
-import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
 import * as ivs from "@distilled.cloud/aws/ivs";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { RecordingConfiguration } from "@/AWS/IVS";
+import { Bucket } from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -32,9 +32,7 @@ const assertConfigGone = (arn: string) =>
   Effect.gen(function* () {
     const config = yield* ivs.getRecordingConfiguration({ arn }).pipe(
       Effect.map((r) => r.recordingConfiguration),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (config !== undefined) {
       return yield* Effect.fail(new Error(`config '${arn}' still exists`));
@@ -76,12 +74,8 @@ test.provider(
       // Create — the provider waits until the configuration leaves
       // CREATING (ACTIVE proves the bucket wiring worked).
       const created = yield* stack.deploy(app);
-      expect(created.recordingConfigurationArn).toContain(
-        ":recording-configuration/",
-      );
-      expect(created.recordingConfigurationName).toBe(
-        "alchemy-test-ivs-recording",
-      );
+      expect(created.recordingConfigurationArn).toContain(":recording-configuration/");
+      expect(created.recordingConfigurationName).toBe("alchemy-test-ivs-recording");
       expect(created.state).toBe("ACTIVE");
       expect(created.bucketName).toBeDefined();
 
@@ -90,22 +84,15 @@ test.provider(
       const observed = yield* ivs.getRecordingConfiguration({
         arn: created.recordingConfigurationArn,
       });
-      expect(
-        observed.recordingConfiguration?.recordingReconnectWindowSeconds,
-      ).toBe(120);
-      expect(
-        observed.recordingConfiguration?.thumbnailConfiguration
-          ?.targetIntervalSeconds,
-      ).toBe(30);
-      expect(observed.recordingConfiguration?.tags?.["alchemy::id"]).toBe(
-        "Recording",
+      expect(observed.recordingConfiguration?.recordingReconnectWindowSeconds).toBe(120);
+      expect(observed.recordingConfiguration?.thumbnailConfiguration?.targetIntervalSeconds).toBe(
+        30,
       );
+      expect(observed.recordingConfiguration?.tags?.["alchemy::id"]).toBe("Recording");
 
       // No-op redeploy keeps the same configuration.
       const noop = yield* stack.deploy(app);
-      expect(noop.recordingConfigurationArn).toBe(
-        created.recordingConfigurationArn,
-      );
+      expect(noop.recordingConfigurationArn).toBe(created.recordingConfigurationArn);
 
       // Destroy and verify out-of-band with a typed wait-until-gone.
       yield* stack.destroy();

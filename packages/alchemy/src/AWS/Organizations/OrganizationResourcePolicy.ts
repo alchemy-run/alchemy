@@ -2,8 +2,8 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import { retryOrganizations } from "./common.ts";
 
 export interface OrganizationResourcePolicyProps {
@@ -78,9 +78,7 @@ const readResourcePolicy = () =>
   retryOrganizations(
     organizations.describeResourcePolicy({}).pipe(
       Effect.map((response) => response.ResourcePolicy),
-      Effect.catchTag("ResourcePolicyNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.succeed(undefined)),
       Effect.map((policy) => {
         const summary = policy?.ResourcePolicySummary;
         return summary?.Id && summary.Arn
@@ -125,9 +123,7 @@ export const OrganizationResourcePolicyProvider = () =>
           // desired so the call only fires when there's drift. Reading by
           // ID isn't possible (resource is a singleton with a server-issued
           // ID), so we compare the JSON-stringified document.
-          const observedContent = state
-            ? JSON.stringify(state.document)
-            : undefined;
+          const observedContent = state ? JSON.stringify(state.document) : undefined;
 
           if (observedContent !== desiredContent) {
             yield* retryOrganizations(
@@ -140,9 +136,7 @@ export const OrganizationResourcePolicyProvider = () =>
 
           if (!state) {
             return yield* Effect.fail(
-              new Error(
-                "organization resource policy not found after reconcile",
-              ),
+              new Error("organization resource policy not found after reconcile"),
             );
           }
 
@@ -153,12 +147,7 @@ export const OrganizationResourcePolicyProvider = () =>
           yield* retryOrganizations(
             organizations
               .deleteResourcePolicy({})
-              .pipe(
-                Effect.catchTag(
-                  "ResourcePolicyNotFoundException",
-                  () => Effect.void,
-                ),
-              ),
+              .pipe(Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.void)),
           );
         }),
       };

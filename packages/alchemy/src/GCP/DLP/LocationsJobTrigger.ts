@@ -150,9 +150,7 @@ export type LocationsJobTrigger = Resource<
  * @resource
  * @category DLP
  */
-export const LocationsJobTrigger = Resource<LocationsJobTrigger>(
-  "GCP.DLP.LocationsJobTrigger",
-);
+export const LocationsJobTrigger = Resource<LocationsJobTrigger>("GCP.DLP.LocationsJobTrigger");
 
 export class LocationsJobTriggerNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsJobTriggerNotResolved",
@@ -163,11 +161,7 @@ export class LocationsJobTriggerNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, triggerId: string) =>
   `${locationParent(project, location)}/jobTriggers/${triggerId}`;
 
-const toAttrs = (
-  trigger: dlp.GooglePrivacyDlpV2JobTrigger,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (trigger: dlp.GooglePrivacyDlpV2JobTrigger, project: string, region: string) => {
   const name = trigger.name ?? "";
   const parsed = parseOwnership(trigger.description);
   return {
@@ -202,9 +196,7 @@ export const LocationsJobTriggerProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.triggerId ?? output?.triggerId;
       const idChanged =
-        previousId !== undefined &&
-        news.triggerId !== undefined &&
-        news.triggerId !== previousId;
+        previousId !== undefined && news.triggerId !== undefined && news.triggerId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -215,23 +207,13 @@ export const LocationsJobTriggerProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const triggerId = yield* toResourceId(
-        id,
-        olds?.triggerId,
-        output?.triggerId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, triggerId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const triggerId = yield* toResourceId(id, olds?.triggerId, output?.triggerId);
+      const name = output?.name ?? resourceName(env.project, location, triggerId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -255,15 +237,8 @@ export const LocationsJobTriggerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const triggerId = yield* toResourceId(
-        id,
-        news.triggerId,
-        output?.triggerId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const triggerId = yield* toResourceId(id, news.triggerId, output?.triggerId);
       const name = resourceName(env.project, location, triggerId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

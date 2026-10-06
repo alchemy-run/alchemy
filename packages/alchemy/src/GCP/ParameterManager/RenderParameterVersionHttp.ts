@@ -1,10 +1,10 @@
 import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { ParametersVersion } from "./ParametersVersion.ts";
-import { RenderParameterVersion } from "./RenderParameterVersion.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
+import type { ParametersVersion } from "./ParametersVersion.ts";
+import { RenderParameterVersion } from "./RenderParameterVersion.ts";
 
 /**
  * HTTP implementation of {@link RenderParameterVersion}.
@@ -15,8 +15,7 @@ import { grantFor } from "../HttpBinding.ts";
 export const RenderParameterVersionHttp = Layer.effect(
   RenderParameterVersion,
   Effect.gen(function* () {
-    const render =
-      yield* parametermanager.renderProjectsLocationsParametersVersions;
+    const render = yield* parametermanager.renderProjectsLocationsParametersVersions;
     return Effect.fn(function* (version: ParametersVersion) {
       yield* bindGcpHost({
         tag: "GCP.ParameterManager.RenderParameterVersion",
@@ -34,11 +33,11 @@ export const RenderParameterVersionHttp = Layer.effect(
         ],
       });
       const name = yield* version.name;
-      return Effect.fn(
-        `GCP.ParameterManager.RenderParameterVersion(${version.LogicalId})`,
-      )(function* () {
-        return yield* render({ name: yield* name });
-      });
+      return Effect.fn(`GCP.ParameterManager.RenderParameterVersion(${version.LogicalId})`)(
+        function* () {
+          return yield* render({ name: yield* name });
+        },
+      );
     });
   }),
 );

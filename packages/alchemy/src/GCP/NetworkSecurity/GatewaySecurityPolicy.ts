@@ -114,11 +114,7 @@ export const GatewaySecurityPolicy = Resource<GatewaySecurityPolicy>(
   "GCP.NetworkSecurity.GatewaySecurityPolicy",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  gatewaySecurityPolicyId: string,
-) =>
+const resourceName = (project: string, location: string, gatewaySecurityPolicyId: string) =>
   `projects/${project}/locations/${location}/gatewaySecurityPolicies/${gatewaySecurityPolicyId}`;
 
 const toAttrs = (
@@ -150,34 +146,22 @@ const getByName = (name: string) =>
 
 export const GatewaySecurityPolicyProvider = () =>
   Provider.succeed(GatewaySecurityPolicy, {
-    stables: [
-      "name",
-      "gatewaySecurityPolicyId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "gatewaySecurityPolicyId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.gatewaySecurityPolicyId ?? output?.gatewaySecurityPolicyId;
+      const previousId = olds?.gatewaySecurityPolicyId ?? output?.gatewaySecurityPolicyId;
       const nextId = news.gatewaySecurityPolicyId
         ? rfc1035(news.gatewaySecurityPolicyId, "gateway-security-policy")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -193,13 +177,8 @@ export const GatewaySecurityPolicyProvider = () =>
         output?.gatewaySecurityPolicyId,
         "gateway-security-policy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, gatewaySecurityPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, gatewaySecurityPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -230,10 +209,7 @@ export const GatewaySecurityPolicyProvider = () =>
         output?.gatewaySecurityPolicyId,
         "gateway-security-policy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, gatewaySecurityPolicyId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
@@ -271,32 +247,26 @@ export const GatewaySecurityPolicyProvider = () =>
         return yield* new NetworksecurityNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const tlsChanged =
-        canonicalizeLink(current.tlsInspectionPolicy) !==
-        (tlsInspectionPolicy ?? "");
+        canonicalizeLink(current.tlsInspectionPolicy) !== (tlsInspectionPolicy ?? "");
       const updateMask = changedFields([
         ["description", descriptionChanged],
         ["tlsInspectionPolicy", tlsChanged],
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networksecurity.patchProjectsLocationsGatewaySecurityPolicies({
+        const operation = yield* networksecurity.patchProjectsLocationsGatewaySecurityPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              tlsInspectionPolicy,
-            },
-          });
+            description: desiredDescription,
+            tlsInspectionPolicy,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

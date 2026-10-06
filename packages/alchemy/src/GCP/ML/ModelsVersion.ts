@@ -37,9 +37,7 @@ export type RequestLoggingConfig = ml.GoogleCloudMlV1__RequestLoggingConfig;
 export type AcceleratorConfig = ml.GoogleCloudMlV1__AcceleratorConfig;
 export type ExplanationConfig = ml.GoogleCloudMlV1__ExplanationConfig;
 export type RouteMap = ml.GoogleCloudMlV1__RouteMap;
-export type VersionFramework =
-  | ml.GoogleCloudMlV1__VersionFrameworkEnum
-  | (string & {});
+export type VersionFramework = ml.GoogleCloudMlV1__VersionFrameworkEnum | (string & {});
 
 export type ModelsVersionProps = {
   /**
@@ -257,23 +255,18 @@ const toAttrs = (version: ml.GoogleCloudMlV1__Version, project: string) => {
   };
 };
 
-const sameMinNodes = (
-  left: AutoScaling | undefined,
-  right: AutoScaling | undefined,
-) => (left?.minNodes ?? undefined) === (right?.minNodes ?? undefined);
+const sameMinNodes = (left: AutoScaling | undefined, right: AutoScaling | undefined) =>
+  (left?.minNodes ?? undefined) === (right?.minNodes ?? undefined);
 
-const sameManualNodes = (
-  left: ManualScaling | undefined,
-  right: ManualScaling | undefined,
-) => (left?.nodes ?? undefined) === (right?.nodes ?? undefined);
+const sameManualNodes = (left: ManualScaling | undefined, right: ManualScaling | undefined) =>
+  (left?.nodes ?? undefined) === (right?.nodes ?? undefined);
 
 const sameLogging = (
   left: RequestLoggingConfig | undefined,
   right: RequestLoggingConfig | undefined,
 ) =>
   (left?.bigqueryTableName ?? "") === (right?.bigqueryTableName ?? "") &&
-  (left?.samplingPercentage ?? undefined) ===
-    (right?.samplingPercentage ?? undefined);
+  (left?.samplingPercentage ?? undefined) === (right?.samplingPercentage ?? undefined);
 
 export const ModelsVersionProvider = () =>
   Provider.succeed(ModelsVersion, {
@@ -282,10 +275,7 @@ export const ModelsVersionProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousParent = expandModel(
-        env.project,
-        olds?.model ?? output?.model ?? "",
-      );
+      const previousParent = expandModel(env.project, olds?.model ?? output?.model ?? "");
       const nextParent = expandModel(env.project, news.model);
       return replaceOnIdentity({
         previousId: olds?.versionId ?? output?.versionId,
@@ -295,16 +285,13 @@ export const ModelsVersionProvider = () =>
         extra:
           (news.deploymentUri !== undefined &&
             (olds?.deploymentUri ?? output?.deploymentUri) !== undefined &&
-            news.deploymentUri !==
-              (olds?.deploymentUri ?? output?.deploymentUri)) ||
+            news.deploymentUri !== (olds?.deploymentUri ?? output?.deploymentUri)) ||
           (news.runtimeVersion !== undefined &&
             (olds?.runtimeVersion ?? output?.runtimeVersion) !== undefined &&
-            news.runtimeVersion !==
-              (olds?.runtimeVersion ?? output?.runtimeVersion)) ||
+            news.runtimeVersion !== (olds?.runtimeVersion ?? output?.runtimeVersion)) ||
           (news.pythonVersion !== undefined &&
             (olds?.pythonVersion ?? output?.pythonVersion) !== undefined &&
-            news.pythonVersion !==
-              (olds?.pythonVersion ?? output?.pythonVersion)) ||
+            news.pythonVersion !== (olds?.pythonVersion ?? output?.pythonVersion)) ||
           (news.framework !== undefined &&
             (olds?.framework ?? output?.framework) !== undefined &&
             news.framework !== (olds?.framework ?? output?.framework)) ||
@@ -316,25 +303,13 @@ export const ModelsVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const versionId = yield* toPhysicalId(
-        id,
-        olds?.versionId,
-        output?.versionId,
-        "version",
-      );
-      const model = expandModel(
-        env.project,
-        olds?.model ?? output?.model ?? "",
-      );
-      const name =
-        output?.name ??
-        (model.length > 0 ? versionResourceName(model, versionId) : "");
+      const versionId = yield* toPhysicalId(id, olds?.versionId, output?.versionId, "version");
+      const model = expandModel(env.project, olds?.model ?? output?.model ?? "");
+      const name = output?.name ?? (model.length > 0 ? versionResourceName(model, versionId) : "");
       const existing = yield* getVersion(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* versionOwnedByAlchemy(id, existing))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* versionOwnedByAlchemy(id, existing)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -346,12 +321,7 @@ export const ModelsVersionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const versionId = yield* toPhysicalId(
-        id,
-        news.versionId,
-        output?.versionId,
-        "version",
-      );
+      const versionId = yield* toPhysicalId(id, news.versionId, output?.versionId, "version");
       const model = expandModel(env.project, news.model);
       const name = versionResourceName(model, versionId);
       const ownership = yield* createInternalLabels(id);
@@ -401,25 +371,15 @@ export const ModelsVersionProvider = () =>
 
       const currentName = current.name ?? name;
       const descriptionChanged = !sameText(current.description, description);
-      const minNodesChanged = !sameMinNodes(
-        current.autoScaling,
-        news.autoScaling,
-      );
-      const manualNodesChanged = !sameManualNodes(
-        current.manualScaling,
-        news.manualScaling,
-      );
+      const minNodesChanged = !sameMinNodes(current.autoScaling, news.autoScaling);
+      const manualNodesChanged = !sameManualNodes(current.manualScaling, news.manualScaling);
       const loggingChanged =
         news.requestLoggingConfig !== undefined &&
         !sameLogging(current.requestLoggingConfig, news.requestLoggingConfig);
       const mask = fieldMask([
         descriptionChanged && "description",
-        minNodesChanged &&
-          news.autoScaling !== undefined &&
-          "autoScaling.minNodes",
-        manualNodesChanged &&
-          news.manualScaling !== undefined &&
-          "manualScaling.nodes",
+        minNodesChanged && news.autoScaling !== undefined && "autoScaling.minNodes",
+        manualNodesChanged && news.manualScaling !== undefined && "manualScaling.nodes",
         loggingChanged && "requestLoggingConfig",
       ]);
 

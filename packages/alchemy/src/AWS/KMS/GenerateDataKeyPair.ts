@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface GenerateDataKeyPairRequest extends Omit<
-  kms.GenerateDataKeyPairRequest,
-  "KeyId"
-> {}
+export interface GenerateDataKeyPairRequest extends Omit<kms.GenerateDataKeyPairRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:GenerateDataKeyPair`.
@@ -43,10 +40,7 @@ export interface GenerateDataKeyPair extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GenerateDataKeyPairRequest,
-    ) => Effect.Effect<
-      kms.GenerateDataKeyPairResponse,
-      kms.GenerateDataKeyPairError
-    >
+    ) => Effect.Effect<kms.GenerateDataKeyPairResponse, kms.GenerateDataKeyPairError>
   >
 > {}
 

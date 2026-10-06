@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gamesConfiguration from "@distilled.cloud/gcp/gamesConfiguration_v1configuration";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  applicationId,
-  logLevel,
-  missingTag,
-  probeApplicationId,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { applicationId, logLevel, missingTag, probeApplicationId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -86,14 +81,11 @@ test.provider.skipIf(!applicationId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.GamesConfiguration.LeaderboardConfiguration(
-            "HighScore",
-            {
-              applicationId: applicationId!,
-              name: "High Score",
-              scoreOrder: "LARGER_IS_BETTER",
-            },
-          );
+          return yield* GCP.GamesConfiguration.LeaderboardConfiguration("HighScore", {
+            applicationId: applicationId!,
+            name: "High Score",
+            scoreOrder: "LARGER_IS_BETTER",
+          });
         }),
       );
 
@@ -105,21 +97,16 @@ test.provider.skipIf(!applicationId)(
         leaderboardId: created.leaderboardId,
       });
       expect(fetched.id).toEqual(created.leaderboardId);
-      expect(fetched.draft?.name?.translations?.[0]?.value).toEqual(
-        "High Score",
-      );
+      expect(fetched.draft?.name?.translations?.[0]?.value).toEqual("High Score");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.GamesConfiguration.LeaderboardConfiguration(
-            "HighScore",
-            {
-              applicationId: created.applicationId,
-              leaderboardId: created.leaderboardId,
-              name: "All-time High Score",
-              scoreOrder: "LARGER_IS_BETTER",
-            },
-          );
+          return yield* GCP.GamesConfiguration.LeaderboardConfiguration("HighScore", {
+            applicationId: created.applicationId,
+            leaderboardId: created.leaderboardId,
+            name: "All-time High Score",
+            scoreOrder: "LARGER_IS_BETTER",
+          });
         }),
       );
 

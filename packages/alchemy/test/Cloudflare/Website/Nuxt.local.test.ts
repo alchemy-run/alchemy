@@ -1,60 +1,38 @@
+import * as kv from "@distilled.cloud/cloudflare/kv";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { isLocalId } from "@/Cloudflare/LocalRuntime";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import * as kv from "@distilled.cloud/cloudflare/kv";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
-const memoInclude = [
-  "app/**",
-  "server/**",
-  "public/**",
-  "nuxt.config.ts",
-  "package.json",
-];
+const memoInclude = ["app/**", "server/**", "public/**", "nuxt.config.ts", "package.json"];
 
 // Tests are independent (per-test scratch stacks, private fixture clones),
 // so run them concurrently; suites are sequential by default.
 describe.concurrent(
   "Nuxt dev",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:kv",
-      "provider:cloudflare:website",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website"] },
   () => {
     test.provider(
       "Nuxt dev: local dev server renders SSR with event.context.cloudflare bindings",
@@ -80,10 +58,7 @@ describe.concurrent(
                 rootDir,
                 dev: { port: 0 },
                 memo: { include: memoInclude },
-                env: {
-                  TEST_BINDING: bindingMarker,
-                  SITE_KV: siteKv,
-                },
+                env: { TEST_BINDING: bindingMarker, SITE_KV: siteKv },
               });
               return { site, siteKv };
             }),
@@ -106,15 +81,10 @@ describe.concurrent(
           // The SSR page reads `event.context.cloudflare.env.TEST_BINDING` —
           // the dev platform bridge reconstructs the runtime contract over
           // the cloudflare-runtime platform proxy.
-          yield* expectUrlContains(
-            `${site.url!}/`,
-            `binding:${bindingMarker}`,
-            {
-              timeout: "60 seconds",
-              label:
-                "nuxt dev SSR page with event.context.cloudflare.env binding",
-            },
-          );
+          yield* expectUrlContains(`${site.url!}/`, `binding:${bindingMarker}`, {
+            timeout: "60 seconds",
+            label: "nuxt dev SSR page with event.context.cloudflare.env binding",
+          });
 
           // API route through the same contract.
           yield* expectUrlContains(`${site.url!}/api/hello`, "api-route-ok", {
@@ -195,17 +165,14 @@ describe.concurrent(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const siteKv = yield* Cloudflare.KV.Namespace(
-                "NuxtDevRemoteKV",
-              ).pipe(Alchemy.remote());
+              const siteKv = yield* Cloudflare.KV.Namespace("NuxtDevRemoteKV").pipe(
+                Alchemy.remote(),
+              );
               const site = yield* Cloudflare.Website.Nuxt("NuxtRemoteKvLocal", {
                 rootDir,
                 dev: { port: 0 },
                 memo: { include: memoInclude },
-                env: {
-                  TEST_BINDING: "nuxt-dev-remote-marker",
-                  SITE_KV: siteKv,
-                },
+                env: { TEST_BINDING: "nuxt-dev-remote-marker", SITE_KV: siteKv },
               });
               return { site, siteKv };
             }),
@@ -248,9 +215,7 @@ describe.concurrent(
               }),
               Effect.flatMap((res) =>
                 Effect.tryPromise(() =>
-                  new Response(
-                    Stream.toReadableStream(res.body) as BodyInit,
-                  ).text(),
+                  new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
                 ),
               ),
             );
@@ -262,10 +227,7 @@ describe.concurrent(
           // state row is stamped live, so the live provider handles the
           // delete even in a dev run).
           const gone = yield* kv
-            .getNamespace({
-              accountId,
-              namespaceId: deployed.siteKv.namespaceId,
-            })
+            .getNamespace({ accountId, namespaceId: deployed.siteKv.namespaceId })
             .pipe(
               Effect.as(false),
               Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
@@ -293,10 +255,7 @@ const fetchJsonReady = <T>(url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 10,
       }),
     );
@@ -316,10 +275,7 @@ const putJsonReady = <T>(url: string) =>
         : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("2 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
       times: 10,
     }),
   );

@@ -41,6 +41,4 @@ export interface GetWorkerPool extends Binding.Service<
   >
 > {}
 
-export const GetWorkerPool = Binding.Service<GetWorkerPool>(
-  "GCP.Run.GetWorkerPool",
-);
+export const GetWorkerPool = Binding.Service<GetWorkerPool>("GCP.Run.GetWorkerPool");

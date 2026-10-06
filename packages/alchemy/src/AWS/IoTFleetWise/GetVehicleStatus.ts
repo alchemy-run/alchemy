@@ -42,10 +42,7 @@ export interface GetVehicleStatus extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetVehicleStatusRequest,
-    ) => Effect.Effect<
-      iotfleetwise.GetVehicleStatusResponse,
-      iotfleetwise.GetVehicleStatusError
-    >
+    ) => Effect.Effect<iotfleetwise.GetVehicleStatusResponse, iotfleetwise.GetVehicleStatusError>
   >
 > {}
 export const GetVehicleStatus = Binding.Service<GetVehicleStatus>(

@@ -35,9 +35,7 @@ export type OrgConfig = dlp.GooglePrivacyDlpV2OrgConfig;
 export type ProcessingLocation = dlp.GooglePrivacyDlpV2ProcessingLocation;
 export type OtherCloudDiscoveryStartingLocation =
   dlp.GooglePrivacyDlpV2OtherCloudDiscoveryStartingLocation;
-export type DiscoveryConfigStatus =
-  | dlp.GooglePrivacyDlpV2DiscoveryConfigStatusEnum
-  | (string & {});
+export type DiscoveryConfigStatus = dlp.GooglePrivacyDlpV2DiscoveryConfigStatusEnum | (string & {});
 
 export type OrganizationsLocationsDiscoveryConfigProps = {
   /**
@@ -172,17 +170,11 @@ export type OrganizationsLocationsDiscoveryConfig = Resource<
  * @category DLP
  */
 export const OrganizationsLocationsDiscoveryConfig =
-  Resource<OrganizationsLocationsDiscoveryConfig>(
-    "GCP.DLP.OrganizationsLocationsDiscoveryConfig",
-  );
+  Resource<OrganizationsLocationsDiscoveryConfig>("GCP.DLP.OrganizationsLocationsDiscoveryConfig");
 
 const DEFAULT_STATUS = "PAUSED" satisfies DiscoveryConfigStatus;
 
-const resourceName = (
-  organization: string,
-  location: string,
-  configId: string,
-) =>
+const resourceName = (organization: string, location: string, configId: string) =>
   `${organizationLocationParent(organization, location)}/discoveryConfigs/${configId}`;
 
 const toAttrs = (
@@ -221,18 +213,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, organization: string, project: string) =>
-  dlp.listOrganizationsLocationsDiscoveryConfigs
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.discoveryConfigs ?? []),
-      ),
-      Stream.filter((config) => hasOwnershipMarker(config.displayName)),
-      Stream.map((config) => toAttrs(config, organization, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dlp.listOrganizationsLocationsDiscoveryConfigs.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.discoveryConfigs ?? [])),
+    Stream.filter((config) => hasOwnershipMarker(config.displayName)),
+    Stream.map((config) => toAttrs(config, organization, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const statusOf = (value: string | undefined) => value ?? DEFAULT_STATUS;
 
@@ -250,18 +238,11 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       return (
         replaceOn(olds?.configId ?? output?.configId, news.configId) ??
-        replaceOn(
-          olds?.organization ?? output?.organization,
-          news.organization,
-        ) ??
+        replaceOn(olds?.organization ?? output?.organization, news.organization) ??
         replaceOn(previousLocation, nextLocation)
       );
     }),
@@ -273,19 +254,12 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
         output?.organization,
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const configId = yield* toPhysicalId(
-        id,
-        olds?.configId,
-        output?.configId,
-      );
-      const name =
-        output?.name ?? resourceName(organization, location, configId);
+      const configId = yield* toPhysicalId(id, olds?.configId, output?.configId);
+      const name = output?.name ?? resourceName(organization, location, configId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -303,10 +277,7 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const location = normalizeLocation(news.location ?? output?.location);
       const configId = yield* toPhysicalId(id, news.configId, output?.configId);
       const parent = organizationLocationParent(organization, location);
@@ -350,18 +321,14 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const statusChanged = !sameText(current.status, status);
-      const orgChanged =
-        fingerprint(current.orgConfig) !== fingerprint(orgConfig);
-      const targetsChanged =
-        fingerprint(current.targets) !== fingerprint(targets);
+      const orgChanged = fingerprint(current.orgConfig) !== fingerprint(orgConfig);
+      const targetsChanged = fingerprint(current.targets) !== fingerprint(targets);
       const templatesChanged =
         fingerprint(current.inspectTemplates) !== fingerprint(inspectTemplates);
       const processingChanged =
-        fingerprint(current.processingLocation) !==
-        fingerprint(processingLocation);
+        fingerprint(current.processingLocation) !== fingerprint(processingLocation);
       const otherChanged =
-        fingerprint(current.otherCloudStartingLocation) !==
-        fingerprint(otherCloudStartingLocation);
+        fingerprint(current.otherCloudStartingLocation) !== fingerprint(otherCloudStartingLocation);
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
         statusChanged ? "status" : undefined,

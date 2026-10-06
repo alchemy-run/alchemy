@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, firewall: string) =>
   compute.getFirewalls({ project, firewall }).pipe(
@@ -47,9 +44,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.priority).toEqual(1000);
       expect(created.description).toEqual("test http");
       expect(created.allowed).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ protocol: "tcp", ports: ["80"] }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ protocol: "tcp", ports: ["80"] })]),
       );
       expect(created.sourceRanges).toEqual(["10.0.0.0/8"]);
       expect(created.targetTags).toEqual(["alchemy-fw"]);

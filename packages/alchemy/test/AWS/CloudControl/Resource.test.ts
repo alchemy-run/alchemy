@@ -1,20 +1,17 @@
-import * as AWS from "@/AWS";
-import { Resource as CloudControlResource } from "@/AWS/CloudControl";
-import * as Test from "@/Test/Alchemy";
 import * as CloudControl from "@distilled.cloud/aws/cloudcontrol";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
+import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Resource as CloudControlResource } from "@/AWS/CloudControl";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class ResourceStillExists extends Data.TaggedError("ResourceStillExists") {}
 
@@ -29,10 +26,7 @@ const readValue = (
   return (JSON.parse(raw) as { Value?: string }).Value;
 };
 
-const assertDeleted = Effect.fn(function* (
-  name: string,
-  typeName = "AWS::SSM::Parameter",
-) {
+const assertDeleted = Effect.fn(function* (name: string, typeName = "AWS::SSM::Parameter") {
   yield* CloudControl.getResource({
     TypeName: typeName,
     Identifier: name,
@@ -75,9 +69,7 @@ test.provider(
         TypeName: "AWS::SSM::Parameter",
         Identifier: paramName,
       });
-      expect(readValue(described.ResourceDescription?.Properties)).toBe(
-        "hello",
-      );
+      expect(readValue(described.ResourceDescription?.Properties)).toBe("hello");
 
       // Update the value — a JSON Patch is computed over just the Value key.
       const { param: updated } = yield* stack.deploy(resourceDef("world"));
@@ -88,9 +80,7 @@ test.provider(
         TypeName: "AWS::SSM::Parameter",
         Identifier: paramName,
       });
-      expect(readValue(reDescribed.ResourceDescription?.Properties)).toBe(
-        "world",
-      );
+      expect(readValue(reDescribed.ResourceDescription?.Properties)).toBe("world");
 
       // Delete + wait gone.
       yield* stack.destroy();
@@ -145,24 +135,18 @@ test.provider(
 
       const { document: created } = yield* stack.deploy(documentDef("hello"));
       expect(created.identifier).toBe(documentName);
-      expect(readContent(created.properties.Content)).toEqual(
-        documentContent("hello"),
-      );
+      expect(readContent(created.properties.Content)).toEqual(documentContent("hello"));
 
       // Unchanged: a perpetual `Content`/`UpdateMethod` patch would send an
       // UpdateDocument with identical content, which SSM rejects.
       const { document: unchanged } = yield* stack.deploy(documentDef("hello"));
       expect(unchanged.identifier).toBe(documentName);
-      expect(readContent(unchanged.properties.Content)).toEqual(
-        documentContent("hello"),
-      );
+      expect(readContent(unchanged.properties.Content)).toEqual(documentContent("hello"));
 
       // A real content change still patches, as a new document version.
       const { document: updated } = yield* stack.deploy(documentDef("world"));
       expect(updated.identifier).toBe(documentName);
-      expect(readContent(updated.properties.Content)).toEqual(
-        documentContent("world"),
-      );
+      expect(readContent(updated.properties.Content)).toEqual(documentContent("world"));
 
       yield* stack.destroy();
       yield* assertDeleted(documentName, "AWS::SSM::Document");

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Accelerator, EndpointGroup, Listener } from "@/AWS/GlobalAccelerator";
-import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
 import * as ga from "@distilled.cloud/aws/global-accelerator";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Accelerator, EndpointGroup, Listener } from "@/AWS/GlobalAccelerator";
+import { Bucket } from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,29 +20,17 @@ const FLOW_LOGS_BUCKET = "alchemy-test-ga-flow-logs-4f81c2";
 
 const assertAcceleratorGone = (acceleratorArn: string) =>
   ga.describeAccelerator({ AcceleratorArn: acceleratorArn }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`accelerator ${acceleratorArn} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`accelerator ${acceleratorArn} still exists`))),
     Effect.catchTag("AcceleratorNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
 describe.sequential(
   "AWS.GlobalAccelerator",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:globalaccelerator",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:globalaccelerator", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "creates accelerator + listener + endpoint group, updates in place, destroys in order",
@@ -122,20 +110,14 @@ describe.sequential(
           expect(created.endpointGroupArn).toContain("/endpoint-group/");
 
           // Out-of-band verification via distilled.
-          const acc = yield* ga.describeAccelerator({
-            AcceleratorArn: created.acceleratorArn,
-          });
+          const acc = yield* ga.describeAccelerator({ AcceleratorArn: created.acceleratorArn });
           expect(acc.Accelerator?.Name).toEqual(created.acceleratorName);
           expect(acc.Accelerator?.Enabled).toBe(true);
           expect(acc.Accelerator?.DnsName).toEqual(created.dnsName);
 
-          const lst = yield* ga.describeListener({
-            ListenerArn: created.listenerArn,
-          });
+          const lst = yield* ga.describeListener({ ListenerArn: created.listenerArn });
           expect(lst.Listener?.Protocol).toEqual("TCP");
-          expect(lst.Listener?.PortRanges).toEqual([
-            { FromPort: 80, ToPort: 80 },
-          ]);
+          expect(lst.Listener?.PortRanges).toEqual([{ FromPort: 80, ToPort: 80 }]);
           expect(lst.Listener?.ClientAffinity).toEqual("NONE");
 
           const grp = yield* ga.describeEndpointGroup({
@@ -145,12 +127,8 @@ describe.sequential(
           expect(grp.EndpointGroup?.TrafficDialPercentage).toEqual(100);
           expect(grp.EndpointGroup?.HealthCheckPort).toEqual(80);
 
-          const tags = yield* ga.listTagsForResource({
-            ResourceArn: created.acceleratorArn,
-          });
-          const tagMap = Object.fromEntries(
-            (tags.Tags ?? []).map((t) => [t.Key, t.Value]),
-          );
+          const tags = yield* ga.listTagsForResource({ ResourceArn: created.acceleratorArn });
+          const tagMap = Object.fromEntries((tags.Tags ?? []).map((t) => [t.Key, t.Value]));
           expect(tagMap.purpose).toEqual("alchemy-test");
           expect(tagMap["alchemy::id"]).toEqual("TestAccelerator");
 
@@ -177,28 +155,18 @@ describe.sequential(
             AcceleratorArn: created.acceleratorArn,
           });
           expect(attrs.AcceleratorAttributes?.FlowLogsEnabled).toBe(true);
-          expect(attrs.AcceleratorAttributes?.FlowLogsS3Bucket).toEqual(
-            FLOW_LOGS_BUCKET,
-          );
-          expect(attrs.AcceleratorAttributes?.FlowLogsS3Prefix).toEqual(
-            "ga-flow-logs",
-          );
+          expect(attrs.AcceleratorAttributes?.FlowLogsS3Bucket).toEqual(FLOW_LOGS_BUCKET);
+          expect(attrs.AcceleratorAttributes?.FlowLogsS3Prefix).toEqual("ga-flow-logs");
 
-          const lst2 = yield* ga.describeListener({
-            ListenerArn: created.listenerArn,
-          });
+          const lst2 = yield* ga.describeListener({ ListenerArn: created.listenerArn });
           const ports = (lst2.Listener?.PortRanges ?? [])
             .map((r) => r.FromPort)
             .sort((a, b) => (a ?? 0) - (b ?? 0));
           expect(ports).toEqual([80, 443]);
           expect(lst2.Listener?.ClientAffinity).toEqual("SOURCE_IP");
 
-          const tags2 = yield* ga.listTagsForResource({
-            ResourceArn: created.acceleratorArn,
-          });
-          const tagMap2 = Object.fromEntries(
-            (tags2.Tags ?? []).map((t) => [t.Key, t.Value]),
-          );
+          const tags2 = yield* ga.listTagsForResource({ ResourceArn: created.acceleratorArn });
+          const tagMap2 = Object.fromEntries((tags2.Tags ?? []).map((t) => [t.Key, t.Value]));
           expect(tagMap2.team).toEqual("platform");
 
           // --- update 2: endpoint group traffic dial + disable flow logs ---

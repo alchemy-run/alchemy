@@ -1,17 +1,13 @@
 import * as Effect from "effect/Effect";
-import type { Repository } from "./Repository.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Repository } from "./Repository.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Build v2 repository bindings.
  * NOT exported from index.ts.
  */
-export const makeRepositoryHttpBinding = <
-  I extends { repository: string },
-  A,
-  E,
->(options: {
+export const makeRepositoryHttpBinding = <I extends { repository: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E> | ((input: I) => Effect.Effect<A, E>);

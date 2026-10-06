@@ -66,10 +66,7 @@ export interface WorkflowProps {
    * A parameter template describing the workflow's input parameters.
    * Immutable.
    */
-  parameterTemplate?: Record<
-    string,
-    { description?: string; optional?: boolean }
-  >;
+  parameterTemplate?: Record<string, { description?: string; optional?: boolean }>;
   /**
    * The default static storage capacity (in gibibytes) for runs that use this
    * workflow. Mutable.
@@ -152,10 +149,7 @@ export const WorkflowProvider = () =>
   Provider.effect(
     Workflow,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
@@ -165,10 +159,7 @@ export const WorkflowProvider = () =>
       const waitUntilReady = Effect.fn(function* (workflowId: string) {
         const final = yield* omics.getWorkflow({ id: workflowId }).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(11),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(11)]),
             until: (w) => w.status === "ACTIVE" || w.status === "FAILED",
           }),
         );
@@ -199,11 +190,7 @@ export const WorkflowProvider = () =>
           if (output?.workflowId === undefined) return undefined;
           const found = yield* omics
             .getWorkflow({ id: output.workflowId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found === undefined || found.id === undefined) return undefined;
           const attrs = {
             workflowId: found.id,
@@ -237,9 +224,7 @@ export const WorkflowProvider = () =>
               : yield* omics
                   .getWorkflow({ id: output.workflowId })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
 
           if (workflow === undefined || workflow.id === undefined) {
@@ -269,16 +254,10 @@ export const WorkflowProvider = () =>
             if (news.name !== undefined && news.name !== workflow.name) {
               patch.name = news.name;
             }
-            if (
-              news.description !== undefined &&
-              news.description !== workflow.description
-            ) {
+            if (news.description !== undefined && news.description !== workflow.description) {
               patch.description = news.description;
             }
-            if (
-              news.storageType !== undefined &&
-              news.storageType !== workflow.storageType
-            ) {
+            if (news.storageType !== undefined && news.storageType !== workflow.storageType) {
               patch.storageType = news.storageType;
             }
             if (
@@ -306,9 +285,7 @@ export const WorkflowProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* omics
             .deleteWorkflow({ id: output.workflowId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

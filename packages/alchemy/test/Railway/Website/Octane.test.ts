@@ -1,8 +1,5 @@
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import * as Railway from "@/Railway";
-import { suitePartition } from "../suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,20 +7,17 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/octane-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/octane-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",
@@ -35,15 +29,11 @@ const fixtureEntries = [
   "public",
 ];
 
-const readService = Query.fn((id: string) => ({
-  deletedAt: RailwayApi.service({ id }).deletedAt,
-}));
+const readService = Query.fn((id: string) => ({ deletedAt: RailwayApi.service({ id }).deletedAt }));
 
 const waitUntilGone = (serviceId: string) =>
   readService(serviceId).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -104,14 +94,10 @@ test.provider(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "OCTANE_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "OCTANE_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
 
       const serviceId = deployed.site.service!.serviceId;
       yield* stack.destroy();

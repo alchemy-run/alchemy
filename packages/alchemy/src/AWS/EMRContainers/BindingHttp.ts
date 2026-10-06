@@ -61,20 +61,18 @@ export const makeEMRContainersVirtualClusterHttpBinding = <
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, ${options.tag}(${virtualCluster}))`({
-            policyStatements: [
-              virtualClusterPolicyStatement(virtualCluster, options.actions),
-            ],
+            policyStatements: [virtualClusterPolicyStatement(virtualCluster, options.actions)],
           });
         }
       }
-      return Effect.fn(`${options.tag}(${virtualCluster.LogicalId})`)(
-        function* (request?: Omit<I, "virtualClusterId">) {
-          return yield* op({
-            ...request,
-            virtualClusterId: yield* VirtualClusterId,
-          } as I);
-        },
-      );
+      return Effect.fn(`${options.tag}(${virtualCluster.LogicalId})`)(function* (
+        request?: Omit<I, "virtualClusterId">,
+      ) {
+        return yield* op({
+          ...request,
+          virtualClusterId: yield* VirtualClusterId,
+        } as I);
+      });
     });
   });
 

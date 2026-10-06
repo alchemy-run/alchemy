@@ -1,12 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  existsSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Manifest } from "../src/Manifest.ts";
@@ -48,22 +41,12 @@ test("CLI selects PR packages, honors overrides, and clears empty output", async
     await run(["git", "add", "."]);
     await run(["git", "commit", "-qm", "base"]);
     const base = await run(["git", "rev-parse", "HEAD"]);
-    writeFileSync(
-      join(cwd, "packages/cloudflare/index.js"),
-      "export const value = 2;",
-    );
+    writeFileSync(join(cwd, "packages/cloudflare/index.js"), "export const value = 2;");
     await run(["git", "add", "."]);
     await run(["git", "commit", "-qm", "change"]);
     const head = await run(["git", "rev-parse", "HEAD"]);
     const pack = async (...flags: string[]) => {
-      await run([
-        process.execPath,
-        cli,
-        "pack",
-        "--group",
-        "SDK=./packages/*",
-        ...flags,
-      ]);
+      await run([process.execPath, cli, "pack", "--group", "SDK=./packages/*", ...flags]);
       const manifest: Manifest = JSON.parse(
         readFileSync(join(cwd, ".pkg/pkg-manifest.json"), "utf8"),
       );
@@ -85,9 +68,7 @@ test("CLI selects PR packages, honors overrides, and clears empty output", async
     };
     writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(event));
     expect(await pack()).toEqual(["cloudflare", "core"]);
-    expect(readFileSync(env.GITHUB_OUTPUT, "utf8")).toContain(
-      "package-count=2",
-    );
+    expect(readFileSync(env.GITHUB_OUTPUT, "utf8")).toContain("package-count=2");
     expect(await pack("--all")).toEqual(["aws", "cloudflare", "core"]);
     event.pull_request.labels.push({ name: "force-ci" });
     writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(event));

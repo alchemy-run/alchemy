@@ -13,9 +13,7 @@ export const MAX_PRODUCT_ID_LENGTH = 128;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const MAX_MODEL_DISPLAY_NAME_LENGTH = 1024;
 
-export class RetailNotResolved extends Data.TaggedError(
-  "GCP.Retail.ResourceNotResolved",
-)<{
+export class RetailNotResolved extends Data.TaggedError("GCP.Retail.ResourceNotResolved")<{
   name: string;
 }> {}
 
@@ -47,24 +45,16 @@ export const normalizeBranch = (branch: string | undefined) =>
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const catalogName = (
-  project: string,
-  location: string,
-  catalogId: string,
-) => `${locationParent(project, location)}/catalogs/${catalogId}`;
+export const catalogName = (project: string, location: string, catalogId: string) =>
+  `${locationParent(project, location)}/catalogs/${catalogId}`;
 
-export const expandCatalog = (
-  value: string | undefined,
-  project: string,
-  location: string,
-) => {
+export const expandCatalog = (value: string | undefined, project: string, location: string) => {
   const raw = (value ?? DEFAULT_CATALOG).replace(/\/+$/, "");
   if (raw.includes("/")) return raw;
   return catalogName(project, location, raw);
 };
 
-export const branchName = (catalog: string, branchId: string) =>
-  `${catalog}/branches/${branchId}`;
+export const branchName = (catalog: string, branchId: string) => `${catalog}/branches/${branchId}`;
 
 export const parseResourceName = (name: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -74,28 +64,13 @@ export const parseResourceName = (name: string, collection: string) => {
   const catalogsAt = parts.lastIndexOf("catalogs");
   const branchesAt = parts.lastIndexOf("branches");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    catalogId:
-      catalogsAt >= 0 && parts[catalogsAt + 1]
-        ? parts[catalogsAt + 1]!
-        : DEFAULT_CATALOG,
-    catalog:
-      catalogsAt >= 0
-        ? parts.slice(0, catalogsAt + 2).join("/")
-        : parentOf(name),
-    branchId:
-      branchesAt >= 0 && parts[branchesAt + 1]
-        ? parts[branchesAt + 1]!
-        : DEFAULT_BRANCH,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    catalogId: catalogsAt >= 0 && parts[catalogsAt + 1] ? parts[catalogsAt + 1]! : DEFAULT_CATALOG,
+    catalog: catalogsAt >= 0 ? parts.slice(0, catalogsAt + 2).join("/") : parentOf(name),
+    branchId: branchesAt >= 0 && parts[branchesAt + 1] ? parts[branchesAt + 1]! : DEFAULT_BRANCH,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -103,11 +78,7 @@ export const parseResourceName = (name: string, collection: string) => {
   };
 };
 
-export const slugNoDigits = (
-  name: string,
-  maxLength: number,
-  minLength = 4,
-): string => {
+export const slugNoDigits = (name: string, maxLength: number, minLength = 4): string => {
   let next = name
     .toLowerCase()
     .replace(/[0-9]/g, (digit) => "abcdefghij"[Number(digit)]!)
@@ -120,10 +91,7 @@ export const slugNoDigits = (
   return next.length > 0 ? next : "resource";
 };
 
-export const productIdOf = (
-  name: string,
-  maxLength = MAX_PRODUCT_ID_LENGTH,
-) => {
+export const productIdOf = (name: string, maxLength = MAX_PRODUCT_ID_LENGTH) => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, "-")
@@ -174,18 +142,14 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  fingerprint([...(left ?? [])].sort()) ===
-  fingerprint([...(right ?? [])].sort());
+) => fingerprint([...(left ?? [])].sort()) === fingerprint([...(right ?? [])].sort());
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -211,9 +175,7 @@ export const replaceOnIdentity = (input: {
   return {
     action: "replace" as const,
     deleteFirst:
-      !parentChanged &&
-      input.previousId !== undefined &&
-      input.nextId === input.previousId,
+      !parentChanged && input.previousId !== undefined && input.nextId === input.previousId,
   };
 };
 
@@ -241,18 +203,12 @@ export const listCatalogs = (project: string, location: string) =>
       pageSize: 100,
     }),
     (page) => page.catalogs,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      emptyList<retail.GoogleCloudRetailV2Catalog>(),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => emptyList<retail.GoogleCloudRetailV2Catalog>()));
 
 export const listProjectCatalogs = (project: string, region: string) =>
-  Effect.forEach(
-    listLocations(region),
-    (location) => listCatalogs(project, location),
-    { concurrency: 2 },
-  ).pipe(
+  Effect.forEach(listLocations(region), (location) => listCatalogs(project, location), {
+    concurrency: 2,
+  }).pipe(
     Effect.map((groups) => {
       const seen = new Set<string>();
       const catalogs: retail.GoogleCloudRetailV2Catalog[] = [];
@@ -275,11 +231,7 @@ export const listControls = (parent: string) =>
           pageSize: 100,
         }),
         (page) => page.controls,
-      ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<retail.GoogleCloudRetailV2Control>(),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<retail.GoogleCloudRetailV2Control>()));
 
 export const listServingConfigs = (parent: string) =>
   parent.length === 0
@@ -291,9 +243,7 @@ export const listServingConfigs = (parent: string) =>
         }),
         (page) => page.servingConfigs,
       ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<retail.GoogleCloudRetailV2ServingConfig>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<retail.GoogleCloudRetailV2ServingConfig>()),
       );
 
 export const listModels = (parent: string) =>
@@ -305,11 +255,7 @@ export const listModels = (parent: string) =>
           pageSize: 100,
         }),
         (page) => page.models,
-      ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<retail.GoogleCloudRetailV2Model>(),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<retail.GoogleCloudRetailV2Model>()));
 
 export const listProducts = (parent: string) =>
   parent.length === 0
@@ -321,8 +267,4 @@ export const listProducts = (parent: string) =>
           readMask: "*",
         }),
         (page) => page.products,
-      ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<retail.GoogleCloudRetailV2Product>(),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<retail.GoogleCloudRetailV2Product>()));

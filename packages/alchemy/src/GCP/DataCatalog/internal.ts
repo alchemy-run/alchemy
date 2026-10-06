@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_TEMPLATE_ID_LENGTH = 64;
 export const MAX_DISPLAY_NAME_LENGTH = 200;
@@ -13,10 +13,8 @@ export const MAX_DESCRIPTION_LENGTH = 2000;
 export const OWNERSHIP_FIELD_ID = "alchemy_ownership";
 
 export type FieldType = datacatalog.GoogleCloudDatacatalogV1FieldType;
-export type TagTemplateField =
-  datacatalog.GoogleCloudDatacatalogV1TagTemplateField;
-export type TagTemplateFieldMap =
-  datacatalog.GoogleCloudDatacatalogV1TagTemplateFieldMap;
+export type TagTemplateField = datacatalog.GoogleCloudDatacatalogV1TagTemplateField;
+export type TagTemplateFieldMap = datacatalog.GoogleCloudDatacatalogV1TagTemplateFieldMap;
 export type TaxonomyActivatedPolicyType =
   | datacatalog.GoogleCloudDatacatalogV1TaxonomyActivatedPolicyTypesItemEnum
   | (string & {});
@@ -33,34 +31,22 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -166,9 +152,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -179,17 +163,13 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBool = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left === true) === (right === true);
+export const sameBool = (left: boolean | undefined, right: boolean | undefined) =>
+  (left === true) === (right === true);
 
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
 const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -210,11 +190,9 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -239,8 +217,7 @@ export const replaceOnIdentity = (input: {
   const locationChanged =
     (input.previousLocation ?? "") !== "" &&
     (input.nextLocation ?? "") !== "" &&
-    (input.previousLocation ?? "").toLowerCase() !==
-      (input.nextLocation ?? "").toLowerCase();
+    (input.previousLocation ?? "").toLowerCase() !== (input.nextLocation ?? "").toLowerCase();
   if (!idChanged && !parentChanged && !locationChanged && !input.extra) {
     return undefined;
   }
@@ -331,9 +308,7 @@ export const findOwned = <A, E, R>(
     return undefined;
   });
 
-export const ownershipField = (
-  labels: Record<string, string>,
-): TagTemplateField => ({
+export const ownershipField = (labels: Record<string, string>): TagTemplateField => ({
   displayName: "Alchemy ownership",
   type: { primitiveType: "STRING" },
   isRequired: false,
@@ -341,9 +316,7 @@ export const ownershipField = (
   order: 0,
 });
 
-export const userFields = (
-  fields: TagTemplateFieldMap | undefined,
-): TagTemplateFieldMap => {
+export const userFields = (fields: TagTemplateFieldMap | undefined): TagTemplateFieldMap => {
   const next: TagTemplateFieldMap = {};
   for (const [key, field] of Object.entries(fields ?? {})) {
     if (key === OWNERSHIP_FIELD_ID || field === undefined) continue;
@@ -374,8 +347,7 @@ export const fieldBody = (field: TagTemplateField): TagTemplateField => ({
   order: field.order,
 });
 
-export const primitiveOf = (type: FieldType | undefined) =>
-  type?.primitiveType ?? "";
+export const primitiveOf = (type: FieldType | undefined) => type?.primitiveType ?? "";
 
 export const enumValuesOf = (type: FieldType | undefined) =>
   (type?.enumType?.allowedValues ?? [])
@@ -390,10 +362,8 @@ export const fieldNeedsReplace = (
   const observedPrimitive = primitiveOf(observed.type);
   const desiredPrimitive = primitiveOf(desired.type);
   if (observedPrimitive !== desiredPrimitive) return true;
-  const observedHasEnum =
-    (observed.type?.enumType?.allowedValues ?? []).length > 0;
-  const desiredHasEnum =
-    (desired.type?.enumType?.allowedValues ?? []).length > 0;
+  const observedHasEnum = (observed.type?.enumType?.allowedValues ?? []).length > 0;
+  const desiredHasEnum = (desired.type?.enumType?.allowedValues ?? []).length > 0;
   if (observedHasEnum !== desiredHasEnum) return true;
   if (desiredHasEnum) {
     const observedValues = new Set(enumValuesOf(observed.type));

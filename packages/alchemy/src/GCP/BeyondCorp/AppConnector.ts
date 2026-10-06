@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -144,15 +139,9 @@ export type AppConnector = Resource<
  * @resource
  * @category BeyondCorp
  */
-export const AppConnector = Resource<AppConnector>(
-  "GCP.BeyondCorp.AppConnector",
-);
+export const AppConnector = Resource<AppConnector>("GCP.BeyondCorp.AppConnector");
 
-const resourceName = (
-  project: string,
-  location: string,
-  appConnectorId: string,
-) =>
+const resourceName = (project: string, location: string, appConnectorId: string) =>
   `projects/${project}/locations/${location}/appConnectors/${appConnectorId}`;
 
 const emailOf = (
@@ -161,9 +150,7 @@ const emailOf = (
 ) => serviceAccountEmail ?? principalInfo?.serviceAccount?.email ?? "";
 
 const toPrincipal = (
-  principal:
-    | beyondcorp.GoogleCloudBeyondcorpAppconnectorsV1AppConnectorPrincipalInfo
-    | undefined,
+  principal: beyondcorp.GoogleCloudBeyondcorpAppconnectorsV1AppConnectorPrincipalInfo | undefined,
 ): AppConnectorPrincipalInfo | undefined => {
   const email = principal?.serviceAccount?.email;
   if (email === undefined) return undefined;
@@ -206,28 +193,14 @@ const listOwned = (project: string) =>
         parent,
         pageSize: 1000,
       }),
-      (
-        page,
-      ):
-        | readonly beyondcorp.GoogleCloudBeyondcorpAppconnectorsV1AppConnector[]
-        | undefined => page.appConnectors,
+      (page): readonly beyondcorp.GoogleCloudBeyondcorpAppconnectorsV1AppConnector[] | undefined =>
+        page.appConnectors,
     ),
-  ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelMap(item.labels)),
-    ),
-  );
+  ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
 
 export const AppConnectorProvider = () =>
   Provider.succeed(AppConnector, {
-    stables: [
-      "name",
-      "appConnectorId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "appConnectorId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -242,18 +215,12 @@ export const AppConnectorProvider = () =>
         nextId: news.appConnectorId
           ? rfc1035(news.appConnectorId, "appconnector")
           : (olds?.appConnectorId ?? output?.appConnectorId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
-        extra:
-          previousEmail !== undefined &&
-          nextEmail.length > 0 &&
-          previousEmail !== nextEmail,
+        extra: previousEmail !== undefined && nextEmail.length > 0 && previousEmail !== nextEmail,
       });
     }),
 
@@ -265,18 +232,12 @@ export const AppConnectorProvider = () =>
         output?.appConnectorId,
         "appconnector",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, appConnectorId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, appConnectorId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -294,10 +255,7 @@ export const AppConnectorProvider = () =>
         output?.appConnectorId,
         "appconnector",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, appConnectorId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -342,21 +300,16 @@ export const AppConnectorProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation = yield* beyondcorp.patchProjectsLocationsAppConnectors(
-          {
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              displayName: news.displayName,
-              labels: desiredLabels,
-            },
+        const operation = yield* beyondcorp.patchProjectsLocationsAppConnectors({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            displayName: news.displayName,
+            labels: desiredLabels,
           },
-        );
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

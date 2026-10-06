@@ -130,17 +130,12 @@ export type PhraseSet = Resource<
  */
 export const PhraseSet = Resource<PhraseSet>("GCP.Speech.PhraseSet");
 
-export class PhraseSetNotResolved extends Data.TaggedError(
-  "GCP.Speech.PhraseSetNotResolved",
-)<{
+export class PhraseSetNotResolved extends Data.TaggedError("GCP.Speech.PhraseSetNotResolved")<{
   name: string;
 }> {}
 
-const phraseSetNameOf = (
-  project: string,
-  location: string,
-  phraseSetId: string,
-) => resourceNameOf(project, location, "phraseSets", phraseSetId);
+const phraseSetNameOf = (project: string, location: string, phraseSetId: string) =>
+  resourceNameOf(project, location, "phraseSets", phraseSetId);
 
 const toAttrs = (phraseSet: speech.PhraseSet, project: string) => {
   const name = phraseSet.name ?? "";
@@ -176,11 +171,7 @@ export const PhraseSetProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const phraseSetId = yield* toPhysicalId(
-        id,
-        olds?.phraseSetId,
-        output?.phraseSetId,
-      );
+      const phraseSetId = yield* toPhysicalId(id, olds?.phraseSetId, output?.phraseSetId);
       const existing = yield* getPhraseSet(
         output?.name ?? phraseSetNameOf(env.project, location, phraseSetId),
       );
@@ -188,9 +179,7 @@ export const PhraseSetProvider = () =>
       const attrs = toAttrs(existing, env.project);
       // No labels: a generated id derives from this stack, stage, logical
       // id and instance; an explicit id is only ours when state has it.
-      return output !== undefined || olds?.phraseSetId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.phraseSetId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -202,17 +191,10 @@ export const PhraseSetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
-      const phraseSetId = yield* toPhysicalId(
-        id,
-        news.phraseSetId,
-        output?.phraseSetId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
+      const phraseSetId = yield* toPhysicalId(id, news.phraseSetId, output?.phraseSetId);
       const phrases = news.phrases ?? [];
-      const name =
-        output?.name ?? phraseSetNameOf(env.project, location, phraseSetId);
+      const name = output?.name ?? phraseSetNameOf(env.project, location, phraseSetId);
 
       let current = yield* getPhraseSet(name);
 

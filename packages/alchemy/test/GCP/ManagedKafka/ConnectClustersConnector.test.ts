@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withKafkaClusterSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Kafka and Connect clusters take ~30 minutes to provision.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -70,20 +67,16 @@ test.provider.skipIf(!runLifecycle)(
             kafkaCluster: cluster.name,
             labels: { env: "test" },
           });
-          const connector = yield* GCP.ManagedKafka.ConnectClustersConnector(
-            "Sink",
-            {
-              connectCluster: connect.name,
-              configs: {
-                "connector.class":
-                  "com.google.pubsub.kafka.sink.CloudPubSubSinkConnector",
-                "tasks.max": "1",
-                topics: "orders",
-                "cps.project": project,
-                "cps.topic": "alchemy-managedkafka-sink",
-              },
+          const connector = yield* GCP.ManagedKafka.ConnectClustersConnector("Sink", {
+            connectCluster: connect.name,
+            configs: {
+              "connector.class": "com.google.pubsub.kafka.sink.CloudPubSubSinkConnector",
+              "tasks.max": "1",
+              topics: "orders",
+              "cps.project": project,
+              "cps.topic": "alchemy-managedkafka-sink",
             },
-          );
+          });
           return { cluster, connect, connector };
         }),
       );
@@ -91,10 +84,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.connector.name).toContain("/connectors/");
       expect(created.connector.configs["connector.class"]).toContain("PubSub");
 
-      const fetched =
-        yield* kafka.getProjectsLocationsConnectClustersConnectors({
-          name: created.connector.name,
-        });
+      const fetched = yield* kafka.getProjectsLocationsConnectClustersConnectors({
+        name: created.connector.name,
+      });
       expect(fetched.name).toEqual(created.connector.name);
 
       const updated = yield* stack.deploy(
@@ -109,27 +101,21 @@ test.provider.skipIf(!runLifecycle)(
             kafkaCluster: cluster.name,
             labels: { env: "test" },
           });
-          const connector = yield* GCP.ManagedKafka.ConnectClustersConnector(
-            "Sink",
-            {
-              connectCluster: connect.name,
-              connectorId: created.connector.connectorId,
-              configs: {
-                "connector.class":
-                  "com.google.pubsub.kafka.sink.CloudPubSubSinkConnector",
-                "tasks.max": "2",
-                topics: "orders",
-                "cps.project": project,
-                "cps.topic": "alchemy-managedkafka-sink",
-              },
+          const connector = yield* GCP.ManagedKafka.ConnectClustersConnector("Sink", {
+            connectCluster: connect.name,
+            connectorId: created.connector.connectorId,
+            configs: {
+              "connector.class": "com.google.pubsub.kafka.sink.CloudPubSubSinkConnector",
+              "tasks.max": "2",
+              topics: "orders",
+              "cps.project": project,
+              "cps.topic": "alchemy-managedkafka-sink",
             },
-          );
+          });
           return { cluster, connect, connector };
         }),
       );
-      expect(updated.connector.connectorId).toEqual(
-        created.connector.connectorId,
-      );
+      expect(updated.connector.connectorId).toEqual(created.connector.connectorId);
       expect(updated.connector.configs["tasks.max"]).toEqual("2");
 
       yield* stack.destroy();

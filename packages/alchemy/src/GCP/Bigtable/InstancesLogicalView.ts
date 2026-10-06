@@ -117,11 +117,8 @@ export class LogicalViewStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toId = (
-  id: string,
-  logicalViewId: string | undefined,
-  existing?: string,
-) => toPhysicalId(id, logicalViewId, existing, MAX_LOGICAL_VIEW_ID_LENGTH);
+const toId = (id: string, logicalViewId: string | undefined, existing?: string) =>
+  toPhysicalId(id, logicalViewId, existing, MAX_LOGICAL_VIEW_ID_LENGTH);
 
 const queryOf = (value: string | undefined) => (value ?? "").trim();
 
@@ -148,9 +145,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view
-        ? Effect.succeed(view)
-        : Effect.fail(new LogicalViewNotResolved({ name })),
+      view ? Effect.succeed(view) : Effect.fail(new LogicalViewNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.LogicalViewNotResolved",
@@ -162,9 +157,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined
-        ? Effect.void
-        : Effect.fail(new LogicalViewStillExists({ name })),
+      view === undefined ? Effect.void : Effect.fail(new LogicalViewStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.LogicalViewStillExists",
@@ -196,9 +189,7 @@ export const InstancesLogicalViewProvider = () =>
       );
       const nextInstance = instanceIdOf(news.instance);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance)
       ) {
         return { action: "replace" as const };
@@ -208,20 +199,12 @@ export const InstancesLogicalViewProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const logicalViewId = yield* toId(
-        id,
-        olds?.logicalViewId,
-        output?.logicalViewId,
-      );
+      const logicalViewId = yield* toId(id, olds?.logicalViewId, output?.logicalViewId);
       const instanceRef = olds?.instance ?? output?.instance;
       const name =
         output?.name ??
         (instanceRef
-          ? logicalViewName(
-              env.project,
-              instanceIdOf(instanceRef),
-              logicalViewId,
-            )
+          ? logicalViewName(env.project, instanceIdOf(instanceRef), logicalViewId)
           : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
@@ -246,11 +229,7 @@ export const InstancesLogicalViewProvider = () =>
                 pageSize: 1000,
               }),
               (page) => page.logicalViews,
-            ).pipe(
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as bigtable.LogicalView[]),
-              ),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as bigtable.LogicalView[]))),
           { concurrency: 4 },
         );
         return pages.flat().map((view) => toAttrs(view, env.project));
@@ -258,11 +237,7 @@ export const InstancesLogicalViewProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const logicalViewId = yield* toId(
-        id,
-        news.logicalViewId,
-        output?.logicalViewId,
-      );
+      const logicalViewId = yield* toId(id, news.logicalViewId, output?.logicalViewId);
       const parent = instanceNameOf(env.project, news.instance);
       const name = `${parent}/logicalViews/${logicalViewId}`;
       const desiredProtection = news.deletionProtection === true;
@@ -288,8 +263,7 @@ export const InstancesLogicalViewProvider = () =>
       }
 
       const queryChanged = queryOf(current.query) !== queryOf(query);
-      const protectionChanged =
-        (current.deletionProtection === true) !== desiredProtection;
+      const protectionChanged = (current.deletionProtection === true) !== desiredProtection;
       if (queryChanged || protectionChanged) {
         const mask = [
           queryChanged ? "query" : undefined,

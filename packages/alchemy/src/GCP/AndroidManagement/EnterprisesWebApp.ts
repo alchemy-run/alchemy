@@ -164,17 +164,10 @@ export const EnterprisesWebAppProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.parent ?? output?.parent ?? "";
-      const byName = yield* getWebApp(
-        toWebAppName(parent, output?.name ?? output?.webAppId),
-      );
+      const byName = yield* getWebApp(toWebAppName(parent, output?.name ?? output?.webAppId));
       if (byName !== undefined) return toAttrs(byName, env.project);
       if (parent.length === 0) return undefined;
-      const generated = yield* toDisplayName(
-        id,
-        undefined,
-        undefined,
-        MAX_WEB_APP_TITLE_LENGTH,
-      );
+      const generated = yield* toDisplayName(id, undefined, undefined, MAX_WEB_APP_TITLE_LENGTH);
       const title = olds?.title ?? generated;
       const found = yield* findWebAppByTitle(toEnterpriseName(parent), title);
       if (found === undefined) return undefined;
@@ -186,14 +179,8 @@ export const EnterprisesWebAppProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = toEnterpriseName(news.parent);
-      const title = yield* toDisplayName(
-        id,
-        news.title,
-        output?.title,
-        MAX_WEB_APP_TITLE_LENGTH,
-      );
-      const displayMode =
-        news.displayMode ?? output?.displayMode ?? DEFAULT_DISPLAY_MODE;
+      const title = yield* toDisplayName(id, news.title, output?.title, MAX_WEB_APP_TITLE_LENGTH);
+      const displayMode = news.displayMode ?? output?.displayMode ?? DEFAULT_DISPLAY_MODE;
       const icons = defaultWebAppIcons(news.icons ?? output?.icons);
       const desired: androidmanagement.WebApp = {
         title,
@@ -202,9 +189,7 @@ export const EnterprisesWebAppProvider = () =>
         icons,
       };
 
-      let current = yield* getWebApp(
-        toWebAppName(parent, output?.name ?? output?.webAppId),
-      );
+      let current = yield* getWebApp(toWebAppName(parent, output?.name ?? output?.webAppId));
       if (current === undefined) {
         current = yield* findWebAppByTitle(parent, title);
       }
@@ -215,9 +200,7 @@ export const EnterprisesWebAppProvider = () =>
             parent,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => findWebAppByTitle(parent, title)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findWebAppByTitle(parent, title)));
         current = created ?? undefined;
       }
 
@@ -231,8 +214,7 @@ export const EnterprisesWebAppProvider = () =>
       const titleChanged = !sameText(current.title, title);
       const urlChanged = !sameText(current.startUrl, news.startUrl);
       const modeChanged = !sameText(current.displayMode, displayMode);
-      const iconsChanged =
-        news.icons !== undefined && !jsonEqual(current.icons, icons);
+      const iconsChanged = news.icons !== undefined && !jsonEqual(current.icons, icons);
 
       const updateMask = updateMaskOf(
         titleChanged ? "title" : undefined,

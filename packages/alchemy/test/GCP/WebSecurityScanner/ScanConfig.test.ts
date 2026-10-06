@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as websecurityscanner from "@distilled.cloud/gcp/websecurityscanner_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const missingNameOf = (project: string) => `projects/${project}/scanConfigs/1`;
 
 const waitUntilGone = (name: string) =>
@@ -45,9 +42,9 @@ test.provider(
         parent: `projects/${project}`,
         pageSize: 10,
       });
-      expect(
-        (page.scanConfigs ?? []).map((config) => config.name),
-      ).not.toContain(missingNameOf(project));
+      expect((page.scanConfigs ?? []).map((config) => config.name)).not.toContain(
+        missingNameOf(project),
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -124,9 +121,7 @@ test.provider(
       expect(created.scan.name).toContain("/scanConfigs/");
       expect(created.scan.scanConfigId).toEqual(expect.any(String));
       expect(created.scan.displayName).toEqual("alchemy scan");
-      expect(created.scan.startingUrls).toEqual([
-        `http://${created.ip.address}`,
-      ]);
+      expect(created.scan.startingUrls).toEqual([`http://${created.ip.address}`]);
       expect(created.scan.maxQps).toEqual(5);
       expect(created.scan.userAgent).toEqual("CHROME_LINUX");
       expect(created.scan.targetPlatforms).toEqual(["COMPUTE"]);
@@ -169,9 +164,7 @@ test.provider(
       expect(updated.scan.displayName).toEqual("alchemy scan v2");
       expect(updated.scan.maxQps).toEqual(10);
       expect(updated.scan.userAgent).toEqual("CHROME_ANDROID");
-      expect(updated.scan.blacklistPatterns).toEqual([
-        `http://${updated.ip.address}/logout`,
-      ]);
+      expect(updated.scan.blacklistPatterns).toEqual([`http://${updated.ip.address}/logout`]);
       expect(updated.scan.ignoreHttpStatusErrors).toEqual(true);
 
       const fetchedUpdate = yield* websecurityscanner.getProjectsScanConfigs({

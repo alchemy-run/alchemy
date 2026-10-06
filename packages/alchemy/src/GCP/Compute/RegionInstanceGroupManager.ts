@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_TARGET_SIZE = 0;
 const MAX_NAME_LENGTH = 63;
@@ -259,10 +255,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
 const toBaseName = (name: string | undefined, managerName: string) =>
   rfc1035Name(name ?? managerName, "mig", MAX_BASE_NAME_LENGTH);
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-) => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>) => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
   const trimmed = user?.trim();
   return trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
@@ -294,14 +287,10 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const toTemplateUrl = (project: string, template: string) =>
-  template.includes("/")
-    ? template
-    : `projects/${project}/global/instanceTemplates/${template}`;
+  template.includes("/") ? template : `projects/${project}/global/instanceTemplates/${template}`;
 
 const canonPorts = (
   ports: readonly RegionInstanceGroupManagerNamedPort[] | undefined,
@@ -344,10 +333,8 @@ const fromApiVersions = (
 const sortedRefs = (values: readonly string[] | undefined) =>
   [...(values ?? [])].map(lastSegment).filter(Boolean).sort();
 
-const sameRefs = (
-  left: readonly string[] | undefined,
-  right: readonly string[] | undefined,
-) => JSON.stringify(sortedRefs(left)) === JSON.stringify(sortedRefs(right));
+const sameRefs = (left: readonly string[] | undefined, right: readonly string[] | undefined) =>
+  JSON.stringify(sortedRefs(left)) === JSON.stringify(sortedRefs(right));
 
 const zonesOf = (policy: compute.DistributionPolicy | undefined) =>
   sortedRefs((policy?.zones ?? []).map((zone) => zone.zone ?? ""));
@@ -414,11 +401,7 @@ const toAttrs = (manager: compute.InstanceGroupManager, project: string) => {
   };
 };
 
-const getByName = (
-  project: string,
-  region: string,
-  instanceGroupManager: string,
-) =>
+const getByName = (project: string, region: string, instanceGroupManager: string) =>
   compute
     .getRegionInstanceGroupManagers({
       project,
@@ -427,11 +410,7 @@ const getByName = (
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitUntilPresent = (
-  project: string,
-  region: string,
-  managerName: string,
-) =>
+const waitUntilPresent = (project: string, region: string, managerName: string) =>
   getByName(project, region, managerName).pipe(
     Effect.flatMap((manager) =>
       manager !== undefined
@@ -444,8 +423,7 @@ const waitUntilPresent = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionInstanceGroupManagerNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionInstanceGroupManagerNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -467,18 +445,13 @@ const waitUntilGone = (project: string, region: string, managerName: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionInstanceGroupManagerStillExists",
+      while: (error) => error._tag === "GCP.Compute.RegionInstanceGroupManagerStillExists",
       times: 15,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
-const getInstanceGroup = (
-  project: string,
-  region: string,
-  instanceGroup: string,
-) =>
+const getInstanceGroup = (project: string, region: string, instanceGroup: string) =>
   compute
     .getRegionInstanceGroups({ project, region, instanceGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -504,8 +477,7 @@ const syncNamedPorts = (
             ),
       ),
       Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Compute.RegionInstanceGroupManagerNotResolved",
+        while: (error) => error._tag === "GCP.Compute.RegionInstanceGroupManagerNotResolved",
         times: 8,
         schedule: Schedule.spaced("1 second"),
       }),
@@ -561,29 +533,18 @@ export const RegionInstanceGroupManagerProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.managerName ?? output?.managerName;
       const nextName = news.managerName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
-      const previousBase =
-        olds?.baseInstanceName ?? output?.baseInstanceName ?? previousName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
+      const previousBase = olds?.baseInstanceName ?? output?.baseInstanceName ?? previousName;
       const nextBase =
         news.baseInstanceName !== undefined
           ? toBaseName(news.baseInstanceName, nextName ?? previousName ?? "mig")
           : previousBase;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const regionChanged = previousRegion !== nextRegion;
       const baseChanged =
-        previousBase !== undefined &&
-        nextBase !== undefined &&
-        previousBase !== nextBase;
+        previousBase !== undefined && nextBase !== undefined && previousBase !== nextBase;
       const previousZones =
         olds?.distributionPolicy !== undefined
           ? zonesOf(olds.distributionPolicy)
@@ -597,8 +558,7 @@ export const RegionInstanceGroupManagerProvider = () =>
       if (!nameChanged && !regionChanged && !baseChanged && !zonesChanged) {
         return undefined;
       }
-      const sameIdentity =
-        previousName === nextName && previousRegion === nextRegion;
+      const sameIdentity = previousName === nextName && previousRegion === nextRegion;
       return {
         action: "replace" as const,
         deleteFirst: sameIdentity,
@@ -607,15 +567,8 @@ export const RegionInstanceGroupManagerProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const managerName = yield* toName(
-        id,
-        olds?.managerName,
-        output?.managerName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const managerName = yield* toName(id, olds?.managerName, output?.managerName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, managerName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -639,8 +592,7 @@ export const RegionInstanceGroupManagerProvider = () =>
             return (scoped?.instanceGroupManagers ?? [])
               .filter(
                 (manager) =>
-                  hasOwnershipMarker(manager.description) &&
-                  lastSegment(manager.region).length > 0,
+                  hasOwnershipMarker(manager.description) && lastSegment(manager.region).length > 0,
               )
               .map((manager) => toAttrs(manager, env.project));
           }),
@@ -649,22 +601,14 @@ export const RegionInstanceGroupManagerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const managerName = yield* toName(
-        id,
-        news.managerName,
-        output?.managerName,
-      );
+      const managerName = yield* toName(id, news.managerName, output?.managerName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const description = encodeDescription(news.description, ownership);
-      const instanceTemplate = toTemplateUrl(
-        env.project,
-        news.instanceTemplate,
-      );
+      const instanceTemplate = toTemplateUrl(env.project, news.instanceTemplate);
       const baseInstanceName = toBaseName(news.baseInstanceName, managerName);
       const targetSize = news.targetSize ?? DEFAULT_TARGET_SIZE;
-      const namedPorts =
-        news.namedPorts !== undefined ? canonPorts(news.namedPorts) : undefined;
+      const namedPorts = news.namedPorts !== undefined ? canonPorts(news.namedPorts) : undefined;
 
       let current = yield* getByName(env.project, region, managerName);
 
@@ -680,9 +624,7 @@ export const RegionInstanceGroupManagerProvider = () =>
               baseInstanceName,
               targetSize,
               namedPorts:
-                namedPorts !== undefined && namedPorts.length > 0
-                  ? namedPorts
-                  : undefined,
+                namedPorts !== undefined && namedPorts.length > 0 ? namedPorts : undefined,
               versions:
                 news.versions !== undefined
                   ? toVersionBodies(env.project, news.versions)
@@ -727,9 +669,7 @@ export const RegionInstanceGroupManagerProvider = () =>
         patch.targetSize = targetSize;
         dirty = true;
       }
-      if (
-        lastSegment(current.instanceTemplate) !== lastSegment(instanceTemplate)
-      ) {
+      if (lastSegment(current.instanceTemplate) !== lastSegment(instanceTemplate)) {
         patch.instanceTemplate = instanceTemplate;
         dirty = true;
       }
@@ -739,10 +679,7 @@ export const RegionInstanceGroupManagerProvider = () =>
       }
       if (
         news.autoHealingPolicies !== undefined &&
-        !subsetEqual(
-          current.autoHealingPolicies ?? [],
-          news.autoHealingPolicies,
-        )
+        !subsetEqual(current.autoHealingPolicies ?? [], news.autoHealingPolicies)
       ) {
         patch.autoHealingPolicies = news.autoHealingPolicies;
         dirty = true;
@@ -754,27 +691,20 @@ export const RegionInstanceGroupManagerProvider = () =>
         patch.updatePolicy = news.updatePolicy;
         dirty = true;
       }
-      if (
-        news.targetPools !== undefined &&
-        !sameRefs(current.targetPools, news.targetPools)
-      ) {
+      if (news.targetPools !== undefined && !sameRefs(current.targetPools, news.targetPools)) {
         patch.targetPools = news.targetPools;
         dirty = true;
       }
       if (
         news.instanceLifecyclePolicy !== undefined &&
-        !subsetEqual(
-          current.instanceLifecyclePolicy ?? {},
-          news.instanceLifecyclePolicy,
-        )
+        !subsetEqual(current.instanceLifecyclePolicy ?? {}, news.instanceLifecyclePolicy)
       ) {
         patch.instanceLifecyclePolicy = news.instanceLifecyclePolicy;
         dirty = true;
       }
       if (
         news.distributionPolicy?.targetShape !== undefined &&
-        news.distributionPolicy.targetShape !==
-          current.distributionPolicy?.targetShape
+        news.distributionPolicy.targetShape !== current.distributionPolicy?.targetShape
       ) {
         patch.distributionPolicy = {
           targetShape: news.distributionPolicy.targetShape,
@@ -796,27 +726,14 @@ export const RegionInstanceGroupManagerProvider = () =>
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
+            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
           );
-        current =
-          (yield* getByName(env.project, region, managerName)) ?? current;
+        current = (yield* getByName(env.project, region, managerName)) ?? current;
       }
 
-      if (
-        namedPorts !== undefined &&
-        !samePorts(fromApiPorts(current.namedPorts), namedPorts)
-      ) {
-        yield* syncNamedPorts(
-          env.project,
-          region,
-          managerName,
-          current.instanceGroup,
-          namedPorts,
-        );
-        current =
-          (yield* getByName(env.project, region, managerName)) ?? current;
+      if (namedPorts !== undefined && !samePorts(fromApiPorts(current.namedPorts), namedPorts)) {
+        yield* syncNamedPorts(env.project, region, managerName, current.instanceGroup, namedPorts);
+        current = (yield* getByName(env.project, region, managerName)) ?? current;
       }
 
       return toAttrs(current, env.project);

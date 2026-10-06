@@ -29,8 +29,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type EvaluationJobConfig =
-  datalabeling.GoogleCloudDatalabelingV1beta1EvaluationJobConfig;
+export type EvaluationJobConfig = datalabeling.GoogleCloudDatalabelingV1beta1EvaluationJobConfig;
 
 export type EvaluationJobProps = {
   /**
@@ -111,9 +110,7 @@ export type EvaluationJob = Resource<
     /** Whether the job is paused. */
     paused: boolean;
     /** Failed attempts, if any. */
-    attempts:
-      | datalabeling.GoogleCloudDatalabelingV1beta1AttemptList
-      | undefined;
+    attempts: datalabeling.GoogleCloudDatalabelingV1beta1AttemptList | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
   },
@@ -182,9 +179,7 @@ export type EvaluationJob = Resource<
  * @resource
  * @category DataLabeling
  */
-export const EvaluationJob = Resource<EvaluationJob>(
-  "GCP.DataLabeling.EvaluationJob",
-);
+export const EvaluationJob = Resource<EvaluationJob>("GCP.DataLabeling.EvaluationJob");
 
 export class EvaluationJobNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.EvaluationJobNotResolved",
@@ -205,12 +200,10 @@ const configIdentity = (config: EvaluationJobConfig | undefined) => {
     humanAnnotationConfig,
     ...rest
   } = config;
-  const { instruction: _instruction, ...humanRest } =
-    humanAnnotationConfig ?? {};
+  const { instruction: _instruction, ...humanRest } = humanAnnotationConfig ?? {};
   return {
     ...rest,
-    humanAnnotationConfig:
-      Object.keys(humanRest).length > 0 ? humanRest : undefined,
+    humanAnnotationConfig: Object.keys(humanRest).length > 0 ? humanRest : undefined,
   };
 };
 
@@ -261,15 +254,11 @@ export const EvaluationJobProvider = () =>
       const extra =
         (output?.annotationSpecSet !== undefined &&
           !sameText(news.annotationSpecSet, output.annotationSpecSet)) ||
-        (output?.modelVersion !== undefined &&
-          !sameText(news.modelVersion, output.modelVersion)) ||
-        (output?.schedule !== undefined &&
-          !sameText(news.schedule, output.schedule)) ||
+        (output?.modelVersion !== undefined && !sameText(news.modelVersion, output.modelVersion)) ||
+        (output?.schedule !== undefined && !sameText(news.schedule, output.schedule)) ||
         (output !== undefined &&
-          (news.labelMissingGroundTruth === true) !==
-            output.labelMissingGroundTruth) ||
-        (olds !== undefined &&
-          !sameText(news.description, output?.description)) ||
+          (news.labelMissingGroundTruth === true) !== output.labelMissingGroundTruth) ||
+        (olds !== undefined && !sameText(news.description, output?.description)) ||
         (output !== undefined &&
           !sameJson(
             configIdentity(news.evaluationJobConfig),
@@ -287,21 +276,14 @@ export const EvaluationJobProvider = () =>
       const evaluationJobId =
         olds?.evaluationJobId ??
         output?.evaluationJobId ??
-        (output?.name
-          ? parseResourceName(output.name, "evaluationJobs").id
-          : "");
+        (output?.name ? parseResourceName(output.name, "evaluationJobs").id : "");
       const name =
         output?.name ??
-        (evaluationJobId.length > 0
-          ? resourceName(env.project, evaluationJobId)
-          : "");
-      const existing =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+        (evaluationJobId.length > 0 ? resourceName(env.project, evaluationJobId) : "");
+      const existing = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -318,9 +300,7 @@ export const EvaluationJobProvider = () =>
       const evaluationJobId = news.evaluationJobId ?? output?.evaluationJobId;
       const name =
         output?.name ??
-        (evaluationJobId !== undefined
-          ? resourceName(env.project, evaluationJobId)
-          : "");
+        (evaluationJobId !== undefined ? resourceName(env.project, evaluationJobId) : "");
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(
         ownership,
@@ -330,8 +310,7 @@ export const EvaluationJobProvider = () =>
       const labelMissingGroundTruth = news.labelMissingGroundTruth === true;
       const desiredPaused = news.paused === true;
 
-      let current =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+      let current = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
 
       if (current === undefined) {
         const created = yield* retryTransient(
@@ -348,9 +327,7 @@ export const EvaluationJobProvider = () =>
               },
             },
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () => findByOwnership(id, env.project)),
-        );
+        ).pipe(Effect.catchTag("Conflict", () => findByOwnership(id, env.project)));
         current = created ?? undefined;
       }
 
@@ -368,8 +345,7 @@ export const EvaluationJobProvider = () =>
         desiredConfig.humanAnnotationConfig?.instruction,
       );
       const exampleCountChanged =
-        (observedConfig?.exampleCount ?? undefined) !==
-        (desiredConfig.exampleCount ?? undefined);
+        (observedConfig?.exampleCount ?? undefined) !== (desiredConfig.exampleCount ?? undefined);
       const sampleChanged =
         (observedConfig?.exampleSamplePercentage ?? undefined) !==
         (desiredConfig.exampleSamplePercentage ?? undefined);
@@ -382,12 +358,8 @@ export const EvaluationJobProvider = () =>
               instructionChanged
                 ? "evaluationJobConfig.humanAnnotationConfig.instruction"
                 : undefined,
-              exampleCountChanged
-                ? "evaluationJobConfig.exampleCount"
-                : undefined,
-              sampleChanged
-                ? "evaluationJobConfig.exampleSamplePercentage"
-                : undefined,
+              exampleCountChanged ? "evaluationJobConfig.exampleCount" : undefined,
+              sampleChanged ? "evaluationJobConfig.exampleSamplePercentage" : undefined,
             ),
             body: {
               evaluationJobConfig: {
@@ -424,9 +396,7 @@ export const EvaluationJobProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* ignoreGone(
-        retryDelete(
-          datalabeling.deleteProjectsEvaluationJobs({ name: output.name }),
-        ),
+        retryDelete(datalabeling.deleteProjectsEvaluationJobs({ name: output.name })),
       );
       yield* waitUntilGone(getByName(output.name));
     }),

@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as securityposture from "@distilled.cloud/gcp/securityposture_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   organization,
@@ -48,40 +48,32 @@ test.provider.skipIf(!runLifecycle)(
             description: "deployable baseline",
             annotations: { env: "test" },
           });
-          const deployment = yield* GCP.SecurityPosture.PostureDeployment(
-            "Staging",
-            {
-              organization,
-              postureId: posture.name,
-              postureRevisionId: posture.revisionId.as<string>(),
-              description: "staging deployment",
-              annotations: { env: "test" },
-            },
-          );
+          const deployment = yield* GCP.SecurityPosture.PostureDeployment("Staging", {
+            organization,
+            postureId: posture.name,
+            postureRevisionId: posture.revisionId.as<string>(),
+            description: "staging deployment",
+            annotations: { env: "test" },
+          });
           return { posture, deployment };
         }),
       );
 
       expect(created.posture.state).toEqual("ACTIVE");
       expect(created.posture.revisionId).toEqual(expect.any(String));
-      expect(created.deployment.postureDeploymentId).toEqual(
-        expect.any(String),
-      );
+      expect(created.deployment.postureDeploymentId).toEqual(expect.any(String));
       expect(created.deployment.organization).toEqual(organization);
       expect(created.deployment.name).toEqual(
         `${organization}/locations/global/postureDeployments/${created.deployment.postureDeploymentId}`,
       );
       expect(created.deployment.postureId).toEqual(created.posture.name);
-      expect(created.deployment.postureRevisionId).toEqual(
-        created.posture.revisionId,
-      );
+      expect(created.deployment.postureRevisionId).toEqual(created.posture.revisionId);
       expect(created.deployment.description).toEqual("staging deployment");
       expect(created.deployment.annotations).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* securityposture.getOrganizationsLocationsPostureDeployments({
-          name: created.deployment.name,
-        });
+      const fetched = yield* securityposture.getOrganizationsLocationsPostureDeployments({
+        name: created.deployment.name,
+      });
       expect(fetched.name).toEqual(created.deployment.name);
       expect(fetched.annotations?.["alchemy-id"]).toEqual(expect.any(String));
 
@@ -94,17 +86,14 @@ test.provider.skipIf(!runLifecycle)(
             description: "deployable baseline v2",
             annotations: { env: "prod" },
           });
-          const deployment = yield* GCP.SecurityPosture.PostureDeployment(
-            "Staging",
-            {
-              organization,
-              postureDeploymentId: created.deployment.postureDeploymentId,
-              postureId: posture.name,
-              postureRevisionId: posture.revisionId.as<string>(),
-              description: "staging deployment v2",
-              annotations: { env: "prod" },
-            },
-          );
+          const deployment = yield* GCP.SecurityPosture.PostureDeployment("Staging", {
+            organization,
+            postureDeploymentId: created.deployment.postureDeploymentId,
+            postureId: posture.name,
+            postureRevisionId: posture.revisionId.as<string>(),
+            description: "staging deployment v2",
+            annotations: { env: "prod" },
+          });
           return { posture, deployment };
         }),
       );
@@ -115,9 +104,7 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
 
-      const deploymentGone = yield* waitUntilDeploymentGone(
-        created.deployment.name,
-      );
+      const deploymentGone = yield* waitUntilDeploymentGone(created.deployment.name);
       expect(deploymentGone).toEqual("gone");
       const postureGone = yield* waitUntilPostureGone(created.posture.name);
       expect(postureGone).toEqual("gone");
