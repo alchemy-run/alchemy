@@ -279,126 +279,170 @@ for (const dev of [true, false]) {
         { timeout: 120_000, retry: 0 },
       );
 
-      test.provider(
-        "deploys native Effect and async containers without fleet settings",
-        (stack) =>
-          Effect.gen(function* () {
-            yield* stack.destroy();
+      for (const scenario of ["execution", "named images"] as const) {
+        test.provider(
+          scenario === "execution"
+            ? "deploys native Effect and async containers without fleet settings"
+            : "adds and removes named images without replacing applications",
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
 
-            /** Exec routes are safe to retry while a new Worker comes up. */
-            const exec = (url: string, path: string) =>
-              getJson<ExecResult>(url, path).pipe(
-                Effect.retry({
-                  schedule: Schedule.spaced("1 second"),
-                  times: 8,
-                }),
-                Effect.timeout("25 seconds"),
-              );
-
-            const applications = yield* Effect.gen(function* () {
-              const deployed = yield* stack.deploy(nativeStack);
-
-              for (const worker of [deployed.asyncWorker, deployed.worker]) {
-                const url = worker.url!;
-                yield* waitUntilReady(url);
-                expect(yield* exec(url, "/exec")).toEqual({
-                  stdout: "native",
-                  exitCode: 7,
-                  images: ["shell"],
-                });
-                expect(yield* exec(url, "/stdin")).toEqual({
-                  stdout: "native stdin",
-                  exitCode: 0,
-                  images: ["shell"],
-                });
-              }
-              expect(yield* exec(deployed.worker.url!, "/snapshot")).toEqual({
-                stdout: "persisted",
-                exitCode: 0,
-                images: ["shell"],
-              });
-
-              if (!dev) {
-                // The applications exist without any fleet configuration.
-                for (const application of [deployed.application, deployed.asyncApplication]) {
-                  const observed = yield* Containers.getContainerApplication({
-                    accountId: application.accountId,
-                    applicationId: application.applicationId,
-                  });
-                  expect(observed.schedulingPolicy).toBe("durable_object");
-                  expect(observed.id).toBe(observed.durableObjects?.namespaceId);
-                  expect(observed.configuration.image).toBeUndefined();
-                  expect(observed.maxInstances ?? undefined).toBeUndefined();
-                }
-                expect(yield* exec(deployed.asyncWorker.url!, "/builtin")).toEqual({
-                  stdout: "native",
-                  exitCode: 7,
-                  images: ["shell"],
-                });
-              }
-
-              const unchanged = yield* stack.deploy(nativeStack);
-              expect(unchanged.application.applicationId).toBe(deployed.application.applicationId);
-
-              // Adding a named image updates the Worker in place.
-              const named = yield* stack.deploy(
-                nativeStack.pipe(
-                  Effect.provideService(NativeImages, {
-                    shell: { image: "alpine:3.21" },
-                    tools: { image: "alpine:3.21" },
+              /** Exec routes are safe to retry while a new Worker comes up. */
+              const exec = (url: string, path: string) =>
+                getJson<ExecResult>(url, path).pipe(
+                  Effect.retry({
+                    schedule: Schedule.spaced("1 second"),
+                    times: 8,
                   }),
-                ),
-              );
-              const imageNames = (images: object | null | undefined) =>
-                Object.keys(images ?? {}).sort();
-              expect(imageNames(named.asyncApplication.images)).toEqual(["shell", "tools"]);
-              expect(imageNames(named.asyncApplication.devImages)).toEqual(["shell", "tools"]);
+                  Effect.timeout("25 seconds"),
+                );
+
+              const applications = yield* Effect.gen(function* () {
+                const deployed = yield* stack.deploy(nativeStack);
+
+                if (scenario === "execution") {
+                  for (const worker of [deployed.asyncWorker, deployed.worker]) {
+                    const url = worker.url!;
+                    yield* waitUntilReady(url);
+                    expect(yield* exec(url, "/exec")).toEqual({
+                      stdout: "native",
+                      exitCode: 7,
+                      images: ["shell"],
+                    });
+                    expect(yield* exec(url, "/stdin")).toEqual({
+                      stdout: "native stdin",
+                      exitCode: 0,
+                      images: ["shell"],
+                    });
+                  }
+                  expect(yield* exec(deployed.worker.url!, "/snapshot")).toEqual({
+                    stdout: "persisted",
+                    exitCode: 0,
+                    images: ["shell"],
+                  });
+
+                  if (!dev) {
+                    // The applications exist without any fleet configuration.
+                    for (const application of [deployed.application, deployed.asyncApplication]) {
+                      const observed = yield* Containers.getContainerApplication({
+                        accountId: application.accountId,
+                        applicationId: application.applicationId,
+                      });
+                      expect(observed.schedulingPolicy).toBe("durable_object");
+                      expect(observed.id).toBe(observed.durableObjects?.namespaceId);
+                      expect(observed.configuration.image).toBeUndefined();
+                      expect(observed.maxInstances ?? undefined).toBeUndefined();
+                    }
+                    expect(yield* exec(deployed.asyncWorker.url!, "/builtin")).toEqual({
+                      stdout: "native",
+                      exitCode: 7,
+                      images: ["shell"],
+                    });
+                  }
+
+                  const unchanged = yield* stack.deploy(nativeStack);
+                  expect(unchanged.application.applicationId).toBe(
+                    deployed.application.applicationId,
+                  );
+                } else {
+                  // Adding a named image updates the Worker in place.
+                  const named = yield* stack.deploy(
+                    nativeStack.pipe(
+                      Effect.provideService(NativeImages, {
+                        shell: { image: "alpine:3.21" },
+                        tools: { image: "alpine:3.21" },
+                      }),
+                    ),
+                  );
+                  const imageNames = (images: object | null | undefined) =>
+                    Object.keys(images ?? {}).sort();
+                  expect(imageNames(named.asyncApplication.images)).toEqual(["shell", "tools"]);
+                  expect(imageNames(named.asyncApplication.devImages)).toEqual(["shell", "tools"]);
+                  if (!dev) {
+                    const containers = yield* uploadedContainers(
+                      named.asyncApplication.accountId,
+                      named.asyncWorker.workerName,
+                    );
+                    const uploaded = containers?.find(
+                      (container) => container.className === "NativeAsyncObject",
+                    );
+                    expect(imageNames(uploaded?.images)).toEqual(["shell", "tools"]);
+                  }
+                  expect(yield* exec(named.asyncWorker.url!, "/image/tools")).toEqual({
+                    stdout: "native",
+                    exitCode: 7,
+                    images: ["shell", "tools"],
+                  });
+
+                  // Removing every named image leaves only managed images.
+                  const updated = yield* stack.deploy(
+                    nativeStack.pipe(Effect.provideService(NativeImages, {})),
+                  );
+                  expect(updated.asyncApplication.applicationId).toBe(
+                    deployed.asyncApplication.applicationId,
+                  );
+                  expect(updated.asyncApplication.images).toEqual({});
+                  if (!dev) {
+                    const uploaded = yield* uploadedContainers(
+                      updated.asyncApplication.accountId,
+                      updated.asyncWorker.workerName,
+                    );
+                    // Upload completion does not mean this object's requests
+                    // already use the new Worker version. Wait for its env
+                    // revision before checking the independently managed map.
+                    const revision = yield* getText(
+                      updated.asyncWorker.url!,
+                      "/revision?object=/builtin-updated",
+                    ).pipe(
+                      Effect.repeat({
+                        schedule: Schedule.spaced("1 second"),
+                        until: (revision) => revision === "{}",
+                        times: 8,
+                      }),
+                      Effect.timeout("12 seconds"),
+                    );
+                    const metadata = yield* readMetadata(
+                      updated.asyncWorker.url!,
+                      "?object=/builtin-updated",
+                    );
+                    yield* Effect.logInfo("Named image removal metadata", {
+                      uploaded,
+                      metadata,
+                      revision,
+                    });
+                    expect(
+                      imageNames(
+                        uploaded?.find((container) => container.className === "NativeAsyncObject")
+                          ?.images,
+                      ),
+                    ).toEqual([]);
+                    expect(revision).toBe("{}");
+                  }
+
+                  expect(yield* exec(updated.asyncWorker.url!, "/builtin-updated")).toEqual({
+                    stdout: "native",
+                    exitCode: 7,
+                    images: [],
+                  });
+                }
+                return [deployed.application, deployed.asyncApplication];
+              }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+
               if (!dev) {
-                const containers = yield* uploadedContainers(
-                  named.asyncApplication.accountId,
-                  named.asyncWorker.workerName,
-                );
-                const uploaded = containers?.find(
-                  (container) => container.className === "NativeAsyncObject",
-                );
-                expect(imageNames(uploaded?.images)).toEqual(["shell", "tools"]);
+                for (const application of applications) {
+                  expect(
+                    yield* waitForApplicationDeleted(
+                      application.accountId,
+                      application.applicationId,
+                    ),
+                  ).toBeUndefined();
+                }
               }
-              expect(yield* exec(named.asyncWorker.url!, "/image/tools")).toEqual({
-                stdout: "native",
-                exitCode: 7,
-                images: ["shell", "tools"],
-              });
-
-              // Removing every named image leaves only managed images.
-              const updated = yield* stack.deploy(
-                nativeStack.pipe(Effect.provideService(NativeImages, {})),
-              );
-              expect(updated.asyncApplication.applicationId).toBe(
-                deployed.asyncApplication.applicationId,
-              );
-              expect(updated.asyncApplication.images).toEqual({});
-              expect(yield* exec(updated.asyncWorker.url!, "/builtin-updated")).toEqual({
-                stdout: "native",
-                exitCode: 7,
-                images: [],
-              });
-
-              return [deployed.application, deployed.asyncApplication];
-            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
-
-            if (!dev) {
-              for (const application of applications) {
-                expect(
-                  yield* waitForApplicationDeleted(
-                    application.accountId,
-                    application.applicationId,
-                  ),
-                ).toBeUndefined();
-              }
-            }
-          }),
-        { timeout: 120_000, retry: 0 },
-      );
+            }),
+          { timeout: 120_000, retry: 0 },
+        );
+      }
     },
   );
 }

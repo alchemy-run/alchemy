@@ -589,7 +589,7 @@ export const DockerLive = Layer.effect(
         if (Option.isNone(version)) return "legacy" as const;
         // Numeric template captures can consume version separators as decimals.
         const match =
-          /^github\.com\/docker\/buildx v(\d+)\.(\d+)\.\d+(?:[-+][^\s]+)?(?:\s.*)?$/.exec(
+          /^github\.com\/docker\/buildx v?(\d+)\.(\d+)\.\d+(?:[-+][^\s]+)?(?:\s.*)?$/.exec(
             version.value.stdout,
           );
         if (!match) return "load" as const;

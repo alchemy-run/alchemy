@@ -196,40 +196,42 @@ describe("Docker.image", (it) => {
     { tags: ["unit", "provider:docker", "local"] },
   );
 
-  it.effect(
-    "exports straight to the registry on Buildx >= 0.26",
-    () =>
-      Effect.gen(function* () {
-        const fake = fakeDocker("v0.26.1");
-        yield* Effect.gen(function* () {
-          const docker = yield* Docker;
-          yield* docker.image.build(
-            {
-              context: "/ctx",
-              tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
-              platform: "linux/amd64",
-            },
-            undefined,
-            registry,
+  for (const version of ["v0.26.1", "0.37.2"]) {
+    it.effect(
+      `exports straight to the registry on Buildx ${version}`,
+      () =>
+        Effect.gen(function* () {
+          const fake = fakeDocker(version);
+          yield* Effect.gen(function* () {
+            const docker = yield* Docker;
+            yield* docker.image.build(
+              {
+                context: "/ctx",
+                tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
+                platform: "linux/amd64",
+              },
+              undefined,
+              registry,
+            );
+          }).pipe(Effect.provide(fake.layer));
+          expect(fake.calls).toHaveLength(1);
+          const [build] = fake.calls;
+          expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--push"]);
+          expect(build!.args).toContain("/ctx");
+          expect(build!.args).toContain("registry.invalid/app:1");
+          expect(build!.args).toContain("registry.invalid/app:buildcache");
+          expect(build!.args.filter((arg) => arg === "--tag")).toHaveLength(2);
+          expect(build!.env.DOCKER_CONFIG).toBeUndefined();
+          const auth = JSON.parse(build!.env.DOCKER_AUTH_CONFIG!) as {
+            auths: Record<string, { auth: string }>;
+          };
+          expect(auth.auths["registry.invalid"]!.auth).toBe(
+            Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString("base64"),
           );
-        }).pipe(Effect.provide(fake.layer));
-        expect(fake.calls).toHaveLength(1);
-        const [build] = fake.calls;
-        expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--push"]);
-        expect(build!.args).toContain("/ctx");
-        expect(build!.args).toContain("registry.invalid/app:1");
-        expect(build!.args).toContain("registry.invalid/app:buildcache");
-        expect(build!.args.filter((arg) => arg === "--tag")).toHaveLength(2);
-        expect(build!.env.DOCKER_CONFIG).toBeUndefined();
-        const auth = JSON.parse(build!.env.DOCKER_AUTH_CONFIG!) as {
-          auths: Record<string, { auth: string }>;
-        };
-        expect(auth.auths["registry.invalid"]!.auth).toBe(
-          Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString("base64"),
-        );
-      }),
-    { tags: ["unit", "provider:docker", "local"] },
-  );
+        }),
+      { tags: ["unit", "provider:docker", "local"] },
+    );
+  }
 
   for (const version of ["v0.23.0-desktop.1", "v0.25.0"]) {
     it.effect(
