@@ -28,3 +28,7 @@ export const credentialsDirPath = () => path.join(rootDir(), "credentials");
 
 export const profileCredentialsDirPath = (profile: string) =>
   path.join(credentialsDirPath(), profile);
+
+/** Persistent browser profile for unattended web-UI automation. */
+export const browserProfileDir = (name: string) =>
+  path.join(rootDir(), "browser", name);

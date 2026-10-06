@@ -484,6 +484,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "playwright-core": "catalog:",
     "prisma": "catalog:",
     "react": "catalog:",
     "react-devtools-core": "catalog:",
@@ -519,6 +520,7 @@
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
+    "playwright-core": "catalog:",
     "prisma": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
@@ -567,6 +569,9 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "playwright-core": {
       "optional": true
     },
     "vite": {

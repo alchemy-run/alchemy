@@ -16,6 +16,7 @@ export * as Aws from "./routes/aws.ts";
 export * as Cloudflare from "./routes/cloudflare.ts";
 export * as CloudflareToken from "./routes/cloudflareToken.ts";
 export * as Drift from "./routes/drift.ts";
+export * as GitHub from "./routes/github.ts";
 export * as Logs from "./routes/logs.ts";
 export * as Nuke from "./routes/nuke.ts";
 export * as Profile from "./routes/profile.ts";

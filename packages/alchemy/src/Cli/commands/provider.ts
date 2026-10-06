@@ -8,6 +8,7 @@ import { CliKit } from "../CliKit/CliKit.ts";
 import { awsCommand } from "./aws.ts";
 import { cloudflareCommand } from "./cloudflare.ts";
 import { setExitCode } from "./errors.ts";
+import { githubCommand } from "./github.ts";
 import { config, envFile, profile } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
@@ -59,5 +60,10 @@ const checkEnvCommand = Command.make(
 
 export const providerCommand = Command.make("provider", {}).pipe(
   Command.withDescription("Manage cloud provider prerequisites and utilities"),
-  Command.withSubcommands([checkEnvCommand, awsCommand, cloudflareCommand]),
+  Command.withSubcommands([
+    checkEnvCommand,
+    awsCommand,
+    cloudflareCommand,
+    githubCommand,
+  ]),
 );

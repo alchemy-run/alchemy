@@ -2,10 +2,12 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Semaphore from "effect/Semaphore";
 import * as Interaction from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
+import { GitHubBrowser, type GitHubBrowserError } from "./Browser.ts";
 
 /** A GitHub App step that has no API and must be done in the browser. */
 export type ManualStep = "register-app" | "delete-app" | "install-app";
@@ -73,10 +75,33 @@ export const pollUntilDefined = <A, E, R>(
   });
 
 /**
- * Ask the human to do `step` in the browser: open `open` (default `url`) and
- * race `until` against the waiting prompt, bounded by
- * {@link ManualStepTimeout}. The prompt is raised first so that without a
- * terminal the step fails at once, before any browser opens.
+ * Run `automate` when a {@link GitHubBrowser} session is in context, else
+ * yield `None` without running anything. Lets a resource repair UI-only
+ * drift when it can and report it when it cannot.
+ */
+export const withBrowser = <A, E, R>(
+  automate: Effect.Effect<A, E, R>,
+): Effect.Effect<Option.Option<A>, E, Exclude<R, GitHubBrowser>> =>
+  Effect.serviceOption(GitHubBrowser).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.succeed(Option.none<A>()),
+        onSome: (browser) =>
+          Effect.provideService(automate, GitHubBrowser, browser).pipe(
+            Effect.map(Option.some),
+          ),
+      }),
+    ),
+  );
+
+/**
+ * Do `step` in the browser. With a {@link GitHubBrowser} session in context,
+ * `automate` drives the page and `until` confirms the result from the API,
+ * without any prompt; an automation failure fails the step. Otherwise ask
+ * the human: open `open` (default `url`) and race `until` against the
+ * waiting prompt. The prompt is raised first so that without a terminal
+ * the step fails at once, before any browser opens. Either way the step is
+ * bounded by {@link ManualStepTimeout}.
  */
 export const manualStep = <A, E, R>(options: {
   readonly step: ManualStep;
@@ -87,13 +112,34 @@ export const manualStep = <A, E, R>(options: {
   /** What to click on the opened page, e.g. `Click "Create GitHub App"`. */
   readonly instruction: string;
   readonly until: Effect.Effect<A, E, R>;
+  readonly automate: Effect.Effect<void, GitHubBrowserError, GitHubBrowser>;
 }) =>
   oneAtATime(
     Effect.gen(function* () {
       const { step, url, action } = options;
       const open = options.open ?? url;
-      const interaction = yield* Interaction.Interaction;
       const timeout = yield* ManualStepTimeout;
+      const timedOut = () =>
+        Effect.fail(
+          new GitHubManualStepTimeout({
+            step,
+            url,
+            action,
+            after: Duration.format(Duration.fromInputUnsafe(timeout)),
+          }),
+        );
+      const browser = yield* Effect.serviceOption(GitHubBrowser);
+      if (Option.isSome(browser)) {
+        return yield* Effect.provideService(
+          options.automate,
+          GitHubBrowser,
+          browser.value,
+        ).pipe(
+          Effect.andThen(options.until),
+          Effect.timeoutOrElse({ duration: timeout, orElse: timedOut }),
+        );
+      }
+      const interaction = yield* Interaction.Interaction;
       // Invoked later by the prompt's keyboard handler, outside this fiber.
       const reopen = Effect.runPromiseWith(
         yield* Effect.context<ChildProcessSpawner>(),
@@ -117,19 +163,6 @@ export const manualStep = <A, E, R>(options: {
           Effect.ignore,
           Effect.andThen(options.until),
         ),
-      ).pipe(
-        Effect.timeoutOrElse({
-          duration: timeout,
-          orElse: () =>
-            Effect.fail(
-              new GitHubManualStepTimeout({
-                step,
-                url,
-                action,
-                after: Duration.format(Duration.fromInputUnsafe(timeout)),
-              }),
-            ),
-        }),
-      );
+      ).pipe(Effect.timeoutOrElse({ duration: timeout, orElse: timedOut }));
     }),
   );

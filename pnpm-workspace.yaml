@@ -172,6 +172,7 @@ catalog:
   pathe: "^2.0.3"
   pg: "^8.22.0"
   picomatch: "^4.0.4"
+  playwright-core: "^1.61.1"
   postal-mime: "^2.4.3"
   postcss: "^8.4.49"
   react: "^19.3.0"

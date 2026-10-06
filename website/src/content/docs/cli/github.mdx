@@ -1,0 +1,65 @@
+---
+title: github
+description: GitHub provider commands — sign in to GitHub's web UI once so deploys can drive it unattended.
+---
+
+import Terminal from "../../../components/Terminal.astro";
+
+```sh
+alchemy provider github <subcommand> [options]
+```
+
+Cloud-provider commands for GitHub — managing the saved browser session
+that lets `GitHub.App` and `GitHub.AppInstallation` complete their web-only
+steps (registering, installing, deleting, re-permissioning) with no human
+interaction.
+
+## `provider github browser-login`
+
+```sh
+alchemy provider github browser-login [options]
+```
+
+Sign in to GitHub's app settings page and save the session to a browser
+profile under `~/.alchemy/browser/<profile>`, reused by every later deploy
+that opts in with `GitHub.providers({ browser: true })`. With
+`GITHUB_BROWSER_USERNAME`, `GITHUB_BROWSER_PASSWORD` and
+`GITHUB_BROWSER_TOTP_SECRET` set, sign-in runs headless and unattended;
+without them a browser window opens and waits until you are signed in.
+
+<Terminal content={`[g]✓[/g] Signed in as octocat.
+  Browser profile: /Users/me/.alchemy/browser/default
+[b]ℹ[/b] Use GitHub.providers({ browser: true }) to let deploys drive GitHub's web UI unattended.`} />
+
+| Option              | Description                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| `--profile <name>`  | Alchemy auth profile (defaults to `$ALCHEMY_PROFILE` or `default`). Names the browser profile directory. |
+| `--base-url <host>` | GitHub Enterprise Server host to sign in to. Defaults to `github.com`.                    |
+| `--env-file <path>` | Load environment variables from a file                                                   |
+
+```sh
+# Sign in once for the default profile
+alchemy provider github browser-login
+
+# Keep a separate session for a staging profile
+alchemy provider github browser-login --profile staging
+
+# GitHub Enterprise Server
+alchemy provider github browser-login --base-url github.example.com
+```
+
+## `provider github browser-logout`
+
+```sh
+alchemy provider github browser-logout [options]
+```
+
+Delete the saved browser profile. The next deploy that needs the web UI
+falls back to the interactive manual step until you sign in again.
+
+<Terminal content={`[g]✓[/g] Removed browser profile: /Users/me/.alchemy/browser/default`} />
+
+| Option              | Description                                                         |
+| ------------------- | ------------------------------------------------------------------- |
+| `--profile <name>`  | Alchemy auth profile whose browser profile is removed.              |
+| `--env-file <path>` | Load environment variables from a file                              |

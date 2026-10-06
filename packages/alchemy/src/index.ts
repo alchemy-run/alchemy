@@ -14,6 +14,7 @@ export {
   type ServiceLike as BindingServiceLike,
   type ServiceShape as BindingServiceShape,
 } from "./Binding.ts";
+export * as Browser from "./Browser.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";
 export * from "./Input.ts";

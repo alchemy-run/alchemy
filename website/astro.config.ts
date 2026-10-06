@@ -504,6 +504,7 @@ export default defineConfig({
               items: [
                 { label: "aws", link: "/cli/aws" },
                 { label: "cloudflare", link: "/cli/cloudflare" },
+                { label: "github", link: "/cli/github" },
               ],
             },
             { label: "Migrating from v1", link: "/migrating-from-v1" },

@@ -2,6 +2,7 @@ import type { Octokit as RestOctokit } from "@octokit/rest";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { randomUUID } from "node:crypto";
 import http from "node:http";
@@ -11,7 +12,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { githubWebOrigin } from "./BaseUrl.ts";
-import { manualStep, pollUntilDefined } from "./ManualStep.ts";
+import { manualStep, pollUntilDefined, withBrowser } from "./ManualStep.ts";
 import {
   appOctokit,
   effectiveGitHubBaseUrl,
@@ -19,6 +20,12 @@ import {
   unlessStatus,
 } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
+import {
+  deleteApp,
+  registerAppFromManifest,
+  updateAppPermissions,
+  updateAppSettings,
+} from "./WebFlows.ts";
 
 export type AppPermissionAccess = "read" | "write" | "admin";
 
@@ -104,18 +111,21 @@ export interface App extends Resource<
 /**
  * A GitHub App registration.
  *
- * GitHub has no API to register or delete an app, so both are human steps:
- * the first deploy opens a local page that submits an app manifest to
- * GitHub, and the human clicks "Create GitHub App"; destroy opens the app's
- * advanced settings page and waits until the human deletes it. Without an
- * interactive terminal both fail with `GitHubManualStepRequired`.
+ * GitHub has no API to register or delete an app, so both happen in a
+ * browser: the first deploy opens a local page that submits an app manifest
+ * to GitHub, where "Create GitHub App" is clicked; destroy opens the app's
+ * advanced settings page and waits until it is deleted. With a browser
+ * session configured (see below) alchemy clicks through both itself.
+ * Otherwise a human does, and without an interactive terminal both fail
+ * with `GitHubManualStepRequired`.
  *
  * Apps register private; visibility is managed in GitHub's UI only.
  *
- * Later deploys never open a browser. Webhook settings are synced through
- * the API. Any other difference from the live registration (name,
- * description, URL, permissions, events) fails with `GitHubAppDrift` and
- * the settings URL to fix it at.
+ * Later deploys never prompt. Webhook settings are synced through the API.
+ * Any other difference from the live registration (name, description, URL,
+ * permissions, events) is repaired through the browser session when there
+ * is one, and otherwise fails with `GitHubAppDrift` and the settings URL to
+ * fix it at.
  *
  * Apps default to **retain** on removal: destroying the stack drops the
  * state and leaves the registration (and every installation) in place.
@@ -182,6 +192,23 @@ export interface App extends Resource<
  *   bindings: { APP_ID: app.appId, PRIVATE_KEY: app.privateKey, WEBHOOK_SECRET: secret.text },
  * });
  * ```
+ *
+ * ### Unattended deploys with a browser session
+ * Sign a browser profile in to GitHub once, then pass `browser` to the
+ * providers: registration, deletion and drift repair run headless in that
+ * session, with no prompt and no clicks, so deploy and destroy also work
+ * without a terminal.
+ * ```sh
+ * alchemy provider github browser-login
+ * ```
+ * ```typescript
+ * providers: GitHub.providers({ browser: true })
+ * ```
+ * `browser: true` reads the session from the environment, so in CI set
+ * `GITHUB_BROWSER_USERNAME`, `GITHUB_BROWSER_PASSWORD` and
+ * `GITHUB_BROWSER_TOTP_SECRET` (the account's TOTP seed) for an unattended
+ * sign-in. Pass an options object instead to pin the profile directory,
+ * host, or credentials.
  *
  * @resource
  * @product App
@@ -397,6 +424,27 @@ export const appDrift = (
   return fields;
 };
 
+/**
+ * Dropdown values that make the live permissions match `desired`: every
+ * live permission the props drop becomes `none`, except GitHub's implicit
+ * `metadata: read`.
+ */
+export const appPermissionChanges = (
+  desired: Readonly<Record<string, AppPermissionAccess>>,
+  live: LivePermissions,
+): Record<string, "none" | AppPermissionAccess> => ({
+  ...Object.fromEntries(
+    Object.keys(definedPermissions(live))
+      .filter(
+        (name) =>
+          desired[name] === undefined &&
+          !(name === "metadata" && live.metadata === "read"),
+      )
+      .map((name) => [name, "none" as const]),
+  ),
+  ...desired,
+});
+
 interface LiveApp {
   readonly id: number;
   readonly slug?: string;
@@ -570,12 +618,67 @@ const registerApp = (
       action: `create GitHub App ${props.name}`,
       instruction: 'Click "Create GitHub App"',
       until: local.code,
+      automate: registerAppFromManifest({ manifestUrl: local.url }),
     });
     const { data } = yield* Effect.tryPromise(() =>
       octokit.rest.apps.createFromManifest({ code }),
     );
     return data;
   }).pipe(Effect.scoped);
+
+// Settings only the UI can change. A browser session sets them and the
+// registration is observed again; whatever still differs is reported.
+const repairAppDrift = (
+  news: AppProps,
+  live: LiveApp,
+  privateKey: Redacted.Redacted<string>,
+  octokit: RestOctokit,
+  baseUrl: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const drift = appDrift(news, live);
+    if (drift.length === 0) return { live, drift };
+    const slug = live.slug ?? "";
+    const fields = new Set(drift.map((f) => f.field));
+    const repaired = yield* withBrowser(
+      Effect.gen(function* () {
+        if (
+          fields.has("name") ||
+          fields.has("description") ||
+          fields.has("url")
+        ) {
+          yield* updateAppSettings({
+            settingsUrl: appSettingsUrl({ owner: news.owner, slug, baseUrl }),
+            name: news.name,
+            description: news.description ?? "",
+            url: news.url,
+          });
+        }
+        if (fields.has("permissions") || fields.has("events")) {
+          yield* updateAppPermissions({
+            permissionsUrl: appSettingsUrl({
+              owner: news.owner,
+              slug,
+              page: "permissions",
+              baseUrl,
+            }),
+            permissions: appPermissionChanges(
+              news.permissions,
+              live.permissions,
+            ),
+            events: news.events ?? [],
+          });
+        }
+        return yield* observeApp(
+          { appId: live.id, slug, privateKey, owner: news.owner },
+          octokit,
+          baseUrl,
+        );
+      }),
+    );
+    const observed = Option.getOrUndefined(repaired) ?? live;
+    return { live: observed, drift: appDrift(news, observed) };
+  });
 
 export const AppProvider = () =>
   Provider.succeed(App, {
@@ -603,7 +706,7 @@ export const AppProvider = () =>
 
       // Ensure — a human registers the app from the manifest.
       const registered = observed === undefined;
-      const { live, secrets } =
+      const { live: found, secrets } =
         observed === undefined || output === undefined
           ? yield* registerApp(news, octokit, baseUrl).pipe(
               Effect.map((data) => ({
@@ -619,10 +722,19 @@ export const AppProvider = () =>
               })),
             )
           : { live: observed, secrets: credentials(news, output) };
-      const slug = live.slug ?? "";
 
-      // Sync — registration settings have no API; report them.
-      const drift = registered ? [] : appDrift(news, live);
+      // Sync — registration settings have no API: a browser session sets
+      // them, otherwise they are reported.
+      const { live, drift } = registered
+        ? { live: found, drift: [] }
+        : yield* repairAppDrift(
+            news,
+            found,
+            secrets.privateKey,
+            octokit,
+            baseUrl,
+          );
+      const slug = live.slug ?? "";
       if (drift.length > 0) {
         return yield* new GitHubAppDrift({
           slug,
@@ -733,17 +845,19 @@ export const AppProvider = () =>
         baseUrl,
       ).pipe(Effect.map((live) => (live === undefined ? true : undefined)));
       if (yield* gone) return;
+      const advancedUrl = appSettingsUrl({
+        owner: olds.owner,
+        slug: output.slug,
+        page: "advanced",
+        baseUrl,
+      });
       yield* manualStep({
         step: "delete-app",
-        url: appSettingsUrl({
-          owner: olds.owner,
-          slug: output.slug,
-          page: "advanced",
-          baseUrl,
-        }),
+        url: advancedUrl,
         action: `delete GitHub App ${output.slug}`,
         instruction: 'Click "Delete GitHub App" under Danger zone',
         until: pollUntilDefined(gone),
+        automate: deleteApp({ advancedUrl, slug: output.slug }),
       });
     }),
   });

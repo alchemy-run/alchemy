@@ -30,10 +30,11 @@ alchemy
 └─ provider
    ├─ check-env           # CI preflight: verify required provider env vars are set
    ├─ aws bootstrap|teardown
-   └─ cloudflare bootstrap|teardown|token|state logs
+   ├─ cloudflare bootstrap|teardown|token|state logs
+   └─ github browser-login|browser-logout
 ```
 
-Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [AWS provider commands](/cli/aws), and [Cloudflare provider commands](/cli/cloudflare). The workflow guides cover [adopting resources](/cli/adopting-resources) and [inspecting state](/cli/inspecting-state).
+Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [AWS provider commands](/cli/aws), [Cloudflare provider commands](/cli/cloudflare), and [GitHub provider commands](/cli/github). The workflow guides cover [adopting resources](/cli/adopting-resources) and [inspecting state](/cli/inspecting-state).
 
 ## Common options
 

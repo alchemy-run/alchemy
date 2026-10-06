@@ -100,6 +100,9 @@ const expectQuietDestroy = (stack: Test.ScratchStack) =>
     expect(yield* persistedApp(stack)).toBeUndefined();
   });
 
+const unattended = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provide(Interaction.layerNonInteractive()));
+
 const identity = (stack: Test.ScratchStack) => ({
   name: stack.name,
   stage: stack.stage,
@@ -531,9 +534,10 @@ test.provider(
         .run(stack.deploy(deployApp(appProps(id))))
         .pipe(withManualStepTimeout("2 minutes"));
 
-      // Raising a permission has no API: even with a human at the terminal
-      // the deploy must stop, name the drift, and point at the settings page.
-      const human = autopilot();
+      // Raising a permission has no API: without a browser session, even with
+      // a human at the terminal the deploy must stop, name the drift, and
+      // point at the settings page.
+      const human = autopilot({ idle: true });
       const error = failureOf(
         yield* Effect.exit(
           human.run(
@@ -604,7 +608,7 @@ test.provider(
       const detected = yield* Drift.detect(identity(stack));
       expect(detected.resources["App"]?.action).toBe("drifted");
 
-      const human = autopilot();
+      const human = autopilot({ idle: true });
       const repair = failureOf(
         yield* Effect.exit(human.run(Drift.repair(identity(stack)))),
       );
@@ -637,6 +641,88 @@ test.provider(
       Effect.ensuring(cleanup(stack, appName("oobperm")).pipe(Effect.ignore)),
     ),
   browserTest,
+);
+
+test.provider(
+  "registers, redeploys and destroys unattended",
+  (stack) =>
+    Effect.gen(function* () {
+      const props = appProps("unattended");
+      yield* cleanup(stack, props.name);
+
+      const human = autopilot();
+      const app = yield* human
+        .run(unattended(stack.deploy(deployApp(props))))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(app.slug).toBe(props.name);
+      expect(yield* appExists(yield* Octokit, props.name)).toBe(true);
+      expect(human.prompts).toEqual([]);
+
+      const again = yield* human.run(
+        unattended(stack.deploy(deployApp(props))),
+      );
+      expect(again.appId).toBe(app.appId);
+      expect(human.prompts).toEqual([]);
+
+      yield* human
+        .run(unattended(stack.destroy()))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(human.prompts).toEqual([]);
+      expect(human.launched).toContain(
+        `https://github.com/organizations/${owner}/settings/apps/${props.name}/advanced`,
+      );
+      expect(yield* appExists(yield* Octokit, props.name)).toBe(false);
+      expect(yield* persistedApp(stack)).toBeUndefined();
+    }).pipe(
+      Effect.ensuring(
+        cleanup(stack, appName("unattended")).pipe(Effect.ignore),
+      ),
+    ),
+  { ...browserTest, timeout: 240_000 },
+);
+
+test.provider(
+  "repairs drift unattended",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "repair";
+      yield* cleanup(stack, appName(id));
+
+      const app = yield* autopilot()
+        .run(stack.deploy(deployApp(appProps(id))))
+        .pipe(withManualStepTimeout("2 minutes"));
+
+      yield* setAppPermission({
+        slug: app.slug,
+        permission: "issues",
+        access: "write",
+      });
+
+      const props = appProps(id, {
+        description: "alchemy GitHub App drift repair test",
+      });
+      const human = autopilot();
+      const repaired = yield* human
+        .run(unattended(stack.deploy(deployApp(props))))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(repaired.appId).toBe(app.appId);
+      expect(repaired.permissions).toMatchObject({ issues: "read" });
+      expect(human.prompts).toEqual([]);
+      const settingsUrl = `https://github.com/organizations/${owner}/settings/apps/${app.slug}`;
+      expect(human.launched).toContain(settingsUrl);
+      expect(human.launched).toContain(`${settingsUrl}/permissions`);
+
+      const { data: live } = yield* Effect.tryPromise(() =>
+        appOctokit(app.appId, app.privateKey).rest.apps.getAuthenticated(),
+      );
+      expect(live ? GitHub.appDrift(props, live) : undefined).toEqual([]);
+
+      const detected = yield* Drift.detect(identity(stack));
+      expect(detected.resources["App"]?.action).toBe("unchanged");
+    }).pipe(
+      Effect.ensuring(cleanup(stack, appName("repair")).pipe(Effect.ignore)),
+    ),
+  { ...browserTest, timeout: 240_000 },
 );
 
 test.provider(

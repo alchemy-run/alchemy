@@ -2,6 +2,7 @@ import { Octokit as _Octokit } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { createSign } from "node:crypto";
 import type { AuthError } from "../Auth/AuthProvider.ts";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
@@ -117,4 +118,23 @@ export const unlessStatus = <A>(
       }),
     catch: (error) =>
       error instanceof Error ? error : new Error(String(error)),
+  });
+
+const freshAppKeyMessage = "Integration must generate a public key";
+
+const isFreshAppKey = (error: unknown): boolean =>
+  (Predicate.hasProperty(error, "message") &&
+    typeof error.message === "string" &&
+    error.message.includes(freshAppKeyMessage)) ||
+  (Predicate.hasProperty(error, "cause") && isFreshAppKey(error.cause));
+
+// GitHub rejects a freshly minted app key's JWT for a few seconds after the
+// registration; the call succeeds once the key has propagated.
+export const retryFreshAppKey = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(effect, {
+    while: isFreshAppKey,
+    schedule: Schedule.spaced("2 seconds"),
+    times: 10,
   });
