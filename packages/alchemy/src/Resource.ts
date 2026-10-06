@@ -293,6 +293,25 @@ export class MissingImplementationError extends Data.TaggedError("MissingImpleme
   id: string;
 }> {}
 
+/**
+ * A logical id was declared again as a different resource type.
+ *
+ * A logical id names one resource in the stack. Yielding that id again
+ * returns the resource already registered, so one declaration can be shared
+ * by the stack program and a service init. A different type is a different
+ * resource. Returning the first one would drop the second declaration while
+ * TypeScript still typed the result as the second type.
+ */
+export class DuplicateLogicalIdError extends Data.TaggedError("DuplicateLogicalIdError")<{
+  message: string;
+  /** Fully qualified logical id already present on the stack. */
+  fqn: string;
+  /** Type registered under {@link fqn}. */
+  existingType: string;
+  /** Type of the declaration that collided with {@link fqn}. */
+  conflictingType: string;
+}> {}
+
 export const missingImplementation = (type: string, id: string) =>
   new MissingImplementationError({
     type,
@@ -349,6 +368,23 @@ export function Resource<R extends ResourceLike>(
 
       const existing = stack.resources[fqn];
       if (existing) {
+        // A logical id names one resource. The same type is the memoized
+        // re-yield. A different type would return the first resource typed
+        // as the second, and the second declaration would never register.
+        if (existing.Type !== type) {
+          return yield* Effect.die(
+            new DuplicateLogicalIdError({
+              message:
+                `Resource '${fqn}' is already registered as '${existing.Type}' ` +
+                `and cannot be declared as '${type}'. A logical id names one ` +
+                `resource in the stack. Yield the existing resource, or give ` +
+                `this declaration its own id.`,
+              fqn,
+              existingType: existing.Type,
+              conflictingType: type,
+            }),
+          );
+        }
         // A resource may be `yield*`ed from several places (idempotent
         // registration). If a later site carries an *explicit* ambient
         // ProviderModePolicy that disagrees with what the resource was
@@ -373,7 +409,7 @@ export function Resource<R extends ResourceLike>(
             }),
           );
         }
-        // // TODO(sam): check if props are different and die
+        // TODO(sam): check if props are different and die
         return existing;
       }
       const bind = (
