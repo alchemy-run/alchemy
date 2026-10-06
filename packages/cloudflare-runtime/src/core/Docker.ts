@@ -1,9 +1,11 @@
 import * as NodeHttp from "node:http";
 import type * as NodeStream from "node:stream";
+import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
@@ -22,6 +24,7 @@ import {
   mergeSidecarLoopbackHostConfig,
 } from "./DockerLoopback.ts";
 import { makeDockerLoopbackForwarders } from "./internal/docker-loopback-forwarders.ts";
+import { makeDockerUpgradeRouter } from "./internal/docker-upgrade-router.ts";
 import { listenOnLoopback } from "./internal/listen-on-loopback.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
@@ -261,6 +264,12 @@ export const DockerLive = Layer.effect(
           if (isCreateRequest && !req.url!.endsWith("-proxy")) {
             const original = yield* readJson<{ Image: string; Env: Array<string> }>(req);
             const image = registeredImages.get(original.Image);
+            // A native `start({ image })` can name an image that was never
+            // prepared (e.g. a managed `cloudflare/*` image): pull it on demand.
+            const pulled = yield* Effect.exit(
+              Cache.get(ensuredImages, image?.tag ?? original.Image),
+            );
+            if (Exit.isFailure(pulled)) return sendError(res, 500, Cause.pretty(pulled.cause));
             return yield* forward(req, res, {
               body: JSON.stringify({
                 ...original,
@@ -416,6 +425,25 @@ export const DockerLive = Layer.effect(
     const inspect = (tag: string, format: string) =>
       Effect.map(run(["image", "inspect", tag, "--format", format]), (result) => result.stdout);
 
+    // `docker image inspect` prints the image id when present and empty
+    // stdout when absent, so only pull when the image is genuinely missing.
+    const pullIfMissing = (imageUri: string, platform?: string) =>
+      inspect(imageUri, "{{.Id}}").pipe(
+        Effect.orElseSucceed(() => undefined),
+        Effect.flatMap((id) =>
+          id?.trim() ? Effect.void : Effect.asVoid(pull({ imageUri, platform })),
+        ),
+      );
+    // workerd may create a container from an image nobody prepared, such as a
+    // managed `cloudflare/*` image. Failed pulls are forgotten and retried.
+    const ensuredImages = yield* Cache.makeWith(
+      (image: string) => pullIfMissing(image, "linux/amd64"),
+      {
+        capacity: Number.MAX_SAFE_INTEGER,
+        timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
+      },
+    );
+
     const list = (ancestor: string) =>
       run([
         "ps",
@@ -445,8 +473,16 @@ export const DockerLive = Layer.effect(
         Effect.flatMap(
           Effect.fnUntraced(function* (socketPath) {
             const forwarders = yield* makeDockerLoopbackForwarders({ bin, socketPath });
-            const port = yield* listenOnLoopback(makeDockerProxyServer(socketPath, forwarders));
-            return `127.0.0.1:${port}`;
+            const httpProxyPort = yield* listenOnLoopback(
+              makeDockerProxyServer(socketPath, forwarders),
+            );
+            // workerd connects to the router, which forwards `docker exec`
+            // streams to Docker directly and everything else to the proxy.
+            const router = yield* makeDockerUpgradeRouter({
+              dockerSocketPath: socketPath,
+              httpProxyPort,
+            });
+            return `127.0.0.1:${yield* listenOnLoopback(router)}`;
           }),
         ),
       ),
@@ -459,15 +495,8 @@ export const DockerLive = Layer.effect(
       // fails with it. `docker image inspect` prints the image id when
       // present and empty stdout when absent (`run` reports the non-zero
       // exit rather than failing the effect), so only pull when the image
-      // is genuinely missing. Any failure to even run `inspect` (unlike
-      // `pull`, it doesn't normalize its error channel) falls back to the
-      // pre-existing pull behavior rather than failing here.
-      inspect(containerEgressInterceptorImage, "{{.Id}}").pipe(
-        Effect.orElseSucceed(() => undefined),
-        Effect.flatMap((imageId) =>
-          imageId?.trim() ? Effect.void : pull({ imageUri: containerEgressInterceptorImage }),
-        ),
-      ),
+      // is genuinely missing. The sidecar needs the host-native image.
+      pullIfMissing(containerEgressInterceptorImage),
       (socketPath) => ({
         localDocker: {
           socketPath,

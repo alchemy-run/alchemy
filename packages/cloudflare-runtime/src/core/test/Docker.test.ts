@@ -250,8 +250,9 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((
  * top-level one mid-test, which would race the fiber's own spawns.
  */
 const makeInspectStub = (
-  inspectStdout: string,
+  inspectStdout: string | ((image: string) => string),
   inspectExitCode?: Effect.Effect<ChildProcessSpawner.ExitCode>,
+  pullExitCode = 0,
 ) => {
   const spawned: Array<ReadonlyArray<string>> = [];
   const layer = Layer.succeed(
@@ -264,14 +265,23 @@ const makeInspectStub = (
         command._tag === "StandardCommand" &&
         command.args[0] === "image" &&
         command.args[1] === "inspect";
-      const stdout = isInspect ? inspectStdout : "";
+      const stdout = isInspect
+        ? typeof inspectStdout === "function"
+          ? inspectStdout(command.args[2]!)
+          : inspectStdout
+        : "";
+      const isPull = command._tag === "StandardCommand" && command.args[0] === "pull";
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
           exitCode:
             isInspect && inspectExitCode
               ? inspectExitCode
-              : Effect.succeed(ChildProcessSpawner.ExitCode(isInspect && stdout === "" ? 1 : 0)),
+              : Effect.succeed(
+                  ChildProcessSpawner.ExitCode(
+                    isPull ? pullExitCode : isInspect && stdout === "" ? 1 : 0,
+                  ),
+                ),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,
@@ -463,4 +473,27 @@ layer(
       expect(error.detail?.stderr).toContain("no such image");
     }),
   );
+});
+
+it.effect("retries an image pull after a failed container create", () => {
+  const image = "alchemy-test:missing";
+  const stub = makeInspectStub((ref) => (ref === image ? "" : "sha256:present"), undefined, 1);
+  return Effect.gen(function* () {
+    const docker = yield* Docker;
+    const config = yield* docker.getWorkerdDockerConfiguration;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = yield* Effect.promise(() =>
+        fetch(`http://${config.localDocker!.socketPath}/containers/create?name=test`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ Image: image, Env: [] }),
+        }),
+      );
+      expect(response.status).toBe(500);
+      yield* Effect.promise(() => response.text());
+    }
+    expect(stub.spawned.filter(([, verb, ref]) => verb === "pull" && ref === image)).toHaveLength(
+      2,
+    );
+  }).pipe(Effect.provide(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, stub.layer))));
 });
