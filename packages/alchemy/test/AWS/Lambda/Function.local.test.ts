@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
@@ -33,7 +34,8 @@ import * as Schedule from "effect/Schedule";
  *   - a dualized Queue + a `bundle: false` Function + a distilled
  *     event-source mapping pump SQS messages through the containerized
  *     function into a dualized Bucket;
- *   - after destroy the function is gone from the emulator.
+ *   - after destroy the function and its `/aws/lambda/<name>` log group
+ *     are gone from the emulator.
  *
  * Requires Docker (floci + the Lambda runtime container); skipped when the
  * daemon is unavailable.
@@ -236,9 +238,28 @@ test.provider.skipIf(!dockerAvailable)(
       );
       expect(afterUpdateSwap.body).toBe("marker-v4:env-updated");
 
+      // The invocations above made the emulator create the function's log
+      // group (control: the destroy assertion below is not vacuous).
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      const logGroupExists = Logs.describeLogGroups({
+        logGroupNamePrefix: logGroupName,
+      }).pipe(
+        Effect.map((r) => (r.logGroups ?? []).some((g) => g.logGroupName === logGroupName)),
+        Effect.provide(flociContext),
+      );
+      const existedBeforeDestroy = yield* logGroupExists.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (exists): boolean => exists,
+          times: 20,
+        }),
+      );
+      expect(existedBeforeDestroy).toBe(true);
+
       // Destroy: the function (and its role) must be gone from the
       // emulator.
       yield* stack.destroy();
+      expect(yield* logGroupExists).toBe(false);
       const gone = yield* Lambda.getFunction({
         FunctionName: fn.functionName,
       }).pipe(
