@@ -1,5 +1,6 @@
 import * as NodeV8 from "node:v8";
 import * as Cause from "effect/Cause";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stdio from "effect/Stdio";
@@ -59,7 +60,7 @@ const program = Effect.gen(function* () {
 // config resolution) reaches the parent.
 runMain(
   program.pipe(
-    Effect.tapCause((cause) => Effect.sync(() => process.stderr.write(`${Cause.pretty(cause)}\n`))),
+    Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),
     Effect.provide(PlatformServices),
   ),
   { disableErrorReporting: true },
