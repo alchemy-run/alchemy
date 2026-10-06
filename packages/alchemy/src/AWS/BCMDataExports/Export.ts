@@ -198,10 +198,7 @@ const retryThrottling = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(5),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
   });
 
 export const ExportProvider = () =>
@@ -212,10 +209,7 @@ export const ExportProvider = () =>
         id: string,
         props: { exportName?: string | undefined },
       ) {
-        return (
-          props.exportName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.exportName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       const buildExport = (name: string, props: ExportProps): bcm.Export => ({
@@ -232,18 +226,11 @@ export const ExportProvider = () =>
             S3Region: props.s3Destination.s3Region,
             S3BucketOwner: props.s3Destination.s3BucketOwner,
             S3OutputConfigurations: {
-              OutputType:
-                props.s3Destination.s3OutputConfigurations?.outputType ??
-                "CUSTOM",
-              Format:
-                props.s3Destination.s3OutputConfigurations?.format ??
-                "TEXT_OR_CSV",
-              Compression:
-                props.s3Destination.s3OutputConfigurations?.compression ??
-                "GZIP",
+              OutputType: props.s3Destination.s3OutputConfigurations?.outputType ?? "CUSTOM",
+              Format: props.s3Destination.s3OutputConfigurations?.format ?? "TEXT_OR_CSV",
+              Compression: props.s3Destination.s3OutputConfigurations?.compression ?? "GZIP",
               Overwrite:
-                props.s3Destination.s3OutputConfigurations?.overwrite ??
-                "OVERWRITE_REPORT",
+                props.s3Destination.s3OutputConfigurations?.overwrite ?? "OVERWRITE_REPORT",
             },
           },
         },
@@ -267,9 +254,7 @@ export const ExportProvider = () =>
               .map(([table, props]) => [
                 table,
                 Object.fromEntries(
-                  Object.entries(props ?? {}).sort(([l], [r]) =>
-                    l.localeCompare(r),
-                  ),
+                  Object.entries(props ?? {}).sort(([l], [r]) => l.localeCompare(r)),
                 ),
               ]),
           ),
@@ -287,8 +272,7 @@ export const ExportProvider = () =>
       // the effective owner account on reads even when it was never supplied.
       const sameExport = (live: bcm.Export, desired: bcm.Export): boolean =>
         normalizeExport(live) === normalizeExport(desired) &&
-        (desired.DestinationConfigurations.S3Destination.S3BucketOwner ===
-          undefined ||
+        (desired.DestinationConfigurations.S3Destination.S3BucketOwner === undefined ||
           desired.DestinationConfigurations.S3Destination.S3BucketOwner ===
             live.DestinationConfigurations.S3Destination.S3BucketOwner);
 
@@ -303,21 +287,14 @@ export const ExportProvider = () =>
 
       // Observe the live export definition. `arnHint` (from cached output)
       // is verified, not trusted — a stale ARN falls through to name lookup.
-      const observe = Effect.fn(function* (
-        name: string,
-        arnHint: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, arnHint: string | undefined) {
         const arns = arnHint !== undefined ? [arnHint] : [];
         const byName = yield* findArnByName(name);
         if (byName !== undefined && byName !== arnHint) arns.push(byName);
         for (const arn of arns) {
           const found = yield* bcm
             .getExport({ ExportArn: arn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found?.Export !== undefined) {
             return { exportArn: arn, export: found.Export };
           }
@@ -328,9 +305,7 @@ export const ExportProvider = () =>
       const fetchObservedTags = Effect.fn(function* (arn: string) {
         return yield* bcm.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) =>
-            Object.fromEntries(
-              (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
           ),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
@@ -351,8 +326,7 @@ export const ExportProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.exportName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.exportName ?? (yield* createName(id, olds ?? {}));
           const live = yield* observe(name, output?.exportArn);
           if (live === undefined) return undefined;
           const attrs = { exportName: name, exportArn: live.exportArn };
@@ -384,22 +358,17 @@ export const ExportProvider = () =>
             const created = yield* retryThrottling(
               bcm.createExport({
                 Export: desired,
-                ResourceTags: Object.entries(desiredTags).map(
-                  ([Key, Value]) => ({ Key, Value }),
-                ),
+                ResourceTags: Object.entries(desiredTags).map(([Key, Value]) => ({ Key, Value })),
               }),
             );
-            exportArn =
-              created.ExportArn ?? (yield* findArnByName(name)) ?? name;
+            exportArn = created.ExportArn ?? (yield* findArnByName(name)) ?? name;
           } else {
             exportArn = live.exportArn;
             // 3. SYNC — updateExport overwrites the full definition; skip
             //    the call when the observed definition already matches.
             if (!sameExport(live.export, desired)) {
               yield* session.note(`updating data export ${name}`);
-              yield* retryThrottling(
-                bcm.updateExport({ ExportArn: exportArn, Export: desired }),
-              );
+              yield* retryThrottling(bcm.updateExport({ ExportArn: exportArn, Export: desired }));
             }
           }
 
@@ -425,9 +394,7 @@ export const ExportProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* bcm
             .deleteExport({ ExportArn: output.exportArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

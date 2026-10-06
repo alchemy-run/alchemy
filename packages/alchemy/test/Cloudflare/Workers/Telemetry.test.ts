@@ -1,11 +1,11 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
 import OtelCustomWorker from "./fixtures/otel-custom-worker.ts";
@@ -14,17 +14,13 @@ import OtelTracedWorker from "./fixtures/otel-traced-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const collectorMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-collector-worker.ts",
-);
+const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/otel-collector-worker.ts");
 
 // The collector must be reachable *from another Worker*: same-account
 // worker-to-worker fetches over workers.dev are blocked (error 1042), so
 // the collector gets a deterministic custom hostname on the standing test
 // zone instead.
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const collectorHost = `otel-collector-${process.env.PULL_REQUEST ?? process.env.USER}.${zoneName}`;
 
 // The OTLP sink both traced fixtures export to. Declared identically in
@@ -32,9 +28,7 @@ const collectorHost = `otel-collector-${process.env.PULL_REQUEST ?? process.env.
 const collectorWorker = () =>
   Cloudflare.Worker("OtelCollector", {
     main: collectorMain,
-    env: {
-      SINK: Cloudflare.DurableObject<OtelSink>("OtelSink"),
-    },
+    env: { SINK: Cloudflare.DurableObject<OtelSink>("OtelSink") },
     domain: collectorHost,
     compatibility: { date: "2024-09-23" },
   });
@@ -67,9 +61,7 @@ describe(
           const collectorUrl = `https://${collectorHost}`;
           const collected = `https://${collector.workerName}.${subdomain}.workers.dev/collected`;
 
-          yield* expectUrlContains(collected, "otel-collector-ok", {
-            timeout: "180 seconds",
-          });
+          yield* expectUrlContains(collected, "otel-collector-ok", { timeout: "180 seconds" });
 
           // The traced fixtures read the collector URL via `Config` at deploy
           // time. The test harness snapshots its ConfigProvider before the
@@ -112,9 +104,7 @@ describe(
 
           // Drive one traced request on each worker now that exports can
           // reach the collector.
-          yield* expectUrlContains(`${tracedUrl}/work`, "did-work", {
-            timeout: "180 seconds",
-          });
+          yield* expectUrlContains(`${tracedUrl}/work`, "did-work", { timeout: "180 seconds" });
           yield* expectUrlContains(`${customUrl}/work`, "custom-did-work", {
             timeout: "180 seconds",
           });
@@ -154,22 +144,14 @@ describe(
           // arrive if the DurableObjectBridge's flush actually completes
           // before/despite the event's I/O context winding down.
           const flushUrl = flush.url as string;
-          yield* expectUrlContains(
-            `${flushUrl}/`,
-            "worker-saw:durable-object-ok",
-            {
-              timeout: "240 seconds",
-              label: "event-flush worker via DO fetch",
-            },
-          );
-          yield* expectUrlContains(
-            `${flushUrl}/rpc`,
-            "worker-saw:durable-object-rpc-ok",
-            {
-              timeout: "120 seconds",
-              label: "event-flush worker via DO rpc",
-            },
-          );
+          yield* expectUrlContains(`${flushUrl}/`, "worker-saw:durable-object-ok", {
+            timeout: "240 seconds",
+            label: "event-flush worker via DO fetch",
+          });
+          yield* expectUrlContains(`${flushUrl}/rpc`, "worker-saw:durable-object-rpc-ok", {
+            timeout: "120 seconds",
+            label: "event-flush worker via DO rpc",
+          });
           // The DO fetch event's child span…
           yield* expectUrlContains(collected, "otel-event-flush.child", {
             timeout: "120 seconds",

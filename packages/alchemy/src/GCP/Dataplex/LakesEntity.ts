@@ -38,9 +38,7 @@ export type EntityPartitionField = {
   /** Partition field name. Immutable. */
   name: string;
   /** Partition field type. Immutable. */
-  type:
-    | dataplex.GoogleCloudDataplexV1SchemaPartitionFieldTypeEnum
-    | (string & {});
+  type: dataplex.GoogleCloudDataplexV1SchemaPartitionFieldTypeEnum | (string & {});
 };
 
 export type EntitySchema = {
@@ -54,16 +52,12 @@ export type EntitySchema = {
   /** Partition keys. Immutable once set. */
   partitionFields?: EntityPartitionField[];
   /** Partition path style (`HIVE_COMPATIBLE`). */
-  partitionStyle?:
-    | dataplex.GoogleCloudDataplexV1SchemaPartitionStyleEnum
-    | (string & {});
+  partitionStyle?: dataplex.GoogleCloudDataplexV1SchemaPartitionStyleEnum | (string & {});
 };
 
 export type EntityStorageFormat = {
   /** File format (`PARQUET`, `CSV`, `JSON`, …). */
-  format?:
-    | dataplex.GoogleCloudDataplexV1StorageFormatFormatEnum
-    | (string & {});
+  format?: dataplex.GoogleCloudDataplexV1StorageFormatFormatEnum | (string & {});
   /** Compression (`GZIP`, `BZIP2`). */
   compressionFormat?:
     | dataplex.GoogleCloudDataplexV1StorageFormatCompressionFormatEnum
@@ -85,9 +79,7 @@ const MIME_TYPES: Record<string, string> = {
   JSON: "application/json",
 };
 
-const withMimeType = (
-  format: EntityStorageFormat | undefined,
-): EntityStorageFormat | undefined => {
+const withMimeType = (format: EntityStorageFormat | undefined): EntityStorageFormat | undefined => {
   if (format === undefined || format.mimeType !== undefined) return format;
   const mimeType = MIME_TYPES[(format.format ?? "").toUpperCase()];
   return mimeType === undefined ? format : { ...format, mimeType };
@@ -231,24 +223,18 @@ export class LakesEntityNotResolved extends Data.TaggedError(
 const DEFAULT_TYPE = "TABLE";
 const DEFAULT_SYSTEM = "CLOUD_STORAGE";
 
-const resourceNameOf = (zone: string, entityId: string) =>
-  `${zone}/entities/${entityId}`;
+const resourceNameOf = (zone: string, entityId: string) => `${zone}/entities/${entityId}`;
 
 const assetIdOf = (asset: string) => lastSegment(asset);
 
-const schemaBody = (
-  schema: EntitySchema | undefined,
-): dataplex.GoogleCloudDataplexV1Schema => ({
+const schemaBody = (schema: EntitySchema | undefined): dataplex.GoogleCloudDataplexV1Schema => ({
   userManaged: schema?.userManaged !== false,
   fields: schema?.fields,
   partitionFields: schema?.partitionFields,
   partitionStyle: schema?.partitionStyle,
 });
 
-const toAttrs = (
-  entity: dataplex.GoogleCloudDataplexV1Entity,
-  project: string,
-) => {
+const toAttrs = (entity: dataplex.GoogleCloudDataplexV1Entity, project: string) => {
   const name = entity.name ?? "";
   const parsed = parseResourceName(name, "entities");
   return {
@@ -284,16 +270,12 @@ const listOwnedEntities = (project: string, region: string) =>
     );
     const zones = yield* listChildResources(lakes, listZones);
     const named = zones.filter((zone) => (zone.name ?? "").length > 0);
-    const tables = yield* Effect.forEach(
-      named,
-      (zone) => listEntities(zone.name!, "TABLES"),
-      { concurrency: 4 },
-    );
-    const filesets = yield* Effect.forEach(
-      named,
-      (zone) => listEntities(zone.name!, "FILESETS"),
-      { concurrency: 4 },
-    );
+    const tables = yield* Effect.forEach(named, (zone) => listEntities(zone.name!, "TABLES"), {
+      concurrency: 4,
+    });
+    const filesets = yield* Effect.forEach(named, (zone) => listEntities(zone.name!, "FILESETS"), {
+      concurrency: 4,
+    });
     return [...tables.flat(), ...filesets.flat()];
   });
 
@@ -318,21 +300,13 @@ export const LakesEntityProvider = () =>
       const nextId = news.entityId ?? previousId;
       const previousZone = olds?.zone ?? output?.zone;
       const nextZone = news.zone ?? previousZone;
-      const previousType = (
-        olds?.type ??
-        output?.type ??
-        DEFAULT_TYPE
-      ).toUpperCase();
+      const previousType = (olds?.type ?? output?.type ?? DEFAULT_TYPE).toUpperCase();
       const nextType = (news.type ?? previousType).toUpperCase();
       const previousAsset = assetIdOf(olds?.asset ?? output?.asset ?? "");
       const nextAsset = assetIdOf(news.asset);
       const previousPath = olds?.dataPath ?? output?.dataPath ?? "";
       const nextPath = news.dataPath;
-      const previousSystem = (
-        olds?.system ??
-        output?.system ??
-        DEFAULT_SYSTEM
-      ).toUpperCase();
+      const previousSystem = (olds?.system ?? output?.system ?? DEFAULT_SYSTEM).toUpperCase();
       const nextSystem = (news.system ?? previousSystem).toUpperCase();
       if (
         replaceIfChanged(previousId, nextId) ||
@@ -345,9 +319,7 @@ export const LakesEntityProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousZone === nextZone &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousZone === nextZone && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -356,11 +328,7 @@ export const LakesEntityProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = olds?.zone ?? output?.zone ?? "";
-      const entityId = yield* toPhysicalSnake(
-        id,
-        olds?.entityId,
-        output?.entityId,
-      );
+      const entityId = yield* toPhysicalSnake(id, olds?.entityId, output?.entityId);
       const name = output?.name ?? resourceNameOf(zone, entityId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -377,9 +345,7 @@ export const LakesEntityProvider = () =>
           entities,
           (entity) =>
             entity.name
-              ? getByName(entity.name).pipe(
-                  Effect.map((full) => full ?? entity),
-                )
+              ? getByName(entity.name).pipe(Effect.map((full) => full ?? entity))
               : Effect.succeed(entity),
           { concurrency: 4 },
         );
@@ -389,11 +355,7 @@ export const LakesEntityProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = news.zone;
-      const entityId = yield* toPhysicalSnake(
-        id,
-        news.entityId,
-        output?.entityId,
-      );
+      const entityId = yield* toPhysicalSnake(id, news.entityId, output?.entityId);
       const name = output?.name ?? resourceNameOf(zone, entityId);
       const description = news.description;
       const type = (news.type ?? DEFAULT_TYPE).toUpperCase();
@@ -429,12 +391,9 @@ export const LakesEntityProvider = () =>
         return yield* new LakesEntityNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const patternChanged =
-        (current.dataPathPattern ?? "") !== (news.dataPathPattern ?? "");
+      const descriptionChanged = (current.description ?? "") !== (description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const patternChanged = (current.dataPathPattern ?? "") !== (news.dataPathPattern ?? "");
       const formatChanged = fingerprint(current.format) !== fingerprint(format);
       const schemaChanged = fingerprint(current.schema) !== fingerprint(schema);
 

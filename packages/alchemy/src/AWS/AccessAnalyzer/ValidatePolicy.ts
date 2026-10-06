@@ -33,6 +33,4 @@ export interface ValidatePolicy extends Binding.Service<
   >
 > {}
 
-export const ValidatePolicy = Binding.Service<ValidatePolicy>(
-  "AWS.AccessAnalyzer.ValidatePolicy",
-);
+export const ValidatePolicy = Binding.Service<ValidatePolicy>("AWS.AccessAnalyzer.ValidatePolicy");

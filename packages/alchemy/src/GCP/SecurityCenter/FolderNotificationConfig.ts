@@ -129,11 +129,7 @@ export const FolderNotificationConfig = Resource<FolderNotificationConfig>(
 const resourceName = (folder: string, configId: string) =>
   `${folder}/notificationConfigs/${configId}`;
 
-const toAttrs = (
-  config: scc.NotificationConfig,
-  folder: string,
-  project: string,
-) => {
+const toAttrs = (config: scc.NotificationConfig, folder: string, project: string) => {
   const name = config.name ?? "";
   const parsed = parseName(name, "notificationConfigs");
   const ownership = parseOwnership(config.description);
@@ -174,22 +170,13 @@ export const FolderNotificationConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const folder = yield* resolveFolder(
-        olds?.folder ?? output?.folder,
-        output?.folder,
-      );
-      const configId = yield* toPhysicalId(
-        id,
-        olds?.configId,
-        output?.configId,
-      );
+      const folder = yield* resolveFolder(olds?.folder ?? output?.folder, output?.folder);
+      const configId = yield* toPhysicalId(id, olds?.configId, output?.configId);
       const name = output?.name ?? resourceName(folder, configId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, folder, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -200,9 +187,7 @@ export const FolderNotificationConfigProvider = () =>
         return yield* scc.listFoldersNotificationConfigs
           .pages({ parent: folder, pageSize: 100 })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.notificationConfigs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.notificationConfigs ?? [])),
             Stream.filter((config) => hasOwnershipMarker(config.description)),
             Stream.map((config) => toAttrs(config, folder, env.project)),
             Stream.runCollect,
@@ -243,9 +228,7 @@ export const FolderNotificationConfigProvider = () =>
       const updateMask = updateMaskOf(
         !sameText(current.pubsubTopic, pubsubTopic) ? "pubsubTopic" : undefined,
         !sameText(current.description, description) ? "description" : undefined,
-        !sameText(current.streamingConfig?.filter, filter)
-          ? "streamingConfig.filter"
-          : undefined,
+        !sameText(current.streamingConfig?.filter, filter) ? "streamingConfig.filter" : undefined,
       );
 
       if (updateMask.length > 0) {

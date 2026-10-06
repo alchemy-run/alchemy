@@ -1,45 +1,28 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as SNS from "@distilled.cloud/aws/sns";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import {
-  SNSApiFunction,
-  SNSApiFunctionLive,
-  TopicAndQueue,
-} from "./handler.ts";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import { SNSApiFunction, SNSApiFunctionLive, TopicAndQueue } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(14),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(14)]);
 
 describe.sequential(
   "SNS Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:sns",
-      "provider:aws:sqs",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sns", "provider:aws:sqs", "live"] },
   () => {
     test.provider(
       "exercises the SNS bindings surface against a live fixture",
       (stack) =>
         Effect.gen(function* () {
-          yield* Effect.logInfo(
-            "SNS test setup: destroying previous resources",
-          );
+          yield* Effect.logInfo("SNS test setup: destroying previous resources");
           if (!process.env.NO_DESTROY) {
             yield* stack.destroy();
           }
@@ -51,12 +34,7 @@ describe.sequential(
 
               const apiFunction = yield* SNSApiFunction;
 
-              return {
-                apiFunction,
-                topic,
-                queue,
-                subscription,
-              };
+              return { apiFunction, topic, queue, subscription };
             }).pipe(Effect.provide(SNSApiFunctionLive)),
           );
 
@@ -82,17 +60,11 @@ describe.sequential(
             Effect.flatMap((response) =>
               response.status === 200
                 ? Effect.succeed(response)
-                : Effect.fail(
-                    new Error(`Function not ready: ${response.status}`),
-                  ),
+                : Effect.fail(new Error(`Function not ready: ${response.status}`)),
             ),
-            Effect.tap(() =>
-              Effect.logInfo("SNS test setup: fixture responded successfully"),
-            ),
+            Effect.tap(() => Effect.logInfo("SNS test setup: fixture responded successfully")),
             Effect.tapError((error) =>
-              Effect.logWarning(
-                `SNS test setup: fixture not ready yet (${String(error)})`,
-              ),
+              Effect.logWarning(`SNS test setup: fixture not ready yet (${String(error)})`),
             ),
             Effect.retry({ schedule: readinessPolicy }),
           );
@@ -110,24 +82,16 @@ describe.sequential(
 
           const postJson = (path: string, body: unknown) =>
             HttpClient.execute(
-              HttpClientRequest.bodyJsonUnsafe(
-                HttpClientRequest.post(`${baseUrl}${path}`),
-                body,
-              ),
+              HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}${path}`), body),
             ).pipe(
-              Effect.tap((response) =>
-                Effect.flatMap(response.text, Effect.logInfo),
-              ),
+              Effect.tap((response) => Effect.flatMap(response.text, Effect.logInfo)),
               Effect.flatMap((response) => response.json),
               Effect.timeout("20 seconds"),
             );
 
           const deleteJson = (path: string, body: unknown) =>
             HttpClient.execute(
-              HttpClientRequest.bodyJsonUnsafe(
-                HttpClientRequest.delete(`${baseUrl}${path}`),
-                body,
-              ),
+              HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.delete(`${baseUrl}${path}`), body),
             ).pipe(
               Effect.flatMap((response) => response.json),
               Effect.timeout("20 seconds"),
@@ -140,17 +104,11 @@ describe.sequential(
           }> = [];
 
           const waitForQueueMessage = Effect.fn(function* (
-            predicate: (body: {
-              message: string;
-              topicArn: string;
-              subject?: string;
-            }) => boolean,
+            predicate: (body: { message: string; topicArn: string; subject?: string }) => boolean,
           ) {
             const takeBuffered = () => {
               const index = bufferedQueueMessages.findIndex(predicate);
-              return index < 0
-                ? undefined
-                : bufferedQueueMessages.splice(index, 1)[0];
+              return index < 0 ? undefined : bufferedQueueMessages.splice(index, 1)[0];
             };
 
             return yield* Effect.gen(function* () {
@@ -173,10 +131,7 @@ describe.sequential(
               yield* Effect.forEach(
                 messages,
                 (message) =>
-                  SQS.deleteMessage({
-                    QueueUrl: queueUrl,
-                    ReceiptHandle: message.ReceiptHandle!,
-                  }),
+                  SQS.deleteMessage({ QueueUrl: queueUrl, ReceiptHandle: message.ReceiptHandle! }),
                 { concurrency: "unbounded" },
               );
               bufferedQueueMessages.push(
@@ -204,11 +159,7 @@ describe.sequential(
           });
 
           const waitForQueueMessages = Effect.fn(function* (count: number) {
-            const bodies: Array<{
-              message: string;
-              topicArn: string;
-              subject?: string;
-            }> = [];
+            const bodies: Array<{ message: string; topicArn: string; subject?: string }> = [];
 
             while (bodies.length < count) {
               bodies.push(yield* waitForQueueMessage(() => true));
@@ -227,9 +178,7 @@ describe.sequential(
 
             expect((response as any).MessageId).toBeTruthy();
 
-            const queued = yield* waitForQueueMessage(
-              (body) => body.message === marker,
-            );
+            const queued = yield* waitForQueueMessage((body) => body.message === marker);
             expect((queued as any).topicArn).toBe(topicArn);
             expect((queued as any).subject).toBe("PublishTest");
           });
@@ -239,9 +188,7 @@ describe.sequential(
             const first = `batch-1-${crypto.randomUUID()}`;
             const second = `batch-2-${crypto.randomUUID()}`;
 
-            const response = yield* postJson("/publish-batch", {
-              messages: [first, second],
-            });
+            const response = yield* postJson("/publish-batch", { messages: [first, second] });
 
             expect(((response as any).Successful ?? []).length).toBe(2);
 
@@ -276,10 +223,7 @@ describe.sequential(
             }).pipe(
               Effect.retry({
                 while: (e) => e._tag === "TopicAttributeNotPropagated",
-                schedule: Schedule.max([
-                  Schedule.fixed("1 second"),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(15)]),
               }),
             );
           });
@@ -288,9 +232,7 @@ describe.sequential(
           yield* Effect.gen(function* () {
             yield* postJson("/add-permission", {});
             const response = yield* getJson("/topic-attributes");
-            expect((response as any).Attributes.Policy).toContain(
-              "FixturePublishPermission",
-            );
+            expect((response as any).Attributes.Policy).toContain("FixturePublishPermission");
           });
 
           // RemovePermission
@@ -315,9 +257,7 @@ describe.sequential(
 
           // PutDataProtectionPolicy
           yield* Effect.gen(function* () {
-            const response = yield* postJson("/data-protection-policy", {
-              policy: "{}",
-            });
+            const response = yield* postJson("/data-protection-policy", { policy: "{}" });
             expect(response).toBeDefined();
           });
 
@@ -361,10 +301,7 @@ describe.sequential(
             }).pipe(
               Effect.retry({
                 while: (e) => e._tag === "SubscriptionNotListed",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
               }),
             );
             expect(arns).toContain(subscriptionArn);
@@ -373,9 +310,7 @@ describe.sequential(
           // ListTagsForResource
           yield* Effect.gen(function* () {
             const response = yield* getJson("/tags");
-            const keys = ((response as any).Tags ?? []).map(
-              (tag: any) => tag.Key,
-            );
+            const keys = ((response as any).Tags ?? []).map((tag: any) => tag.Key);
             expect(keys).toContain("alchemy::stack");
             expect(keys).toContain("alchemy::stage");
             expect(keys).toContain("alchemy::id");
@@ -383,33 +318,20 @@ describe.sequential(
 
           // TagResource
           yield* Effect.gen(function* () {
-            yield* postJson("/tags", {
-              key: "sns-binding-test",
-              value: "true",
-            });
+            yield* postJson("/tags", { key: "sns-binding-test", value: "true" });
             const response = yield* getJson("/tags");
             const tags = Object.fromEntries(
-              ((response as any).Tags ?? []).map((tag: any) => [
-                tag.Key,
-                tag.Value,
-              ]),
+              ((response as any).Tags ?? []).map((tag: any) => [tag.Key, tag.Value]),
             );
             expect(tags["sns-binding-test"]).toBe("true");
           });
 
           // UntagResource
           yield* Effect.gen(function* () {
-            yield* postJson("/tags", {
-              key: "sns-remove-test",
-              value: "true",
-            });
-            yield* deleteJson("/tags", {
-              keys: ["sns-remove-test"],
-            });
+            yield* postJson("/tags", { key: "sns-remove-test", value: "true" });
+            yield* deleteJson("/tags", { keys: ["sns-remove-test"] });
             const response = yield* getJson("/tags");
-            const keys = ((response as any).Tags ?? []).map(
-              (tag: any) => tag.Key,
-            );
+            const keys = ((response as any).Tags ?? []).map((tag: any) => tag.Key);
             expect(keys).not.toContain("sns-remove-test");
           });
 
@@ -433,16 +355,12 @@ describe.sequential(
                 }).pipe(Effect.ignore),
               ),
             );
-            expect((response as any).Attributes.RawMessageDelivery).toBe(
-              "true",
-            );
+            expect((response as any).Attributes.RawMessageDelivery).toBe("true");
           });
 
           // ConfirmSubscription
           yield* Effect.gen(function* () {
-            const response = yield* postJson("/confirm-subscription", {
-              token: "invalid-token",
-            });
+            const response = yield* postJson("/confirm-subscription", { token: "invalid-token" });
             expect((response as any).ok).toBe(false);
             expect((response as any).error).toBeTruthy();
           });
@@ -467,9 +385,7 @@ describe.sequential(
           yield* Effect.gen(function* () {
             yield* postJson("/sms/attributes", { type: "Transactional" });
             const response = yield* getJson("/sms/attributes");
-            expect((response as any).attributes.DefaultSMSType).toBe(
-              "Transactional",
-            );
+            expect((response as any).attributes.DefaultSMSType).toBe("Transactional");
           });
 
           // ListPhoneNumbersOptedOut
@@ -481,9 +397,7 @@ describe.sequential(
           // CheckIfPhoneNumberIsOptedOut — reserved fictional number; never
           // opted out.
           yield* Effect.gen(function* () {
-            const response = yield* postJson("/sms/check-opt-out", {
-              phoneNumber: "+15555550100",
-            });
+            const response = yield* postJson("/sms/check-opt-out", { phoneNumber: "+15555550100" });
             expect((response as any).isOptedOut).toBe(false);
           });
 
@@ -491,9 +405,7 @@ describe.sequential(
           // SNS either succeeds (no-op) or rejects with a typed error; both
           // prove the binding + IAM wiring.
           yield* Effect.gen(function* () {
-            const response = yield* postJson("/sms/opt-in", {
-              phoneNumber: "+15555550100",
-            });
+            const response = yield* postJson("/sms/opt-in", { phoneNumber: "+15555550100" });
             expect(response).toBeDefined();
           });
 
@@ -555,17 +467,14 @@ describe.sequential(
               message: "alchemy sns binding test",
             });
             const ok =
-              typeof (response as any).MessageId === "string" ||
-              (response as any).ok === false;
+              typeof (response as any).MessageId === "string" || (response as any).ok === false;
             expect(ok).toBe(true);
           });
 
           // ListPlatformApplications
           yield* Effect.gen(function* () {
             const response = yield* getJson("/platform/applications");
-            expect(Array.isArray((response as any).PlatformApplications)).toBe(
-              true,
-            );
+            expect(Array.isArray((response as any).PlatformApplications)).toBe(true);
           });
 
           // TopicSink — 12 messages > the PublishBatch limit of 10, so the
@@ -573,10 +482,7 @@ describe.sequential(
           // (10 + 2) and every message must still arrive.
           yield* Effect.gen(function* () {
             const prefix = `sink-${crypto.randomUUID()}`;
-            const markers = Array.from(
-              { length: 12 },
-              (_, i) => `${prefix}-${i}`,
-            );
+            const markers = Array.from({ length: 12 }, (_, i) => `${prefix}-${i}`);
 
             const response = yield* postJson("/sink", { messages: markers });
             expect((response as any).ok).toBe(true);
@@ -620,6 +526,4 @@ const assertTopicGone = Effect.fn(function* (topicArn: string) {
 
 class QueueMessageNotReady extends Data.TaggedError("QueueMessageNotReady") {}
 class SubscriptionNotListed extends Data.TaggedError("SubscriptionNotListed") {}
-class TopicAttributeNotPropagated extends Data.TaggedError(
-  "TopicAttributeNotPropagated",
-) {}
+class TopicAttributeNotPropagated extends Data.TaggedError("TopicAttributeNotPropagated") {}

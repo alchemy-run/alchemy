@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -66,10 +66,9 @@ test.provider(
       expect(created.mysql?.username).toEqual("alchemy");
       expect(created.mysql?.password).toBeUndefined();
 
-      const fetched =
-        yield* datamigration.getProjectsLocationsConnectionProfiles({
-          name: created.name,
-        });
+      const fetched = yield* datamigration.getProjectsLocationsConnectionProfiles({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.displayName).toEqual("mysql-src");
       expect(fetched.labels?.env).toEqual("test");
@@ -96,10 +95,9 @@ test.provider(
       expect(updated.displayName).toEqual("mysql-src-v2");
       expect(updated.labels).toMatchObject({ env: "prod", team: "dms" });
 
-      const fetchedUpdate =
-        yield* datamigration.getProjectsLocationsConnectionProfiles({
-          name: updated.name,
-        });
+      const fetchedUpdate = yield* datamigration.getProjectsLocationsConnectionProfiles({
+        name: updated.name,
+      });
       expect(fetchedUpdate.displayName).toEqual("mysql-src-v2");
       expect(fetchedUpdate.labels?.team).toEqual("dms");
 

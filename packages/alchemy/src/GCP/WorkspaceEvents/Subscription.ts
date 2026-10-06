@@ -189,9 +189,7 @@ export type Subscription = Resource<
  * @resource
  * @category WorkspaceEvents
  */
-export const Subscription = Resource<Subscription>(
-  "GCP.WorkspaceEvents.Subscription",
-);
+export const Subscription = Resource<Subscription>("GCP.WorkspaceEvents.Subscription");
 
 export class SubscriptionNotResolved extends Data.TaggedError(
   "GCP.WorkspaceEvents.SubscriptionNotResolved",
@@ -199,9 +197,7 @@ export class SubscriptionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const payloadOf = (
-  options: we.PayloadOptions | undefined,
-): PayloadOptions | undefined => {
+const payloadOf = (options: we.PayloadOptions | undefined): PayloadOptions | undefined => {
   if (options === undefined) return undefined;
   return {
     includeResource: options.includeResource,
@@ -209,18 +205,12 @@ const payloadOf = (
   };
 };
 
-const driveOf = (
-  options: we.DriveOptions | undefined,
-): DriveOptions | undefined => {
+const driveOf = (options: we.DriveOptions | undefined): DriveOptions | undefined => {
   if (options === undefined) return undefined;
   return { includeDescendants: options.includeDescendants };
 };
 
-const toAttrs = (
-  subscription: we.Subscription,
-  project: string,
-  managedTopic: boolean,
-) => {
+const toAttrs = (subscription: we.Subscription, project: string, managedTopic: boolean) => {
   const name = subscription.name ?? "";
   return {
     name,
@@ -243,10 +233,7 @@ const toAttrs = (
   };
 };
 
-const lookupName = (
-  subscriptionId: string | undefined,
-  existingName: string | undefined,
-) => {
+const lookupName = (subscriptionId: string | undefined, existingName: string | undefined) => {
   if (subscriptionId !== undefined && subscriptionId.length > 0) {
     return toSubscriptionName(subscriptionId);
   }
@@ -263,14 +250,7 @@ const sameTopic = (left: string | undefined, right: string | undefined) => {
 
 export const SubscriptionProvider = () =>
   Provider.succeed(Subscription, {
-    stables: [
-      "name",
-      "subscriptionId",
-      "project",
-      "uid",
-      "createTime",
-      "targetResource",
-    ],
+    stables: ["name", "subscriptionId", "project", "uid", "createTime", "targetResource"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -278,18 +258,14 @@ export const SubscriptionProvider = () =>
       if (
         previousId !== undefined &&
         news.subscriptionId !== undefined &&
-        toSubscriptionName(news.subscriptionId) !==
-          toSubscriptionName(previousId) &&
+        toSubscriptionName(news.subscriptionId) !== toSubscriptionName(previousId) &&
         news.subscriptionId !== output?.subscriptionId &&
         toSubscriptionName(news.subscriptionId) !== output?.name
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousTarget = olds?.targetResource ?? output?.targetResource;
-      if (
-        previousTarget !== undefined &&
-        news.targetResource !== previousTarget
-      ) {
+      if (previousTarget !== undefined && news.targetResource !== previousTarget) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousTopic = olds?.pubsubTopic ?? output?.pubsubTopic;
@@ -304,10 +280,8 @@ export const SubscriptionProvider = () =>
       if (
         news.payloadOptions !== undefined &&
         previousPayload !== undefined &&
-        (news.payloadOptions.includeResource !==
-          previousPayload.includeResource ||
-          (news.payloadOptions.fieldMask ?? "") !==
-            (previousPayload.fieldMask ?? ""))
+        (news.payloadOptions.includeResource !== previousPayload.includeResource ||
+          (news.payloadOptions.fieldMask ?? "") !== (previousPayload.fieldMask ?? ""))
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -315,8 +289,7 @@ export const SubscriptionProvider = () =>
       if (
         news.driveOptions?.includeDescendants !== undefined &&
         previousDrive?.includeDescendants !== undefined &&
-        news.driveOptions.includeDescendants !==
-          previousDrive.includeDescendants
+        news.driveOptions.includeDescendants !== previousDrive.includeDescendants
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -325,10 +298,7 @@ export const SubscriptionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const name = lookupName(
-        olds?.subscriptionId ?? output?.subscriptionId,
-        output?.name,
-      );
+      const name = lookupName(olds?.subscriptionId ?? output?.subscriptionId, output?.name);
       let existing = yield* getSubscription(name);
       if (existing === undefined) {
         existing = yield* findSubscription(
@@ -338,26 +308,16 @@ export const SubscriptionProvider = () =>
         );
       }
       if (existing === undefined) return undefined;
-      const topic = yield* getTopic(
-        existing.notificationEndpoint?.pubsubTopic ?? "",
-      );
-      const attrs = toAttrs(
-        existing,
-        env.project,
-        output?.managedTopic === true,
-      );
-      return (yield* ownedByWesubLabels(id, topic?.labels))
-        ? attrs
-        : Unowned(attrs);
+      const topic = yield* getTopic(existing.notificationEndpoint?.pubsubTopic ?? "");
+      const attrs = toAttrs(existing, env.project, output?.managedTopic === true);
+      return (yield* ownedByWesubLabels(id, topic?.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const subscriptions = yield* listOwnedSubscriptions();
-        return subscriptions.map((subscription) =>
-          toAttrs(subscription, env.project, false),
-        );
+        return subscriptions.map((subscription) => toAttrs(subscription, env.project, false));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -368,28 +328,15 @@ export const SubscriptionProvider = () =>
         ? expandTopic(news.pubsubTopic, env.project)
         : expandTopic(
             output?.pubsubTopic ??
-              (yield* toPhysicalId(
-                `${id}-topic`,
-                undefined,
-                undefined,
-                "topic",
-                255,
-              )),
+              (yield* toPhysicalId(`${id}-topic`, undefined, undefined, "topic", 255)),
             env.project,
           );
 
       yield* ensureTopic(topicName, labels);
 
       const eventTypes = news.eventTypes;
-      const lookup = lookupName(
-        news.subscriptionId ?? output?.subscriptionId,
-        output?.name,
-      );
-      let current = yield* findSubscription(
-        lookup,
-        eventTypes,
-        news.targetResource,
-      );
+      const lookup = lookupName(news.subscriptionId ?? output?.subscriptionId, output?.name);
+      let current = yield* findSubscription(lookup, eventTypes, news.targetResource);
 
       if (current === undefined) {
         const created = yield* we
@@ -414,18 +361,11 @@ export const SubscriptionProvider = () =>
           );
           const createdName = operationResourceName(settled) ?? lookup;
           if (createdName.length > 0) {
-            current = yield* waitUntilExists(
-              getSubscription(createdName),
-              createdName,
-            );
+            current = yield* waitUntilExists(getSubscription(createdName), createdName);
           }
         }
         if (current === undefined) {
-          current = yield* findSubscription(
-            lookup,
-            eventTypes,
-            news.targetResource,
-          );
+          current = yield* findSubscription(lookup, eventTypes, news.targetResource);
         }
       }
 
@@ -437,13 +377,10 @@ export const SubscriptionProvider = () =>
 
       const name = current.name ?? lookup;
       const eventTypesChanged =
-        sortedStrings(current.eventTypes).join(",") !==
-        sortedStrings(eventTypes).join(",");
+        sortedStrings(current.eventTypes).join(",") !== sortedStrings(eventTypes).join(",");
       const expireChanged =
-        news.expireTime !== undefined &&
-        !sameText(current.expireTime, news.expireTime);
-      const ttlChanged =
-        news.ttl !== undefined && news.expireTime === undefined;
+        news.expireTime !== undefined && !sameText(current.expireTime, news.expireTime);
+      const ttlChanged = news.ttl !== undefined && news.expireTime === undefined;
       const mask = updateMaskOf(
         eventTypesChanged ? "event_types" : undefined,
         expireChanged ? "expire_time" : undefined,

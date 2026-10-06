@@ -16,45 +16,24 @@ import * as Stream from "effect/Stream";
  * Collect every node of a connection. `select` projects one node, e.g.
  * `(service) => ({ id: service.id, name: service.name })`.
  */
-const collect = <Item, Error>(
-  connection: Query<ReadonlyArray<Item> | null, Error>,
-) =>
-  Stream.runCollect(Query.items(connection)).pipe(
-    Effect.map((items) => Array.from(items)),
-  );
+const collect = <Item, Error>(connection: Query<ReadonlyArray<Item> | null, Error>) =>
+  Stream.runCollect(Query.items(connection)).pipe(Effect.map((items) => Array.from(items)));
 
 /** Every service of a project, projected by `select`. */
 export const projectServices = <Mapped>(
   projectId: string,
   select: (service: Query<Service>) => Mapped,
-) =>
-  collect(
-    Railway.project({ id: projectId })
-      .services({ first: 50 })
-      .pipe(Query.map(select)),
-  );
+) => collect(Railway.project({ id: projectId }).services({ first: 50 }).pipe(Query.map(select)));
 
 /** Every bucket of a project, projected by `select`. */
 export const projectBuckets = <Mapped>(
   projectId: string,
   select: (bucket: Query<Bucket>) => Mapped,
-) =>
-  collect(
-    Railway.project({ id: projectId })
-      .buckets({ first: 50 })
-      .pipe(Query.map(select)),
-  );
+) => collect(Railway.project({ id: projectId }).buckets({ first: 50 }).pipe(Query.map(select)));
 
 /** Every group of a project, projected by `select`. */
-export const projectGroups = <Mapped>(
-  projectId: string,
-  select: (group: Query<Group>) => Mapped,
-) =>
-  collect(
-    Railway.project({ id: projectId })
-      .groups({ first: 50 })
-      .pipe(Query.map(select)),
-  );
+export const projectGroups = <Mapped>(projectId: string, select: (group: Query<Group>) => Mapped) =>
+  collect(Railway.project({ id: projectId }).groups({ first: 50 }).pipe(Query.map(select)));
 
 const environmentDeleted = Query.fn((id: string, projectId: string) => ({
   deletedAt: Railway.environment({ id, projectId }).deletedAt,
@@ -93,9 +72,7 @@ export const environmentServiceInstances = <Mapped>(
   });
 
 /** A delete remains pending until its read path confirms absence. */
-export class ResourceDeletionPending extends Data.TaggedError(
-  "Railway.ResourceDeletionPending",
-)<{
+export class ResourceDeletionPending extends Data.TaggedError("Railway.ResourceDeletionPending")<{
   resourceType: string;
   resourceId: string;
 }> {}
@@ -107,16 +84,8 @@ export const waitUntilDeleted = <E, R>(
   times: 4 | 8 | 10 = 8,
 ) =>
   absent.pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
-      times,
-    }),
+    Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (gone) => gone, times }),
     Effect.flatMap((gone) =>
-      gone
-        ? Effect.void
-        : Effect.fail(
-            new ResourceDeletionPending({ resourceType, resourceId }),
-          ),
+      gone ? Effect.void : Effect.fail(new ResourceDeletionPending({ resourceType, resourceId })),
     ),
   );

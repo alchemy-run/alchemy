@@ -20,24 +20,17 @@ export const StartJobRunHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.EMRContainers.StartJobRun(${virtualCluster}))`(
-            {
-              policyStatements: [
-                virtualClusterPolicyStatement(virtualCluster, [
-                  "emr-containers:StartJobRun",
-                ]),
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.EMRContainers.StartJobRun(${virtualCluster}))`({
+            policyStatements: [
+              virtualClusterPolicyStatement(virtualCluster, ["emr-containers:StartJobRun"]),
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.EMRContainers.StartJobRun(${virtualCluster.LogicalId})`,
-      )(function* (
-        request: Omit<
-          emrc.StartJobRunRequest,
-          "virtualClusterId" | "clientToken"
-        > & { clientToken?: string },
+      return Effect.fn(`AWS.EMRContainers.StartJobRun(${virtualCluster.LogicalId})`)(function* (
+        request: Omit<emrc.StartJobRunRequest, "virtualClusterId" | "clientToken"> & {
+          clientToken?: string;
+        },
       ) {
         return yield* op({
           ...request,

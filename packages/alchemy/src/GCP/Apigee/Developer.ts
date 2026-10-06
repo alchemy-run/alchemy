@@ -136,9 +136,7 @@ export type Developer = Resource<
  */
 export const Developer = Resource<Developer>("GCP.Apigee.Developer");
 
-export class DeveloperNotResolved extends Data.TaggedError(
-  "GCP.Apigee.DeveloperNotResolved",
-)<{
+export class DeveloperNotResolved extends Data.TaggedError("GCP.Apigee.DeveloperNotResolved")<{
   name: string;
 }> {}
 
@@ -157,10 +155,7 @@ const toEmail = (id: string, email: string | undefined, existing?: string) =>
     return `${generated}@alchemy.example`;
   });
 
-const toAttrs = (
-  developer: apigee.GoogleCloudApigeeV1Developer,
-  organization: string,
-) => {
+const toAttrs = (developer: apigee.GoogleCloudApigeeV1Developer, organization: string) => {
   const email = (developer.email ?? "").toLowerCase();
   return {
     name: resourceName(organization, email),
@@ -184,11 +179,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopers({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const DeveloperProvider = () =>
   Provider.succeed(Developer, {
@@ -217,18 +208,13 @@ export const DeveloperProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
       const email = yield* toEmail(id, olds?.email, output?.email);
       const name = output?.name ?? resourceName(organization, email);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization);
-      return (yield* ownedBy(id, attributesToRecord(existing.attributes)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedBy(id, attributesToRecord(existing.attributes))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -266,8 +252,7 @@ export const DeveloperProvider = () =>
       const name = resourceName(organization, email);
       const firstName = news.firstName ?? "Alchemy";
       const lastName = news.lastName ?? "Developer";
-      const userName =
-        news.userName ?? lastSegment(email.split("@")[0] ?? email);
+      const userName = news.userName ?? lastSegment(email.split("@")[0] ?? email);
       const ownership = yield* createOwnership(id);
       const attributes = desiredAttributes(news.attributes, ownership);
 
@@ -340,11 +325,6 @@ export const DeveloperProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsDevelopers({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

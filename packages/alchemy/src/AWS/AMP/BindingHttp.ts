@@ -47,10 +47,7 @@ export interface AmpHttpRequest {
  */
 export type AmpSend = (
   request: AmpHttpRequest,
-) => Effect.Effect<
-  unknown,
-  PrometheusApiError | Credentials.CredentialsError | SigV4.SigningError
->;
+) => Effect.Effect<unknown, PrometheusApiError | Credentials.CredentialsError | SigV4.SigningError>;
 
 const appendParams = (
   target: URLSearchParams,
@@ -71,8 +68,7 @@ export const toPromTime = (time: PrometheusTime): string =>
   time instanceof Date ? time.toISOString() : String(time);
 
 /** Serialize a `Duration.Input` as a Prometheus duration string (`"30s"`). */
-export const toPromDuration = (input: Duration.Input): string =>
-  `${toWireSeconds(input)}s`;
+export const toPromDuration = (input: Duration.Input): string => `${toWireSeconds(input)}s`;
 
 /**
  * Build the shared body of an AMP data-plane `*Http` binding layer:
@@ -90,32 +86,28 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
   makeClient: (send: AmpSend) => Client;
 }) =>
   Effect.gen(function* () {
-    const services = yield* Effect.context<
-      Credentials.Credentials | Region.Region
-    >();
+    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
 
     return Effect.fn(function* (workspace: Workspace) {
       const PrometheusEndpoint = yield* workspace.prometheusEndpoint;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.AMP.${options.name}(${workspace}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: options.iamActions,
-                  Resource: [workspace.workspaceArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.AMP.${options.name}(${workspace}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: options.iamActions,
+                Resource: [workspace.workspaceArn],
+              },
+            ],
+          });
         }
       }
 
-      const send: AmpSend = Effect.fn(
-        `AWS.AMP.${options.name}(${workspace.LogicalId})`,
-      )(function* (request: AmpHttpRequest) {
+      const send: AmpSend = Effect.fn(`AWS.AMP.${options.name}(${workspace.LogicalId})`)(function* (
+        request: AmpHttpRequest,
+      ) {
         const endpoint = yield* PrometheusEndpoint;
         if (endpoint === undefined) {
           return yield* Effect.fail(
@@ -152,9 +144,8 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
         const { credentials, region } = yield* Effect.gen(function* () {
           const credentials = yield* yield* Credentials.Credentials;
           const region =
-            /^aps-workspaces\.([a-z0-9-]+)\.amazonaws\.com$/.exec(
-              url.hostname,
-            )?.[1] ?? (yield* yield* Region.Region);
+            /^aps-workspaces\.([a-z0-9-]+)\.amazonaws\.com$/.exec(url.hostname)?.[1] ??
+            (yield* yield* Region.Region);
           return { credentials, region };
         }).pipe(Effect.provideContext(services));
 

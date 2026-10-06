@@ -71,18 +71,15 @@ export interface ApplicationCloudWatchLoggingOption extends Resource<
  *
  * @resource
  */
-export const ApplicationCloudWatchLoggingOption =
-  Resource<ApplicationCloudWatchLoggingOption>(
-    "AWS.KinesisAnalyticsV2.ApplicationCloudWatchLoggingOption",
-  );
+export const ApplicationCloudWatchLoggingOption = Resource<ApplicationCloudWatchLoggingOption>(
+  "AWS.KinesisAnalyticsV2.ApplicationCloudWatchLoggingOption",
+);
 
 /**
  * The logging option could not be observed on the application after it was
  * added — the add call succeeded but the option never appeared.
  */
-export class LoggingOptionNotFound extends Data.TaggedError(
-  "LoggingOptionNotFound",
-)<{
+export class LoggingOptionNotFound extends Data.TaggedError("LoggingOptionNotFound")<{
   readonly applicationName: string;
   readonly logStreamArn: string;
 }> {}
@@ -99,28 +96,18 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "ResourceInUseException" ||
-      e._tag === "ConcurrentModificationException",
+      e._tag === "ResourceInUseException" || e._tag === "ConcurrentModificationException",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
-const describeApplicationDetail = Effect.fn(function* (
-  applicationName: string,
-) {
+const describeApplicationDetail = Effect.fn(function* (applicationName: string) {
   const response = yield* analytics
     .describeApplication({ ApplicationName: applicationName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return response?.ApplicationDetail;
 });
 
-const findOption = (
-  detail: analytics.ApplicationDetail | undefined,
-  logStreamArn: string,
-) =>
+const findOption = (detail: analytics.ApplicationDetail | undefined, logStreamArn: string) =>
   detail?.CloudWatchLoggingOptionDescriptions?.find(
     (option) => option.LogStreamARN === logStreamArn,
   );
@@ -130,11 +117,7 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
     ApplicationCloudWatchLoggingOption,
     Effect.gen(function* () {
       return ApplicationCloudWatchLoggingOption.Provider.of({
-        stables: [
-          "applicationName",
-          "logStreamArn",
-          "cloudWatchLoggingOptionId",
-        ],
+        stables: ["applicationName", "logStreamArn", "cloudWatchLoggingOptionId"],
 
         // Sub-resource keyed by its parent application — there is no
         // account-level enumeration of logging options, so `list` is empty
@@ -142,8 +125,7 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ olds, output }) {
-          const applicationName =
-            output?.applicationName ?? olds?.applicationName;
+          const applicationName = output?.applicationName ?? olds?.applicationName;
           const logStreamArn = output?.logStreamArn ?? olds?.logStreamArn;
           if (!applicationName || !logStreamArn) return undefined;
           const detail = yield* describeApplicationDetail(applicationName);
@@ -180,21 +162,18 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
             const detail = yield* describeApplicationDetail(applicationName);
             const existing = findOption(detail, logStreamArn);
             if (existing || !detail) return existing;
-            const response =
-              yield* analytics.addApplicationCloudWatchLoggingOption({
-                ApplicationName: applicationName,
-                CurrentApplicationVersionId: detail.ApplicationVersionId,
-                CloudWatchLoggingOption: { LogStreamARN: logStreamArn },
-              });
+            const response = yield* analytics.addApplicationCloudWatchLoggingOption({
+              ApplicationName: applicationName,
+              CurrentApplicationVersionId: detail.ApplicationVersionId,
+              CloudWatchLoggingOption: { LogStreamARN: logStreamArn },
+            });
             return response.CloudWatchLoggingOptionDescriptions?.find(
               (option) => option.LogStreamARN === logStreamArn,
             );
           });
           const option = yield* retryWhileInUse(ensureOption);
           if (!option) {
-            return yield* Effect.fail(
-              new LoggingOptionNotFound({ applicationName, logStreamArn }),
-            );
+            return yield* Effect.fail(new LoggingOptionNotFound({ applicationName, logStreamArn }));
           }
 
           yield* session.note(
@@ -210,13 +189,9 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // A missing application means the option is already gone.
           const removeOption = Effect.gen(function* () {
-            const detail = yield* describeApplicationDetail(
-              output.applicationName,
-            );
+            const detail = yield* describeApplicationDetail(output.applicationName);
             const option = findOption(detail, output.logStreamArn);
-            const optionId =
-              option?.CloudWatchLoggingOptionId ??
-              output.cloudWatchLoggingOptionId;
+            const optionId = option?.CloudWatchLoggingOptionId ?? output.cloudWatchLoggingOptionId;
             if (!detail || !option || !optionId) return;
             yield* analytics
               .deleteApplicationCloudWatchLoggingOption({
@@ -224,9 +199,7 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
                 CurrentApplicationVersionId: detail.ApplicationVersionId,
                 CloudWatchLoggingOptionId: optionId,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           });
           yield* retryWhileInUse(removeOption);
         }),

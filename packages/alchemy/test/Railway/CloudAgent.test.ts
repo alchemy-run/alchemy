@@ -1,21 +1,18 @@
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloud agents are Priority Boarding. Unentitled workspaces reject
 // `cloudAgentCreate` with a typed plan/auth tag. The probe always runs
@@ -39,9 +36,7 @@ const listLive = Query.fn((environmentId: string) =>
 const waitUntilAgentGone = (environmentId: string, cloudAgentId: string) =>
   listLive(environmentId).pipe(
     Effect.map((items) =>
-      items.some(
-        (agent) => agent.id === cloudAgentId && agent.status !== "DELETING",
-      )
+      items.some((agent) => agent.id === cloudAgentId && agent.status !== "DELETING")
         ? ("found" as const)
         : ("gone" as const),
     ),
@@ -52,16 +47,12 @@ const waitUntilAgentGone = (environmentId: string, cloudAgentId: string) =>
     }),
   );
 
-const deleteAgent = Query.fn((id: string) =>
-  RailwayApi.cloudAgentDelete({ id }),
-);
+const deleteAgent = Query.fn((id: string) => RailwayApi.cloudAgentDelete({ id }));
 
-const createCloudAgent = Query.fn(
-  (input: { environmentId: string; name: string }) => {
-    const agent = RailwayApi.cloudAgentCreate({ input });
-    return { id: agent.id };
-  },
-);
+const createCloudAgent = Query.fn((input: { environmentId: string; name: string }) => {
+  const agent = RailwayApi.cloudAgentCreate({ input });
+  return { id: agent.id };
+});
 
 test.provider(
   "create, list, and delete a cloud agent",
@@ -84,35 +75,26 @@ test.provider(
       );
       if (Result.isFailure(probe)) {
         expect(
-          ["RailwayForbidden", "RailwayPlanLimitExceeded"].includes(
-            probe.failure._tag,
-          ),
+          ["RailwayForbidden", "RailwayPlanLimitExceeded"].includes(probe.failure._tag),
         ).toEqual(true);
         yield* stack.destroy();
         return;
       }
 
       yield* deleteAgent(probe.success.id);
-      yield* waitUntilAgentGone(
-        projectOnly.environment.environmentId,
-        probe.success.id,
-      );
+      yield* waitUntilAgentGone(projectOnly.environment.environmentId, probe.success.id);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const { project, environment } = yield* suitePartition;
-          const agent = yield* Railway.CloudAgent("Coder", {
-            environment,
-          });
+          const agent = yield* Railway.CloudAgent("Coder", { environment });
           return { project, environment, agent };
         }),
       );
 
       expect(created.agent.cloudAgentId).toEqual(expect.any(String));
       expect(created.agent.cloudAgentId.length).toBeGreaterThan(0);
-      expect(created.agent.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.agent.environmentId).toEqual(created.environment.environmentId);
       expect(created.agent.projectId).toEqual(created.project.projectId);
       expect(created.agent.name).toEqual(expect.any(String));
       expect(created.agent.name.length).toBeGreaterThan(0);
@@ -121,20 +103,13 @@ test.provider(
       expect(created.agent.createdAt).toEqual(expect.any(String));
       expect(created.agent.status).toEqual(expect.any(String));
       expect(
-        [
-          "CRASHED",
-          "DELETING",
-          "FAILED",
-          "RUNNING",
-          "SLEEPING",
-          "STARTING",
-        ].includes(created.agent.status),
+        ["CRASHED", "DELETING", "FAILED", "RUNNING", "SLEEPING", "STARTING"].includes(
+          created.agent.status,
+        ),
       ).toEqual(true);
 
       const listed = yield* listLive(created.environment.environmentId);
-      const fetched = listed.find(
-        (agent) => agent.id === created.agent.cloudAgentId,
-      );
+      const fetched = listed.find((agent) => agent.id === created.agent.cloudAgentId);
       expect(fetched).toBeDefined();
       expect(fetched?.name).toEqual(created.agent.name);
       expect(fetched?.environmentId).toEqual(created.environment.environmentId);
@@ -142,9 +117,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.CloudAgent);
       const fromProvider = yield* provider.list();
-      const found = fromProvider.find(
-        (agent) => agent.cloudAgentId === created.agent.cloudAgentId,
-      );
+      const found = fromProvider.find((agent) => agent.cloudAgentId === created.agent.cloudAgentId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.agent.name);
       expect(found?.environmentId).toEqual(created.environment.environmentId);

@@ -72,7 +72,11 @@ export type Beat =
   /** Open (or switch to) a file tab. */
   | { kind: "editor.open"; file: string; content: string }
   /** A full-screen transition slide before building a significant piece. */
-  | { kind: "slide"; layout: "section" | "title" | "bullets"; props: { eyebrow?: string; heading: string; subtitle?: string; bullets?: string[] } }
+  | {
+      kind: "slide";
+      layout: "section" | "title" | "bullets";
+      props: { eyebrow?: string; heading: string; subtitle?: string; bullets?: string[] };
+    }
   /** The narration caption at the bottom of the screen; stays until the next caption. */
   | { kind: "caption"; text: string }
   /** Starts a new presenter step: everything until the next `step` plays on one press of →. */

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networkservices.getProjectsLocationsTlsRoutes({ name }).pipe(
@@ -93,9 +90,7 @@ test.provider(
       expect(created.route.location).toEqual("global");
       expect(created.route.description).toEqual("tls route a");
       expect(created.route.meshes).toContain(created.mesh.name);
-      expect(created.route.rules[0]?.matches?.[0]?.sniHost).toContain(
-        "api.example.com",
-      );
+      expect(created.route.rules[0]?.matches?.[0]?.sniHost).toContain("api.example.com");
       expect(created.route.labels).toMatchObject({ env: "test" });
       expect(created.route.createTime).toEqual(expect.any(String));
 
@@ -105,11 +100,9 @@ test.provider(
       expect(fetched.name).toEqual(created.route.name);
       expect(fetched.description).toEqual("tls route a");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -153,9 +146,7 @@ test.provider(
       expect(updated.route.name).toEqual(created.route.name);
       expect(updated.route.description).toEqual("tls route b");
       expect(updated.route.labels).toMatchObject({ env: "prod", role: "tls" });
-      expect(updated.route.rules[0]?.matches?.[0]?.sniHost).toContain(
-        "secure.example.com",
-      );
+      expect(updated.route.rules[0]?.matches?.[0]?.sniHost).toContain("secure.example.com");
 
       const refetched = yield* networkservices.getProjectsLocationsTlsRoutes({
         name: created.route.name,

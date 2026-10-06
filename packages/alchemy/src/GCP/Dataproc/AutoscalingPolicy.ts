@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -131,9 +126,7 @@ export type AutoscalingPolicy = Resource<
  * @resource
  * @category Dataproc
  */
-export const AutoscalingPolicy = Resource<AutoscalingPolicy>(
-  "GCP.Dataproc.AutoscalingPolicy",
-);
+export const AutoscalingPolicy = Resource<AutoscalingPolicy>("GCP.Dataproc.AutoscalingPolicy");
 
 export class AutoscalingPolicyNotResolved extends Data.TaggedError(
   "GCP.Dataproc.AutoscalingPolicyNotResolved",
@@ -144,11 +137,7 @@ export class AutoscalingPolicyNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, policyId: string) =>
   `${locationParent(project, location)}/autoscalingPolicies/${policyId}`;
 
-const toAttrs = (
-  policy: dataproc.AutoscalingPolicy,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (policy: dataproc.AutoscalingPolicy, project: string, location: string) => {
   const name = policy.name ?? "";
   const parsed = parseResourceName(name, "autoscalingPolicies", location);
   return {
@@ -205,10 +194,7 @@ const listLocation = (project: string, location: string) =>
     ),
   );
 
-const policyChanged = (
-  current: dataproc.AutoscalingPolicy,
-  desired: dataproc.AutoscalingPolicy,
-) =>
+const policyChanged = (current: dataproc.AutoscalingPolicy, desired: dataproc.AutoscalingPolicy) =>
   !sameJson(current.workerConfig, desired.workerConfig) ||
   !sameJson(current.secondaryWorkerConfig, desired.secondaryWorkerConfig) ||
   (current.clusterType ?? "") !== (desired.clusterType ?? "") ||
@@ -223,26 +209,19 @@ export const AutoscalingPolicyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.policyId ?? output?.policyId;
       const nextId = news.policyId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousLocation !== nextLocation)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -250,10 +229,7 @@ export const AutoscalingPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const policyId = yield* toPhysicalId(
         id,
         olds?.policyId,
@@ -261,14 +237,11 @@ export const AutoscalingPolicyProvider = () =>
         MAX_POLICY_ID_LENGTH,
         "policy",
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, policyId);
+      const name = output?.name ?? resourceName(env.project, location, policyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -284,10 +257,7 @@ export const AutoscalingPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const policyId = yield* toPhysicalId(
         id,
         news.policyId,

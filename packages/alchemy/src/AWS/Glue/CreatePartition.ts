@@ -46,6 +46,4 @@ export interface CreatePartition extends Binding.Service<
   >
 > {}
 
-export const CreatePartition = Binding.Service<CreatePartition>(
-  "AWS.Glue.CreatePartition",
-);
+export const CreatePartition = Binding.Service<CreatePartition>("AWS.Glue.CreatePartition");

@@ -29,20 +29,12 @@ export interface ReadBucketClient {
   /** Object metadata, or `undefined` when the object does not exist. */
   head(
     object: string,
-  ): Effect.Effect<
-    storage.Storage_Object | undefined,
-    storage.GetObjectsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<storage.Storage_Object | undefined, storage.GetObjectsError, RuntimeContext>;
   /** Object content, or `undefined` when the object does not exist. */
   get(
     object: string,
     options?: { generation?: string },
-  ): Effect.Effect<
-    ObjectContent | undefined,
-    ObjectRequestFailed,
-    RuntimeContext
-  >;
+  ): Effect.Effect<ObjectContent | undefined, ObjectRequestFailed, RuntimeContext>;
   /** One page of object listings. */
   list(
     options?: ListBucketOptions,

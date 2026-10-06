@@ -23,9 +23,7 @@ import type { Providers } from "../Providers.ts";
 const MAX_NAME_LENGTH = 64;
 
 export type CallLogLevel = workflows.WorkflowCallLogLevelEnum | (string & {});
-export type ExecutionHistoryLevel =
-  | workflows.WorkflowExecutionHistoryLevelEnum
-  | (string & {});
+export type ExecutionHistoryLevel = workflows.WorkflowExecutionHistoryLevelEnum | (string & {});
 
 export type WorkflowProps = {
   /**
@@ -185,23 +183,17 @@ export type Workflow = Resource<
  */
 export const Workflow = Resource<Workflow>("GCP.Workflows.Workflow");
 
-export class WorkflowNotResolved extends Data.TaggedError(
-  "GCP.Workflows.WorkflowNotResolved",
-)<{
+export class WorkflowNotResolved extends Data.TaggedError("GCP.Workflows.WorkflowNotResolved")<{
   name: string;
 }> {}
 
 /** The deployed workflow is in state `UNAVAILABLE` (see `stateError`). */
-export class WorkflowUnavailable extends Data.TaggedError(
-  "GCP.Workflows.WorkflowUnavailable",
-)<{
+export class WorkflowUnavailable extends Data.TaggedError("GCP.Workflows.WorkflowUnavailable")<{
   name: string;
   message: string;
 }> {}
 
-export class WorkflowStillExists extends Data.TaggedError(
-  "GCP.Workflows.WorkflowStillExists",
-)<{
+export class WorkflowStillExists extends Data.TaggedError("GCP.Workflows.WorkflowStillExists")<{
   name: string;
 }> {}
 
@@ -217,8 +209,7 @@ const normalizeLocation = (location: string | undefined, fallback: string) =>
 const resourceName = (project: string, location: string, workflowId: string) =>
   `projects/${project}/locations/${location}/workflows/${workflowId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -226,14 +217,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     workflowId:
-      workflowsAt >= 0 && parts[workflowsAt + 1]
-        ? parts[workflowsAt + 1]!
-        : lastSegment(name),
+      workflowsAt >= 0 && parts[workflowsAt + 1] ? parts[workflowsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -259,9 +246,7 @@ const toId = (id: string, workflowId: string | undefined, existing?: string) =>
   });
 
 const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const mapJson = (map: Record<string, string | undefined> | null | undefined) =>
   JSON.stringify(
@@ -314,20 +299,15 @@ const getByName = (name: string) =>
  * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
  * and an operation that is already gone.
  */
-const waitForOperation = (
-  operation: workflows.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  waitForGcpOperation(
-    operation,
-    (name) => workflows.getProjectsLocationsOperations({ name }),
-    { budget: "5 minutes", interval: "2 seconds" },
-  ).pipe(
+const waitForOperation = (operation: workflows.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(operation, (name) => workflows.getProjectsLocationsOperations({ name }), {
+    budget: "5 minutes",
+    interval: "2 seconds",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         (error._tag === "GCP.OperationFailed" &&
-          (error.code === 6 ||
-            (options?.notFoundOk === true && error.code === 5))) ||
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
         (options?.notFoundOk === true && error._tag === "NotFound"),
       () => Effect.succeed(operation),
     ),
@@ -361,9 +341,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((workflow) =>
-      workflow === undefined
-        ? Effect.void
-        : Effect.fail(new WorkflowStillExists({ name })),
+      workflow === undefined ? Effect.void : Effect.fail(new WorkflowStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Workflows.WorkflowStillExists",
@@ -381,19 +359,10 @@ export const WorkflowProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.workflowId ?? output?.workflowId;
       const nextId = news.workflowId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const locationChanged = previousLocation !== nextLocation;
 
       if (idChanged || locationChanged) {
@@ -405,18 +374,12 @@ export const WorkflowProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const workflowId = yield* toId(id, olds?.workflowId, output?.workflowId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, workflowId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, workflowId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -430,9 +393,7 @@ export const WorkflowProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.workflows ?? [])),
             Stream.filter((workflow) =>
-              Object.keys(workflow.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(workflow.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((workflow) => toAttrs(workflow, env.project)),
             Stream.runCollect,
@@ -444,10 +405,7 @@ export const WorkflowProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const workflowId = yield* toId(id, news.workflowId, output?.workflowId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, workflowId);
       const parent = parentOf(env.project, location);
       const desiredLabels = {
@@ -488,14 +446,11 @@ export const WorkflowProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const sourceChanged =
-        (current.sourceContents ?? "") !== news.sourceContents;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const sourceChanged = (current.sourceContents ?? "") !== news.sourceContents;
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const serviceAccountChanged =
         news.serviceAccount !== undefined &&
-        lastSegment(current.serviceAccount ?? "") !==
-          lastSegment(news.serviceAccount);
+        lastSegment(current.serviceAccount ?? "") !== lastSegment(news.serviceAccount);
       const callLogLevelChanged =
         news.callLogLevel !== undefined &&
         logLevelOf(current.callLogLevel) !== logLevelOf(news.callLogLevel);
@@ -507,8 +462,7 @@ export const WorkflowProvider = () =>
         historyLevelOf(current.executionHistoryLevel) !==
           historyLevelOf(news.executionHistoryLevel);
       const cryptoKeyChanged =
-        news.cryptoKeyName !== undefined &&
-        (current.cryptoKeyName ?? "") !== news.cryptoKeyName;
+        news.cryptoKeyName !== undefined && (current.cryptoKeyName ?? "") !== news.cryptoKeyName;
 
       const updateMask = [
         labelsChanged ? "labels" : undefined,

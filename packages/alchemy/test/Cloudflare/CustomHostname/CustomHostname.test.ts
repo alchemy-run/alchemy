@@ -1,15 +1,15 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { adopt } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -26,13 +26,9 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 const saasEnabled = !!process.env.CLOUDFLARE_SAAS_ENABLED;
 const testSaas = test.provider.skipIf(!saasEnabled);
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test hostnames on a domain we do not control — the
 // hostnames stay `pending` forever, which is fine: CRUD is still fully
@@ -47,9 +43,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -62,27 +56,19 @@ const resolveZoneId = Effect.gen(function* () {
 const forbiddenBlips = Schedule.exponential("500 millis");
 
 const findByHostname = (zoneId: string, hostname: string) =>
-  customHostnames.listCustomHostnames
-    .items({ zoneId, hostname: { contain: hostname } })
-    .pipe(
-      Stream.filter((h) => h.hostname === hostname),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenBlips,
-        times: 8,
-      }),
-    );
+  customHostnames.listCustomHostnames.items({ zoneId, hostname: { contain: hostname } }).pipe(
+    Stream.filter((h) => h.hostname === hostname),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)[0]),
+    Effect.retry({ while: (e) => e._tag === "Forbidden", schedule: forbiddenBlips, times: 8 }),
+  );
 
 const getHostname = (zoneId: string, customHostnameId: string) =>
-  customHostnames.getCustomHostname({ zoneId, customHostnameId }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: forbiddenBlips,
-      times: 8,
-    }),
-  );
+  customHostnames
+    .getCustomHostname({ zoneId, customHostnameId })
+    .pipe(
+      Effect.retry({ while: (e) => e._tag === "Forbidden", schedule: forbiddenBlips, times: 8 }),
+    );
 
 // Typed entitlement probe: every custom-hostnames call on an unprovisioned
 // zone is rejected with `SaasQuotaNotAllocated` (code 1404). When the suite
@@ -91,11 +77,7 @@ const getHostname = (zoneId: string, customHostnameId: string) =>
 const probeSaasEntitlement = (zoneId: string) =>
   customHostnames.listCustomHostnames.items({ zoneId }).pipe(
     Stream.runDrain,
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: forbiddenBlips,
-      times: 8,
-    }),
+    Effect.retry({ while: (e) => e._tag === "Forbidden", schedule: forbiddenBlips, times: 8 }),
     Effect.catchTag("SaasQuotaNotAllocated", (e) =>
       Effect.die(
         new Error(
@@ -141,10 +123,7 @@ testSaas(
       const gone = yield* findByHostname(zoneId, HOST_DEFAULT);
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"], timeout: 120_000 },
 );
 
 testSaas(
@@ -199,10 +178,7 @@ testSaas(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"], timeout: 120_000 },
 );
 
 // `list()` fans out over every zone in the account and skips zones without
@@ -215,9 +191,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomHostname.CustomHostname,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.CustomHostname);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -229,9 +203,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"] },
 );
 
 // Entitlement-gated: deploy a custom hostname and assert `list()` enumerates
@@ -249,31 +221,21 @@ testSaas(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname.CustomHostname(
-            "ListResource",
-            {
-              zoneId,
-              hostname: HOST_DEFAULT,
-            },
-          ).pipe(adopt(true));
+          return yield* Cloudflare.CustomHostname.CustomHostname("ListResource", {
+            zoneId,
+            hostname: HOST_DEFAULT,
+          }).pipe(adopt(true));
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomHostname.CustomHostname,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.CustomHostname);
       const all = yield* provider.list();
 
-      expect(
-        all.some((h) => h.customHostnameId === deployed.customHostnameId),
-      ).toBe(true);
+      expect(all.some((h) => h.customHostnameId === deployed.customHostnameId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"], timeout: 120_000 },
 );
 
 testSaas(
@@ -321,8 +283,5 @@ testSaas(
       const gone = yield* findByHostname(zoneId, HOST_REPLACE_B);
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"],
-    timeout: 180_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"], timeout: 180_000 },
 );

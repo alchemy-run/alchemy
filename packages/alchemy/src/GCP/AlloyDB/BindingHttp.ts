@@ -1,20 +1,16 @@
 import * as Effect from "effect/Effect";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Backup } from "./Backup.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { ClustersUser } from "./ClustersUser.ts";
 import type { Instance } from "./Instance.ts";
-import { bindGcpHost } from "../Host.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for AlloyDB cluster, instance, backup, and
  * user bindings. NOT exported from index.ts.
  */
-export const makeAlloyDbClusterHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeAlloyDbClusterHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -39,11 +35,7 @@ export const makeAlloyDbClusterHttpBinding = <
     });
   });
 
-export const makeAlloyDbInstanceHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeAlloyDbInstanceHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -68,11 +60,7 @@ export const makeAlloyDbInstanceHttpBinding = <
     });
   });
 
-export const makeAlloyDbBackupHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeAlloyDbBackupHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -97,11 +85,7 @@ export const makeAlloyDbBackupHttpBinding = <
     });
   });
 
-export const makeAlloyDbUserHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeAlloyDbUserHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -115,9 +99,7 @@ export const makeAlloyDbUserHttpBinding = <
         iam: [grantFor(options.iam, user.name)],
       });
       const name = yield* user.name;
-      return Effect.fn(`${options.tag}(${user.LogicalId})`)(function* (
-        request?: Omit<I, "name">,
-      ) {
+      return Effect.fn(`${options.tag}(${user.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
           ...(request as I),
           name: yield* name,
@@ -126,11 +108,7 @@ export const makeAlloyDbUserHttpBinding = <
     });
   });
 
-export const makeAlloyDbConnectionInfoHttpBinding = <
-  I extends { parent?: string },
-  A,
-  E,
->(options: {
+export const makeAlloyDbConnectionInfoHttpBinding = <I extends { parent?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

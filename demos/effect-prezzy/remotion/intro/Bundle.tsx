@@ -10,7 +10,8 @@ const WALL_HEIGHT = 440;
 /** Size at which the bar is full. */
 const MAX_KB = 2000;
 
-const formatSize = (kb: number) => (kb < 1000 ? `${Math.round(kb)} KB` : `${(kb / 1000).toFixed(1)} MB`);
+const formatSize = (kb: number) =>
+  kb < 1000 ? `${Math.round(kb)} KB` : `${(kb / 1000).toFixed(1)} MB`;
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
 /**
@@ -43,7 +44,8 @@ export const BundleView = ({
   const pour = Math.max(8, Math.min(30, added.length / 6));
   const t = interpolate(local, [delay, delay + pour], [0, 1], clamp);
   const eased = growing ? t * t : 1 - (1 - t) * (1 - t);
-  const size = (prev?.size ?? bundle.size) + (bundle.size - (prev?.size ?? bundle.size)) * (prev ? eased : 1);
+  const size =
+    (prev?.size ?? bundle.size) + (bundle.size - (prev?.size ?? bundle.size)) * (prev ? eased : 1);
   const heavy = size > 500;
   const color = heavy ? TONE.bad : TONE.good;
   const used = new Set(bundle.used ?? []);
@@ -57,20 +59,52 @@ export const BundleView = ({
 
   return (
     <>
-      <div style={{ position: "absolute", left: x, top: labelY, fontFamily: mono, fontSize: 22, color: brand.fgMuted }}>
+      <div
+        style={{
+          position: "absolute",
+          left: x,
+          top: labelY,
+          fontFamily: mono,
+          fontSize: 22,
+          color: brand.fgMuted,
+        }}
+      >
         {bundle.label}
       </div>
       <div style={{ position: "absolute", left: x, top, width: WIDTH }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
-          <span style={{ fontFamily: sans, fontWeight: 800, fontSize: 64, color, fontVariantNumeric: "tabular-nums" }}>
+          <span
+            style={{
+              fontFamily: sans,
+              fontWeight: 800,
+              fontSize: 64,
+              color,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {formatSize(size)}
           </span>
           <span style={{ fontFamily: mono, fontSize: 20, color: brand.fgMuted }}>
             {bundle.items.length} {bundle.items.length === 1 ? "client" : "clients"}
           </span>
         </div>
-        <div style={{ marginTop: 10, height: 14, borderRadius: 7, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-          <div style={{ width: `${Math.min(100, (size / MAX_KB) * 100)}%`, height: "100%", borderRadius: 7, background: color }} />
+        <div
+          style={{
+            marginTop: 10,
+            height: 14,
+            borderRadius: 7,
+            background: "rgba(255,255,255,0.08)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.min(100, (size / MAX_KB) * 100)}%`,
+              height: "100%",
+              borderRadius: 7,
+              background: color,
+            }}
+          />
         </div>
         <div
           style={{

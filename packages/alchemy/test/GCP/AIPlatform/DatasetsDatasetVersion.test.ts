@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getDatasetsDatasetVersions({ name }).pipe(
@@ -51,8 +48,7 @@ test.provider(
 const imageDataset = {
   location: "us-central1",
   displayName: "version-parent",
-  metadataSchemaUri:
-    "gs://google-cloud-aiplatform/schema/dataset/metadata/image_1.0.0.yaml",
+  metadataSchemaUri: "gs://google-cloud-aiplatform/schema/dataset/metadata/image_1.0.0.yaml",
   metadata: {},
   labels: { env: "test" },
   savedQueries: [
@@ -72,10 +68,7 @@ test.provider(
       const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
-            const dataset = yield* GCP.AIPlatform.Dataset(
-              "Samples",
-              imageDataset,
-            );
+            const dataset = yield* GCP.AIPlatform.Dataset("Samples", imageDataset);
             const version = yield* GCP.AIPlatform.DatasetsDatasetVersion("V1", {
               dataset: dataset.name,
               displayName: "v1",
@@ -103,10 +96,7 @@ test.provider.skipIf(!process.env.GCP_TEST_AIPLATFORM_DATASET_VERSION)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const dataset = yield* GCP.AIPlatform.Dataset(
-            "Samples",
-            imageDataset,
-          );
+          const dataset = yield* GCP.AIPlatform.Dataset("Samples", imageDataset);
           const version = yield* GCP.AIPlatform.DatasetsDatasetVersion("V1", {
             dataset: dataset.name,
             displayName: "v1",

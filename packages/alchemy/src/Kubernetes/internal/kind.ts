@@ -39,8 +39,5 @@ export const kindClusterConfig = (config: KindClusterConfig) => ({
   kind: "Cluster",
   apiVersion: "kind.x-k8s.io/v1alpha4",
   ...JSON.parse(JSON.stringify(config)),
-  containerdConfigPatches: [
-    ...(config.containerdConfigPatches ?? []),
-    REGISTRY_CONTAINERD_PATCH,
-  ],
+  containerdConfigPatches: [...(config.containerdConfigPatches ?? []), REGISTRY_CONTAINERD_PATCH],
 });

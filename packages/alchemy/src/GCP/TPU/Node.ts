@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ACCELERATOR,
@@ -361,10 +356,7 @@ const acceleratorOf = (
   return { type: config.type, topology: config.topology };
 };
 
-const acceleratorKey = (
-  type: string | undefined,
-  config: AcceleratorConfig | undefined,
-) =>
+const acceleratorKey = (type: string | undefined, config: AcceleratorConfig | undefined) =>
   JSON.stringify({
     type: (type ?? "").toLowerCase(),
     configType: (config?.type ?? "").toUpperCase(),
@@ -381,9 +373,7 @@ const serviceAccountOf = (
   };
 };
 
-const serviceAccountKey = (
-  account: tpu.ServiceAccount | ServiceAccount | undefined,
-) =>
+const serviceAccountKey = (account: tpu.ServiceAccount | ServiceAccount | undefined) =>
   JSON.stringify({
     email: serviceAccountOf(account)?.email ?? "",
     scope: [...(serviceAccountOf(account)?.scope ?? [])].sort(),
@@ -400,9 +390,7 @@ const schedulingOf = (
   };
 };
 
-const schedulingKey = (
-  config: tpu.SchedulingConfig | SchedulingConfig | undefined,
-) =>
+const schedulingKey = (config: tpu.SchedulingConfig | SchedulingConfig | undefined) =>
   JSON.stringify({
     reserved: schedulingOf(config)?.reserved === true,
     spot: schedulingOf(config)?.spot === true,
@@ -414,9 +402,7 @@ const diskOf = (disk: tpu.AttachedDisk | AttachedDisk): AttachedDisk => ({
   mode: disk.mode,
 });
 
-const disksKey = (
-  disks: ReadonlyArray<tpu.AttachedDisk | AttachedDisk> | undefined,
-) =>
+const disksKey = (disks: ReadonlyArray<tpu.AttachedDisk | AttachedDisk> | undefined) =>
   JSON.stringify(
     (disks ?? []).map((disk) => ({
       sourceDisk: disk.sourceDisk ?? "",
@@ -443,9 +429,8 @@ const shieldedOf = (
   return { enableSecureBoot: config.enableSecureBoot };
 };
 
-const shieldedKey = (
-  config: tpu.ShieldedInstanceConfig | ShieldedInstanceConfig | undefined,
-) => JSON.stringify(shieldedOf(config)?.enableSecureBoot === true);
+const shieldedKey = (config: tpu.ShieldedInstanceConfig | ShieldedInstanceConfig | undefined) =>
+  JSON.stringify(shieldedOf(config)?.enableSecureBoot === true);
 
 const runtimeOf = (version: string | undefined) => version ?? DEFAULT_RUNTIME;
 
@@ -527,9 +512,7 @@ const toAttrs = (node: tpu.Node, project: string) => {
 
 const isPlaceholder = (node: tpu.Node) => {
   const name = node.name ?? "";
-  return (
-    name.length === 0 || name.endsWith("/nodes/-") || name.endsWith("/nodes/")
-  );
+  return name.length === 0 || name.endsWith("/nodes/-") || name.endsWith("/nodes/");
 };
 
 const getByName = (name: string) =>
@@ -546,13 +529,9 @@ export const NodeProvider = () =>
 
       const previousId = olds?.nodeId ?? output?.nodeId;
       const nextId = news.nodeId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
       const nextLocation = normalizeLocation(news.location ?? output?.location);
-      const previousRuntime = runtimeOf(
-        olds?.runtimeVersion ?? output?.runtimeVersion,
-      );
+      const previousRuntime = runtimeOf(olds?.runtimeVersion ?? output?.runtimeVersion);
       const nextRuntime = runtimeOf(
         news.runtimeVersion ?? olds?.runtimeVersion ?? output?.runtimeVersion,
       );
@@ -561,41 +540,27 @@ export const NodeProvider = () =>
         acceleratorOf(olds?.acceleratorConfig ?? output?.acceleratorConfig),
       );
       const nextAccelerator = acceleratorKey(
-        news.acceleratorType ??
-          olds?.acceleratorType ??
-          output?.acceleratorType,
+        news.acceleratorType ?? olds?.acceleratorType ?? output?.acceleratorType,
         acceleratorOf(
-          news.acceleratorConfig ??
-            olds?.acceleratorConfig ??
-            output?.acceleratorConfig,
+          news.acceleratorConfig ?? olds?.acceleratorConfig ?? output?.acceleratorConfig,
         ),
       );
       const previousCidr = olds?.cidrBlock ?? output?.cidrBlock ?? "";
       const nextCidr = news.cidrBlock ?? previousCidr;
-      const previousAccount = serviceAccountKey(
-        olds?.serviceAccount ?? output?.serviceAccount,
-      );
+      const previousAccount = serviceAccountKey(olds?.serviceAccount ?? output?.serviceAccount);
       const nextAccount = serviceAccountKey(
         news.serviceAccount ?? olds?.serviceAccount ?? output?.serviceAccount,
       );
-      const previousScheduling = schedulingKey(
-        olds?.schedulingConfig ?? output?.schedulingConfig,
-      );
+      const previousScheduling = schedulingKey(olds?.schedulingConfig ?? output?.schedulingConfig);
       const nextScheduling = schedulingKey(
-        news.schedulingConfig ??
-          olds?.schedulingConfig ??
-          output?.schedulingConfig,
+        news.schedulingConfig ?? olds?.schedulingConfig ?? output?.schedulingConfig,
       );
-      const previousBoot = bootKey(
-        olds?.bootDiskConfig ?? output?.bootDiskConfig,
-      );
+      const previousBoot = bootKey(olds?.bootDiskConfig ?? output?.bootDiskConfig);
       const nextBoot = bootKey(
         news.bootDiskConfig ?? olds?.bootDiskConfig ?? output?.bootDiskConfig,
       );
       const previousDisks = disksKey(olds?.dataDisks ?? output?.dataDisks);
-      const nextDisks = disksKey(
-        news.dataDisks ?? olds?.dataDisks ?? output?.dataDisks,
-      );
+      const nextDisks = disksKey(news.dataDisks ?? olds?.dataDisks ?? output?.dataDisks);
       const previousShielded = shieldedKey(
         olds?.shieldedInstanceConfig ?? output?.shieldedInstanceConfig,
       );
@@ -604,21 +569,16 @@ export const NodeProvider = () =>
           olds?.shieldedInstanceConfig ??
           output?.shieldedInstanceConfig,
       );
-      const previousMulti = networksIdentityKey(
-        olds?.networkConfigs ?? output?.networkConfigs,
-      );
+      const previousMulti = networksIdentityKey(olds?.networkConfigs ?? output?.networkConfigs);
       const nextMulti = networksIdentityKey(
         news.networkConfigs ?? olds?.networkConfigs ?? output?.networkConfigs,
       );
-      const previousNet = networkIdentityKey(
-        olds?.networkConfig ?? output?.networkConfig,
-      );
+      const previousNet = networkIdentityKey(olds?.networkConfig ?? output?.networkConfig);
       const nextNet = networkIdentityKey(
         news.networkConfig ?? olds?.networkConfig ?? output?.networkConfig,
       );
       const usedMulti =
-        (news.networkConfigs ?? olds?.networkConfigs ?? output?.networkConfigs)
-          ?.length ?? 0;
+        (news.networkConfigs ?? olds?.networkConfigs ?? output?.networkConfigs)?.length ?? 0;
 
       return replaceOnIdentity({
         previousId,
@@ -647,9 +607,7 @@ export const NodeProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -715,23 +673,16 @@ export const NodeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const metadataChanged =
-        news.metadata !== undefined &&
-        mapKey(current.metadata) !== mapKey(news.metadata);
+        news.metadata !== undefined && mapKey(current.metadata) !== mapKey(news.metadata);
       const tagsChanged =
-        news.networkTags !== undefined &&
-        stringsKey(current.tags) !== stringsKey(news.networkTags);
+        news.networkTags !== undefined && stringsKey(current.tags) !== stringsKey(news.networkTags);
       const desiredExternal = news.networkConfig?.enableExternalIps !== false;
-      const observedExternal =
-        current.networkConfig?.enableExternalIps !== false;
-      const usingMulti =
-        (news.networkConfigs ?? current.networkConfigs ?? []).length > 0;
+      const observedExternal = current.networkConfig?.enableExternalIps !== false;
+      const usingMulti = (news.networkConfigs ?? current.networkConfigs ?? []).length > 0;
       const externalChanged =
-        !usingMulti &&
-        news.networkConfig !== undefined &&
-        desiredExternal !== observedExternal;
+        !usingMulti && news.networkConfig !== undefined && desiredExternal !== observedExternal;
 
       if (
         labelsChanged ||
@@ -776,16 +727,14 @@ export const NodeProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* tpu
-        .deleteProjectsLocationsNodes({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-        );
+      const operation = yield* tpu.deleteProjectsLocationsNodes({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

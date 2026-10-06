@@ -208,8 +208,7 @@ export const SupportEventSubscriptionProvider = () =>
       if (
         news.organization !== undefined &&
         previousOrg !== undefined &&
-        organizationParent(news.organization) !==
-          organizationParent(previousOrg)
+        organizationParent(news.organization) !== organizationParent(previousOrg)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -217,8 +216,7 @@ export const SupportEventSubscriptionProvider = () =>
       if (
         previousId !== undefined &&
         news.subscriptionId !== undefined &&
-        toSubscriptionName("", news.subscriptionId) !==
-          toSubscriptionName("", previousId) &&
+        toSubscriptionName("", news.subscriptionId) !== toSubscriptionName("", previousId) &&
         news.subscriptionId !== output?.subscriptionId &&
         news.subscriptionId !== output?.name
       ) {
@@ -233,11 +231,7 @@ export const SupportEventSubscriptionProvider = () =>
         olds?.organization ?? output?.organization,
         output?.parent,
       );
-      const name = lookupName(
-        parent,
-        olds?.subscriptionId ?? output?.subscriptionId,
-        output?.name,
-      );
+      const name = lookupName(parent, olds?.subscriptionId ?? output?.subscriptionId, output?.name);
       let existing = yield* getByName(name);
       if (existing === undefined) {
         existing = yield* findOwnedSubscription(
@@ -249,14 +243,8 @@ export const SupportEventSubscriptionProvider = () =>
       }
       if (existing === undefined || isDeleted(existing)) return undefined;
       const topic = yield* getTopic(existing.pubSubTopic ?? "");
-      const attrs = toAttrs(
-        existing,
-        env.project,
-        output?.managedTopic === true,
-      );
-      const owned =
-        (yield* ownedByTopicLabels(id, topic?.labels)) ||
-        output?.name === attrs.name;
+      const attrs = toAttrs(existing, env.project, output?.managedTopic === true);
+      const owned = (yield* ownedByTopicLabels(id, topic?.labels)) || output?.name === attrs.name;
       return owned ? attrs : Unowned(attrs);
     }),
 
@@ -267,9 +255,7 @@ export const SupportEventSubscriptionProvider = () =>
         const pages = yield* Effect.forEach(parents, listOwnedSubscriptions, {
           concurrency: 2,
         });
-        return pages
-          .flat()
-          .map((subscription) => toAttrs(subscription, env.project, false));
+        return pages.flat().map((subscription) => toAttrs(subscription, env.project, false));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -283,8 +269,7 @@ export const SupportEventSubscriptionProvider = () =>
       const topicName = news.pubSubTopic
         ? expandTopic(news.pubSubTopic, env.project)
         : expandTopic(
-            output?.pubSubTopic ??
-              (yield* toPhysicalId(id, undefined, undefined)),
+            output?.pubSubTopic ?? (yield* toPhysicalId(id, undefined, undefined)),
             env.project,
           );
 
@@ -313,9 +298,7 @@ export const SupportEventSubscriptionProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwnedSubscription(parent, id, lookup, topicName),
-            ),
+            Effect.catchTag("Conflict", () => findOwnedSubscription(parent, id, lookup, topicName)),
           );
         current = created ?? undefined;
         if (current?.name) {
@@ -344,14 +327,13 @@ export const SupportEventSubscriptionProvider = () =>
 
       const name = current.name;
       if (!sameTopic(current.pubSubTopic, topicName)) {
-        current =
-          yield* cloudsupport.patchOrganizationsSupportEventSubscriptions({
-            name,
-            updateMask: "pub_sub_topic",
-            body: {
-              pubSubTopic: topicName,
-            },
-          });
+        current = yield* cloudsupport.patchOrganizationsSupportEventSubscriptions({
+          name,
+          updateMask: "pub_sub_topic",
+          body: {
+            pubSubTopic: topicName,
+          },
+        });
       }
 
       const fresh = (yield* getDeletedByName(name)) ?? current;
@@ -359,8 +341,7 @@ export const SupportEventSubscriptionProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const name =
-        output.name || toSubscriptionName(output.parent, output.subscriptionId);
+      const name = output.name || toSubscriptionName(output.parent, output.subscriptionId);
       if (name.length > 0) {
         yield* cloudsupport
           .deleteOrganizationsSupportEventSubscriptions({ name })

@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   normalizeLocation,
@@ -138,25 +133,16 @@ export type BackendAuthenticationConfig = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const BackendAuthenticationConfig =
-  Resource<BackendAuthenticationConfig>(
-    "GCP.NetworkSecurity.BackendAuthenticationConfig",
-  );
+export const BackendAuthenticationConfig = Resource<BackendAuthenticationConfig>(
+  "GCP.NetworkSecurity.BackendAuthenticationConfig",
+);
 
-const resourceName = (
-  project: string,
-  location: string,
-  backendAuthenticationConfigId: string,
-) =>
+const resourceName = (project: string, location: string, backendAuthenticationConfigId: string) =>
   `projects/${project}/locations/${location}/backendAuthenticationConfigs/${backendAuthenticationConfigId}`;
 
-const rootsOf = (value: string | undefined) =>
-  (value ?? DEFAULT_WELL_KNOWN_ROOTS).toUpperCase();
+const rootsOf = (value: string | undefined) => (value ?? DEFAULT_WELL_KNOWN_ROOTS).toUpperCase();
 
-const toAttrs = (
-  config: networksecurity.BackendAuthenticationConfig,
-  project: string,
-) => {
+const toAttrs = (config: networksecurity.BackendAuthenticationConfig, project: string) => {
   const name = config.name ?? "";
   const parsed = parseResourceName(name);
   return {
@@ -187,13 +173,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.backendAuthenticationConfigs ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.backendAuthenticationConfigs ?? [])),
       Stream.filter((config) =>
-        Object.keys(config.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(config.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((config) => toAttrs(config, project)),
       Stream.runCollect,
@@ -203,38 +185,23 @@ const listOwned = (project: string) =>
 
 export const BackendAuthenticationConfigProvider = () =>
   Provider.succeed(BackendAuthenticationConfig, {
-    stables: [
-      "name",
-      "backendAuthenticationConfigId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "backendAuthenticationConfigId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId =
-        olds?.backendAuthenticationConfigId ??
-        output?.backendAuthenticationConfigId;
+        olds?.backendAuthenticationConfigId ?? output?.backendAuthenticationConfigId;
       const nextId = news.backendAuthenticationConfigId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -248,14 +215,11 @@ export const BackendAuthenticationConfigProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(env.project, location, backendAuthenticationConfigId);
+        output?.name ?? resourceName(env.project, location, backendAuthenticationConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -273,11 +237,7 @@ export const BackendAuthenticationConfigProvider = () =>
         "backendauth",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        backendAuthenticationConfigId,
-      );
+      const name = resourceName(env.project, location, backendAuthenticationConfigId);
       const wellKnownRoots = rootsOf(news.wellKnownRoots);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -320,21 +280,12 @@ export const BackendAuthenticationConfigProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const trustChanged =
-        (current.trustConfig ?? "") !== (news.trustConfig ?? "");
-      const certChanged =
-        (current.clientCertificate ?? "") !== (news.clientCertificate ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const trustChanged = (current.trustConfig ?? "") !== (news.trustConfig ?? "");
+      const certChanged = (current.clientCertificate ?? "") !== (news.clientCertificate ?? "");
       const rootsChanged = rootsOf(current.wellKnownRoots) !== wellKnownRoots;
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        trustChanged ||
-        certChanged ||
-        rootsChanged
-      ) {
+      if (labelsChanged || descriptionChanged || trustChanged || certChanged || rootsChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,
@@ -343,26 +294,22 @@ export const BackendAuthenticationConfigProvider = () =>
           rootsChanged ? "wellKnownRoots" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networksecurity.patchProjectsLocationsBackendAuthenticationConfigs(
-            {
+        const operation = yield* networksecurity.patchProjectsLocationsBackendAuthenticationConfigs(
+          {
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                trustConfig: news.trustConfig,
-                clientCertificate: news.clientCertificate,
-                wellKnownRoots,
-              },
+              labels: desiredLabels,
+              description: news.description,
+              trustConfig: news.trustConfig,
+              clientCertificate: news.clientCertificate,
+              wellKnownRoots,
             },
-          );
-        yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
+          },
         );
+        yield* waitForOperation(operation);
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

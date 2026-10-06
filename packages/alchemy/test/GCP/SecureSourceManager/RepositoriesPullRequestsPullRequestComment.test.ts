@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as ssm from "@distilled.cloud/gcp/securesourcemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  currentProject,
-  logLevel,
-  missingPullRequestOf,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { currentProject, logLevel, missingPullRequestOf, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -92,38 +87,30 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.SecureSourceManager.RepositoriesPullRequestsPullRequestComment(
-            "Note",
-            {
-              pullRequest:
-                process.env.GCP_TEST_SECURE_SOURCE_MANAGER_PULL_REQUEST ??
-                missingPullRequest,
-              comment: { body: "looks good" },
-            },
-          );
+          return yield* GCP.SecureSourceManager.RepositoriesPullRequestsPullRequestComment("Note", {
+            pullRequest:
+              process.env.GCP_TEST_SECURE_SOURCE_MANAGER_PULL_REQUEST ?? missingPullRequest,
+            comment: { body: "looks good" },
+          });
         }),
       );
 
       expect(created.name).toContain("/pullRequestComments/");
       expect(created.comment?.body).toEqual("looks good");
 
-      const fetched =
-        yield* ssm.getProjectsLocationsRepositoriesPullRequestsPullRequestComments(
-          { name: created.name },
-        );
+      const fetched = yield* ssm.getProjectsLocationsRepositoriesPullRequestsPullRequestComments({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.comment?.body).toEqual("looks good");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.SecureSourceManager.RepositoriesPullRequestsPullRequestComment(
-            "Note",
-            {
-              pullRequest: created.pullRequest,
-              commentId: created.commentId,
-              comment: { body: "looks good after the rebase" },
-            },
-          );
+          return yield* GCP.SecureSourceManager.RepositoriesPullRequestsPullRequestComment("Note", {
+            pullRequest: created.pullRequest,
+            commentId: created.commentId,
+            comment: { body: "looks good after the rebase" },
+          });
         }),
       );
 

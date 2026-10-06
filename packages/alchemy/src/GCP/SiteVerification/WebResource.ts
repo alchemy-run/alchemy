@@ -154,9 +154,7 @@ export type WebResource = Resource<
  * @resource
  * @category SiteVerification
  */
-export const WebResource = Resource<WebResource>(
-  "GCP.SiteVerification.WebResource",
-);
+export const WebResource = Resource<WebResource>("GCP.SiteVerification.WebResource");
 
 export class WebResourceNotResolved extends Data.TaggedError(
   "GCP.SiteVerification.WebResourceNotResolved",
@@ -188,10 +186,7 @@ const desiredMethod = (
   news: WebResourceProps,
   siteType: string,
   outputMethod: string | undefined,
-) =>
-  news.verificationMethod ??
-  outputMethod ??
-  defaultVerificationMethod(siteType);
+) => news.verificationMethod ?? outputMethod ?? defaultVerificationMethod(siteType);
 
 export const WebResourceProvider = () =>
   Provider.succeed(WebResource, {
@@ -213,9 +208,7 @@ export const WebResourceProvider = () =>
         news.identifier !== undefined &&
         !sameText(news.identifier, previousId) &&
         !sameText(
-          news.identifier.endsWith("/")
-            ? news.identifier
-            : `${news.identifier}/`,
+          news.identifier.endsWith("/") ? news.identifier : `${news.identifier}/`,
           previousId,
         )
       ) {
@@ -244,9 +237,7 @@ export const WebResourceProvider = () =>
         env.project,
         olds?.verificationMethod ?? output?.verificationMethod,
       );
-      return foundById || hasOwnershipMarker(existing.site?.identifier)
-        ? attrs
-        : Unowned(attrs);
+      return foundById || hasOwnershipMarker(existing.site?.identifier) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -267,11 +258,7 @@ export const WebResourceProvider = () =>
         news.identifier,
         output?.identifier,
       );
-      const verificationMethod = desiredMethod(
-        news,
-        siteType,
-        output?.verificationMethod,
-      );
+      const verificationMethod = desiredMethod(news, siteType, output?.verificationMethod);
 
       let current = yield* getWebResource(output?.webResourceId);
       if (current === undefined) {
@@ -287,11 +274,7 @@ export const WebResourceProvider = () =>
               owners: news.owners,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findWebResource(identifier, siteType),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findWebResource(identifier, siteType)));
         current = created ?? undefined;
       }
 
@@ -299,10 +282,7 @@ export const WebResourceProvider = () =>
         return yield* new WebResourceNotResolved({ identifier, siteType });
       }
 
-      if (
-        news.owners !== undefined &&
-        !sameOwners(current.owners, news.owners)
-      ) {
+      if (news.owners !== undefined && !sameOwners(current.owners, news.owners)) {
         const pathId = toPathId(current.id ?? output?.webResourceId);
         current = yield* siteVerification.updateWebResource({
           id: pathId,

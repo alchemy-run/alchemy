@@ -4,7 +4,6 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
-
 // #region show
 export default Cloudflare.Worker(
   "Commits",
@@ -15,7 +14,9 @@ export default Cloudflare.Worker(
     yield* GitHub.consumeRepositoryEvents(
       { owner: "alchemy-run", repository: "alchemy", events: ["push"] },
       (event) =>
-        messages.send({ room: "commits", text: event.payload.head_commit?.message ?? "" })/*hide*/.pipe(Effect.orDie)/*end*/,
+        messages
+          .send({ room: "commits", text: event.payload.head_commit?.message ?? "" }) /*hide*/
+          .pipe(Effect.orDie) /*end*/,
     );
 
     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };

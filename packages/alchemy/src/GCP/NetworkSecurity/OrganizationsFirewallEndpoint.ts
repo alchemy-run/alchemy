@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   listOrganizations,
@@ -159,16 +154,11 @@ export type OrganizationsFirewallEndpoint = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const OrganizationsFirewallEndpoint =
-  Resource<OrganizationsFirewallEndpoint>(
-    "GCP.NetworkSecurity.OrganizationsFirewallEndpoint",
-  );
+export const OrganizationsFirewallEndpoint = Resource<OrganizationsFirewallEndpoint>(
+  "GCP.NetworkSecurity.OrganizationsFirewallEndpoint",
+);
 
-const resourceName = (
-  organization: string,
-  location: string,
-  firewallEndpointId: string,
-) =>
+const resourceName = (organization: string, location: string, firewallEndpointId: string) =>
   `organizations/${organization}/locations/${location}/firewallEndpoints/${firewallEndpointId}`;
 
 const jumboOf = (settings: OrganizationsFirewallEndpointSettings | undefined) =>
@@ -209,8 +199,7 @@ const isPendingState = (state: string | undefined) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (endpoint): endpoint is networksecurity.FirewallEndpoint =>
-        endpoint !== undefined,
+      (endpoint): endpoint is networksecurity.FirewallEndpoint => endpoint !== undefined,
       () => new ResourceNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -218,8 +207,7 @@ const waitUntilReady = (name: string) =>
       () => new ResourceNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.ResourceNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.ResourceNotResolved",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -232,13 +220,9 @@ const listOwned = (organization: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.firewallEndpoints ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.firewallEndpoints ?? [])),
       Stream.filter((endpoint) =>
-        Object.keys(endpoint.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(endpoint.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map(toAttrs),
       Stream.runCollect,
@@ -264,14 +248,9 @@ export const OrganizationsFirewallEndpointProvider = () =>
       const nextId = news.firewallEndpointId ?? previousId;
       const previousOrg = olds?.organization ?? output?.organization;
       const nextOrg = news.organization ?? previousOrg;
-      const previousLocation = normalizeZone(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeZone(
-        news.location ?? olds?.location ?? output?.location,
-      );
-      const previousBilling =
-        olds?.billingProjectId ?? output?.billingProjectId;
+      const previousLocation = normalizeZone(olds?.location ?? output?.location);
+      const nextLocation = normalizeZone(news.location ?? olds?.location ?? output?.location);
+      const previousBilling = olds?.billingProjectId ?? output?.billingProjectId;
       const nextBilling = news.billingProjectId ?? previousBilling;
       const previousJumbo = jumboOf(olds?.endpointSettings);
       const nextJumbo =
@@ -279,12 +258,8 @@ export const OrganizationsFirewallEndpointProvider = () =>
           ? jumboOf(news.endpointSettings)
           : (output?.jumboFramesEnabled ?? previousJumbo);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousOrg !== undefined &&
-          nextOrg !== undefined &&
-          nextOrg !== previousOrg) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousOrg !== undefined && nextOrg !== undefined && nextOrg !== previousOrg) ||
         previousLocation !== nextLocation ||
         (previousBilling !== undefined &&
           nextBilling !== undefined &&
@@ -319,16 +294,12 @@ export const OrganizationsFirewallEndpointProvider = () =>
       const location = normalizeZone(olds?.location ?? output?.location);
       const name =
         output?.name ??
-        (organization.length > 0
-          ? resourceName(organization, location, firewallEndpointId)
-          : "");
+        (organization.length > 0 ? resourceName(organization, location, firewallEndpointId) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -398,8 +369,7 @@ export const OrganizationsFirewallEndpointProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
@@ -407,21 +377,17 @@ export const OrganizationsFirewallEndpointProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networksecurity.patchOrganizationsLocationsFirewallEndpoints({
+        const operation = yield* networksecurity.patchOrganizationsLocationsFirewallEndpoints({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current);

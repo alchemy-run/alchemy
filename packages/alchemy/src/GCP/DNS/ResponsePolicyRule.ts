@@ -123,9 +123,7 @@ export type ResponsePolicyRule = Resource<
  * @resource
  * @category DNS
  */
-export const ResponsePolicyRule = Resource<ResponsePolicyRule>(
-  "GCP.DNS.ResponsePolicyRule",
-);
+export const ResponsePolicyRule = Resource<ResponsePolicyRule>("GCP.DNS.ResponsePolicyRule");
 
 export class ResponsePolicyRuleNotResolved extends Data.TaggedError(
   "GCP.DNS.ResponsePolicyRuleNotResolved",
@@ -140,8 +138,7 @@ export class ResponsePolicyRulePolicyNotFound extends Data.TaggedError(
   responsePolicy: string;
 }> {}
 
-const withTrailingDot = (name: string) =>
-  name.endsWith(".") ? name : `${name}.`;
+const withTrailingDot = (name: string) => (name.endsWith(".") ? name : `${name}.`);
 
 const normalizeFqdn = (name: string) => withTrailingDot(name).toLowerCase();
 
@@ -173,9 +170,7 @@ const toLocalData = (
     rrdatas: record.rrdatas ?? [],
   }));
 
-const observedLocalData = (
-  rule: dns.ResponsePolicyRule,
-): ResponsePolicyRuleLocalData[] =>
+const observedLocalData = (rule: dns.ResponsePolicyRule): ResponsePolicyRuleLocalData[] =>
   (rule.localData?.localDatas ?? []).map((record) => ({
     name: record.name ? normalizeFqdn(record.name) : "",
     type: (record.type ?? "").toUpperCase(),
@@ -183,10 +178,8 @@ const observedLocalData = (
     rrdatas: record.rrdatas ?? [],
   }));
 
-const sameLocalData = (
-  left: ResponsePolicyRuleLocalData[],
-  right: ResponsePolicyRuleLocalData[],
-) => JSON.stringify(left) === JSON.stringify(right);
+const sameLocalData = (left: ResponsePolicyRuleLocalData[], right: ResponsePolicyRuleLocalData[]) =>
+  JSON.stringify(left) === JSON.stringify(right);
 
 const toBody = (props: {
   ruleName: string;
@@ -213,11 +206,7 @@ const toBody = (props: {
   return body;
 };
 
-const toAttrs = (
-  rule: dns.ResponsePolicyRule,
-  project: string,
-  responsePolicy: string,
-) => ({
+const toAttrs = (rule: dns.ResponsePolicyRule, project: string, responsePolicy: string) => ({
   project,
   responsePolicy,
   ruleName: rule.ruleName ?? "",
@@ -257,11 +246,7 @@ const listRules = (project: string, responsePolicy: string) =>
       if (pageToken === undefined || pageToken === "") break;
     }
     return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as dns.ResponsePolicyRule[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as dns.ResponsePolicyRule[])));
 
 const listAlchemyResponsePolicies = (project: string) =>
   Effect.gen(function* () {
@@ -274,11 +259,7 @@ const listAlchemyResponsePolicies = (project: string) =>
         pageToken,
       });
       for (const policy of response.responsePolicies ?? []) {
-        if (
-          Object.keys(policy.labels ?? {}).some((key) =>
-            key.startsWith(ALCHEMY_LABEL_PREFIX),
-          )
-        ) {
+        if (Object.keys(policy.labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX))) {
           found.push(policy);
         }
       }
@@ -297,12 +278,9 @@ export const ResponsePolicyRuleProvider = () =>
       const previousPolicy = olds?.responsePolicy ?? output?.responsePolicy;
       const previousName = olds?.ruleName ?? output?.ruleName;
       const nextName = news.ruleName ?? previousName;
-      const policyChanged =
-        previousPolicy !== undefined && news.responsePolicy !== previousPolicy;
+      const policyChanged = previousPolicy !== undefined && news.responsePolicy !== previousPolicy;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
       if (!policyChanged && !nameChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -330,11 +308,7 @@ export const ResponsePolicyRuleProvider = () =>
               ? listRules(env.project, policy.responsePolicyName).pipe(
                   Effect.map((rules) =>
                     rules.map((rule) =>
-                      toAttrs(
-                        rule,
-                        env.project,
-                        policy.responsePolicyName ?? "",
-                      ),
+                      toAttrs(rule, env.project, policy.responsePolicyName ?? ""),
                     ),
                   ),
                 )
@@ -374,9 +348,7 @@ export const ResponsePolicyRuleProvider = () =>
             body: desired,
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, responsePolicy, ruleName),
-            ),
+            Effect.catchTag("Conflict", () => getByName(env.project, responsePolicy, ruleName)),
           );
         current = created ?? undefined;
       }
@@ -389,10 +361,7 @@ export const ResponsePolicyRuleProvider = () =>
       }
 
       const dnsChanged = normalizeFqdn(current.dnsName ?? "") !== dnsName;
-      const localChanged = !sameLocalData(
-        observedLocalData(current),
-        localData,
-      );
+      const localChanged = !sameLocalData(observedLocalData(current), localData);
       const behaviorChanged = (current.behavior ?? undefined) !== behavior;
 
       if (dnsChanged || localChanged || behaviorChanged) {

@@ -26,12 +26,7 @@ export interface ListHostedZones extends Binding.Service<
   () => Effect.Effect<
     (
       request?: route53.ListHostedZonesRequest,
-    ) => Effect.Effect<
-      route53.ListHostedZonesResponse,
-      route53.ListHostedZonesError
-    >
+    ) => Effect.Effect<route53.ListHostedZonesResponse, route53.ListHostedZonesError>
   >
 > {}
-export const ListHostedZones = Binding.Service<ListHostedZones>(
-  "AWS.Route53.ListHostedZones",
-);
+export const ListHostedZones = Binding.Service<ListHostedZones>("AWS.Route53.ListHostedZones");

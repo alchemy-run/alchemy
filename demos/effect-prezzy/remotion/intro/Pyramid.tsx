@@ -41,7 +41,15 @@ type Brick = NonNullable<PyramidStep["bricks"]>[number];
  * them, a feature cut through them, and the modules that rebuild them come
  * and go by step.
  */
-export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: PyramidStep; local: number }) => {
+export const PyramidView = ({
+  step,
+  prev,
+  local,
+}: {
+  step: PyramidStep;
+  prev?: PyramidStep;
+  local: number;
+}) => {
   const t = interpolate(local, [0, 10], [0, 1], clamp);
   const lit = (s: PyramidStep | undefined, id: string) => !s?.lit || s.lit.includes(id);
   const blend = (now: number, then: number) => then + (now - then) * t;
@@ -50,16 +58,24 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
   const noteKey = (n: { layer: string; text: string }) => `${n.layer}:${n.text}`;
   const oldNotes = new Set(prev?.side?.map(noteKey));
   const newNotes = (step.side ?? []).filter((n) => !oldNotes.has(noteKey(n)));
-  const braceNew = !!step.brace && (prev?.brace?.text !== step.brace.text || prev?.brace?.sub !== step.brace.sub);
+  const braceNew =
+    !!step.brace && (prev?.brace?.text !== step.brace.text || prev?.brace?.sub !== step.brace.sub);
   const braceWas = !!prev?.brace;
 
   // Bands fade back when something is drawn over them.
   const covered = (s: PyramidStep | undefined) => (s?.bricks || s?.slice || s?.slices ? 0 : 1);
   const bandText = blend(covered(step), prev ? covered(prev) : covered(step));
-  const bandFill = blend(step.bricks ? 0.25 : 1, prev ? (prev.bricks ? 0.25 : 1) : step.bricks ? 0.25 : 1);
+  const bandFill = blend(
+    step.bricks ? 0.25 : 1,
+    prev ? (prev.bricks ? 0.25 : 1) : step.bricks ? 0.25 : 1,
+  );
 
   const sliceIn = step.slice ? (prev?.slice ? 1 : interpolate(local, [2, 12], [0, 1], clamp)) : 0;
-  const cutIn = step.cut ? (prev?.cut?.under === step.cut.under ? 1 : drawProgress(local, 6, 12)) : 0;
+  const cutIn = step.cut
+    ? prev?.cut?.under === step.cut.under
+      ? 1
+      : drawProgress(local, 6, 12)
+    : 0;
 
   const brickKey = (b: Brick) => `${b.row}:${b.title}`;
   const oldBricks = new Set(prev?.bricks?.map(brickKey));
@@ -79,7 +95,10 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
         const wt = widthAt(top);
         const wb = widthAt(bottom);
         const oldDetail = prev?.layers.find((l) => l.id === layer.id)?.detail;
-        const detailIn = oldDetail === undefined || oldDetail === layer.detail ? 1 : interpolate(local, [2, 10], [0, 1], clamp);
+        const detailIn =
+          oldDetail === undefined || oldDetail === layer.detail
+            ? 1
+            : interpolate(local, [2, 10], [0, 1], clamp);
         return (
           <g key={layer.id} opacity={q * level} transform={`translate(0 ${(1 - q) * 30})`}>
             <path
@@ -92,10 +111,26 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
               strokeLinejoin="round"
             />
             <g opacity={bandText}>
-              <text x={CX} y={mid - 6} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={40} fill={brand.fg}>
+              <text
+                x={CX}
+                y={mid - 6}
+                textAnchor="middle"
+                fontFamily={sans}
+                fontWeight={700}
+                fontSize={40}
+                fill={brand.fg}
+              >
                 {layer.title}
               </text>
-              <text x={CX} y={mid + 38} textAnchor="middle" fontFamily={mono} fontSize={24} fill={brand.fgMuted} opacity={detailIn}>
+              <text
+                x={CX}
+                y={mid + 38}
+                textAnchor="middle"
+                fontFamily={mono}
+                fontSize={24}
+                fill={brand.fgMuted}
+                opacity={detailIn}
+              >
                 {layer.detail}
               </text>
             </g>
@@ -119,8 +154,12 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
                   strokeLinecap="round"
                 />
                 <g opacity={cutIn} fontFamily={hand} fontWeight={700} fontSize={46} fill={brand.fg}>
-                  <text x={NOTE_X} y={y - 26}>↑ {step.cut.above}</text>
-                  <text x={NOTE_X} y={y + 58}>↓ {step.cut.below}</text>
+                  <text x={NOTE_X} y={y - 26}>
+                    ↑ {step.cut.above}
+                  </text>
+                  <text x={NOTE_X} y={y + 58}>
+                    ↓ {step.cut.below}
+                  </text>
                 </g>
               </g>
             );
@@ -137,17 +176,42 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
                 {step.layers.map((layer, slot) => {
                   const b = band(slot);
                   const item = step.slice!.items[layer.id];
-                  const level = blend(lit(step, layer.id) ? 1 : DIM, prev?.slice ? (lit(prev, layer.id) ? 1 : DIM) : 1);
+                  const level = blend(
+                    lit(step, layer.id) ? 1 : DIM,
+                    prev?.slice ? (lit(prev, layer.id) ? 1 : DIM) : 1,
+                  );
                   return (
                     <g key={layer.id}>
                       <rect x={x} y={b.top} width={SLICE_W} height={BAND} fill={brand.bg} />
-                      <rect x={x} y={b.top} width={SLICE_W} height={BAND} fill={layer.color} fillOpacity={0.16 * level} />
+                      <rect
+                        x={x}
+                        y={b.top}
+                        width={SLICE_W}
+                        height={BAND}
+                        fill={layer.color}
+                        fillOpacity={0.16 * level}
+                      />
                       {item ? (
                         <g opacity={level}>
-                          <text x={CX} y={b.mid - 10} textAnchor="middle" fontFamily={mono} fontSize={20} fill={layer.color}>
+                          <text
+                            x={CX}
+                            y={b.mid - 10}
+                            textAnchor="middle"
+                            fontFamily={mono}
+                            fontSize={20}
+                            fill={layer.color}
+                          >
                             {layer.title.toLowerCase()}
                           </text>
-                          <text x={CX} y={b.mid + 30} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={32} fill={brand.fg}>
+                          <text
+                            x={CX}
+                            y={b.mid + 30}
+                            textAnchor="middle"
+                            fontFamily={sans}
+                            fontWeight={700}
+                            fontSize={32}
+                            fill={brand.fg}
+                          >
                             {item}
                           </text>
                         </g>
@@ -155,8 +219,25 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
                     </g>
                   );
                 })}
-                <rect x={x} y={top} width={SLICE_W} height={BOTTOM - top} rx={14} fill="none" stroke={TONE.good} strokeWidth={4} />
-                <text x={CX} y={BOTTOM + 58} textAnchor="middle" fontFamily={hand} fontWeight={700} fontSize={48} fill={TONE.good}>
+                <rect
+                  x={x}
+                  y={top}
+                  width={SLICE_W}
+                  height={BOTTOM - top}
+                  rx={14}
+                  fill="none"
+                  stroke={TONE.good}
+                  strokeWidth={4}
+                />
+                <text
+                  x={CX}
+                  y={BOTTOM + 58}
+                  textAnchor="middle"
+                  fontFamily={hand}
+                  fontWeight={700}
+                  fontSize={48}
+                  fill={TONE.good}
+                >
                   {step.slice.label}
                 </text>
               </g>
@@ -178,7 +259,9 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
             const topY = band(step.layers.length - 1).top;
             const [tl, tr] = edges(topY);
             const [bl, br] = edges(BOTTOM);
-            const q = prev?.slices?.some((p) => p.label === sl.label) ? 1 : interpolate(local, [2 + k * 4, 10 + k * 4], [0, 1], clamp);
+            const q = prev?.slices?.some((p) => p.label === sl.label)
+              ? 1
+              : interpolate(local, [2 + k * 4, 10 + k * 4], [0, 1], clamp);
             return (
               <g key={sl.label} opacity={q} transform={`translate(0 ${(1 - q) * 18})`}>
                 {step.layers.map((layer, slot) => {
@@ -189,22 +272,46 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
                   const [m1, m2] = edges(b.mid);
                   return (
                     <g key={layer.id}>
-                      <path d={`M ${a1} ${b.top} L ${a2} ${b.top} L ${c2} ${b.bottom} L ${c1} ${b.bottom} Z`} fill={brand.bg} />
+                      <path
+                        d={`M ${a1} ${b.top} L ${a2} ${b.top} L ${c2} ${b.bottom} L ${c1} ${b.bottom} Z`}
+                        fill={brand.bg}
+                      />
                       <path
                         d={`M ${a1} ${b.top} L ${a2} ${b.top} L ${c2} ${b.bottom} L ${c1} ${b.bottom} Z`}
                         fill={layer.color}
                         fillOpacity={item ? 0.2 : 0.05}
                       />
                       {item ? (
-                        <text x={(m1 + m2) / 2} y={b.mid + 9} textAnchor="middle" fontFamily={mono} fontSize={22} fill={brand.fg}>
+                        <text
+                          x={(m1 + m2) / 2}
+                          y={b.mid + 9}
+                          textAnchor="middle"
+                          fontFamily={mono}
+                          fontSize={22}
+                          fill={brand.fg}
+                        >
                           {item}
                         </text>
                       ) : null}
                     </g>
                   );
                 })}
-                <path d={`M ${tl} ${topY} L ${tr} ${topY} L ${br} ${BOTTOM} L ${bl} ${BOTTOM} Z`} fill="none" stroke={TONE.good} strokeWidth={3} strokeLinejoin="round" />
-                <text x={(bl + br) / 2} y={BOTTOM + 50} textAnchor="middle" fontFamily={hand} fontWeight={700} fontSize={40} fill={TONE.good}>
+                <path
+                  d={`M ${tl} ${topY} L ${tr} ${topY} L ${br} ${BOTTOM} L ${bl} ${BOTTOM} Z`}
+                  fill="none"
+                  stroke={TONE.good}
+                  strokeWidth={3}
+                  strokeLinejoin="round"
+                />
+                <text
+                  x={(bl + br) / 2}
+                  y={BOTTOM + 50}
+                  textAnchor="middle"
+                  fontFamily={hand}
+                  fontWeight={700}
+                  fontSize={40}
+                  fill={TONE.good}
+                >
                   {sl.label}
                 </text>
               </g>
@@ -225,14 +332,45 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
         const h = bottom - top - 20;
         const k = newBricks.indexOf(brick);
         const q = k < 0 ? 1 : interpolate(local, [4 + k * 4, 12 + k * 4], [0, 1], clamp);
-        const level = blend(lit(step, brick.title) ? 1 : DIM, prev?.bricks?.some((b) => brickKey(b) === brickKey(brick)) ? (lit(prev, brick.title) ? 1 : DIM) : 1);
+        const level = blend(
+          lit(step, brick.title) ? 1 : DIM,
+          prev?.bricks?.some((b) => brickKey(b) === brickKey(brick))
+            ? lit(prev, brick.title)
+              ? 1
+              : DIM
+            : 1,
+        );
         return (
           <g key={brickKey(brick)} opacity={q * level} transform={`translate(0 ${(1 - q) * -40})`}>
-            <rect x={x} y={y} width={w} height={h} rx={16} fill={brand.bgElevated} stroke={brick.color} strokeWidth={3.5} />
-            <text x={x + w / 2} y={y + h / 2 - 4} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={36} fill={brand.fg}>
+            <rect
+              x={x}
+              y={y}
+              width={w}
+              height={h}
+              rx={16}
+              fill={brand.bgElevated}
+              stroke={brick.color}
+              strokeWidth={3.5}
+            />
+            <text
+              x={x + w / 2}
+              y={y + h / 2 - 4}
+              textAnchor="middle"
+              fontFamily={sans}
+              fontWeight={700}
+              fontSize={36}
+              fill={brand.fg}
+            >
               {brick.title}
             </text>
-            <text x={x + w / 2} y={y + h / 2 + 34} textAnchor="middle" fontFamily={mono} fontSize={20} fill={brand.fgMuted}>
+            <text
+              x={x + w / 2}
+              y={y + h / 2 + 34}
+              textAnchor="middle"
+              fontFamily={mono}
+              fontSize={20}
+              fill={brand.fgMuted}
+            >
               {brick.detail}
             </text>
           </g>
@@ -247,7 +385,10 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
             const x = PILLAR_X;
             const was = prev?.pillar;
             const q = was ? 1 : interpolate(local, [2, 12], [0, 1], clamp);
-            const linesIn = was && was.lines.join() === pillar.lines.join() ? 1 : interpolate(local, [6, 14], [0, 1], clamp);
+            const linesIn =
+              was && was.lines.join() === pillar.lines.join()
+                ? 1
+                : interpolate(local, [6, 14], [0, 1], clamp);
             const mid = (top + BOTTOM) / 2;
             return (
               <g opacity={q} transform={`translate(${(1 - q) * 24} 0)`}>
@@ -265,8 +406,25 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
                     />
                   );
                 })}
-                <rect x={x} y={top} width={PILLAR_W} height={BOTTOM - top} rx={18} fill={brand.bgElevated} stroke={pillar.color} strokeWidth={3.5} />
-                <text x={x + PILLAR_W / 2} y={top + 64} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={34} fill={brand.fg}>
+                <rect
+                  x={x}
+                  y={top}
+                  width={PILLAR_W}
+                  height={BOTTOM - top}
+                  rx={18}
+                  fill={brand.bgElevated}
+                  stroke={pillar.color}
+                  strokeWidth={3.5}
+                />
+                <text
+                  x={x + PILLAR_W / 2}
+                  y={top + 64}
+                  textAnchor="middle"
+                  fontFamily={sans}
+                  fontWeight={700}
+                  fontSize={34}
+                  fill={brand.fg}
+                >
                   {pillar.title}
                 </text>
                 <g opacity={linesIn}>
@@ -299,7 +457,8 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
         if (note.code) {
           // One left-aligned column beside the pyramid; each line keeps its place, and only
           // lines that weren't there before fade in.
-          const lines = note.tokens ?? note.text.split("\n").map((text) => [{ text, color: brand.fg }]);
+          const lines =
+            note.tokens ?? note.text.split("\n").map((text) => [{ text, color: brand.fg }]);
           const before = new Set(
             (prev?.side ?? [])
               .filter((n) => n.code && n.layer === note.layer)
@@ -336,7 +495,14 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
         }
         return (
           <g key={noteKey(note)} opacity={q} transform={`translate(${(1 - q) * 14} 0)`}>
-            <text x={NOTE_X} y={mid + 14} fontFamily={hand} fontWeight={700} fontSize={44} fill={color}>
+            <text
+              x={NOTE_X}
+              y={mid + 14}
+              fontFamily={hand}
+              fontWeight={700}
+              fontSize={44}
+              fill={color}
+            >
               {note.text}
             </text>
           </g>
@@ -365,12 +531,26 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
                   strokeDashoffset={3000 * (1 - p)}
                 />
                 <g opacity={label}>
-                  <text x={x + 84} y={midY - 4} fontFamily={hand} fontWeight={700} fontSize={54} fill={TONE.good}>
+                  <text
+                    x={x + 84}
+                    y={midY - 4}
+                    fontFamily={hand}
+                    fontWeight={700}
+                    fontSize={54}
+                    fill={TONE.good}
+                  >
                     {step.brace.text}
                   </text>
                   {step.brace.sub
                     ? step.brace.sub.split("\n").map((line, i) => (
-                        <text key={line} x={x + 86} y={midY + 44 + i * 40} fontFamily={mono} fontSize={26} fill={brand.fgMuted}>
+                        <text
+                          key={line}
+                          x={x + 86}
+                          y={midY + 44 + i * 40}
+                          fontFamily={mono}
+                          fontSize={26}
+                          fill={brand.fgMuted}
+                        >
                           {line}
                         </text>
                       ))

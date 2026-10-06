@@ -34,11 +34,7 @@ export interface RetrievePromotionCode extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrievePromotionCodeRequest,
-    ) => Effect.Effect<
-      StripePromotionCode,
-      GetPromotionCodeError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripePromotionCode, GetPromotionCodeError, RuntimeContext>
   >
 > {}
 

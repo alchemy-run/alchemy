@@ -25,10 +25,7 @@ export interface DescribeDomainNodes extends Binding.Service<
   () => Effect.Effect<
     (
       request: opensearch.DescribeDomainNodesRequest,
-    ) => Effect.Effect<
-      opensearch.DescribeDomainNodesResponse,
-      opensearch.DescribeDomainNodesError
-    >
+    ) => Effect.Effect<opensearch.DescribeDomainNodesResponse, opensearch.DescribeDomainNodesError>
   >
 > {}
 export const DescribeDomainNodes = Binding.Service<DescribeDomainNodes>(

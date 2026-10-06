@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/gcp/dns_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, policyName: string) =>
   dns.getPolicies({ project, policy: policyName }).pipe(
@@ -52,9 +49,7 @@ test.provider(
       expect(created.policy.enableLogging).toEqual(true);
       expect(created.policy.enableInboundForwarding).toEqual(false);
       expect(created.policy.enableDns64).toEqual(false);
-      expect(created.policy.networks.map(lastSegment)).toContain(
-        created.vpc.networkName,
-      );
+      expect(created.policy.networks.map(lastSegment)).toContain(created.vpc.networkName);
 
       const fetched = yield* dns.getPolicies({
         project: created.policy.project,
@@ -65,9 +60,7 @@ test.provider(
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("alchemy test dns policy");
       expect(
-        (fetched.networks ?? []).map((network) =>
-          lastSegment(network.networkUrl ?? ""),
-        ),
+        (fetched.networks ?? []).map((network) => lastSegment(network.networkUrl ?? "")),
       ).toContain(created.vpc.networkName);
 
       const updated = yield* stack.deploy(
@@ -87,9 +80,7 @@ test.provider(
       );
 
       expect(updated.policy.policyName).toEqual(created.policy.policyName);
-      expect(updated.policy.description).toEqual(
-        "updated alchemy test dns policy",
-      );
+      expect(updated.policy.description).toEqual("updated alchemy test dns policy");
       expect(updated.policy.enableLogging).toEqual(false);
 
       const fetchedUpdate = yield* dns.getPolicies({
@@ -97,9 +88,7 @@ test.provider(
         policy: created.policy.policyName,
       });
       expect(fetchedUpdate.enableLogging).toEqual(false);
-      expect(fetchedUpdate.description).toContain(
-        "updated alchemy test dns policy",
-      );
+      expect(fetchedUpdate.description).toContain("updated alchemy test dns policy");
 
       const replacedName = `r${created.policy.policyName}`.slice(0, 63);
       const replaced = yield* stack.deploy(
@@ -120,14 +109,9 @@ test.provider(
 
       expect(replaced.policy.policyName).toEqual(replacedName);
       expect(replaced.policy.enableLogging).toEqual(true);
-      expect(replaced.policy.description).toEqual(
-        "replaced alchemy test dns policy",
-      );
+      expect(replaced.policy.description).toEqual("replaced alchemy test dns policy");
 
-      const previousGone = yield* waitUntilGone(
-        created.policy.project,
-        created.policy.policyName,
-      );
+      const previousGone = yield* waitUntilGone(created.policy.project, created.policy.policyName);
       expect(previousGone).toEqual("gone");
 
       const fetchedReplacement = yield* dns.getPolicies({

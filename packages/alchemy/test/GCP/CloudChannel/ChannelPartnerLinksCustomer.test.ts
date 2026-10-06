@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   probeAccountName,
@@ -64,8 +64,7 @@ test.provider.skipIf(!runLifecycle)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const partner =
-        process.env.GOOGLE_CLOUDCHANNEL_PARTNER?.trim() ?? probePartner;
+      const partner = process.env.GOOGLE_CLOUDCHANNEL_PARTNER?.trim() ?? probePartner;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -79,10 +78,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.name).toContain("/customers/");
       expect(created.orgDisplayName).toEqual("Resold Corp");
 
-      const fetched =
-        yield* cloudchannel.getAccountsChannelPartnerLinksCustomers({
-          name: created.name,
-        });
+      const fetched = yield* cloudchannel.getAccountsChannelPartnerLinksCustomers({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.orgDisplayName).toEqual("Resold Corp");
 

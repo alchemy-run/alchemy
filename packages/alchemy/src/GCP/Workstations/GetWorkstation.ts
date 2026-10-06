@@ -43,6 +43,4 @@ export interface GetWorkstation extends Binding.Service<
   >
 > {}
 
-export const GetWorkstation = Binding.Service<GetWorkstation>(
-  "GCP.Workstations.GetWorkstation",
-);
+export const GetWorkstation = Binding.Service<GetWorkstation>("GCP.Workstations.GetWorkstation");

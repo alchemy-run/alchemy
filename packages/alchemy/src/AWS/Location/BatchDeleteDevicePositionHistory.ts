@@ -43,7 +43,6 @@ export interface BatchDeleteDevicePositionHistory extends Binding.Service<
     >
   >
 > {}
-export const BatchDeleteDevicePositionHistory =
-  Binding.Service<BatchDeleteDevicePositionHistory>(
-    "AWS.Location.BatchDeleteDevicePositionHistory",
-  );
+export const BatchDeleteDevicePositionHistory = Binding.Service<BatchDeleteDevicePositionHistory>(
+  "AWS.Location.BatchDeleteDevicePositionHistory",
+);

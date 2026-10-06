@@ -112,16 +112,12 @@ export type AdminReservation = Resource<
  * @resource
  * @category PubSubLite
  */
-export const AdminReservation = Resource<AdminReservation>(
-  "GCP.PubSubLite.AdminReservation",
-);
+export const AdminReservation = Resource<AdminReservation>("GCP.PubSubLite.AdminReservation");
 
 const COLLECTION = "reservations";
 
 const capacityOf = (value: string | number | undefined) =>
-  value === undefined || value === ""
-    ? DEFAULT_THROUGHPUT_CAPACITY
-    : String(value);
+  value === undefined || value === "" ? DEFAULT_THROUGHPUT_CAPACITY : String(value);
 
 const toAttrs = (
   reservation: pubsublite.Reservation,
@@ -147,12 +143,8 @@ export const AdminReservationProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.reservationId ?? output?.reservationId,
-        nextId:
-          news.reservationId ?? olds?.reservationId ?? output?.reservationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.reservationId ?? olds?.reservationId ?? output?.reservationId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -162,26 +154,15 @@ export const AdminReservationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const reservationId = yield* toResourceId(
-        id,
-        olds?.reservationId,
-        output?.reservationId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, reservationId);
+      const reservationId = yield* toResourceId(id, olds?.reservationId, output?.reservationId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, reservationId);
       const existing = yield* getReservation(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const owned = yield* ownedByAlchemy(id, attrs.reservationId);
       if (owned) return attrs;
-      return hasOwnershipMarker(attrs.reservationId)
-        ? undefined
-        : Unowned(attrs);
+      return hasOwnershipMarker(attrs.reservationId) ? undefined : Unowned(attrs);
     }),
 
     list: () =>
@@ -193,21 +174,9 @@ export const AdminReservationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const reservationId = yield* toResourceId(
-        id,
-        news.reservationId,
-        output?.reservationId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        reservationId,
-      );
+      const reservationId = yield* toResourceId(id, news.reservationId, output?.reservationId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, reservationId);
       const throughputCapacity = capacityOf(news.throughputCapacity);
 
       let current = yield* getReservation(output?.name ?? name);
@@ -229,8 +198,7 @@ export const AdminReservationProvider = () =>
 
       const observedName = current.name ?? name;
       const mask = fieldMask([
-        !sameText(current.throughputCapacity, throughputCapacity) &&
-          "throughputCapacity",
+        !sameText(current.throughputCapacity, throughputCapacity) && "throughputCapacity",
       ]);
       if (mask.length > 0) {
         current = yield* pubsublite.patchAdminProjectsLocationsReservations({

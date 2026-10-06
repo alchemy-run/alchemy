@@ -1,7 +1,7 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -13,9 +13,7 @@ export const logLevel = Effect.provideService(
 export const entitled = !!process.env.GCP_TEST_CLOUD_NUMBER_REGISTRY;
 export const runLifecycle = entitled && !process.env.FAST;
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 export const location = "global";
 
 export const waitUntilGone = <E extends { readonly _tag: string }, R>(
@@ -24,8 +22,7 @@ export const waitUntilGone = <E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.as("found" as const),
     Effect.catchIf(
-      (error): error is Extract<E, { readonly _tag: "NotFound" }> =>
-        error._tag === "NotFound",
+      (error): error is Extract<E, { readonly _tag: "NotFound" }> => error._tag === "NotFound",
       () => Effect.succeed("gone" as const),
     ),
     Effect.repeat({

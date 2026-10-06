@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
-import { RunJob, type RunJobRequest } from "./RunJob.ts";
 import type { Job } from "./Job.ts";
+import { RunJob, type RunJobRequest } from "./RunJob.ts";
 
 /**
  * HTTP implementation of {@link RunJob}.
@@ -23,15 +23,10 @@ export const RunJobHttp = Layer.effect(
         resource: job,
         iam: [
           // runWithOverrides: RunJobRequest accepts `body.overrides`.
-          grantFor(
-            { role: "roles/run.jobsExecutorWithOverrides", on: "run.job" },
-            job.name,
-          ),
+          grantFor({ role: "roles/run.jobsExecutorWithOverrides", on: "run.job" }, job.name),
         ],
       });
-      return Effect.fn(`GCP.Run.RunJob(${job.LogicalId})`)(function* (
-        request?: RunJobRequest,
-      ) {
+      return Effect.fn(`GCP.Run.RunJob(${job.LogicalId})`)(function* (request?: RunJobRequest) {
         return yield* run({
           ...request,
           name: yield* name,

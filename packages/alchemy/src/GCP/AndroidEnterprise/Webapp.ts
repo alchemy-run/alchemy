@@ -128,18 +128,12 @@ export type Webapp = Resource<
  */
 export const Webapp = Resource<Webapp>("GCP.AndroidEnterprise.Webapp");
 
-export class WebappNotResolved extends Data.TaggedError(
-  "GCP.AndroidEnterprise.WebappNotResolved",
-)<{
+export class WebappNotResolved extends Data.TaggedError("GCP.AndroidEnterprise.WebappNotResolved")<{
   enterpriseId: string;
   webAppId: string;
 }> {}
 
-const toAttrs = (
-  webapp: androidenterprise.WebApp,
-  enterpriseId: string,
-  project: string,
-) => ({
+const toAttrs = (webapp: androidenterprise.WebApp, enterpriseId: string, project: string) => ({
   webAppId: webapp.webAppId ?? "",
   enterpriseId,
   project,
@@ -159,25 +153,17 @@ const desiredBody = (input: {
   webAppId: input.webAppId,
   title: input.title,
   startUrl: input.news.startUrl,
-  displayMode:
-    input.news.displayMode ??
-    input.current?.displayMode ??
-    DEFAULT_DISPLAY_MODE,
+  displayMode: input.news.displayMode ?? input.current?.displayMode ?? DEFAULT_DISPLAY_MODE,
   icons: input.news.icons ?? input.current?.icons,
   isPublished: input.news.isPublished ?? input.current?.isPublished,
 });
 
-const needsSync = (
-  current: androidenterprise.WebApp,
-  desired: androidenterprise.WebApp,
-) =>
+const needsSync = (current: androidenterprise.WebApp, desired: androidenterprise.WebApp) =>
   !sameText(current.title, desired.title) ||
   !sameText(current.startUrl, desired.startUrl) ||
-  (desired.displayMode !== undefined &&
-    !sameText(current.displayMode, desired.displayMode)) ||
+  (desired.displayMode !== undefined && !sameText(current.displayMode, desired.displayMode)) ||
   (desired.icons !== undefined && !jsonEqual(current.icons, desired.icons)) ||
-  (desired.isPublished !== undefined &&
-    current.isPublished !== desired.isPublished);
+  (desired.isPublished !== undefined && current.isPublished !== desired.isPublished);
 
 export const WebappProvider = () =>
   Provider.succeed(Webapp, {
@@ -186,18 +172,11 @@ export const WebappProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousEnterprise = olds?.enterpriseId ?? output?.enterpriseId;
-      if (
-        previousEnterprise !== undefined &&
-        news.enterpriseId !== previousEnterprise
-      ) {
+      if (previousEnterprise !== undefined && news.enterpriseId !== previousEnterprise) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.webAppId ?? output?.webAppId;
-      if (
-        previousId !== undefined &&
-        news.webAppId !== undefined &&
-        news.webAppId !== previousId
-      ) {
+      if (previousId !== undefined && news.webAppId !== undefined && news.webAppId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -226,9 +205,7 @@ export const WebappProvider = () =>
         const webapps = yield* listOwnedWebapps();
         return webapps
           .filter(({ webapp }) => hasOwnershipMarker(webapp.title))
-          .map(({ webapp, enterpriseId }) =>
-            toAttrs(webapp, enterpriseId, env.project),
-          );
+          .map(({ webapp, enterpriseId }) => toAttrs(webapp, enterpriseId, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -237,10 +214,7 @@ export const WebappProvider = () =>
       const displayName = yield* toDisplayName(id, news.title, output?.title);
       const title = defaultTitle(news.title, displayName);
 
-      let current = yield* getWebapp(
-        enterpriseId,
-        news.webAppId ?? output?.webAppId ?? "",
-      );
+      let current = yield* getWebapp(enterpriseId, news.webAppId ?? output?.webAppId ?? "");
       if (current === undefined) {
         current = yield* findOwnedWebapp(id, enterpriseId);
       }
@@ -251,11 +225,7 @@ export const WebappProvider = () =>
             enterpriseId,
             body: desiredBody({ title, news }),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwnedWebapp(id, enterpriseId),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwnedWebapp(id, enterpriseId)));
         current = created ?? undefined;
       }
 
@@ -266,8 +236,7 @@ export const WebappProvider = () =>
         });
       }
 
-      const webAppId =
-        current.webAppId ?? news.webAppId ?? output?.webAppId ?? "";
+      const webAppId = current.webAppId ?? news.webAppId ?? output?.webAppId ?? "";
       const desired = desiredBody({
         webAppId,
         title,

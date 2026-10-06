@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   parametermanager.getProjectsLocationsParametersVersions({ name }).pipe(
@@ -24,8 +21,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const payloadOf = (data: string) =>
-  Effect.sync(() => Buffer.from(data, "utf8").toString("base64"));
+const payloadOf = (data: string) => Effect.sync(() => Buffer.from(data, "utf8").toString("base64"));
 
 test.provider(
   "create, update, and delete a parameter version",
@@ -52,11 +48,10 @@ test.provider(
       const expectedPayload = yield* payloadOf("host=api.example.com");
       expect(created.version.payloadData).toEqual(expectedPayload);
 
-      const fetched =
-        yield* parametermanager.getProjectsLocationsParametersVersions({
-          name: created.version.name,
-          view: "FULL",
-        });
+      const fetched = yield* parametermanager.getProjectsLocationsParametersVersions({
+        name: created.version.name,
+        view: "FULL",
+      });
       expect(fetched.name).toEqual(created.version.name);
       expect(fetched.disabled).toBeFalsy();
       expect(fetched.payload?.data).toEqual(created.version.payloadData);
@@ -81,11 +76,10 @@ test.provider(
       expect(updated.version.name).toEqual(created.version.name);
       expect(updated.version.disabled).toEqual(true);
 
-      const fetchedUpdate =
-        yield* parametermanager.getProjectsLocationsParametersVersions({
-          name: created.version.name,
-          view: "BASIC",
-        });
+      const fetchedUpdate = yield* parametermanager.getProjectsLocationsParametersVersions({
+        name: created.version.name,
+        view: "BASIC",
+      });
       expect(fetchedUpdate.disabled).toEqual(true);
 
       yield* stack.destroy();
@@ -107,10 +101,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const parameter = yield* GCP.ParameterManager.Parameter(
-            "AppConfig",
-            {},
-          );
+          const parameter = yield* GCP.ParameterManager.Parameter("AppConfig", {});
           const version = yield* GCP.ParameterManager.ParametersVersion("V1", {
             parameter: parameter.name,
             data: "first",
@@ -141,11 +132,10 @@ test.provider(
       const secondPayload = yield* payloadOf("second");
       expect(replaced.version.payloadData).toEqual(secondPayload);
 
-      const fetched =
-        yield* parametermanager.getProjectsLocationsParametersVersions({
-          name: replaced.version.name,
-          view: "FULL",
-        });
+      const fetched = yield* parametermanager.getProjectsLocationsParametersVersions({
+        name: replaced.version.name,
+        view: "FULL",
+      });
       expect(fetched.payload?.data).toEqual(replaced.version.payloadData);
 
       yield* stack.destroy();

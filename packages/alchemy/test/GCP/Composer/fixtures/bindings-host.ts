@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import { serveProbes } from "../../bindingHost.ts";
-import { defaultComputeServiceAccount } from "../serviceAccount.ts";
 import { CAPACITY_REGION } from "../../zones.ts";
+import { defaultComputeServiceAccount } from "../serviceAccount.ts";
 
 /** Environment GetEnvironment / ExecuteAirflowCommand are bound to. */
 export const Airflow = Effect.gen(function* () {
@@ -55,12 +55,8 @@ export default class ComposerBindingsHost extends GCP.Function<ComposerBindingsH
     const environment = yield* Airflow;
     const getEnvironment = yield* GCP.Composer.GetEnvironment(environment);
     const execute = yield* GCP.Composer.ExecuteAirflowCommand(environment);
-    const getConfigMap = yield* GCP.Composer.GetUserWorkloadsConfigMap(
-      yield* TaskConfig,
-    );
-    const getSecret = yield* GCP.Composer.GetUserWorkloadsSecret(
-      yield* TaskSecret,
-    );
+    const getConfigMap = yield* GCP.Composer.GetUserWorkloadsConfigMap(yield* TaskConfig);
+    const getSecret = yield* GCP.Composer.GetUserWorkloadsSecret(yield* TaskSecret);
 
     return {
       fetch: serveProbes({

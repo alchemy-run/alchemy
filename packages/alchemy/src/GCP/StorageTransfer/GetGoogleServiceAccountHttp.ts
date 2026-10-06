@@ -1,11 +1,11 @@
-import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { bindGcpHost } from "../Host.ts";
 import { GetGoogleServiceAccount } from "./GetGoogleServiceAccount.ts";
 import type { TransferJob } from "./TransferJob.ts";
-import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetGoogleServiceAccount}.
@@ -28,11 +28,11 @@ export const GetGoogleServiceAccountHttp: Layer.Layer<
         iam: [{ role: "roles/storagetransfer.viewer" }],
       });
       const project = yield* job.project;
-      return Effect.fn(
-        `GCP.StorageTransfer.GetGoogleServiceAccount(${job.LogicalId})`,
-      )(function* () {
-        return yield* run({ projectId: yield* project });
-      });
+      return Effect.fn(`GCP.StorageTransfer.GetGoogleServiceAccount(${job.LogicalId})`)(
+        function* () {
+          return yield* run({ projectId: yield* project });
+        },
+      );
     });
   }),
 );

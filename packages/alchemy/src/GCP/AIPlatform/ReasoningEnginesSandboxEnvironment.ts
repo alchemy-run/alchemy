@@ -137,10 +137,9 @@ export type ReasoningEnginesSandboxEnvironment = Resource<
  * @resource
  * @category AIPlatform
  */
-export const ReasoningEnginesSandboxEnvironment =
-  Resource<ReasoningEnginesSandboxEnvironment>(
-    "GCP.AIPlatform.ReasoningEnginesSandboxEnvironment",
-  );
+export const ReasoningEnginesSandboxEnvironment = Resource<ReasoningEnginesSandboxEnvironment>(
+  "GCP.AIPlatform.ReasoningEnginesSandboxEnvironment",
+);
 
 export class ReasoningEnginesSandboxEnvironmentNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentNotResolved",
@@ -148,11 +147,7 @@ export class ReasoningEnginesSandboxEnvironmentNotResolved extends Data.TaggedEr
   name: string;
 }> {}
 
-const engineNameOf = (
-  project: string,
-  location: string,
-  reasoningEngine: string,
-) =>
+const engineNameOf = (project: string, location: string, reasoningEngine: string) =>
   reasoningEngine.includes("/")
     ? reasoningEngine
     : `${locationParent(project, location)}/reasoningEngines/${reasoningEngine}`;
@@ -186,17 +181,13 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : aiplatform.getReasoningEnginesSandboxEnvironments({ name }).pipe(
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("SandboxEnvironmentsNotEnabled", () => Effect.succeed(undefined)),
       );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (
-        sandbox,
-      ): sandbox is aiplatform.GoogleCloudAiplatformV1SandboxEnvironment =>
+      (sandbox): sandbox is aiplatform.GoogleCloudAiplatformV1SandboxEnvironment =>
         sandbox !== undefined,
       () => new AiPlatformNotResolved({ name }),
     ),
@@ -228,13 +219,9 @@ const listSandboxes = (parent: string) =>
       pageSize: 100,
     }),
   ).pipe(
-    Effect.map((pages) =>
-      pages.flatMap((page) => page.sandboxEnvironments ?? []),
-    ),
+    Effect.map((pages) => pages.flatMap((page) => page.sandboxEnvironments ?? [])),
     Effect.catchTag("NotFound", () =>
-      Effect.succeed<aiplatform.GoogleCloudAiplatformV1SandboxEnvironment[]>(
-        [],
-      ),
+      Effect.succeed<aiplatform.GoogleCloudAiplatformV1SandboxEnvironment[]>([]),
     ),
   );
 
@@ -264,21 +251,12 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousParent = lastSegment(
-        olds?.reasoningEngine ?? output?.reasoningEngine ?? "",
-      );
+      const previousParent = lastSegment(olds?.reasoningEngine ?? output?.reasoningEngine ?? "");
       const nextParent = lastSegment(news.reasoningEngine);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const templateChanged =
-        (news.sandboxEnvironmentTemplate ?? "") !==
-        (olds?.sandboxEnvironmentTemplate ?? "");
+        (news.sandboxEnvironmentTemplate ?? "") !== (olds?.sandboxEnvironmentTemplate ?? "");
       const replace =
         (previousParent.length > 0 && previousParent !== nextParent) ||
         previousLocation !== nextLocation ||
@@ -286,17 +264,13 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
       if (!replace) return undefined;
       return {
         action: "replace" as const,
-        deleteFirst:
-          previousLocation === nextLocation && previousParent === nextParent,
+        deleteFirst: previousLocation === nextLocation && previousParent === nextParent,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parentRef = olds?.reasoningEngine ?? output?.reasoningEngine;
       // A create interrupted before its parent resolved has nothing to find.
       if (output?.name === undefined && typeof parentRef !== "string") {
@@ -304,9 +278,7 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
       }
       const parent = engineNameOf(env.project, location, parentRef ?? "");
       const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : yield* findOwned(parent, id);
+        output?.name !== undefined ? yield* getByName(output.name) : yield* findOwned(parent, id);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDisplayName(existing.displayName);
@@ -316,18 +288,15 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listAlchemyReasoningEngines(env.project, location),
+        const engines = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listAlchemyReasoningEngines(env.project, location),
         )).flat();
         const sandboxes = yield* Effect.forEach(
           engines,
           (engine) =>
             engine.name
               ? listSandboxes(engine.name)
-              : Effect.succeed<
-                  aiplatform.GoogleCloudAiplatformV1SandboxEnvironment[]
-                >([]),
+              : Effect.succeed<aiplatform.GoogleCloudAiplatformV1SandboxEnvironment[]>([]),
           { concurrency: 4 },
         );
         return sandboxes
@@ -338,21 +307,13 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = engineNameOf(env.project, location, news.reasoningEngine);
       const internal = yield* createInternalLabels(id);
-      const displayName = encodeDisplayName(
-        internal,
-        news.displayName ?? "sandbox",
-      );
+      const displayName = encodeDisplayName(internal, news.displayName ?? "sandbox");
 
       let current =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : yield* findOwned(parent, id);
+        output?.name !== undefined ? yield* getByName(output.name) : yield* findOwned(parent, id);
 
       if (current === undefined) {
         const created = yield* aiplatform
@@ -369,9 +330,7 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
           })
           .pipe(
             GcpRetry.none,
-            Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("SandboxEnvironmentsNotEnabled", () => Effect.succeed(undefined)),
             Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
             Effect.timeoutOption("20 seconds"),
@@ -381,9 +340,7 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
           yield* waitForOperation(createdOp, { alreadyExistsOk: true });
         }
         const createdName =
-          createdOp !== undefined
-            ? resourceNameFromOperation(createdOp)
-            : undefined;
+          createdOp !== undefined ? resourceNameFromOperation(createdOp) : undefined;
         current =
           createdName !== undefined
             ? yield* waitUntilExists(createdName)

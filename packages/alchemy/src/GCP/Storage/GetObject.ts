@@ -2,11 +2,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  ObjectContent,
-  ObjectNotFound,
-  ObjectRequestFailed,
-} from "./ObjectMedia.ts";
+import type { ObjectContent, ObjectNotFound, ObjectRequestFailed } from "./ObjectMedia.ts";
 
 export type { ObjectContent } from "./ObjectMedia.ts";
 
@@ -44,11 +40,7 @@ export interface GetObject extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetObjectRequest,
-    ) => Effect.Effect<
-      ObjectContent,
-      ObjectNotFound | ObjectRequestFailed,
-      RuntimeContext
-    >
+    ) => Effect.Effect<ObjectContent, ObjectNotFound | ObjectRequestFailed, RuntimeContext>
   >
 > {}
 

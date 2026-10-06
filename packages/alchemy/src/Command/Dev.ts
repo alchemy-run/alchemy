@@ -1,24 +1,19 @@
+import { stripVTControlCharacters } from "node:util";
 import * as ConsoleService from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { stripVTControlCharacters } from "node:util";
-import { makeResourceOutput } from "../Util/ResourceOutput.ts";
-import { makeDevLogOpener } from "../Local/DevLog.ts";
 import { FQN_SEPARATOR } from "../FQN.ts";
+import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Stage } from "../Stage.ts";
-import {
-  CommandExecutor,
-  UnexpectedExit,
-  makeCommandError,
-  type CommandProps,
-} from "./Command.ts";
-import { makeCommandRedactor } from "./Redaction.ts";
 import { moduleExtension } from "../Util/Node.ts";
+import { makeResourceOutput } from "../Util/ResourceOutput.ts";
+import { CommandExecutor, UnexpectedExit, makeCommandError, type CommandProps } from "./Command.ts";
+import { makeCommandRedactor } from "./Redaction.ts";
 
 export interface DevProps extends CommandProps {}
 
@@ -112,10 +107,7 @@ export const DevProviderLive = () =>
 export const DevProviderLocal = () =>
   LocalProvider.make(
     Dev,
-    import.meta.resolve(
-      `./Local${moduleExtension(import.meta.url)}`,
-      import.meta.url,
-    ),
+    import.meta.resolve(`./Local${moduleExtension(import.meta.url)}`, import.meta.url),
     Effect.gen(function* () {
       const { spawn } = yield* CommandExecutor;
       const stage = yield* Stage;
@@ -126,7 +118,7 @@ export const DevProviderLocal = () =>
         // The dev process is spawned into the instance scope the helper
         // provides: it keeps running after `start` returns (readiness) and
         // is killed when the helper closes the scope on restart/delete.
-        start: Effect.fn(function* ({ id, fqn, news: props, invalidate }) {
+        start: Effect.fn(function* ({ fqn, news: props, invalidate }) {
           const child = yield* spawn(props);
           const redactor = makeCommandRedactor(props.env);
           // One log file per process generation, closed with the instance
@@ -200,10 +192,7 @@ export const DevProviderLocal = () =>
             child.exitCode.pipe(
               Effect.mapError((error) => makeCommandError(props, error.reason)),
               Effect.flatMap((exitCode) =>
-                makeCommandError(
-                  props,
-                  new UnexpectedExit({ exitCode, stderr: buffer }),
-                ),
+                makeCommandError(props, new UnexpectedExit({ exitCode, stderr: buffer })),
               ),
             ),
           ]);

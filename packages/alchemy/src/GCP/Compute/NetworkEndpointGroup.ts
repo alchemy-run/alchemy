@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 export type NetworkEndpointType =
   | "GCE_VM_IP"
@@ -224,10 +220,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-) => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>) => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
   const trimmed = user?.trim();
   return trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
@@ -259,9 +252,7 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const zoneToRegion = (zone: string) => {
   const idx = zone.lastIndexOf("-");
@@ -276,20 +267,14 @@ const toNetworkUrl = (project: string, network: string | undefined) => {
   return `projects/${project}/global/networks/${network}`;
 };
 
-const toSubnetworkUrl = (
-  project: string,
-  zone: string,
-  subnetwork: string | undefined,
-) => {
+const toSubnetworkUrl = (project: string, zone: string, subnetwork: string | undefined) => {
   if (subnetwork === undefined || subnetwork.length === 0) return undefined;
   if (subnetwork.includes("/")) return subnetwork;
   return `projects/${project}/regions/${zoneToRegion(zone)}/subnetworks/${subnetwork}`;
 };
 
 const toInstanceUrl = (project: string, zone: string, instance: string) =>
-  instance.includes("/")
-    ? instance
-    : `projects/${project}/zones/${zone}/instances/${instance}`;
+  instance.includes("/") ? instance : `projects/${project}/zones/${zone}/instances/${instance}`;
 
 const asType = (value: string | undefined): NetworkEndpointType => {
   switch (value) {
@@ -329,11 +314,7 @@ const toAttrs = (
   };
 };
 
-const getByName = (
-  project: string,
-  zone: string,
-  networkEndpointGroup: string,
-) =>
+const getByName = (project: string, zone: string, networkEndpointGroup: string) =>
   compute
     .getNetworkEndpointGroups({ project, zone, networkEndpointGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -344,9 +325,7 @@ const toApiEndpoint = (
   endpoint: NetworkEndpointSpec,
 ): compute.NetworkEndpoint => ({
   instance:
-    endpoint.instance !== undefined
-      ? toInstanceUrl(project, zone, endpoint.instance)
-      : undefined,
+    endpoint.instance !== undefined ? toInstanceUrl(project, zone, endpoint.instance) : undefined,
   ipAddress: endpoint.ipAddress,
   ipv6Address: endpoint.ipv6Address,
   port: endpoint.port,
@@ -371,11 +350,7 @@ const endpointKey = (endpoint: {
     endpoint.clientDestinationPort ?? "",
   ].join("|");
 
-const listEndpoints = (
-  project: string,
-  zone: string,
-  networkEndpointGroup: string,
-) =>
+const listEndpoints = (project: string, zone: string, networkEndpointGroup: string) =>
   compute.listNetworkEndpointsNetworkEndpointGroups
     .items({
       project,
@@ -388,21 +363,12 @@ const listEndpoints = (
       Effect.map((chunk) =>
         Array.from(chunk)
           .map((item) => item.networkEndpoint)
-          .filter(
-            (endpoint): endpoint is compute.NetworkEndpoint =>
-              endpoint !== undefined,
-          ),
+          .filter((endpoint): endpoint is compute.NetworkEndpoint => endpoint !== undefined),
       ),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as compute.NetworkEndpoint[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as compute.NetworkEndpoint[])),
     );
 
-const waitGone = (
-  project: string,
-  zone: string,
-  networkEndpointGroupName: string,
-) =>
+const waitGone = (project: string, zone: string, networkEndpointGroupName: string) =>
   getByName(project, zone, networkEndpointGroupName).pipe(
     Effect.flatMap((group) =>
       group === undefined
@@ -415,8 +381,7 @@ const waitGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.NetworkEndpointGroupStillExists",
+      while: (error) => error._tag === "GCP.Compute.NetworkEndpointGroupStillExists",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -449,8 +414,7 @@ export const NetworkEndpointGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.networkEndpointGroupName ?? output?.networkEndpointGroupName;
+      const previousName = olds?.networkEndpointGroupName ?? output?.networkEndpointGroupName;
       const nextName = news.networkEndpointGroupName ?? previousName;
       const previousZone = olds?.zone ?? output?.zone;
       const nextZone = news.zone ?? DEFAULT_ZONE;
@@ -458,18 +422,14 @@ export const NetworkEndpointGroupProvider = () =>
       const nextNetwork = news.network;
       const previousSubnetwork = olds?.subnetwork ?? output?.subnetwork;
       const nextSubnetwork = news.subnetwork;
-      const previousType =
-        olds?.networkEndpointType ?? output?.networkEndpointType;
+      const previousType = olds?.networkEndpointType ?? output?.networkEndpointType;
       const nextType = news.networkEndpointType ?? previousType ?? DEFAULT_TYPE;
       const previousPort = olds?.defaultPort ?? output?.defaultPort;
       const nextPort = news.defaultPort;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const zoneChanged =
-        previousZone !== undefined &&
-        lastSegment(previousZone) !== lastSegment(nextZone);
+        previousZone !== undefined && lastSegment(previousZone) !== lastSegment(nextZone);
       const networkChanged =
         nextNetwork !== undefined &&
         previousNetwork !== undefined &&
@@ -478,15 +438,11 @@ export const NetworkEndpointGroupProvider = () =>
         nextSubnetwork !== undefined &&
         previousSubnetwork !== undefined &&
         lastSegment(previousSubnetwork) !== lastSegment(nextSubnetwork);
-      const typeChanged =
-        previousType !== undefined && previousType !== nextType;
+      const typeChanged = previousType !== undefined && previousType !== nextType;
       const portChanged =
-        nextPort !== undefined &&
-        previousPort !== undefined &&
-        nextPort !== previousPort;
+        nextPort !== undefined && previousPort !== undefined && nextPort !== previousPort;
       const descriptionChanged =
-        olds !== undefined &&
-        (olds.description ?? "") !== (news.description ?? "");
+        olds !== undefined && (olds.description ?? "") !== (news.description ?? "");
       if (
         !nameChanged &&
         !zoneChanged &&
@@ -499,8 +455,7 @@ export const NetworkEndpointGroupProvider = () =>
         return undefined;
       }
       const sameIdentity =
-        previousName === nextName &&
-        lastSegment(previousZone ?? "") === lastSegment(nextZone);
+        previousName === nextName && lastSegment(previousZone ?? "") === lastSegment(nextZone);
       return {
         action: "replace" as const,
         deleteFirst: sameIdentity,
@@ -515,11 +470,7 @@ export const NetworkEndpointGroupProvider = () =>
         output?.networkEndpointGroupName,
       );
       const zone = lastSegment(olds?.zone ?? output?.zone ?? DEFAULT_ZONE);
-      const existing = yield* getByName(
-        env.project,
-        zone,
-        networkEndpointGroupName,
-      );
+      const existing = yield* getByName(env.project, zone, networkEndpointGroupName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -553,32 +504,22 @@ export const NetworkEndpointGroupProvider = () =>
         output?.networkEndpointGroupName,
       );
       const zone = lastSegment(news.zone ?? output?.zone ?? DEFAULT_ZONE);
-      const networkEndpointType = asType(
-        news.networkEndpointType ?? output?.networkEndpointType,
-      );
+      const networkEndpointType = asType(news.networkEndpointType ?? output?.networkEndpointType);
       const network = toNetworkUrl(
         env.project,
         news.network ??
-          (output?.network !== undefined
-            ? lastSegment(output.network)
-            : DEFAULT_NETWORK),
+          (output?.network !== undefined ? lastSegment(output.network) : DEFAULT_NETWORK),
       );
       const subnetwork = toSubnetworkUrl(
         env.project,
         zone,
         news.subnetwork ??
-          (output?.subnetwork !== undefined
-            ? lastSegment(output.subnetwork)
-            : undefined),
+          (output?.subnetwork !== undefined ? lastSegment(output.subnetwork) : undefined),
       );
       const desiredLabels = yield* createInternalLabels(id);
       const description = encodeDescription(news.description, desiredLabels);
 
-      let current = yield* getByName(
-        env.project,
-        zone,
-        networkEndpointGroupName,
-      );
+      let current = yield* getByName(env.project, zone, networkEndpointGroupName);
 
       if (current === undefined) {
         yield* compute
@@ -604,11 +545,7 @@ export const NetworkEndpointGroupProvider = () =>
                   }).pipe(Effect.asVoid),
             ),
           );
-        current = yield* getByName(
-          env.project,
-          zone,
-          networkEndpointGroupName,
-        ).pipe(
+        current = yield* getByName(env.project, zone, networkEndpointGroupName).pipe(
           Effect.flatMap((group) =>
             group === undefined
               ? Effect.fail(
@@ -620,8 +557,7 @@ export const NetworkEndpointGroupProvider = () =>
               : Effect.succeed(group),
           ),
           Effect.retry({
-            while: (error) =>
-              error._tag === "GCP.Compute.NetworkEndpointGroupNotResolved",
+            while: (error) => error._tag === "GCP.Compute.NetworkEndpointGroupNotResolved",
             times: 8,
             schedule: Schedule.exponential("250 millis"),
           }),
@@ -639,22 +575,14 @@ export const NetworkEndpointGroupProvider = () =>
       }
 
       if (news.networkEndpoints !== undefined) {
-        const observed = yield* listEndpoints(
-          env.project,
-          zone,
-          networkEndpointGroupName,
-        );
+        const observed = yield* listEndpoints(env.project, zone, networkEndpointGroupName);
         const desired = news.networkEndpoints.map((endpoint) =>
           toApiEndpoint(env.project, zone, endpoint),
         );
         const observedKeys = new Set(observed.map(endpointKey));
         const desiredKeys = new Set(desired.map(endpointKey));
-        const toAdd = desired.filter(
-          (endpoint) => !observedKeys.has(endpointKey(endpoint)),
-        );
-        const toRemove = observed.filter(
-          (endpoint) => !desiredKeys.has(endpointKey(endpoint)),
-        );
+        const toAdd = desired.filter((endpoint) => !observedKeys.has(endpointKey(endpoint)));
+        const toRemove = observed.filter((endpoint) => !desiredKeys.has(endpointKey(endpoint)));
         if (toAdd.length > 0) {
           yield* runOp(
             env.project,
@@ -679,9 +607,7 @@ export const NetworkEndpointGroupProvider = () =>
             }),
           ).pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
         }
-        current =
-          (yield* getByName(env.project, zone, networkEndpointGroupName)) ??
-          current;
+        current = (yield* getByName(env.project, zone, networkEndpointGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -705,10 +631,6 @@ export const NetworkEndpointGroupProvider = () =>
           ),
           Effect.catchTag("NotFound", () => Effect.void),
         );
-      yield* waitGone(
-        output.project,
-        output.zone,
-        output.networkEndpointGroupName,
-      );
+      yield* waitGone(output.project, output.zone, output.networkEndpointGroupName);
     }),
   });

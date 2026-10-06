@@ -1,14 +1,11 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/http/HttpClient";
-import type { CatalogsCatalogItem } from "./CatalogsCatalogItem.ts";
+import * as Layer from "effect/Layer";
 import { bindGcpHost } from "../Host.ts";
-import {
-  GetCatalogItem,
-  type GetCatalogItemRequest,
-} from "./GetCatalogItem.ts";
+import type { CatalogsCatalogItem } from "./CatalogsCatalogItem.ts";
+import { GetCatalogItem, type GetCatalogItemRequest } from "./GetCatalogItem.ts";
 
 /**
  * HTTP implementation of {@link GetCatalogItem}.
@@ -23,8 +20,7 @@ export const GetCatalogItemHttp: Layer.Layer<
 > = Layer.effect(
   GetCatalogItem,
   Effect.gen(function* () {
-    const run =
-      yield* recommendationengine.getProjectsLocationsCatalogsCatalogItems;
+    const run = yield* recommendationengine.getProjectsLocationsCatalogsCatalogItems;
     return Effect.fn(function* (item: CatalogsCatalogItem) {
       yield* bindGcpHost({
         tag: "GCP.RecommendationEngine.GetCatalogItem",
@@ -32,9 +28,9 @@ export const GetCatalogItemHttp: Layer.Layer<
         iam: [{ role: "roles/automlrecommendations.viewer" }],
       });
       const name = yield* item.name;
-      return Effect.fn(
-        `GCP.RecommendationEngine.GetCatalogItem(${item.LogicalId})`,
-      )(function* (_request?: GetCatalogItemRequest) {
+      return Effect.fn(`GCP.RecommendationEngine.GetCatalogItem(${item.LogicalId})`)(function* (
+        _request?: GetCatalogItemRequest,
+      ) {
         return yield* run({ name: yield* name });
       });
     });

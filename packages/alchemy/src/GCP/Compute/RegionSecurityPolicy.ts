@@ -1,6 +1,4 @@
-import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,6 +18,8 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitRegionOperation } from "./operations.ts";
 import type {
   SecurityPolicyAdaptiveProtectionConfig,
   SecurityPolicyAdvancedOptionsConfig,
@@ -120,9 +120,7 @@ export type RegionSecurityPolicy = Resource<
     /** Advanced WAF options, if configured. */
     advancedOptionsConfig: SecurityPolicyAdvancedOptionsConfig | undefined;
     /** Adaptive Protection config, if configured. */
-    adaptiveProtectionConfig:
-      | SecurityPolicyAdaptiveProtectionConfig
-      | undefined;
+    adaptiveProtectionConfig: SecurityPolicyAdaptiveProtectionConfig | undefined;
     /** reCAPTCHA options, if configured. */
     recaptchaOptionsConfig: SecurityPolicyRecaptchaOptionsConfig | undefined;
     /** DDoS protection config, if configured. */
@@ -234,15 +232,13 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -271,9 +267,7 @@ const canonMatch = (match: SecurityPolicyRuleMatcher | undefined) => {
   if (match === undefined) return undefined;
   return {
     versionedExpr: match.versionedExpr,
-    config: match.config
-      ? { srcIpRanges: sorted(match.config.srcIpRanges) }
-      : undefined,
+    config: match.config ? { srcIpRanges: sorted(match.config.srcIpRanges) } : undefined,
     expr: match.expr,
     exprOptions: match.exprOptions,
   };
@@ -339,13 +333,8 @@ const desiredRules = (
     byPriority.set(rule.priority, rule);
   }
   if (!byPriority.has(DEFAULT_RULE_PRIORITY)) {
-    const observedDefault = observed.find(
-      (rule) => rule.priority === DEFAULT_RULE_PRIORITY,
-    );
-    byPriority.set(
-      DEFAULT_RULE_PRIORITY,
-      observedDefault ?? defaultAllowRule(),
-    );
+    const observedDefault = observed.find((rule) => rule.priority === DEFAULT_RULE_PRIORITY);
+    byPriority.set(DEFAULT_RULE_PRIORITY, observedDefault ?? defaultAllowRule());
   }
   return [...byPriority.values()].sort(
     (left, right) => (left.priority ?? 0) - (right.priority ?? 0),
@@ -378,11 +367,7 @@ const getByName = (project: string, region: string, securityPolicy: string) =>
     .getRegionSecurityPolicies({ project, region, securityPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const awaitResource = (
-  project: string,
-  region: string,
-  securityPolicyName: string,
-) =>
+const awaitResource = (project: string, region: string, securityPolicyName: string) =>
   getByName(project, region, securityPolicyName).pipe(
     Effect.flatMap((policy) =>
       policy !== undefined
@@ -395,18 +380,13 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionSecurityPolicyNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionSecurityPolicyNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  securityPolicyName: string,
-) =>
+const waitUntilGone = (project: string, region: string, securityPolicyName: string) =>
   getByName(project, region, securityPolicyName).pipe(
     Effect.flatMap((policy) =>
       policy === undefined
@@ -419,15 +399,11 @@ const waitUntilGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionSecurityPolicyStillExists",
+      while: (error) => error._tag === "GCP.Compute.RegionSecurityPolicyStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.RegionSecurityPolicyStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.RegionSecurityPolicyStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -553,22 +529,13 @@ export const RegionSecurityPolicyProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousName =
-        olds?.securityPolicyName ?? output?.securityPolicyName;
+      const previousName = olds?.securityPolicyName ?? output?.securityPolicyName;
       const nextName = news.securityPolicyName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
       const previousType = typeOf(olds?.type ?? output?.type);
@@ -591,20 +558,11 @@ export const RegionSecurityPolicyProvider = () =>
         olds?.securityPolicyName,
         output?.securityPolicyName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        securityPolicyName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, securityPolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -623,9 +581,7 @@ export const RegionSecurityPolicyProvider = () =>
             (scoped?.securityPolicies ?? [])
               .filter((policy) => (policy.region ?? "").length > 0)
               .filter((policy) =>
-                Object.keys(policy.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(policy.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((policy) => toAttrs(policy, env.project)),
           ),
@@ -690,20 +646,14 @@ export const RegionSecurityPolicyProvider = () =>
       }
       if (
         news.adaptiveProtectionConfig !== undefined &&
-        !subsetEqual(
-          current.adaptiveProtectionConfig,
-          news.adaptiveProtectionConfig,
-        )
+        !subsetEqual(current.adaptiveProtectionConfig, news.adaptiveProtectionConfig)
       ) {
         patch.adaptiveProtectionConfig = news.adaptiveProtectionConfig;
         needsPatch = true;
       }
       if (
         news.recaptchaOptionsConfig !== undefined &&
-        !subsetEqual(
-          current.recaptchaOptionsConfig,
-          news.recaptchaOptionsConfig,
-        )
+        !subsetEqual(current.recaptchaOptionsConfig, news.recaptchaOptionsConfig)
       ) {
         patch.recaptchaOptionsConfig = news.recaptchaOptionsConfig;
         needsPatch = true;
@@ -735,23 +685,13 @@ export const RegionSecurityPolicyProvider = () =>
             body: patch,
           }),
         );
-        current =
-          (yield* getByName(env.project, region, securityPolicyName)) ??
-          current;
+        current = (yield* getByName(env.project, region, securityPolicyName)) ?? current;
       }
 
       const nextRules = desiredRules(news, current.rules ?? []);
       if (nextRules !== undefined) {
-        yield* syncRules(
-          env.project,
-          region,
-          securityPolicyName,
-          current.rules ?? [],
-          nextRules,
-        );
-        current =
-          (yield* getByName(env.project, region, securityPolicyName)) ??
-          current;
+        yield* syncRules(env.project, region, securityPolicyName, current.rules ?? [], nextRules);
+        current = (yield* getByName(env.project, region, securityPolicyName)) ?? current;
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -771,9 +711,7 @@ export const RegionSecurityPolicyProvider = () =>
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, region, securityPolicyName)) ??
-          current;
+        current = (yield* getByName(env.project, region, securityPolicyName)) ?? current;
       }
 
       if (current === undefined) {

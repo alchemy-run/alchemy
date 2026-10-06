@@ -66,6 +66,4 @@ export interface GetQueryResults extends Binding.Service<
     ) => Effect.Effect<Logs.GetQueryResultsResponse, Logs.GetQueryResultsError>
   >
 > {}
-export const GetQueryResults = Binding.Service<GetQueryResults>(
-  "AWS.Logs.GetQueryResults",
-);
+export const GetQueryResults = Binding.Service<GetQueryResults>("AWS.Logs.GetQueryResults");

@@ -1,6 +1,6 @@
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as cloudsupport from "@distilled.cloud/gcp/cloudsupport_v2";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
-import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -8,11 +8,7 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  hasAlchemyLabels,
-  sanitizeLabelValue,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, sanitizeLabelValue } from "../Labels.ts";
 
 export const COLLECTION = "supportEventSubscriptions";
 export const MAX_TOPIC_ID_LENGTH = 255;
@@ -33,9 +29,7 @@ export const lastSegment = (value: string) => {
 };
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const parentOfName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -56,9 +50,8 @@ export const toSubscriptionName = (parent: string, value: string) => {
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const isDeleted = (
-  subscription: cloudsupport.SupportEventSubscription | undefined,
-) => subscription?.state === "DELETED";
+export const isDeleted = (subscription: cloudsupport.SupportEventSubscription | undefined) =>
+  subscription?.state === "DELETED";
 
 export const expandTopic = (value: string, project: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -66,10 +59,7 @@ export const expandTopic = (value: string, project: string) => {
   return `projects/${project}/topics/${lastSegment(trimmed)}`;
 };
 
-export const sameTopic = (
-  left: string | undefined,
-  right: string | undefined,
-) => {
+export const sameTopic = (left: string | undefined, right: string | undefined) => {
   if (left === undefined || right === undefined) return left === right;
   return left === right || lastSegment(left) === lastSegment(right);
 };
@@ -144,10 +134,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined && explicit.length > 0) {
       return organizationParent(explicit);
@@ -174,9 +161,7 @@ export const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : cloudsupport.getOrganizationsSupportEventSubscriptions({ name }).pipe(
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.map((subscription) =>
-          isDeleted(subscription) ? undefined : subscription,
-        ),
+        Effect.map((subscription) => (isDeleted(subscription) ? undefined : subscription)),
       );
 
 export const getDeletedByName = (name: string) =>
@@ -203,15 +188,10 @@ export const grantCloudSupportPublisher = (topic: string) =>
       ...binding,
       members: [...(binding.members ?? [])],
     }));
-    const publisher = bindings.find(
-      (binding) => binding.role === PUBLISHER_ROLE,
-    );
+    const publisher = bindings.find((binding) => binding.role === PUBLISHER_ROLE);
     if (publisher?.members?.includes(CLOUD_SUPPORT_EVENTS_MEMBER)) return;
     if (publisher) {
-      publisher.members = [
-        ...(publisher.members ?? []),
-        CLOUD_SUPPORT_EVENTS_MEMBER,
-      ];
+      publisher.members = [...(publisher.members ?? []), CLOUD_SUPPORT_EVENTS_MEMBER];
     } else {
       bindings.push({
         role: PUBLISHER_ROLE,
@@ -245,9 +225,7 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
     if (current === undefined) return undefined;
     const observed = tagRecord(current.labels);
     const desired = { ...observed, ...labels };
-    const changed = Object.entries(desired).some(
-      ([key, value]) => observed[key] !== value,
-    );
+    const changed = Object.entries(desired).some(([key, value]) => observed[key] !== value);
     if (changed) {
       current = yield* pubsub
         .patchProjectsTopics({
@@ -279,12 +257,9 @@ export const ownershipLabels = (id: string) =>
     };
   });
 
-export const hasOwnershipLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+export const hasOwnershipLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some(
-    (key) =>
-      key.startsWith("alchemy-cloudsupport") || key.startsWith("alchemy-"),
+    (key) => key.startsWith("alchemy-cloudsupport") || key.startsWith("alchemy-"),
   );
 
 export const ownedByTopicLabels = (
@@ -310,14 +285,10 @@ export const listSubscriptions = (
           filter: options?.filter,
         })
         .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.supportEventSubscriptions ?? []),
-          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.supportEventSubscriptions ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            emptyList<cloudsupport.SupportEventSubscription>(),
-          ),
+          Effect.catchTag("NotFound", () => emptyList<cloudsupport.SupportEventSubscription>()),
         );
 
 export const listOwnedSubscriptions = (parent: string) =>
@@ -364,10 +335,7 @@ export const findOwnedSubscription = (
       if (name !== undefined && name.length > 0 && subscription.name === name) {
         return subscription;
       }
-      if (
-        topicName !== undefined &&
-        sameTopic(subscription.pubSubTopic, topicName)
-      ) {
+      if (topicName !== undefined && sameTopic(subscription.pubSubTopic, topicName)) {
         const topic = yield* getTopic(subscription.pubSubTopic ?? "");
         if (yield* ownedByTopicLabels(id, topic?.labels)) {
           return subscription;
@@ -385,9 +353,7 @@ export const findOwnedSubscription = (
   });
 
 export const undeleteSubscription = (name: string) =>
-  cloudsupport
-    .undeleteOrganizationsSupportEventSubscriptions({ name, body: {} })
-    .pipe(
-      // Already live or already gone: observe instead.
-      Effect.catchTag(["NotFound", "Conflict"], () => getDeletedByName(name)),
-    );
+  cloudsupport.undeleteOrganizationsSupportEventSubscriptions({ name, body: {} }).pipe(
+    // Already live or already gone: observe instead.
+    Effect.catchTag(["NotFound", "Conflict"], () => getDeletedByName(name)),
+  );

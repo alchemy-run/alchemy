@@ -142,15 +142,11 @@ export type Batch = Resource<
  */
 export const Batch = Resource<Batch>("GCP.Dataproc.Batch");
 
-export class BatchNotResolved extends Data.TaggedError(
-  "GCP.Dataproc.BatchNotResolved",
-)<{
+export class BatchNotResolved extends Data.TaggedError("GCP.Dataproc.BatchNotResolved")<{
   name: string;
 }> {}
 
-export class BatchNotTerminal extends Data.TaggedError(
-  "GCP.Dataproc.BatchNotTerminal",
-)<{
+export class BatchNotTerminal extends Data.TaggedError("GCP.Dataproc.BatchNotTerminal")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -188,10 +184,7 @@ const toAttrs = (batch: dataproc.Batch, project: string, location: string) => {
   };
 };
 
-const desiredBody = (
-  news: BatchProps,
-  desiredLabels: Record<string, string>,
-): dataproc.Batch => ({
+const desiredBody = (news: BatchProps, desiredLabels: Record<string, string>): dataproc.Batch => ({
   labels: desiredLabels,
   sparkBatch: defaultSpark(news),
   pysparkBatch: news.pysparkBatch,
@@ -256,26 +249,19 @@ export const BatchProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.batchId ?? output?.batchId;
       const nextId = news.batchId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousLocation !== nextLocation)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -283,10 +269,7 @@ export const BatchProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const batchId = yield* toPhysicalId(
         id,
         olds?.batchId,
@@ -298,9 +281,7 @@ export const BatchProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -316,10 +297,7 @@ export const BatchProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const batchId = yield* toPhysicalId(
         id,
         news.batchId,
@@ -360,17 +338,14 @@ export const BatchProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* waitUntilTerminal(output.name);
-      yield* dataproc
-        .deleteProjectsLocationsBatches({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "BadRequest",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* dataproc.deleteProjectsLocationsBatches({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

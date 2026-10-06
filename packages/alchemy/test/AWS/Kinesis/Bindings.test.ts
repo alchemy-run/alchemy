@@ -1,23 +1,17 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Alchemy from "@/index.ts";
 import * as State from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import KinesisApiFunctionLive, {
-  KinesisApiFunction,
-  StreamAndConsumer,
-} from "./handler.ts";
+import KinesisApiFunctionLive, { KinesisApiFunction, StreamAndConsumer } from "./handler.ts";
 
 const providers = AWS.providers();
 const state = State.localState();
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers,
-  state,
-});
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers, state });
 
 const Stack = Alchemy.Stack(
   "kinesis-bindings",
@@ -46,26 +40,20 @@ const stack = beforeAll(
   }),
   { timeout: 240_000 },
 );
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: 300_000,
-});
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 300_000 });
 
 // Lambda Function URLs cold-start (DNS, init) and a fresh role's IAM grants
 // (eventual consistency) can both take a while on the first hit. Retrying on
 // any non-200 lets the first request wait through that window; warm calls
 // return on the first try and never retry.
-const readinessSchedule = Schedule.max([
-  Schedule.fixed("4 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessSchedule = Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(10)]);
 
 // Lambda Function URLs come back with a trailing slash (`https://…on.aws/`).
 // Naively concatenating `${baseUrl}${path}` would yield a double slash
 // (`…on.aws//stream`), whose pathname (`//stream`) never matches the fixture's
 // `/stream` route, so every request 404s and the readiness retry spins until
 // the test times out. Strip the trailing slash before joining.
-const urlOf = (baseUrl: string, path: string) =>
-  `${baseUrl.replace(/\/+$/, "")}${path}`;
+const urlOf = (baseUrl: string, path: string) => `${baseUrl.replace(/\/+$/, "")}${path}`;
 
 const getJson = (baseUrl: string, path: string) =>
   HttpClient.get(urlOf(baseUrl, path)).pipe(
@@ -80,10 +68,7 @@ const getJson = (baseUrl: string, path: string) =>
 
 const postJson = (baseUrl: string, path: string, body: unknown) =>
   HttpClient.execute(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(urlOf(baseUrl, path)),
-      body,
-    ),
+    HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(urlOf(baseUrl, path)), body),
   ).pipe(
     // Runtime routes are normally sub-second. The record-polling and sink
     // routes can legitimately spend several seconds on bounded retries.
@@ -103,14 +88,7 @@ const getFirstShardId = (baseUrl: string) =>
 
 describe.sequential(
   "Kinesis Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:kinesis",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:kinesis", "provider:aws:lambda", "live"] },
   () => {
     describe("DescribeAccountSettings", () => {
       test(
@@ -165,9 +143,7 @@ describe.sequential(
         Effect.gen(function* () {
           const { url, streamName } = yield* stack;
           const response = yield* getJson(url, "/stream");
-          expect((response as any).StreamDescription.StreamName).toBe(
-            streamName,
-          );
+          expect((response as any).StreamDescription.StreamName).toBe(streamName);
         }),
       );
     });
@@ -178,9 +154,7 @@ describe.sequential(
         Effect.gen(function* () {
           const { url, streamName } = yield* stack;
           const response = yield* getJson(url, "/stream-summary");
-          expect((response as any).StreamDescriptionSummary.StreamName).toBe(
-            streamName,
-          );
+          expect((response as any).StreamDescriptionSummary.StreamName).toBe(streamName);
         }),
       );
     });
@@ -236,9 +210,7 @@ describe.sequential(
             data: marker,
           });
           const records = (response as any).records ?? [];
-          expect(records.some((record: any) => record.data === marker)).toBe(
-            true,
-          );
+          expect(records.some((record: any) => record.data === marker)).toBe(true);
         }),
       );
     });
@@ -250,11 +222,9 @@ describe.sequential(
           const { url, consumerName } = yield* stack;
           const response = yield* getJson(url, "/stream-consumers");
           const consumers = (response as any).Consumers ?? [];
-          expect(
-            consumers.some(
-              (consumer: any) => consumer.ConsumerName === consumerName,
-            ),
-          ).toBe(true);
+          expect(consumers.some((consumer: any) => consumer.ConsumerName === consumerName)).toBe(
+            true,
+          );
         }),
       );
     });
@@ -265,9 +235,7 @@ describe.sequential(
         Effect.gen(function* () {
           const { url, consumerName } = yield* stack;
           const response = yield* getJson(url, "/consumer");
-          expect((response as any).ConsumerDescription.ConsumerName).toBe(
-            consumerName,
-          );
+          expect((response as any).ConsumerDescription.ConsumerName).toBe(consumerName);
         }),
       );
     });
@@ -290,9 +258,7 @@ describe.sequential(
         Effect.gen(function* () {
           const { url } = yield* stack;
           const response = yield* getJson(url, "/tags");
-          const keys = ((response as any).Tags ?? []).map(
-            (tag: any) => tag.Key,
-          );
+          const keys = ((response as any).Tags ?? []).map((tag: any) => tag.Key);
           expect(keys).toContain("alchemy::stack");
           expect(keys).toContain("alchemy::stage");
           expect(keys).toContain("alchemy::id");
@@ -323,14 +289,8 @@ describe.sequential(
           const { url } = yield* stack;
           const response = yield* postJson(url, "/put-records", {
             records: [
-              {
-                partitionKey: "put-records",
-                data: `batch-1-${crypto.randomUUID()}`,
-              },
-              {
-                partitionKey: "put-records",
-                data: `batch-2-${crypto.randomUUID()}`,
-              },
+              { partitionKey: "put-records", data: `batch-1-${crypto.randomUUID()}` },
+              { partitionKey: "put-records", data: `batch-2-${crypto.randomUUID()}` },
             ],
           });
           expect((response as any).FailedRecordCount ?? 0).toBe(0);
@@ -420,8 +380,7 @@ describe.sequential(
           // Order the two children by hash-key range so they are passed as
           // (shard, adjacent-shard) the way MergeShards expects.
           const [low, high] = [...openShards].sort((a, b) =>
-            BigInt(a.HashKeyRange.StartingHashKey) <
-            BigInt(b.HashKeyRange.StartingHashKey)
+            BigInt(a.HashKeyRange.StartingHashKey) < BigInt(b.HashKeyRange.StartingHashKey)
               ? -1
               : 1,
           );
@@ -453,8 +412,7 @@ const getOpenShards = (baseUrl: string) =>
   getJson(baseUrl, "/shards").pipe(
     Effect.map((response) =>
       (((response as any).Shards ?? []) as ShardInfo[]).filter(
-        (shard) =>
-          shard.SequenceNumberRange?.EndingSequenceNumber === undefined,
+        (shard) => shard.SequenceNumberRange?.EndingSequenceNumber === undefined,
       ),
     ),
   );
@@ -470,9 +428,7 @@ const waitForOpenShardCount = (baseUrl: string, count: number) =>
       shards.length === count
         ? Effect.succeed(shards)
         : Effect.fail(
-            new Error(
-              `expected ${count} open shards, saw ${shards.length} after polling`,
-            ),
+            new Error(`expected ${count} open shards, saw ${shards.length} after polling`),
           ),
     ),
   );

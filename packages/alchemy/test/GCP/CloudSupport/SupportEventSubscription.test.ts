@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as cloudsupport from "@distilled.cloud/gcp/cloudsupport_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as cloudsupport from "@distilled.cloud/gcp/cloudsupport_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Support event subscriptions need an organization-level Cloud Support role
 // (Cloud Customer Care). The testing credentials hold none, so every call is
@@ -106,28 +103,22 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const topic = yield* GCP.PubSub.Topic("SupportEventsA", {});
-          const subscription = yield* GCP.CloudSupport.SupportEventSubscription(
-            "Events",
-            {
-              organization,
-              pubSubTopic: topic.name,
-            },
-          );
+          const subscription = yield* GCP.CloudSupport.SupportEventSubscription("Events", {
+            organization,
+            pubSubTopic: topic.name,
+          });
           return { topic, subscription };
         }),
       );
 
-      expect(created.subscription.name).toContain(
-        "/supportEventSubscriptions/",
-      );
+      expect(created.subscription.name).toContain("/supportEventSubscriptions/");
       expect(created.subscription.subscriptionId.length).toBeGreaterThan(0);
       expect(created.subscription.organization).toEqual(organization);
       expect(created.subscription.pubSubTopic).toEqual(created.topic.name);
 
-      const fetched =
-        yield* cloudsupport.getOrganizationsSupportEventSubscriptions({
-          name: created.subscription.name,
-        });
+      const fetched = yield* cloudsupport.getOrganizationsSupportEventSubscriptions({
+        name: created.subscription.name,
+      });
       expect(fetched.name).toEqual(created.subscription.name);
       expect(fetched.pubSubTopic).toEqual(created.topic.name);
 
@@ -135,14 +126,11 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           const topicA = yield* GCP.PubSub.Topic("SupportEventsA", {});
           const topicB = yield* GCP.PubSub.Topic("SupportEventsB", {});
-          const subscription = yield* GCP.CloudSupport.SupportEventSubscription(
-            "Events",
-            {
-              organization,
-              subscriptionId: created.subscription.subscriptionId,
-              pubSubTopic: topicB.name,
-            },
-          );
+          const subscription = yield* GCP.CloudSupport.SupportEventSubscription("Events", {
+            organization,
+            subscriptionId: created.subscription.subscriptionId,
+            pubSubTopic: topicB.name,
+          });
           return { topicA, topicB, subscription };
         }),
       );

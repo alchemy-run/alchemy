@@ -1,9 +1,9 @@
-import { waitForOperation } from "@/GCP/DiscoveryEngine";
 import * as Category from "@distilled.cloud/core/category";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import * as GcpRetry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { waitForOperation } from "@/GCP/DiscoveryEngine";
 
 /**
  * The suite runs ~25 files at once against one project, which overruns the
@@ -11,25 +11,18 @@ import * as Schedule from "effect/Schedule";
  * gives up before the minute rolls over, so the suite rides it out.
  */
 export const quotaTolerant = GcpRetry.policy({
-  while: (error) =>
-    Category.isThrottling(error) || Category.isTransientError(error),
+  while: (error) => Category.isThrottling(error) || Category.isTransientError(error),
   schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(12)]),
 });
 
 export const DEFAULT_LOCATION = "global";
 export const DEFAULT_COLLECTION = "default_collection";
 
-export const collectionParent = (
-  project: string,
-  location = DEFAULT_LOCATION,
-) =>
+export const collectionParent = (project: string, location = DEFAULT_LOCATION) =>
   `projects/${project}/locations/${location}/collections/${DEFAULT_COLLECTION}`;
 
-export const dataStoreName = (
-  project: string,
-  dataStoreId: string,
-  location = DEFAULT_LOCATION,
-) => `${collectionParent(project, location)}/dataStores/${dataStoreId}`;
+export const dataStoreName = (project: string, dataStoreId: string, location = DEFAULT_LOCATION) =>
+  `${collectionParent(project, location)}/dataStores/${dataStoreId}`;
 
 export const getDataStore = (name: string) =>
   discoveryengine
@@ -70,21 +63,17 @@ export const ensureDataStore = (
       if (created !== undefined) {
         yield* waitForOperation(created);
       }
-      store = yield* discoveryengine
-        .getProjectsLocationsCollectionsDataStores({ name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "NotFound",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-        );
+      store = yield* discoveryengine.getProjectsLocationsCollectionsDataStores({ name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "NotFound",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+      );
     }
 
     if (options?.withEngine === true) {
-      const engineId = `${dataStoreId}eng`
-        .replace(/[^a-z0-9]/g, "")
-        .slice(0, 63);
+      const engineId = `${dataStoreId}eng`.replace(/[^a-z0-9]/g, "").slice(0, 63);
       const engineName = `${parent}/engines/${engineId}`;
       const existingEngine = yield* discoveryengine
         .getProjectsLocationsCollectionsEngines({ name: engineName })
@@ -111,11 +100,7 @@ export const ensureDataStore = (
     return store;
   });
 
-export const engineNameOf = (
-  project: string,
-  dataStoreId: string,
-  location = DEFAULT_LOCATION,
-) =>
+export const engineNameOf = (project: string, dataStoreId: string, location = DEFAULT_LOCATION) =>
   `${collectionParent(project, location)}/engines/${dataStoreId.replace(/[^a-z0-9]/g, "").slice(0, 60)}eng`;
 
 export const deleteEngine = (name: string) =>

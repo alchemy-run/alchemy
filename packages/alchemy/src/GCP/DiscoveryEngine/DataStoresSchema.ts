@@ -107,9 +107,7 @@ export type DataStoresSchema = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const DataStoresSchema = Resource<DataStoresSchema>(
-  "GCP.DiscoveryEngine.DataStoresSchema",
-);
+export const DataStoresSchema = Resource<DataStoresSchema>("GCP.DiscoveryEngine.DataStoresSchema");
 
 export class DataStoresSchemaNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSchemaNotResolved",
@@ -117,13 +115,9 @@ export class DataStoresSchemaNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (dataStore: string, schemaId: string) =>
-  `${dataStore}/schemas/${schemaId}`;
+const resourceName = (dataStore: string, schemaId: string) => `${dataStore}/schemas/${schemaId}`;
 
-const toAttrs = (
-  schema: discoveryengine.GoogleCloudDiscoveryengineV1Schema,
-  project: string,
-) => {
+const toAttrs = (schema: discoveryengine.GoogleCloudDiscoveryengineV1Schema, project: string) => {
   const name = schema.name ?? "";
   const parsed = parseResourceName(name, "schemas");
   const json = schema.jsonSchema;
@@ -160,11 +154,7 @@ export const DataStoresSchemaProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.schemaId ?? output?.schemaId;
-      if (
-        previousId !== undefined &&
-        news.schemaId !== undefined &&
-        news.schemaId !== previousId
-      ) {
+      if (previousId !== undefined && news.schemaId !== undefined && news.schemaId !== previousId) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -172,21 +162,11 @@ export const DataStoresSchemaProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const schemaId = yield* toPhysical(
-        id,
-        olds?.schemaId,
-        output?.schemaId,
-        rfc1035,
-      );
+      const schemaId = yield* toPhysical(id, olds?.schemaId, output?.schemaId, rfc1035);
       const parent = olds?.dataStore
-        ? expandDataStore(
-            olds.dataStore,
-            env.project,
-            output?.location ?? "global",
-          )
+        ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
         : undefined;
-      const name =
-        output?.name ?? (parent ? resourceName(parent, schemaId) : "");
+      const name = output?.name ?? (parent ? resourceName(parent, schemaId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -196,23 +176,13 @@ export const DataStoresSchemaProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = expandDataStore(
-        news.dataStore,
-        env.project,
-        output?.location ?? "global",
-      );
-      const schemaId = yield* toPhysical(
-        id,
-        news.schemaId,
-        output?.schemaId,
-        rfc1035,
-      );
+      const parent = expandDataStore(news.dataStore, env.project, output?.location ?? "global");
+      const schemaId = yield* toPhysical(id, news.schemaId, output?.schemaId, rfc1035);
       const name = resourceName(parent, schemaId);
       const jsonSchema = withSchemaVersion(news.jsonSchema);
       const body: discoveryengine.GoogleCloudDiscoveryengineV1Schema = {
         jsonSchema,
-        structSchema:
-          news.jsonSchema === undefined ? news.structSchema : undefined,
+        structSchema: news.jsonSchema === undefined ? news.structSchema : undefined,
       };
 
       let current = yield* getByName(output?.name ?? name);
@@ -253,14 +223,13 @@ export const DataStoresSchemaProvider = () =>
           fingerprint(current.structSchema) !== fingerprint(news.structSchema));
 
       if (schemaChanged) {
-        const patched =
-          yield* discoveryengine.patchProjectsLocationsDataStoresSchemas({
+        const patched = yield* discoveryengine.patchProjectsLocationsDataStoresSchemas({
+          name: current.name ?? name,
+          body: {
+            ...body,
             name: current.name ?? name,
-            body: {
-              ...body,
-              name: current.name ?? name,
-            },
-          });
+          },
+        });
         yield* waitForOperation(patched);
         current = (yield* getByName(current.name ?? name)) ?? current;
       }

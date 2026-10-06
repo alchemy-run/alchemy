@@ -31,12 +31,9 @@ import {
 } from "./internal.ts";
 
 const COLLECTION = "vmwareEngineNetworks";
-const DEFAULT_TYPE =
-  "STANDARD" satisfies vmwareengine.VmwareEngineNetworkTypeEnum;
+const DEFAULT_TYPE = "STANDARD" satisfies vmwareengine.VmwareEngineNetworkTypeEnum;
 
-export type VmwareEngineNetworkType =
-  | vmwareengine.VmwareEngineNetworkTypeEnum
-  | (string & {});
+export type VmwareEngineNetworkType = vmwareengine.VmwareEngineNetworkTypeEnum | (string & {});
 
 export type VmwareEngineNetworkVpc = {
   /** VPC network type (`INTRANET`, `INTERNET`, `GOOGLE_CLOUD`). */
@@ -169,8 +166,7 @@ export const VmwareEngineNetwork = Resource<VmwareEngineNetwork>(
 const resourceName = (project: string, location: string, networkId: string) =>
   `${parentOf(project, location)}/${COLLECTION}/${networkId}`;
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const fallbackLocation = (type: string, region: string) =>
   type === "LEGACY" ? region : DEFAULT_GLOBAL;
@@ -191,18 +187,13 @@ const toId = (
   return toPhysicalId(id, undefined, existing, "network");
 };
 
-const toVpcs = (
-  networks: vmwareengine.VpcNetworkList | undefined,
-): VmwareEngineNetworkVpc[] =>
+const toVpcs = (networks: vmwareengine.VpcNetworkList | undefined): VmwareEngineNetworkVpc[] =>
   (networks ?? []).map((network) => ({
     type: network.type,
     network: network.network,
   }));
 
-const toAttrs = (
-  network: vmwareengine.VmwareEngineNetwork,
-  project: string,
-) => {
+const toAttrs = (network: vmwareengine.VmwareEngineNetwork, project: string) => {
   const name = network.name ?? "";
   const parsed = parseName(name, COLLECTION, DEFAULT_GLOBAL);
   const ownership = parseOwnership(network.description);
@@ -231,15 +222,7 @@ const getByName = (name: string) =>
 
 export const VmwareEngineNetworkProvider = () =>
   Provider.succeed(VmwareEngineNetwork, {
-    stables: [
-      "name",
-      "vmwareEngineNetworkId",
-      "project",
-      "location",
-      "type",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "vmwareEngineNetworkId", "project", "location", "type", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -254,8 +237,7 @@ export const VmwareEngineNetworkProvider = () =>
         news.location ?? olds?.location ?? output?.location,
         fallbackLocation(nextType, env.region),
       );
-      const previousId =
-        olds?.vmwareEngineNetworkId ?? output?.vmwareEngineNetworkId;
+      const previousId = olds?.vmwareEngineNetworkId ?? output?.vmwareEngineNetworkId;
       const nextId = news.vmwareEngineNetworkId
         ? rfc1035(news.vmwareEngineNetworkId, "network")
         : nextType === "LEGACY"
@@ -284,8 +266,7 @@ export const VmwareEngineNetworkProvider = () =>
         type,
         location,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, networkId);
+      const name = output?.name ?? resourceName(env.project, location, networkId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -296,17 +277,14 @@ export const VmwareEngineNetworkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsVmwareEngineNetworks.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.vmwareEngineNetworks,
-            ),
+        const items = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsVmwareEngineNetworks.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.vmwareEngineNetworks,
+          ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
@@ -371,15 +349,14 @@ export const VmwareEngineNetworkProvider = () =>
         ["description", (current.description ?? "") !== desiredDescription],
       ]);
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsVmwareEngineNetworks({
+        const operation = yield* vmwareengine.patchProjectsLocationsVmwareEngineNetworks({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-            },
-          });
+            description: desiredDescription,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

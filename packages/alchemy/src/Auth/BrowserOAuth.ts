@@ -54,14 +54,12 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
       .awaitExternal({
         message: `${options.provider} authorization`,
         waitingLabel:
-          options.waitingLabel ??
-          "waiting for browser authorization (up to 5 minutes)…",
+          options.waitingLabel ?? "waiting for browser authorization (up to 5 minutes)…",
         url: options.url,
         openFailed,
         onOpen: () => openUrl(Interaction.openUrl(options.url)),
         inputLabel: "Paste the authorization code or callback URL",
-        validate: (value) =>
-          value.trim().length > 0 ? undefined : "Paste a code or URL",
+        validate: (value) => (value.trim().length > 0 ? undefined : "Paste a code or URL"),
       })
       .pipe(Effect.flatMap(options.exchange)),
   );

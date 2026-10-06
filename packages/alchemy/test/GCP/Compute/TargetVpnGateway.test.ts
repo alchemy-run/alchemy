@@ -1,24 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  targetVpnGatewayName: string,
-) =>
+const waitUntilGone = (project: string, region: string, targetVpnGatewayName: string) =>
   compute
     .getTargetVpnGateways({
       project,
@@ -71,9 +64,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(fetched.description).toEqual("classic vpn");
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
-      expect(fetched.network).toEqual(
-        expect.stringContaining(`/networks/${DEFAULT_NETWORK}`),
-      );
+      expect(fetched.network).toEqual(expect.stringContaining(`/networks/${DEFAULT_NETWORK}`));
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -88,12 +79,8 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
       );
 
-      expect(updated.gateway.targetVpnGatewayName).toEqual(
-        created.gateway.targetVpnGatewayName,
-      );
-      expect(updated.gateway.targetVpnGatewayId).toEqual(
-        created.gateway.targetVpnGatewayId,
-      );
+      expect(updated.gateway.targetVpnGatewayName).toEqual(created.gateway.targetVpnGatewayName);
+      expect(updated.gateway.targetVpnGatewayId).toEqual(created.gateway.targetVpnGatewayId);
       expect(updated.gateway.labels).toMatchObject({
         env: "prod",
         role: "vpn",

@@ -9,11 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const CUSTOM_PREFIX = "custom.";
@@ -166,9 +162,7 @@ export type CustomConstraint = Resource<
  * @resource
  * @category OrgPolicy
  */
-export const CustomConstraint = Resource<CustomConstraint>(
-  "GCP.OrgPolicy.CustomConstraint",
-);
+export const CustomConstraint = Resource<CustomConstraint>("GCP.OrgPolicy.CustomConstraint");
 
 export class CustomConstraintNotResolved extends Data.TaggedError(
   "GCP.OrgPolicy.CustomConstraintNotResolved",
@@ -176,9 +170,7 @@ export class CustomConstraintNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class OrganizationRequired extends Data.TaggedError(
-  "GCP.OrgPolicy.OrganizationRequired",
-)<{
+export class OrganizationRequired extends Data.TaggedError("GCP.OrgPolicy.OrganizationRequired")<{
   project: string;
 }> {}
 
@@ -189,9 +181,7 @@ const lastSegment = (value: string) => {
 };
 
 const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 const constraintIdOf = (value: string) => {
   const at = value.indexOf(COLLECTION);
@@ -217,16 +207,12 @@ const parseName = (name: string) => {
   };
 };
 
-const sameOrganization = (
-  left: string | undefined,
-  right: string | undefined,
-) => {
+const sameOrganization = (left: string | undefined, right: string | undefined) => {
   if (left === undefined || right === undefined) return left === right;
   return organizationParent(left) === organizationParent(right);
 };
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 const sameStringList = (
   left: readonly string[] | undefined,
@@ -261,10 +247,7 @@ const tryResolveOrganization = (explicit?: string) =>
     return undefined;
   });
 
-const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     const resolved = yield* tryResolveOrganization(explicit ?? existing);
     if (resolved === undefined) {
@@ -274,11 +257,7 @@ const resolveOrganization = (
     return resolved;
   });
 
-const toConstraintId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const toConstraintId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return normalizeConstraintId(explicit);
     if (existing !== undefined) return existing;
@@ -327,14 +306,9 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const toAttrs = (
-  constraint: orgpolicy.GoogleCloudOrgpolicyV2CustomConstraint,
-  project: string,
-) => {
+const toAttrs = (constraint: orgpolicy.GoogleCloudOrgpolicyV2CustomConstraint, project: string) => {
   const name = constraint.name ?? "";
   const parsedName = parseName(name);
   const parsed = parseDescription(constraint.description);
@@ -398,25 +372,14 @@ const toBody = (
 
 export const CustomConstraintProvider = () =>
   Provider.succeed(CustomConstraint, {
-    stables: [
-      "name",
-      "constraintId",
-      "organization",
-      "organizationId",
-      "project",
-    ],
+    stables: ["name", "constraintId", "organization", "organizationId", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.constraintId ?? output?.constraintId;
       const nextId =
-        news.constraintId !== undefined
-          ? normalizeConstraintId(news.constraintId)
-          : previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        previousId !== nextId;
+        news.constraintId !== undefined ? normalizeConstraintId(news.constraintId) : previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && previousId !== nextId;
 
       const previousOrg = olds?.organization ?? output?.organization;
       const orgChanged =
@@ -442,16 +405,10 @@ export const CustomConstraintProvider = () =>
       const organization = yield* tryResolveOrganization(
         olds?.organization ?? output?.organization,
       );
-      const constraintId = yield* toConstraintId(
-        id,
-        olds?.constraintId,
-        output?.constraintId,
-      );
+      const constraintId = yield* toConstraintId(id, olds?.constraintId, output?.constraintId);
       const name =
         output?.name ??
-        (organization !== undefined
-          ? resourceName(organization, constraintId)
-          : "");
+        (organization !== undefined ? resourceName(organization, constraintId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -472,15 +429,8 @@ export const CustomConstraintProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const constraintId = yield* toConstraintId(
-        id,
-        news.constraintId,
-        output?.constraintId,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const constraintId = yield* toConstraintId(id, news.constraintId, output?.constraintId);
       const name = output?.name ?? resourceName(organization, constraintId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -507,16 +457,11 @@ export const CustomConstraintProvider = () =>
         return yield* new CustomConstraintNotResolved({ name });
       }
 
-      const methodsChanged = !sameStringList(
-        current.methodTypes,
-        news.methodTypes,
-      );
+      const methodsChanged = !sameStringList(current.methodTypes, news.methodTypes);
       const conditionChanged = (current.condition ?? "") !== news.condition;
       const actionChanged = (current.actionType ?? "") !== news.actionType;
-      const displayChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
 
       if (
         methodsChanged ||

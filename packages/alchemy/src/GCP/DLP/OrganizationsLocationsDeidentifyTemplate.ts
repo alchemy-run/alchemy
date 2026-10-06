@@ -137,11 +137,7 @@ export const OrganizationsLocationsDeidentifyTemplate =
     "GCP.DLP.OrganizationsLocationsDeidentifyTemplate",
   );
 
-const resourceName = (
-  organization: string,
-  location: string,
-  templateId: string,
-) =>
+const resourceName = (organization: string, location: string, templateId: string) =>
   `${organizationLocationParent(organization, location)}/deidentifyTemplates/${templateId}`;
 
 const toAttrs = (
@@ -175,18 +171,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, organization: string, project: string) =>
-  dlp.listOrganizationsLocationsDeidentifyTemplates
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.deidentifyTemplates ?? []),
-      ),
-      Stream.filter((template) => hasOwnershipMarker(template.description)),
-      Stream.map((template) => toAttrs(template, organization, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dlp.listOrganizationsLocationsDeidentifyTemplates.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.deidentifyTemplates ?? [])),
+    Stream.filter((template) => hasOwnershipMarker(template.description)),
+    Stream.map((template) => toAttrs(template, organization, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const OrganizationsLocationsDeidentifyTemplateProvider = () =>
   Provider.succeed(OrganizationsLocationsDeidentifyTemplate, {
@@ -202,18 +194,11 @@ export const OrganizationsLocationsDeidentifyTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       return (
         replaceOn(olds?.templateId ?? output?.templateId, news.templateId) ??
-        replaceOn(
-          olds?.organization ?? output?.organization,
-          news.organization,
-        ) ??
+        replaceOn(olds?.organization ?? output?.organization, news.organization) ??
         replaceOn(previousLocation, nextLocation)
       );
     }),
@@ -225,19 +210,12 @@ export const OrganizationsLocationsDeidentifyTemplateProvider = () =>
         output?.organization,
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const templateId = yield* toPhysicalId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
-      const name =
-        output?.name ?? resourceName(organization, location, templateId);
+      const templateId = yield* toPhysicalId(id, olds?.templateId, output?.templateId);
+      const name = output?.name ?? resourceName(organization, location, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -255,16 +233,9 @@ export const OrganizationsLocationsDeidentifyTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const location = normalizeLocation(news.location ?? output?.location);
-      const templateId = yield* toPhysicalId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toPhysicalId(id, news.templateId, output?.templateId);
       const parent = organizationLocationParent(organization, location);
       const name = resourceName(organization, location, templateId);
       const ownership = yield* createInternalLabels(id);
@@ -298,8 +269,7 @@ export const OrganizationsLocationsDeidentifyTemplateProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const configChanged =
-        fingerprint(current.deidentifyConfig) !== fingerprint(deidentifyConfig);
+      const configChanged = fingerprint(current.deidentifyConfig) !== fingerprint(deidentifyConfig);
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
         descriptionChanged ? "description" : undefined,

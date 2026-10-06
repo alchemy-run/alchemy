@@ -8,14 +8,11 @@ export default Cloudflare.Worker(
   "Archive",
   { main: import.meta.url },
   Effect.gen(function* () {
-    yield* GitHub.consumeRepositoryEvents(
-      { owner: "alchemy-run", repository: "chat" },
-      (event) => Effect.log(event),
+    yield* GitHub.consumeRepositoryEvents({ owner: "alchemy-run", repository: "chat" }, (event) =>
+      Effect.log(event),
     );
 
     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
-  }).pipe(
-    Effect.provide(Cloudflare.GitHubRepositoryEventSourceLive),
-  ),
+  }).pipe(Effect.provide(Cloudflare.GitHubRepositoryEventSourceLive)),
 );
 // #endregion show

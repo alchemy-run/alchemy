@@ -17,7 +17,8 @@ export default Cloudflare.Worker(
         const request = yield* HttpServerRequest;
         yield* files.upload(request.url, yield* request.text);
         return HttpServerResponse.empty({ status: 201 });
-      })/*hide*/.pipe(Effect.orDie)/*end*/,
+      }) /*hide*/
+        .pipe(Effect.orDie) /*end*/,
     };
   }).pipe(Effect.provide(FilesR2)),
 );

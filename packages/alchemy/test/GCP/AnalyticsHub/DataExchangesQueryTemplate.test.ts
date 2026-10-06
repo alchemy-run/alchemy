@@ -1,16 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as analyticshub from "@distilled.cloud/gcp/analyticshub_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  hubLocation,
-  logLevel,
-  primaryContactOf,
-  currentProject,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { hubLocation, logLevel, primaryContactOf, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,20 +67,17 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "Clean Room",
             sharingEnvironmentConfig: { dcrExchangeConfig: {} },
           });
-          const template = yield* GCP.AnalyticsHub.DataExchangesQueryTemplate(
-            "Counts",
-            {
-              dataExchange: exchange.name,
-              location: hubLocation,
-              displayName: "Counts",
-              description: "row counts",
-              primaryContact,
-              routine: {
-                routineType: "TABLE_VALUED_FUNCTION",
-                definitionBody: "SELECT 1 AS n",
-              },
+          const template = yield* GCP.AnalyticsHub.DataExchangesQueryTemplate("Counts", {
+            dataExchange: exchange.name,
+            location: hubLocation,
+            displayName: "Counts",
+            description: "row counts",
+            primaryContact,
+            routine: {
+              routineType: "TABLE_VALUED_FUNCTION",
+              definitionBody: "SELECT 1 AS n",
             },
-          );
+          });
           return { exchange, template };
         }),
       );
@@ -95,14 +86,11 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.template.dataExchange).toEqual(created.exchange.name);
       expect(created.template.displayName).toEqual("Counts");
       expect(created.template.description).toEqual("row counts");
-      expect(created.template.routine?.routineType).toEqual(
-        "TABLE_VALUED_FUNCTION",
-      );
+      expect(created.template.routine?.routineType).toEqual("TABLE_VALUED_FUNCTION");
 
-      const fetched =
-        yield* analyticshub.getProjectsLocationsDataExchangesQueryTemplates({
-          name: created.template.name,
-        });
+      const fetched = yield* analyticshub.getProjectsLocationsDataExchangesQueryTemplates({
+        name: created.template.name,
+      });
       expect(fetched.name).toEqual(created.template.name);
       expect(fetched.displayName).toEqual("Counts");
       expect(fetched.description).toContain("alchemy-id=");
@@ -116,21 +104,18 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "Clean Room",
             sharingEnvironmentConfig: { dcrExchangeConfig: {} },
           });
-          const template = yield* GCP.AnalyticsHub.DataExchangesQueryTemplate(
-            "Counts",
-            {
-              dataExchange: exchange.name,
-              queryTemplateId: created.template.queryTemplateId,
-              location: hubLocation,
-              displayName: "Counts",
-              description: "updated counts",
-              primaryContact,
-              routine: {
-                routineType: "TABLE_VALUED_FUNCTION",
-                definitionBody: "SELECT 2 AS n",
-              },
+          const template = yield* GCP.AnalyticsHub.DataExchangesQueryTemplate("Counts", {
+            dataExchange: exchange.name,
+            queryTemplateId: created.template.queryTemplateId,
+            location: hubLocation,
+            displayName: "Counts",
+            description: "updated counts",
+            primaryContact,
+            routine: {
+              routineType: "TABLE_VALUED_FUNCTION",
+              definitionBody: "SELECT 2 AS n",
             },
-          );
+          });
           return { exchange, template };
         }),
       );
@@ -139,18 +124,14 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.template.displayName).toEqual("Counts");
       expect(updated.template.description).toEqual("updated counts");
 
-      const fetchedUpdate =
-        yield* analyticshub.getProjectsLocationsDataExchangesQueryTemplates({
-          name: created.template.name,
-        });
+      const fetchedUpdate = yield* analyticshub.getProjectsLocationsDataExchangesQueryTemplates({
+        name: created.template.name,
+      });
       expect(fetchedUpdate.displayName).toEqual("Counts");
       expect(fetchedUpdate.description).toContain("updated counts");
 
       yield* stack.destroy();
-      const gone = yield* waitUntilGone(
-        created.exchange.name,
-        created.template.name,
-      );
+      const gone = yield* waitUntilGone(created.exchange.name, created.template.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {

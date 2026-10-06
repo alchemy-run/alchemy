@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Room } from "@/AWS/IVSChat";
-import * as Test from "@/Test/Alchemy";
 import * as ivschat from "@distilled.cloud/aws/ivschat";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Room } from "@/AWS/IVSChat";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,9 +31,7 @@ const assertRoomGone = (arn: string) =>
   Effect.gen(function* () {
     const room = yield* ivschat.getRoom({ identifier: arn }).pipe(
       Effect.map((r) => r.arn),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (room !== undefined) {
       return yield* Effect.fail(new Error(`room '${arn}' still exists`));

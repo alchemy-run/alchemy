@@ -102,10 +102,7 @@ export const patchChange = (rows: readonly { kind: string }[]) => {
   return Math.max(TIMING.patch.change, (removed ? TIMING.patchDelete : 0) + stream);
 };
 
-export const schedule = async (
-  capture: SceneCapture,
-  fps: number,
-): Promise<SceneSchedule> => {
+export const schedule = async (capture: SceneCapture, fps: number): Promise<SceneSchedule> => {
   const segments: Segment[] = [];
   let frame = 0;
   // The scene opens on the first beat's window, without a switch.
@@ -144,7 +141,8 @@ export const schedule = async (
       case "diagram":
         work = Math.min(
           TIMING.diagramMax,
-          TIMING.diagram + TIMING.diagramPerAdded * (beat.addedNodes.length + beat.addedEdges.length),
+          TIMING.diagram +
+            TIMING.diagramPerAdded * (beat.addedNodes.length + beat.addedEdges.length),
         );
         break;
       case "slide":
@@ -222,10 +220,12 @@ export const schedule = async (
       }
     }
   }
-  const steps: Step[] = marks.map((mark, i) => ({
-    ...mark,
-    to: marks[i + 1]?.from ?? durationInFrames,
-  })).filter((step) => step.to > step.from);
+  const steps: Step[] = marks
+    .map((mark, i) => ({
+      ...mark,
+      to: marks[i + 1]?.from ?? durationInFrames,
+    }))
+    .filter((step) => step.to > step.from);
   return { segments, steps, initialViews, durationInFrames };
 };
 

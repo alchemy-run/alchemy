@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  logLevel,
-  currentProject,
-  TEST_ATTESTATION,
-  TEST_RESOURCE_URI,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, currentProject, TEST_ATTESTATION, TEST_RESOURCE_URI } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -101,9 +96,7 @@ test.provider(
       );
 
       expect(updated.occurrence.name).toEqual(created.occurrence.name);
-      expect(updated.occurrence.remediation).toEqual(
-        "rebuild from a patched base",
-      );
+      expect(updated.occurrence.remediation).toEqual("rebuild from a patched base");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.occurrence.name);

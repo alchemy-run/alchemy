@@ -167,9 +167,7 @@ const resourceName = (agent: string, transitionRouteGroupId: string) =>
   `${agent}/transitionRouteGroups/${transitionRouteGroupId}`;
 
 const routesOf = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3TransitionRoute[]
-    | undefined,
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3TransitionRoute[] | undefined,
 ): TransitionRoute[] =>
   (list ?? []).map((route) => ({
     intent: route.intent,
@@ -183,8 +181,7 @@ const routesOf = (
             text: message.text
               ? {
                   text: [...(message.text.text ?? [])],
-                  allowPlaybackInterruption:
-                    message.text.allowPlaybackInterruption,
+                  allowPlaybackInterruption: message.text.allowPlaybackInterruption,
                 }
               : undefined,
           })),
@@ -220,33 +217,23 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsAgentsTransitionRouteGroups
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.transitionRouteGroups ?? []),
-      ),
-      Stream.filter((group) => hasOwnershipMarker(group.displayName)),
-      Stream.map((group) => toAttrs(group, project, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsTransitionRouteGroups.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.transitionRouteGroups ?? [])),
+    Stream.filter((group) => hasOwnershipMarker(group.displayName)),
+    Stream.map((group) => toAttrs(group, project, parent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  dialogflow.listProjectsLocationsAgentsTransitionRouteGroups
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.transitionRouteGroups ?? []),
-      ),
-      Stream.filter((group) => group.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsAgentsTransitionRouteGroups.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.transitionRouteGroups ?? [])),
+    Stream.filter((group) => group.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const AgentsTransitionRouteGroupProvider = () =>
   Provider.succeed(AgentsTransitionRouteGroup, {
@@ -258,8 +245,7 @@ export const AgentsTransitionRouteGroupProvider = () =>
       if (previousAgent !== undefined && news.agent !== previousAgent) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousId =
-        olds?.transitionRouteGroupId ?? output?.transitionRouteGroupId;
+      const previousId = olds?.transitionRouteGroupId ?? output?.transitionRouteGroupId;
       if (
         previousId !== undefined &&
         news.transitionRouteGroupId !== undefined &&
@@ -281,55 +267,40 @@ export const AgentsTransitionRouteGroupProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const agent = olds?.agent
-        ? expandAgent(olds.agent, env.project, location)
-        : output?.agent;
+      const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
       const transitionRouteGroupId = yield* toResourceId(
         id,
         olds?.transitionRouteGroupId,
         output?.transitionRouteGroupId,
       );
       const name =
-        output?.name ??
-        (agent !== undefined
-          ? resourceName(agent, transitionRouteGroupId)
-          : "");
+        output?.name ?? (agent !== undefined ? resourceName(agent, transitionRouteGroupId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined && agent !== undefined) {
         const ownership = yield* internalLabels(id);
         existing = yield* findByDisplayName(
           agent,
-          encodeOwnershipLine(
-            ownership,
-            olds?.displayName,
-            MAX_ROUTE_GROUP_DISPLAY_NAME_LENGTH,
-          ),
+          encodeOwnershipLine(ownership, olds?.displayName, MAX_ROUTE_GROUP_DISPLAY_NAME_LENGTH),
         );
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, agent);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const agents = yield* namedAgents(env.project);
-        const pages = yield* Effect.forEach(
-          agents,
-          (agent) => listAt(agent.name, env.project),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(agents, (agent) => listAt(agent.name, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const agent = expandAgent(news.agent, env.project, location);
       const transitionRouteGroupId = yield* toResourceId(
         id,
@@ -360,11 +331,7 @@ export const AgentsTransitionRouteGroupProvider = () =>
             languageCode: news.languageCode,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(agent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
@@ -375,20 +342,18 @@ export const AgentsTransitionRouteGroupProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const routesChanged =
-        fingerprint(routesOf(current.transitionRoutes)) !==
-        fingerprint(news.transitionRoutes);
+        fingerprint(routesOf(current.transitionRoutes)) !== fingerprint(news.transitionRoutes);
 
       if (displayChanged || routesChanged) {
-        current =
-          yield* dialogflow.patchProjectsLocationsAgentsTransitionRouteGroups({
-            name: currentName,
-            languageCode: news.languageCode,
-            updateMask: updateMaskOf(
-              displayChanged ? "display_name" : undefined,
-              routesChanged ? "transition_routes" : undefined,
-            ),
-            body: { ...body, name: currentName },
-          });
+        current = yield* dialogflow.patchProjectsLocationsAgentsTransitionRouteGroups({
+          name: currentName,
+          languageCode: news.languageCode,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            routesChanged ? "transition_routes" : undefined,
+          ),
+          body: { ...body, name: currentName },
+        });
       }
 
       return toAttrs(current, env.project, agent);

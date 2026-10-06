@@ -3,21 +3,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   fingerprint,
   hasAlchemyLabelMap,
@@ -28,6 +21,8 @@ import {
   toPhysicalRfc1035,
   userLabels,
 } from "./helpers.ts";
+import { listLocations } from "./names.ts";
+import { waitForOperation } from "./operations.ts";
 import type { EncryptionSpec } from "./shared.ts";
 
 const MAX_NAME_LENGTH = 63;
@@ -166,9 +161,7 @@ export type Endpoint = Resource<
     /** Client connection config. */
     clientConnectionConfig: ClientConnectionConfig | undefined;
     /** Request/response logging config. */
-    predictRequestResponseLoggingConfig:
-      | PredictRequestResponseLoggingConfig
-      | undefined;
+    predictRequestResponseLoggingConfig: PredictRequestResponseLoggingConfig | undefined;
     /** Private Service Connect config. */
     privateServiceConnectConfig: PrivateServiceConnectConfig | undefined;
     /** Deprecated PSC flag. */
@@ -230,15 +223,11 @@ export type Endpoint = Resource<
  */
 export const Endpoint = Resource<Endpoint>("GCP.AIPlatform.Endpoint");
 
-export class EndpointNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.EndpointNotResolved",
-)<{
+export class EndpointNotResolved extends Data.TaggedError("GCP.AIPlatform.EndpointNotResolved")<{
   name: string;
 }> {}
 
-export class EndpointStillExists extends Data.TaggedError(
-  "GCP.AIPlatform.EndpointStillExists",
-)<{
+export class EndpointStillExists extends Data.TaggedError("GCP.AIPlatform.EndpointStillExists")<{
   name: string;
 }> {}
 
@@ -255,10 +244,7 @@ const trafficSplitOf = (
   );
 
 const toEncryption = (
-  spec:
-    | aiplatform.GoogleCloudAiplatformV1EncryptionSpec
-    | EncryptionSpec
-    | undefined,
+  spec: aiplatform.GoogleCloudAiplatformV1EncryptionSpec | EncryptionSpec | undefined,
 ): EncryptionSpec | undefined => {
   const kmsKeyName = spec?.kmsKeyName;
   if (kmsKeyName === undefined || kmsKeyName.length === 0) return undefined;
@@ -327,10 +313,7 @@ const toGdc = (
   return { zone };
 };
 
-const toAttrs = (
-  endpoint: aiplatform.GoogleCloudAiplatformV1Endpoint,
-  project: string,
-) => {
+const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1Endpoint, project: string) => {
   const name = endpoint.name ?? "";
   const parsed = parseResourceName(name, "endpoints");
   return {
@@ -347,9 +330,7 @@ const toAttrs = (
     dedicatedEndpointDns: endpoint.dedicatedEndpointDns,
     trafficSplit: trafficSplitOf(endpoint.trafficSplit),
     clientConnectionConfig: toClientConnection(endpoint.clientConnectionConfig),
-    predictRequestResponseLoggingConfig: toLogging(
-      endpoint.predictRequestResponseLoggingConfig,
-    ),
+    predictRequestResponseLoggingConfig: toLogging(endpoint.predictRequestResponseLoggingConfig),
     privateServiceConnectConfig: toPsc(endpoint.privateServiceConnectConfig),
     enablePrivateServiceConnect: endpoint.enablePrivateServiceConnect === true,
     genAiAdvancedFeaturesConfig: toGenAi(endpoint.genAiAdvancedFeaturesConfig),
@@ -372,9 +353,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint
-        ? Effect.succeed(endpoint)
-        : Effect.fail(new EndpointNotResolved({ name })),
+      endpoint ? Effect.succeed(endpoint) : Effect.fail(new EndpointNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointNotResolved",
@@ -386,9 +365,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint === undefined
-        ? Effect.void
-        : Effect.fail(new EndpointStillExists({ name })),
+      endpoint === undefined ? Effect.void : Effect.fail(new EndpointStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointStillExists",
@@ -407,14 +384,12 @@ const toCreateBody = (
   labels: desiredLabels,
   network: news.network,
   encryptionSpec: news.encryptionSpec,
-  dedicatedEndpointEnabled:
-    news.dedicatedEndpointEnabled === true ? true : undefined,
+  dedicatedEndpointEnabled: news.dedicatedEndpointEnabled === true ? true : undefined,
   trafficSplit: news.trafficSplit,
   clientConnectionConfig: news.clientConnectionConfig,
   predictRequestResponseLoggingConfig: news.predictRequestResponseLoggingConfig,
   privateServiceConnectConfig: news.privateServiceConnectConfig,
-  enablePrivateServiceConnect:
-    news.enablePrivateServiceConnect === true ? true : undefined,
+  enablePrivateServiceConnect: news.enablePrivateServiceConnect === true ? true : undefined,
   genAiAdvancedFeaturesConfig: news.genAiAdvancedFeaturesConfig,
   gdcConfig: news.gdcConfig,
 });
@@ -427,36 +402,21 @@ export const EndpointProvider = () =>
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.endpointId ?? output?.endpointId;
-      const nextId = news.endpointId
-        ? lastSegment(news.endpointId)
-        : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const nextId = news.endpointId ? lastSegment(news.endpointId) : previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const previousNetwork = olds?.network ?? output?.network ?? "";
       const nextNetwork = news.network ?? previousNetwork;
       const previousKey =
-        olds?.encryptionSpec?.kmsKeyName ??
-        output?.encryptionSpec?.kmsKeyName ??
-        "";
+        olds?.encryptionSpec?.kmsKeyName ?? output?.encryptionSpec?.kmsKeyName ?? "";
       const nextKey = news.encryptionSpec?.kmsKeyName ?? previousKey;
-      const previousGdc =
-        olds?.gdcConfig?.zone ?? output?.gdcConfig?.zone ?? "";
+      const previousGdc = olds?.gdcConfig?.zone ?? output?.gdcConfig?.zone ?? "";
       const nextGdc = news.gdcConfig?.zone ?? previousGdc;
       const previousPsc =
-        olds?.enablePrivateServiceConnect ??
-        output?.enablePrivateServiceConnect ??
-        false;
+        olds?.enablePrivateServiceConnect ?? output?.enablePrivateServiceConnect ?? false;
       const nextPsc = news.enablePrivateServiceConnect ?? previousPsc;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousNetwork !== nextNetwork ||
         previousKey !== nextKey ||
@@ -466,9 +426,7 @@ export const EndpointProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -480,18 +438,12 @@ export const EndpointProvider = () =>
         output?.endpointId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, endpointId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, endpointId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -524,10 +476,7 @@ export const EndpointProvider = () =>
         output?.endpointId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, endpointId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -559,15 +508,12 @@ export const EndpointProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const dedicatedChanged =
-        (current.dedicatedEndpointEnabled === true) !==
-        (news.dedicatedEndpointEnabled === true);
+        (current.dedicatedEndpointEnabled === true) !== (news.dedicatedEndpointEnabled === true);
       const trafficChanged =
         news.trafficSplit !== undefined &&
-        fingerprint(trafficSplitOf(current.trafficSplit)) !==
-          fingerprint(news.trafficSplit);
+        fingerprint(trafficSplitOf(current.trafficSplit)) !== fingerprint(news.trafficSplit);
       const clientChanged =
         news.clientConnectionConfig !== undefined &&
         !specifiedEquals(
@@ -611,9 +557,7 @@ export const EndpointProvider = () =>
           dedicatedChanged ? "dedicated_endpoint_enabled" : undefined,
           trafficChanged ? "traffic_split" : undefined,
           clientChanged ? "client_connection_config" : undefined,
-          loggingChanged
-            ? "predict_request_response_logging_config"
-            : undefined,
+          loggingChanged ? "predict_request_response_logging_config" : undefined,
           pscChanged ? "private_service_connect_config" : undefined,
           genAiChanged ? "gen_ai_advanced_features_config" : undefined,
         ].filter((field): field is string => field !== undefined);
@@ -630,8 +574,7 @@ export const EndpointProvider = () =>
               dedicatedEndpointEnabled: news.dedicatedEndpointEnabled === true,
               trafficSplit: news.trafficSplit,
               clientConnectionConfig: news.clientConnectionConfig,
-              predictRequestResponseLoggingConfig:
-                news.predictRequestResponseLoggingConfig,
+              predictRequestResponseLoggingConfig: news.predictRequestResponseLoggingConfig,
               privateServiceConnectConfig: news.privateServiceConnectConfig,
               genAiAdvancedFeaturesConfig: news.genAiAdvancedFeaturesConfig,
             },

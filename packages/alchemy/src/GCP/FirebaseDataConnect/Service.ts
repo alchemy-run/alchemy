@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -191,10 +186,7 @@ export const ServiceProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.serviceId ?? output?.serviceId,
         nextId: news.serviceId ?? olds?.serviceId ?? output?.serviceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -204,24 +196,13 @@ export const ServiceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const serviceId = yield* toPhysicalId(
-        id,
-        olds?.serviceId,
-        output?.serviceId,
-        "service",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, serviceId);
+      const serviceId = yield* toPhysicalId(id, olds?.serviceId, output?.serviceId, "service");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, serviceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -233,16 +214,8 @@ export const ServiceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const serviceId = yield* toPhysicalId(
-        id,
-        news.serviceId,
-        output?.serviceId,
-        "service",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const serviceId = yield* toPhysicalId(id, news.serviceId, output?.serviceId, "service");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, serviceId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -278,8 +251,8 @@ export const ServiceProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.displayName, news.displayName) && "displayName",
       ]);
 
@@ -290,30 +263,23 @@ export const ServiceProvider = () =>
         yield* retryStaleEtag(
           Effect.gen(function* () {
             const latest = yield* getByName(serviceName);
-            const operation =
-              yield* firebasedataconnect.patchProjectsLocationsServices({
-                name: serviceName,
-                updateMask: mask,
-                body: {
-                  etag: latest?.etag,
-                  displayName: news.displayName,
-                  annotations: desiredAnnotations,
-                  labels: desiredLabels,
-                },
-              });
+            const operation = yield* firebasedataconnect.patchProjectsLocationsServices({
+              name: serviceName,
+              updateMask: mask,
+              body: {
+                etag: latest?.etag,
+                displayName: news.displayName,
+                annotations: desiredAnnotations,
+                labels: desiredLabels,
+              },
+            });
             yield* waitForOperation(operation);
           }),
         );
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
-      current = yield* waitUntilReady(
-        getByName(current.name ?? name),
-        current.name ?? name,
-      );
+      current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
       return toAttrs(current, env.project, env.region);
     }),
 

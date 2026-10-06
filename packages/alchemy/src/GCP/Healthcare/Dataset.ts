@@ -94,20 +94,14 @@ export type Dataset = Resource<
  */
 export const Dataset = Resource<Dataset>("GCP.Healthcare.Dataset");
 
-export class DatasetNotResolved extends Data.TaggedError(
-  "GCP.Healthcare.DatasetNotResolved",
-)<{
+export class DatasetNotResolved extends Data.TaggedError("GCP.Healthcare.DatasetNotResolved")<{
   name: string;
 }> {}
 
 const resourceName = (project: string, location: string, datasetId: string) =>
   `${locationParent(project, location)}/datasets/${datasetId}`;
 
-const toAttrs = (
-  dataset: healthcare.Dataset,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (dataset: healthcare.Dataset, project: string, region: string) => {
   const name = dataset.name ?? "";
   const parsed = parseResourceName(name, "datasets", region);
   return {
@@ -152,46 +146,29 @@ export const DatasetProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const datasetId =
         olds?.datasetId ??
         output?.datasetId ??
-        (output?.name
-          ? parseResourceName(output.name, "datasets", env.region).id
-          : "");
+        (output?.name ? parseResourceName(output.name, "datasets", env.region).id : "");
       const name =
         output?.name ??
-        (datasetId.length > 0
-          ? resourceName(env.project, location, datasetId)
-          : "");
+        (datasetId.length > 0 ? resourceName(env.project, location, datasetId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
       // Datasets have no labels. The physical name is unique per
       // instance id, so a hit at our computed name is treated as owned.
-      return output?.name !== undefined && output.name !== attrs.name
-        ? Unowned(attrs)
-        : attrs;
+      return output?.name !== undefined && output.name !== attrs.name ? Unowned(attrs) : attrs;
     }),
 
     list: () => Effect.succeed<ReturnType<typeof toAttrs>[]>([]),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const datasetId = yield* toPhysicalId(
-        id,
-        news.datasetId,
-        output?.datasetId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, datasetId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const datasetId = yield* toPhysicalId(id, news.datasetId, output?.datasetId);
+      const name = output?.name ?? resourceName(env.project, location, datasetId);
       const parent = locationParent(env.project, location);
 
       let current = yield* getByName(name);
@@ -234,9 +211,9 @@ export const DatasetProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryTransient(
-        healthcare.deleteProjectsLocationsDatasets({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryTransient(healthcare.deleteProjectsLocationsDatasets({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

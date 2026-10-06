@@ -11,27 +11,23 @@ import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { resolveBranchScope, type ResolvedBranchScope } from "./BranchScope.ts";
-import { Function, type FunctionAttributes } from "./Function.ts";
+import { branchScopeOf, Function, type FunctionAttributes } from "./Function.ts";
 import { buildFunctionArtifact } from "./FunctionArtifact.ts";
 import { functionEnvironment, functionSlug } from "./FunctionConfig.ts";
 import { LocalFunctionProvider } from "./LocalFunctionProvider.ts";
 
-export class FunctionDeploymentFailed extends Data.TaggedError(
-  "FunctionDeploymentFailed",
-)<{
+export class FunctionDeploymentFailed extends Data.TaggedError("FunctionDeploymentFailed")<{
   slug: string;
   deploymentId: number;
   status: string;
   message?: string;
 }> {}
-export class FunctionDeploymentNotReady extends Data.TaggedError(
-  "FunctionDeploymentNotReady",
-)<{ slug: string; deploymentId: number }> {}
+export class FunctionDeploymentNotReady extends Data.TaggedError("FunctionDeploymentNotReady")<{
+  slug: string;
+  deploymentId: number;
+}> {}
 
-export const observeFunction = Effect.fn(function* (
-  scope: ResolvedBranchScope,
-  slug: string,
-) {
+export const observeFunction = Effect.fn(function* (scope: ResolvedBranchScope, slug: string) {
   let cursor: string | undefined;
   const seen = new Set<string>();
   do {
@@ -85,16 +81,12 @@ export const waitForFunctionDeployment = (
       branch_id: scope.branchId,
       slug,
     });
-    if (
-      fn.current_deployment?.id === deploymentId &&
-      fn.current_deployment.status === "failed"
-    ) {
+    if (fn.current_deployment?.id === deploymentId && fn.current_deployment.status === "failed") {
       return yield* new FunctionDeploymentFailed({
         slug,
         deploymentId,
         status: "failed",
-        message:
-          fn.current_deployment.error ?? "Neon Function deployment failed",
+        message: fn.current_deployment.error ?? "Neon Function deployment failed",
       });
     }
     if (
@@ -113,9 +105,7 @@ export const waitForFunctionDeployment = (
     }),
   );
 
-export class FunctionLogQueryError extends Data.TaggedError(
-  "FunctionLogQueryError",
-)<{
+export class FunctionLogQueryError extends Data.TaggedError("FunctionLogQueryError")<{
   reason: "invalid-limit" | "invalid-cursor" | "pagination-limit";
 }> {}
 
@@ -133,9 +123,7 @@ export const FunctionLogs = Effect.fn(function* (
     branch_id: output.branchId,
     source: "function" as const,
     service_name: service,
-    ...(options.since
-      ? { start_time: options.since.toISOString() }
-      : { since: "1h" }),
+    ...(options.since ? { start_time: options.since.toISOString() } : { since: "1h" }),
     end_time: new Date().toISOString(),
     limit: Math.min(limit, 1000),
     sort_order: "desc" as const,
@@ -179,9 +167,7 @@ export const FunctionProviderLive = () =>
     stables: ["projectId", "branchId", "functionId", "slug", "url"],
     list: Effect.fn(function* () {
       const result: FunctionAttributes[] = [];
-      for (const project of yield* Neon.listProjects
-        .items({})
-        .pipe(Stream.runCollect)) {
+      for (const project of yield* Neon.listProjects.items({}).pipe(Stream.runCollect)) {
         for (const branch of yield* Neon.listProjectBranches
           .items({ project_id: project.id })
           .pipe(Stream.runCollect)) {
@@ -196,7 +182,7 @@ export const FunctionProviderLive = () =>
     }),
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return;
-      const scope = yield* resolveBranchScope(news);
+      const scope = yield* resolveBranchScope(branchScopeOf(news));
       if (
         output &&
         (scope.projectId !== output.projectId ||
@@ -211,20 +197,18 @@ export const FunctionProviderLive = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       if (
         !output &&
-        !(olds?.branch?.projectId && olds.branch.branchId) &&
-        !olds?.project?.projectId
+        !(olds && branchScopeOf(olds).branch?.projectId && branchScopeOf(olds).branch?.branchId) &&
+        !(olds && branchScopeOf(olds).project?.projectId)
       )
         return undefined;
-      const scope = output ?? (yield* resolveBranchScope(olds!));
+      const scope = output ?? (yield* resolveBranchScope(branchScopeOf(olds!)));
       const slug = output?.slug ?? (yield* functionSlug(id, olds?.slug));
       const found = yield* observeFunction(scope, slug);
       if (!found) return undefined;
       const attrs = attributes(
         scope,
         found,
-        output?.activeDeploymentId === found.active_deployment?.id
-          ? output?.codeHash
-          : undefined,
+        output?.activeDeploymentId === found.active_deployment?.id ? output?.codeHash : undefined,
         output?.activeDeploymentId === found.active_deployment?.id
           ? output?.environmentHash
           : undefined,
@@ -232,7 +216,7 @@ export const FunctionProviderLive = () =>
       return output ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
-      const scope = yield* resolveBranchScope(news);
+      const scope = yield* resolveBranchScope(branchScopeOf(news));
       const slug = news.slug ?? output?.slug ?? (yield* functionSlug(id));
       yield* functionSlug(id, slug);
       const observed = yield* observeFunction(scope, slug);
@@ -280,11 +264,7 @@ export const FunctionProviderLive = () =>
           zip,
           environment: JSON.stringify(environment),
         });
-        current = yield* waitForFunctionDeployment(
-          scope,
-          slug,
-          deployment.deployment.id,
-        );
+        current = yield* waitForFunctionDeployment(scope, slug, deployment.deployment.id);
       }
       if (current.name !== (news.name ?? slug)) {
         const updated = yield* Neon.updateProjectBranchFunction({

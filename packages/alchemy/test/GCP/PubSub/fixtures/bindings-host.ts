@@ -1,6 +1,6 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Topic the `Publish` binding writes to; `PublishTap` observes it. */
@@ -53,8 +53,7 @@ export const WRITE_BATCH_TEXT = "batch-text";
 /** Binary payload: must round-trip byte for byte. */
 export const WRITE_BATCH_BYTES = [0, 1, 255];
 
-const untilSome = <A>(page: ReadonlyArray<A> | undefined) =>
-  (page ?? []).length > 0;
+const untilSome = <A>(page: ReadonlyArray<A> | undefined) => (page ?? []).length > 0;
 
 /**
  * Effect-native Cloud Run service exercising every Pub/Sub binding as its
@@ -115,15 +114,13 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
           return { id, batch, empty };
         }),
         readSubscription: Effect.gen(function* () {
-          const messages = yield* readSubscription
-            .pull({ maxMessages: 10 })
-            .pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("1 second"),
-                until: untilSome,
-                times: 20,
-              }),
-            );
+          const messages = yield* readSubscription.pull({ maxMessages: 10 }).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: untilSome,
+              times: 20,
+            }),
+          );
           // Extend, then acknowledge: exercises every client method.
           const ackIds = messages.map((message) => message.ackId);
           yield* readSubscription.modifyAckDeadline(ackIds, 30);
@@ -136,9 +133,7 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
         getSchema: getSchema({ view: "FULL" }),
         validateValid: validate({
           encoding: "JSON",
-          message: Buffer.from(JSON.stringify({ id: "abc" })).toString(
-            "base64",
-          ),
+          message: Buffer.from(JSON.stringify({ id: "abc" })).toString("base64"),
         }),
         validateInvalid: validate({
           encoding: "JSON",

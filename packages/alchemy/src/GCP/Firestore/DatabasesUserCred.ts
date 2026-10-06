@@ -1,8 +1,8 @@
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { Unowned } from "../../AdoptPolicy.ts";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -110,19 +110,13 @@ export type DatabasesUserCred = Resource<
  * @resource
  * @category Firestore
  */
-export const DatabasesUserCred = Resource<DatabasesUserCred>(
-  "GCP.Firestore.DatabasesUserCred",
-);
+export const DatabasesUserCred = Resource<DatabasesUserCred>("GCP.Firestore.DatabasesUserCred");
 
-export class UserCredNotResolved extends Data.TaggedError(
-  "GCP.Firestore.UserCredNotResolved",
-)<{
+export class UserCredNotResolved extends Data.TaggedError("GCP.Firestore.UserCredNotResolved")<{
   name: string;
 }> {}
 
-export class UserCredStillExists extends Data.TaggedError(
-  "GCP.Firestore.UserCredStillExists",
-)<{
+export class UserCredStillExists extends Data.TaggedError("GCP.Firestore.UserCredStillExists")<{
   name: string;
 }> {}
 
@@ -193,14 +187,7 @@ const syncEnabled = (
 
 export const DatabasesUserCredProvider = () =>
   Provider.succeed(DatabasesUserCred, {
-    stables: [
-      "name",
-      "userCredsId",
-      "database",
-      "databaseId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "userCredsId", "database", "databaseId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -211,9 +198,7 @@ export const DatabasesUserCredProvider = () =>
       );
       const nextDatabase = databaseIdOf(news.database);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousDatabase.length > 0 && previousDatabase !== nextDatabase)
       ) {
         return { action: "replace" as const };
@@ -223,11 +208,7 @@ export const DatabasesUserCredProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const userCredsId = yield* toResourceId(
-        id,
-        olds?.userCredsId,
-        output?.userCredsId,
-      );
+      const userCredsId = yield* toResourceId(id, olds?.userCredsId, output?.userCredsId);
       const databaseRef = olds?.database ?? output?.database;
       const name =
         output?.name ??
@@ -245,11 +226,7 @@ export const DatabasesUserCredProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = databaseNameOf(env.project, news.database);
-      const userCredsId = yield* toResourceId(
-        id,
-        news.userCredsId,
-        output?.userCredsId,
-      );
+      const userCredsId = yield* toResourceId(id, news.userCredsId, output?.userCredsId);
       const name = resourceName(parent, userCredsId);
       const disabled = news.disabled === true;
 
@@ -268,9 +245,7 @@ export const DatabasesUserCredProvider = () =>
               listOnDatabase(parent).pipe(
                 Effect.map(
                   (creds) =>
-                    creds.find(
-                      (item) => lastSegment(item.name ?? "") === userCredsId,
-                    ) ?? undefined,
+                    creds.find((item) => lastSegment(item.name ?? "") === userCredsId) ?? undefined,
                 ),
                 Effect.flatMap((found) =>
                   found !== undefined ? Effect.succeed(found) : getByName(name),

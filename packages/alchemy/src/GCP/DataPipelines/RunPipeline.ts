@@ -42,6 +42,4 @@ export interface RunPipeline extends Binding.Service<
   >
 > {}
 
-export const RunPipeline = Binding.Service<RunPipeline>(
-  "GCP.DataPipelines.RunPipeline",
-);
+export const RunPipeline = Binding.Service<RunPipeline>("GCP.DataPipelines.RunPipeline");

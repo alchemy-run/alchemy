@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -136,9 +131,7 @@ export type WorkflowTemplate = Resource<
  * @resource
  * @category Dataproc
  */
-export const WorkflowTemplate = Resource<WorkflowTemplate>(
-  "GCP.Dataproc.WorkflowTemplate",
-);
+export const WorkflowTemplate = Resource<WorkflowTemplate>("GCP.Dataproc.WorkflowTemplate");
 
 export class WorkflowTemplateNotResolved extends Data.TaggedError(
   "GCP.Dataproc.WorkflowTemplateNotResolved",
@@ -149,11 +142,7 @@ export class WorkflowTemplateNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, templateId: string) =>
   `${locationParent(project, location)}/workflowTemplates/${templateId}`;
 
-const toAttrs = (
-  template: dataproc.WorkflowTemplate,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (template: dataproc.WorkflowTemplate, project: string, location: string) => {
   const name = template.name ?? "";
   const parsed = parseResourceName(name, "workflowTemplates", location);
   return {
@@ -213,16 +202,12 @@ const listLocation = (project: string, location: string) =>
     ),
   );
 
-const templateChanged = (
-  current: dataproc.WorkflowTemplate,
-  desired: dataproc.WorkflowTemplate,
-) =>
+const templateChanged = (current: dataproc.WorkflowTemplate, desired: dataproc.WorkflowTemplate) =>
   fingerprint(current.jobs) !== fingerprint(desired.jobs) ||
   fingerprint(current.placement) !== fingerprint(desired.placement) ||
   (current.dagTimeout ?? "") !== (desired.dagTimeout ?? "") ||
   fingerprint(current.parameters) !== fingerprint(desired.parameters) ||
-  (current.encryptionConfig?.kmsKey ?? "") !==
-    (desired.encryptionConfig?.kmsKey ?? "");
+  (current.encryptionConfig?.kmsKey ?? "") !== (desired.encryptionConfig?.kmsKey ?? "");
 
 export const WorkflowTemplateProvider = () =>
   Provider.succeed(WorkflowTemplate, {
@@ -233,26 +218,19 @@ export const WorkflowTemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const nextId = news.templateId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousLocation !== nextLocation)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -260,10 +238,7 @@ export const WorkflowTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const templateId = yield* toPhysicalId(
         id,
         olds?.templateId,
@@ -271,14 +246,11 @@ export const WorkflowTemplateProvider = () =>
         MAX_POLICY_ID_LENGTH,
         "template",
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, templateId);
+      const name = output?.name ?? resourceName(env.project, location, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -294,10 +266,7 @@ export const WorkflowTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const templateId = yield* toPhysicalId(
         id,
         news.templateId,

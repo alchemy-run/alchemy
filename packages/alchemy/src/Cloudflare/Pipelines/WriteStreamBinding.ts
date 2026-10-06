@@ -4,11 +4,7 @@ import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { isLegacyPipeline, type LegacyPipeline } from "./LegacyPipeline.ts";
 import type { Stream } from "./Stream.ts";
-import {
-  StreamSendError,
-  WriteStream,
-  type WriteStreamClient,
-} from "./WriteStream.ts";
+import { StreamSendError, WriteStream, type WriteStreamClient } from "./WriteStream.ts";
 
 /**
  * Implementation of the {@link WriteStream} service that uses a native
@@ -29,9 +25,7 @@ export const WriteStreamBinding = Layer.effect(
               name: stream.LogicalId,
               // A stream is bound by id; a legacy pipeline by name (the
               // API identifier of the legacy generation).
-              pipeline: isLegacyPipeline(stream)
-                ? stream.name
-                : stream.streamId,
+              pipeline: isLegacyPipeline(stream) ? stream.name : stream.streamId,
             },
           ],
         });
@@ -47,9 +41,7 @@ export const makeWriteStreamClient = (
   env: Record<string, any>,
   stream: Stream | LegacyPipeline,
 ): WriteStreamClient => {
-  const raw = Effect.sync(
-    () => (env as Record<string, Pipeline>)[stream.LogicalId]!,
-  );
+  const raw = Effect.sync(() => (env as Record<string, Pipeline>)[stream.LogicalId]!);
   return {
     raw,
     send: (records) =>

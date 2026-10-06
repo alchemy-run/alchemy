@@ -27,9 +27,7 @@ export interface StopApplication extends Binding.Service<
   "AWS.EMRServerless.StopApplication",
   (
     application: Application,
-  ) => Effect.Effect<
-    () => Effect.Effect<emr.StopApplicationResponse, emr.StopApplicationError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<emr.StopApplicationResponse, emr.StopApplicationError>>
 > {}
 export const StopApplication = Binding.Service<StopApplication>(
   "AWS.EMRServerless.StopApplication",

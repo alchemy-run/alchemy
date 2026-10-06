@@ -1,3 +1,9 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Stream from "effect/Stream";
 import {
   RpcDecodeError,
   RpcCallError,
@@ -17,16 +23,8 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "@/Cloudflare/Workers/Rpc";
-import { describe, expect, it } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Stream from "effect/Stream";
 
-class MyError extends Data.TaggedError("MyError")<{
-  readonly message: string;
-}> {}
+class MyError extends Data.TaggedError("MyError")<{ readonly message: string }> {}
 
 // ---------------------------------------------------------------------------
 // RpcDecodeError
@@ -34,14 +32,7 @@ class MyError extends Data.TaggedError("MyError")<{
 
 describe(
   "RpcDecodeError",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("message delegates to Error.message when cause is an Error", () =>
       Effect.gen(function* () {
@@ -66,21 +57,11 @@ describe(
 
 describe(
   "RpcCallError",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("message includes method name and Error.message", () =>
       Effect.gen(function* () {
-        const err = new RpcCallError({
-          method: "doStuff",
-          cause: new Error("boom"),
-        });
+        const err = new RpcCallError({ method: "doStuff", cause: new Error("boom") });
         expect(err._tag).toBe("RpcCallError");
         expect(err.message).toBe('RPC call to "doStuff" failed: boom');
       }),
@@ -101,21 +82,11 @@ describe(
 
 describe(
   "isRpcErrorEnvelope",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("detects valid envelope", () =>
       Effect.gen(function* () {
-        const envelope: RpcErrorEnvelope = {
-          _tag: ErrorTag,
-          error: { message: "boom" },
-        };
+        const envelope: RpcErrorEnvelope = { _tag: ErrorTag, error: { message: "boom" } };
         expect(isRpcErrorEnvelope(envelope)).toBe(true);
       }),
     );
@@ -139,14 +110,7 @@ describe(
 
 describe(
   "isRpcStreamEnvelope",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("detects valid bytes envelope", () =>
       Effect.gen(function* () {
@@ -176,18 +140,10 @@ describe(
         expect(isRpcStreamEnvelope(42)).toBe(false);
         expect(isRpcStreamEnvelope({ _tag: StreamTag })).toBe(false);
         expect(
-          isRpcStreamEnvelope({
-            _tag: StreamTag,
-            encoding: "xml",
-            body: new ReadableStream(),
-          }),
+          isRpcStreamEnvelope({ _tag: StreamTag, encoding: "xml", body: new ReadableStream() }),
         ).toBe(false);
         expect(
-          isRpcStreamEnvelope({
-            _tag: StreamTag,
-            encoding: "jsonl",
-            body: "not a stream",
-          }),
+          isRpcStreamEnvelope({ _tag: StreamTag, encoding: "jsonl", body: "not a stream" }),
         ).toBe(false);
       }),
     );
@@ -200,14 +156,7 @@ describe(
 
 describe(
   "encodeRpcError",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("preserves tagged error fields", () =>
       Effect.gen(function* () {
@@ -260,9 +209,7 @@ const textToReadableStream = (text: string): ReadableStream<Uint8Array> => {
   });
 };
 
-const bytesToReadableStream = (
-  chunks: Uint8Array[],
-): ReadableStream<Uint8Array> =>
+const bytesToReadableStream = (chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
   new ReadableStream({
     start(controller) {
       for (const chunk of chunks) {
@@ -278,14 +225,7 @@ const bytesToReadableStream = (
 
 describe(
   "fromRpcReadableStream",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("bytes encoding passes raw Uint8Array chunks through", () =>
       Effect.gen(function* () {
@@ -332,26 +272,13 @@ describe(
 
 describe(
   "fromRpcStreamEnvelope",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("delegates to fromRpcReadableStream", () =>
       Effect.gen(function* () {
         const body = textToReadableStream('{"v":99}\n');
-        const envelope: RpcStreamEnvelope = {
-          _tag: StreamTag,
-          encoding: "jsonl",
-          body,
-        };
-        const chunks = yield* Stream.runCollect(
-          fromRpcStreamEnvelope(envelope),
-        );
+        const envelope: RpcStreamEnvelope = { _tag: StreamTag, encoding: "jsonl", body };
+        const chunks = yield* Stream.runCollect(fromRpcStreamEnvelope(envelope));
         expect(chunks).toEqual([{ v: 99 }]);
       }),
     );
@@ -364,14 +291,7 @@ describe(
 
 describe(
   "decodeRpcValue",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("passes through plain values", () =>
       Effect.gen(function* () {
@@ -384,11 +304,7 @@ describe(
     it.effect("converts stream envelope to Effect Stream", () =>
       Effect.gen(function* () {
         const body = textToReadableStream('{"k":1}\n');
-        const envelope: RpcStreamEnvelope = {
-          _tag: StreamTag,
-          encoding: "jsonl",
-          body,
-        };
+        const envelope: RpcStreamEnvelope = { _tag: StreamTag, encoding: "jsonl", body };
         const result = decodeRpcValue(envelope);
         expect(Stream.isStream(result)).toBe(true);
         const chunks = yield* Stream.runCollect(result as Stream.Stream<any>);
@@ -415,14 +331,7 @@ describe(
 
 describe(
   "decodeRpcResult",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("succeeds for plain values", () =>
       Effect.gen(function* () {
@@ -475,11 +384,7 @@ describe(
     it.effect("wraps stream envelopes in succeed (stream passthrough)", () =>
       Effect.gen(function* () {
         const body = textToReadableStream('{"s":1}\n');
-        const envelope: RpcStreamEnvelope = {
-          _tag: StreamTag,
-          encoding: "jsonl",
-          body,
-        };
+        const envelope: RpcStreamEnvelope = { _tag: StreamTag, encoding: "jsonl", body };
         const result = yield* decodeRpcResult(envelope);
         expect(Stream.isStream(result)).toBe(true);
         const chunks = yield* Stream.runCollect(result as Stream.Stream<any>);
@@ -495,14 +400,7 @@ describe(
 
 describe(
   "toRpcStream",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("selects jsonl encoding for non-byte data", () =>
       Effect.gen(function* () {
@@ -567,23 +465,12 @@ describe(
 
 describe(
   "makeRpcStub",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("proxies successful calls", () =>
       Effect.gen(function* () {
-        const mockStub = {
-          greet: async (name: string) => `hello ${name}`,
-        };
-        const stub = makeRpcStub<{
-          greet: (name: string) => Effect.Effect<string>;
-        }>(mockStub);
+        const mockStub = { greet: async (name: string) => `hello ${name}` };
+        const stub = makeRpcStub<{ greet: (name: string) => Effect.Effect<string> }>(mockStub);
 
         const result = yield* stub.greet("world");
         expect(result).toBe("hello world");
@@ -597,9 +484,7 @@ describe(
             throw new Error("kaboom");
           },
         };
-        const stub = makeRpcStub<{
-          boom: () => Effect.Effect<never, RpcCallError>;
-        }>(mockStub);
+        const stub = makeRpcStub<{ boom: () => Effect.Effect<never, RpcCallError> }>(mockStub);
 
         const exit = yield* Effect.exit(stub.boom());
         expect(Exit.isFailure(exit)).toBe(true);
@@ -640,15 +525,11 @@ describe(
       Effect.gen(function* () {
         const body = textToReadableStream('{"n":42}\n');
         const mockStub = {
-          streamMe: async () => ({
-            _tag: StreamTag,
-            encoding: "jsonl" as const,
-            body,
-          }),
+          streamMe: async () => ({ _tag: StreamTag, encoding: "jsonl" as const, body }),
         };
-        const stub = makeRpcStub<{
-          streamMe: () => Effect.Effect<Stream.Stream<{ n: number }>>;
-        }>(mockStub);
+        const stub = makeRpcStub<{ streamMe: () => Effect.Effect<Stream.Stream<{ n: number }>> }>(
+          mockStub,
+        );
 
         const stream = yield* stub.streamMe();
         expect(Stream.isStream(stream)).toBe(true);
@@ -665,14 +546,7 @@ describe(
 
 describe(
   "stream errors",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     it.effect("toRpcStream encodes a stream that fails immediately", () =>
       Effect.gen(function* () {
@@ -714,10 +588,7 @@ describe(
           expect(reason).toBeDefined();
           const err = reason!.error;
           expect(err).toBeInstanceOf(RpcRemoteStreamError);
-          expect((err as RpcRemoteStreamError).error).toEqual({
-            _tag: "MyError",
-            message: "mid",
-          });
+          expect((err as RpcRemoteStreamError).error).toEqual({ _tag: "MyError", message: "mid" });
         }
       }),
     );
@@ -736,10 +607,7 @@ describe(
           const reason = exit.cause.reasons.find(Cause.isFailReason);
           const err = reason!.error;
           expect(err).toBeInstanceOf(RpcRemoteStreamError);
-          expect((err as RpcRemoteStreamError).error).toEqual({
-            _tag: "MyError",
-            message: "wire",
-          });
+          expect((err as RpcRemoteStreamError).error).toEqual({ _tag: "MyError", message: "wire" });
         }
       }),
     );
@@ -765,37 +633,29 @@ describe(
       }),
     );
 
-    it.effect(
-      "makeRpcStub preserves stream errors (not collapsed to RpcCallError)",
-      () =>
-        Effect.gen(function* () {
-          const errorLine = JSON.stringify({
-            _tag: StreamErrorTag,
-            error: { _tag: "MyError", message: "remote stream err" },
-          });
-          const body = textToReadableStream(`{"n":1}\n${errorLine}\n`);
-          const mockStub = {
-            streamFail: async () => ({
-              _tag: StreamTag,
-              encoding: "jsonl" as const,
-              body,
-            }),
-          };
-          const stub = makeRpcStub<{
-            streamFail: () => Effect.Effect<
-              Stream.Stream<unknown, RpcRemoteStreamError>
-            >;
-          }>(mockStub);
+    it.effect("makeRpcStub preserves stream errors (not collapsed to RpcCallError)", () =>
+      Effect.gen(function* () {
+        const errorLine = JSON.stringify({
+          _tag: StreamErrorTag,
+          error: { _tag: "MyError", message: "remote stream err" },
+        });
+        const body = textToReadableStream(`{"n":1}\n${errorLine}\n`);
+        const mockStub = {
+          streamFail: async () => ({ _tag: StreamTag, encoding: "jsonl" as const, body }),
+        };
+        const stub = makeRpcStub<{
+          streamFail: () => Effect.Effect<Stream.Stream<unknown, RpcRemoteStreamError>>;
+        }>(mockStub);
 
-          const stream = yield* stub.streamFail();
-          const exit = yield* Effect.exit(Stream.runCollect(stream));
-          expect(Exit.isFailure(exit)).toBe(true);
-          if (Exit.isFailure(exit)) {
-            const reason = exit.cause.reasons.find(Cause.isFailReason);
-            expect(reason).toBeDefined();
-            expect(reason!.error).toBeInstanceOf(RpcRemoteStreamError);
-          }
-        }),
+        const stream = yield* stub.streamFail();
+        const exit = yield* Effect.exit(Stream.runCollect(stream));
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const reason = exit.cause.reasons.find(Cause.isFailReason);
+          expect(reason).toBeDefined();
+          expect(reason!.error).toBeInstanceOf(RpcRemoteStreamError);
+        }
+      }),
     );
   },
 );

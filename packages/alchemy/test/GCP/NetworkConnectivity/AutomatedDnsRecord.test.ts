@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Consumer-created DNS records need `networkconnectivity.serviceClasses.use` on
 // the Google producer's service class, which the testing project lacks
@@ -71,30 +68,24 @@ test.provider.skipIf(!runLifecycle)(
             ipCidrRange: "10.23.0.0/24",
             privateIpGoogleAccess: true,
           });
-          const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy(
-            "RedisPolicy",
-            {
-              serviceClass: "gcp-memorystore-redis",
-              network: network.selfLink.as<string>(),
-              pscConfig: {
-                subnetworks: [subnet.selfLink.as<string>()],
-              },
+          const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy("RedisPolicy", {
+            serviceClass: "gcp-memorystore-redis",
+            network: network.selfLink.as<string>(),
+            pscConfig: {
+              subnetworks: [subnet.selfLink.as<string>()],
             },
-          );
-          const record = yield* GCP.NetworkConnectivity.AutomatedDnsRecord(
-            "Redis",
-            {
-              serviceClass: policy.serviceClass.as<string>(),
-              creationMode: "CONSUMER_API",
-              recordType: "A",
-              hostname: "redis",
-              dnsSuffix: "psc.internal.",
-              originalConfig: { ttl: "30s", rrdatas: ["10.0.0.1"] },
-              consumerNetwork: network.selfLink.as<string>(),
-              description: "adr a",
-              labels: { env: "test" },
-            },
-          );
+          });
+          const record = yield* GCP.NetworkConnectivity.AutomatedDnsRecord("Redis", {
+            serviceClass: policy.serviceClass.as<string>(),
+            creationMode: "CONSUMER_API",
+            recordType: "A",
+            hostname: "redis",
+            dnsSuffix: "psc.internal.",
+            originalConfig: { ttl: "30s", rrdatas: ["10.0.0.1"] },
+            consumerNetwork: network.selfLink.as<string>(),
+            description: "adr a",
+            labels: { env: "test" },
+          });
           return { network, subnet, policy, record };
         }),
       );
@@ -105,17 +96,14 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.record.hostname).toEqual("redis");
       expect(created.record.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networkconnectivity.getProjectsLocationsAutomatedDnsRecords({
-          name: created.record.name,
-        });
+      const fetched = yield* networkconnectivity.getProjectsLocationsAutomatedDnsRecords({
+        name: created.record.name,
+      });
       expect(fetched.name).toEqual(created.record.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       yield* stack.destroy();
 

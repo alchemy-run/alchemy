@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ContactCenterNotResolved,
@@ -234,15 +229,10 @@ export type ContactCenter = Resource<
  * @resource
  * @category ContactCenterAIPlatform
  */
-export const ContactCenter = Resource<ContactCenter>(
-  "GCP.ContactCenterAIPlatform.ContactCenter",
-);
+export const ContactCenter = Resource<ContactCenter>("GCP.ContactCenterAIPlatform.ContactCenter");
 
-const resourceName = (
-  project: string,
-  location: string,
-  contactCenterId: string,
-) => `${locationParent(project, location)}/contactCenters/${contactCenterId}`;
+const resourceName = (project: string, location: string, contactCenterId: string) =>
+  `${locationParent(project, location)}/contactCenters/${contactCenterId}`;
 
 const instanceConfigOf = (news: ContactCenterProps): ccaip.InstanceConfig =>
   news.instanceConfig ?? {
@@ -250,9 +240,7 @@ const instanceConfigOf = (news: ContactCenterProps): ccaip.InstanceConfig =>
   };
 
 const channelBody = (news: ContactCenterProps) => {
-  const channel =
-    news.releaseChannel ??
-    (news.critical !== undefined ? "critical" : undefined);
+  const channel = news.releaseChannel ?? (news.critical !== undefined ? "critical" : undefined);
   return {
     early: channel === "early" ? {} : undefined,
     normal: channel === "normal" ? {} : undefined,
@@ -260,11 +248,7 @@ const channelBody = (news: ContactCenterProps) => {
   };
 };
 
-const toAttrs = (
-  item: ccaip.ContactCenter,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: ccaip.ContactCenter, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -307,9 +291,7 @@ const getByName = (name: string) =>
 
 const getLive = (name: string) =>
   getByName(name).pipe(
-    Effect.map((item) =>
-      item === undefined || isTerminated(item.state) ? undefined : item,
-    ),
+    Effect.map((item) => (item === undefined || isTerminated(item.state) ? undefined : item)),
   );
 
 export const ContactCenterProvider = () =>
@@ -326,21 +308,15 @@ export const ContactCenterProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const previousSize =
-        olds?.instanceConfig?.instanceSize ??
-        olds?.instanceSize ??
-        output?.instanceSize;
+        olds?.instanceConfig?.instanceSize ?? olds?.instanceSize ?? output?.instanceSize;
       const nextSize = news.instanceConfig?.instanceSize ?? news.instanceSize;
-      const previousPrefix =
-        olds?.customerDomainPrefix ?? output?.customerDomainPrefix;
+      const previousPrefix = olds?.customerDomainPrefix ?? output?.customerDomainPrefix;
       const previousKms = olds?.kmsKey ?? output?.kmsKey;
       return replaceOnIdentity({
         previousId: olds?.contactCenterId ?? output?.contactCenterId,
@@ -351,40 +327,29 @@ export const ContactCenterProvider = () =>
           (previousPrefix !== undefined &&
             news.customerDomainPrefix !== undefined &&
             previousPrefix !== news.customerDomainPrefix) ||
-          (previousSize !== undefined &&
-            nextSize !== undefined &&
-            previousSize !== nextSize) ||
-          (previousKms !== undefined &&
-            news.kmsKey !== undefined &&
-            previousKms !== news.kmsKey) ||
+          (previousSize !== undefined && nextSize !== undefined && previousSize !== nextSize) ||
+          (previousKms !== undefined && news.kmsKey !== undefined && previousKms !== news.kmsKey) ||
           (olds?.instanceConfig !== undefined &&
             news.instanceConfig !== undefined &&
-            fingerprint(olds.instanceConfig) !==
-              fingerprint(news.instanceConfig)),
+            fingerprint(olds.instanceConfig) !== fingerprint(news.instanceConfig)),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const contactCenterId = yield* toPhysicalId(
         id,
         olds?.contactCenterId,
         output?.contactCenterId,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, contactCenterId);
+      const name = output?.name ?? resourceName(env.project, location, contactCenterId);
       const existing = yield* getLive(name);
       if (existing === undefined) {
         return undefined;
       }
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -401,17 +366,13 @@ export const ContactCenterProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const contactCenterId = yield* toPhysicalId(
         id,
         news.contactCenterId,
         output?.contactCenterId,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, contactCenterId);
+      const name = output?.name ?? resourceName(env.project, location, contactCenterId);
       const parent = locationParent(env.project, location);
       const customerDomainPrefix = yield* toDomainPrefix(
         news.customerDomainPrefix,
@@ -469,8 +430,7 @@ export const ContactCenterProvider = () =>
         (item) => item.state,
       ).pipe(
         Effect.catchIf(
-          (error) =>
-            error._tag === "GCP.ContactCenterAIPlatform.ContactCenterNotReady",
+          (error) => error._tag === "GCP.ContactCenterAIPlatform.ContactCenterNotReady",
           () => waitUntilExists(getLive(currentName), currentName),
         ),
       );
@@ -481,29 +441,21 @@ export const ContactCenterProvider = () =>
       const displayChanged = !sameText(live.displayName, displayName);
       const emailChanged = !sameText(live.userEmail, news.userEmail);
       const adminChanged = !sameJson(live.adminUser, news.adminUser);
-      const managedChanged = !sameBool(
-        live.ccaipManagedUsers,
-        news.ccaipManagedUsers,
-      );
+      const managedChanged = !sameBool(live.ccaipManagedUsers, news.ccaipManagedUsers);
       const samlChanged =
-        news.samlParams !== undefined &&
-        !sameJson(live.samlParams, news.samlParams);
+        news.samlParams !== undefined && !sameJson(live.samlParams, news.samlParams);
       const featureChanged =
-        news.featureConfig !== undefined &&
-        !sameJson(live.featureConfig, news.featureConfig);
+        news.featureConfig !== undefined && !sameJson(live.featureConfig, news.featureConfig);
       const privateChanged =
-        news.privateAccess !== undefined &&
-        !sameJson(live.privateAccess, news.privateAccess);
+        news.privateAccess !== undefined && !sameJson(live.privateAccess, news.privateAccess);
       const reportingChanged = !sameBool(
         live.advancedReportingEnabled,
         news.advancedReportingEnabled,
       );
       const desiredChannel =
-        news.releaseChannel ??
-        (news.critical !== undefined ? "critical" : undefined);
+        news.releaseChannel ?? (news.critical !== undefined ? "critical" : undefined);
       const channelChanged =
-        desiredChannel !== undefined &&
-        releaseChannelOf(live) !== desiredChannel;
+        desiredChannel !== undefined && releaseChannelOf(live) !== desiredChannel;
       const criticalChanged =
         news.critical !== undefined && !sameJson(live.critical, news.critical);
 

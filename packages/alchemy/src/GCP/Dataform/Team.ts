@@ -93,17 +93,11 @@ export type Team = Resource<
  */
 export const Team = Resource<Team>("GCP.Dataform.Team");
 
-export class TeamNotResolved extends Data.TaggedError(
-  "GCP.Dataform.TeamNotResolved",
-)<{
+export class TeamNotResolved extends Data.TaggedError("GCP.Dataform.TeamNotResolved")<{
   name: string;
 }> {}
 
-const toAttrs = (
-  folder: dataform.TeamFolder,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (folder: dataform.TeamFolder, project: string, region: string) => {
   const name = folder.name ?? "";
   const parsed = parseResourceName(name, "teamFolders", region);
   return {
@@ -159,18 +153,13 @@ export const TeamProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const existing = output?.name
         ? yield* getByName(output.name)
         : yield* findOwned(env.project, location, id, olds?.displayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -184,10 +173,7 @@ export const TeamProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
 
@@ -202,9 +188,7 @@ export const TeamProvider = () =>
             body: { displayName },
           }),
         ).pipe(
-          Effect.catchTag("Conflict", () =>
-            findOwned(env.project, location, id, news.displayName),
-          ),
+          Effect.catchTag("Conflict", () => findOwned(env.project, location, id, news.displayName)),
         );
         current = created ?? undefined;
         if (current?.name) {

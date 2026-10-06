@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fingerprint,
@@ -84,17 +79,13 @@ export type DeploymentProps = {
    * (`CREATE_OR_ACQUIRE` or `ACQUIRE`).
    * @default "CREATE_OR_ACQUIRE"
    */
-  createPolicy?:
-    | deploymentmanager.InsertDeploymentsCreatePolicyEnum
-    | (string & {});
+  createPolicy?: deploymentmanager.InsertDeploymentsCreatePolicyEnum | (string & {});
   /**
    * Policy for deleting resources when the deployment is destroyed
    * (`DELETE` or `ABANDON`).
    * @default "DELETE"
    */
-  deletePolicy?:
-    | deploymentmanager.DeleteDeploymentsDeletePolicyEnum
-    | (string & {});
+  deletePolicy?: deploymentmanager.DeleteDeploymentsDeletePolicyEnum | (string & {});
   /**
    * When true, create or update shell resources without instantiating
    * them. A later reconcile with `preview: false` deploys the preview.
@@ -212,16 +203,12 @@ export type Deployment = Resource<
  * @resource
  * @category DeploymentManager
  */
-export const Deployment = Resource<Deployment>(
-  "GCP.DeploymentManager.Deployment",
-);
+export const Deployment = Resource<Deployment>("GCP.DeploymentManager.Deployment");
 
 const DEFAULT_CREATE_POLICY = "CREATE_OR_ACQUIRE";
 const DEFAULT_DELETE_POLICY = "DELETE";
 
-const desiredTarget = (
-  target: TargetConfiguration,
-): deploymentmanager.TargetConfiguration => ({
+const desiredTarget = (target: TargetConfiguration): deploymentmanager.TargetConfiguration => ({
   config: { content: target.config.content },
   imports:
     target.imports === undefined
@@ -245,11 +232,7 @@ const observedTarget = (
   };
 };
 
-const toAttrs = (
-  item: deploymentmanager.Deployment,
-  project: string,
-  deletePolicy: string,
-) => ({
+const toAttrs = (item: deploymentmanager.Deployment, project: string, deletePolicy: string) => ({
   name: item.name ?? "",
   deploymentId: item.name ?? "",
   project,
@@ -265,10 +248,7 @@ const toAttrs = (
   deletePolicy,
 });
 
-const replaceOnName = (input: {
-  previousId: string | undefined;
-  nextId: string | undefined;
-}) => {
+const replaceOnName = (input: { previousId: string | undefined; nextId: string | undefined }) => {
   if (
     input.previousId === undefined ||
     input.nextId === undefined ||
@@ -296,15 +276,8 @@ export const DeploymentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const deploymentId = yield* toPhysicalId(
-        id,
-        olds?.deploymentId,
-        output?.deploymentId,
-      );
-      const existing = yield* getDeployment(
-        env.project,
-        output?.name ?? deploymentId,
-      );
+      const deploymentId = yield* toPhysicalId(id, olds?.deploymentId, output?.deploymentId);
+      const existing = yield* getDeployment(env.project, output?.name ?? deploymentId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(
         existing,
@@ -320,18 +293,12 @@ export const DeploymentProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwnedDeployments(env.project);
-        return items.map((item) =>
-          toAttrs(item, env.project, DEFAULT_DELETE_POLICY),
-        );
+        return items.map((item) => toAttrs(item, env.project, DEFAULT_DELETE_POLICY));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const deploymentId = yield* toPhysicalId(
-        id,
-        news.deploymentId,
-        output?.deploymentId,
-      );
+      const deploymentId = yield* toPhysicalId(id, news.deploymentId, output?.deploymentId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -341,16 +308,10 @@ export const DeploymentProvider = () =>
       const createPolicy = news.createPolicy ?? DEFAULT_CREATE_POLICY;
       const deletePolicy = news.deletePolicy ?? DEFAULT_DELETE_POLICY;
 
-      let current = yield* getDeployment(
-        env.project,
-        output?.name ?? deploymentId,
-      );
+      let current = yield* getDeployment(env.project, output?.name ?? deploymentId);
       if (current !== undefined) {
         yield* settleDeployment(env.project, current);
-        current = yield* getDeployment(
-          env.project,
-          current.name ?? deploymentId,
-        );
+        current = yield* getDeployment(env.project, current.name ?? deploymentId);
       }
 
       if (current === undefined) {
@@ -370,10 +331,7 @@ export const DeploymentProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(env.project, created);
         }
-        current = yield* waitUntilExists(
-          getDeployment(env.project, deploymentId),
-          deploymentId,
-        );
+        current = yield* waitUntilExists(getDeployment(env.project, deploymentId), deploymentId);
       }
 
       if (current === undefined) {
@@ -384,10 +342,7 @@ export const DeploymentProvider = () =>
       const observedLabels = labelsToRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged = !sameText(
-        current.description,
-        news.description,
-      );
+      const descriptionChanged = !sameText(current.description, news.description);
       const observedPreview = current.update !== undefined;
       const previewChanged = observedPreview !== preview;
       const manifest = yield* getManifest(
@@ -400,12 +355,7 @@ export const DeploymentProvider = () =>
           ? fingerprint(observedTarget(manifest)) !== fingerprint(news.target)
           : fingerprint(olds.target) !== fingerprint(news.target);
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        previewChanged ||
-        targetChanged
-      ) {
+      if (labelsChanged || descriptionChanged || previewChanged || targetChanged) {
         const operation = yield* deploymentmanager
           .patchDeployments({
             project: env.project,
@@ -429,10 +379,7 @@ export const DeploymentProvider = () =>
             }),
           );
         yield* waitForOperation(env.project, operation);
-        current = yield* waitUntilExists(
-          getDeployment(env.project, name),
-          name,
-        );
+        current = yield* waitUntilExists(getDeployment(env.project, name), name);
       }
 
       if (current === undefined) {
@@ -465,9 +412,6 @@ export const DeploymentProvider = () =>
       if (operation !== undefined) {
         yield* waitForOperation(env.project, operation, { notFoundOk: true });
       }
-      yield* waitUntilGone(
-        getDeployment(env.project, output.name),
-        output.name,
-      );
+      yield* waitUntilGone(getDeployment(env.project, output.name), output.name);
     }),
   });

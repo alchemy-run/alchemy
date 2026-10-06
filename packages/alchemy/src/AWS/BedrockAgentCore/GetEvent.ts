@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Memory } from "./Memory.ts";
 
-export interface GetEventRequest extends Omit<
-  agentcore.GetEventInput,
-  "memoryId"
-> {}
+export interface GetEventRequest extends Omit<agentcore.GetEventInput, "memoryId"> {}
 
 /**
  * Fetches a single short-term event from an actor's session.
@@ -42,11 +39,7 @@ export interface GetEvent extends Binding.Service<
   <R extends Memory>(
     memory: R,
   ) => Effect.Effect<
-    (
-      request: GetEventRequest,
-    ) => Effect.Effect<agentcore.GetEventOutput, agentcore.GetEventError>
+    (request: GetEventRequest) => Effect.Effect<agentcore.GetEventOutput, agentcore.GetEventError>
   >
 > {}
-export const GetEvent = Binding.Service<GetEvent>(
-  "AWS.BedrockAgentCore.GetEvent",
-);
+export const GetEvent = Binding.Service<GetEvent>("AWS.BedrockAgentCore.GetEvent");

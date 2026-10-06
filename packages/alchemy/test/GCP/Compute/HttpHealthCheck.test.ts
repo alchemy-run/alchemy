@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, httpHealthCheck: string) =>
   compute.getHttpHealthChecks({ project, httpHealthCheck }).pipe(
@@ -89,9 +86,7 @@ test.provider(
       expect(refetched.port).toEqual(8080);
       expect(refetched.host).toEqual("ready.example");
 
-      const nextName = `r${created.httpHealthCheckName}`
-        .slice(0, 63)
-        .replace(/-+$/, "x");
+      const nextName = `r${created.httpHealthCheckName}`.slice(0, 63).replace(/-+$/, "x");
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Compute.HttpHealthCheck("Api", {
@@ -114,18 +109,12 @@ test.provider(
       expect(afterReplace.name).toEqual(nextName);
       expect(afterReplace.requestPath).toEqual("/live");
 
-      const oldGone = yield* waitUntilGone(
-        created.project,
-        created.httpHealthCheckName,
-      );
+      const oldGone = yield* waitUntilGone(created.project, created.httpHealthCheckName);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        replaced.project,
-        replaced.httpHealthCheckName,
-      );
+      const gone = yield* waitUntilGone(replaced.project, replaced.httpHealthCheckName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },

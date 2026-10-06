@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as we from "@distilled.cloud/gcp/workspaceevents_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Subscriptions need a real Workspace resource (e.g. a Chat space) the
 // credentials can watch; set GCP_TEST_WORKSPACE_EVENTS_TARGET to run the lifecycle.
@@ -85,58 +82,45 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
 
       const targetResource =
-        process.env.GCP_TEST_WORKSPACE_EVENTS_TARGET ??
-        "//chat.googleapis.com/spaces/-";
+        process.env.GCP_TEST_WORKSPACE_EVENTS_TARGET ?? "//chat.googleapis.com/spaces/-";
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const topic = yield* GCP.PubSub.Topic("WorkspaceEvents", {});
-          const subscription = yield* GCP.WorkspaceEvents.Subscription(
-            "SpaceEvents",
-            {
-              targetResource,
-              eventTypes: ["google.workspace.chat.message.v1.created"],
-              pubsubTopic: topic.name,
-              ttl: "3600s",
-            },
-          );
+          const subscription = yield* GCP.WorkspaceEvents.Subscription("SpaceEvents", {
+            targetResource,
+            eventTypes: ["google.workspace.chat.message.v1.created"],
+            pubsubTopic: topic.name,
+            ttl: "3600s",
+          });
           return { topic, subscription };
         }),
       );
 
-      expect(created.subscription.name.startsWith("subscriptions/")).toEqual(
-        true,
-      );
+      expect(created.subscription.name.startsWith("subscriptions/")).toEqual(true);
       expect(created.subscription.subscriptionId.length).toBeGreaterThan(0);
       expect(created.subscription.targetResource).toEqual(targetResource);
-      expect(created.subscription.eventTypes).toContain(
-        "google.workspace.chat.message.v1.created",
-      );
+      expect(created.subscription.eventTypes).toContain("google.workspace.chat.message.v1.created");
 
       const fetched = yield* we.getSubscriptions({
         name: created.subscription.name,
       });
       expect(fetched.name).toEqual(created.subscription.name);
-      expect(fetched.notificationEndpoint?.pubsubTopic).toEqual(
-        created.topic.name,
-      );
+      expect(fetched.notificationEndpoint?.pubsubTopic).toEqual(created.topic.name);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const topic = yield* GCP.PubSub.Topic("WorkspaceEvents", {});
-          const subscription = yield* GCP.WorkspaceEvents.Subscription(
-            "SpaceEvents",
-            {
-              subscriptionId: created.subscription.subscriptionId,
-              targetResource,
-              eventTypes: [
-                "google.workspace.chat.message.v1.created",
-                "google.workspace.chat.message.v1.updated",
-              ],
-              pubsubTopic: topic.name,
-              ttl: "7200s",
-            },
-          );
+          const subscription = yield* GCP.WorkspaceEvents.Subscription("SpaceEvents", {
+            subscriptionId: created.subscription.subscriptionId,
+            targetResource,
+            eventTypes: [
+              "google.workspace.chat.message.v1.created",
+              "google.workspace.chat.message.v1.updated",
+            ],
+            pubsubTopic: topic.name,
+            ttl: "7200s",
+          });
           return { topic, subscription };
         }),
       );

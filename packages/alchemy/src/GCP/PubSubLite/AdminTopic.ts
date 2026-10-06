@@ -196,18 +196,15 @@ const desiredPartition = (news: AdminTopicProps): pubsublite.PartitionConfig =>
   partitionBody({
     count: news.partitionConfig?.count ?? DEFAULT_PARTITION_COUNT,
     capacity: {
-      publishMibPerSec:
-        news.partitionConfig?.capacity?.publishMibPerSec ?? DEFAULT_PUBLISH_MIB,
+      publishMibPerSec: news.partitionConfig?.capacity?.publishMibPerSec ?? DEFAULT_PUBLISH_MIB,
       subscribeMibPerSec:
-        news.partitionConfig?.capacity?.subscribeMibPerSec ??
-        DEFAULT_SUBSCRIBE_MIB,
+        news.partitionConfig?.capacity?.subscribeMibPerSec ?? DEFAULT_SUBSCRIBE_MIB,
     },
   });
 
 const desiredRetention = (news: AdminTopicProps): pubsublite.RetentionConfig =>
   retentionBody({
-    perPartitionBytes:
-      news.retentionConfig?.perPartitionBytes ?? DEFAULT_PER_PARTITION_BYTES,
+    perPartitionBytes: news.retentionConfig?.perPartitionBytes ?? DEFAULT_PER_PARTITION_BYTES,
     period: news.retentionConfig?.period,
   });
 
@@ -218,24 +215,14 @@ const desiredReservation = (
 ): pubsublite.ReservationConfig | undefined => {
   const reservation = news.reservationConfig?.throughputReservation;
   if (reservation === undefined || reservation.length === 0) {
-    return news.reservationConfig === undefined
-      ? undefined
-      : { throughputReservation: undefined };
+    return news.reservationConfig === undefined ? undefined : { throughputReservation: undefined };
   }
   return {
-    throughputReservation: expandName(
-      reservation,
-      project,
-      regionOf(location),
-      COLLECTION,
-    ),
+    throughputReservation: expandName(reservation, project, regionOf(location), COLLECTION),
   };
 };
 
-const toAttrs = (
-  topic: pubsublite.Topic,
-  project: string,
-): AdminTopic["Attributes"] => {
+const toAttrs = (topic: pubsublite.Topic, project: string): AdminTopic["Attributes"] => {
   const name = topic.name ?? "";
   const parsed = parseName(name, TOPIC_COLLECTION);
   return {
@@ -255,9 +242,7 @@ export const AdminTopicProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousCount = countOf(
-        olds?.partitionConfig?.count ?? output?.partitionConfig?.count,
-      );
+      const previousCount = countOf(olds?.partitionConfig?.count ?? output?.partitionConfig?.count);
       const nextCount = countOf(
         news.partitionConfig?.count ??
           olds?.partitionConfig?.count ??
@@ -266,10 +251,7 @@ export const AdminTopicProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.topicId ?? output?.topicId,
         nextId: news.topicId ?? olds?.topicId ?? output?.topicId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          DEFAULT_ZONE,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           DEFAULT_ZONE,
@@ -281,13 +263,8 @@ export const AdminTopicProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const topicId = yield* toResourceId(id, olds?.topicId, output?.topicId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, TOPIC_COLLECTION, topicId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
+      const name = output?.name ?? resourceName(env.project, location, TOPIC_COLLECTION, topicId);
       const existing = yield* getTopic(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -306,16 +283,8 @@ export const AdminTopicProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const topicId = yield* toResourceId(id, news.topicId, output?.topicId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        TOPIC_COLLECTION,
-        topicId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, TOPIC_COLLECTION, topicId);
       const partitionConfig = desiredPartition(news);
       const retentionConfig = desiredRetention(news);
       const reservationConfig = desiredReservation(news, env.project, location);
@@ -352,10 +321,10 @@ export const AdminTopicProvider = () =>
           reservationConfig.throughputReservation,
         );
       const mask = fieldMask([
-        partitionKey(current.partitionConfig) !==
-          partitionKey(partitionConfig) && "partitionConfig",
-        retentionKey(current.retentionConfig) !==
-          retentionKey(retentionConfig) && "retentionConfig",
+        partitionKey(current.partitionConfig) !== partitionKey(partitionConfig) &&
+          "partitionConfig",
+        retentionKey(current.retentionConfig) !== retentionKey(retentionConfig) &&
+          "retentionConfig",
         reservationChanged && "reservationConfig",
       ]);
       if (mask.length > 0) {

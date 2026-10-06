@@ -166,9 +166,7 @@ export type AppsTool = Resource<
  */
 export const AppsTool = Resource<AppsTool>("GCP.CES.AppsTool");
 
-export class AppsToolNotResolved extends Data.TaggedError(
-  "GCP.CES.AppsToolNotResolved",
-)<{
+export class AppsToolNotResolved extends Data.TaggedError("GCP.CES.AppsToolNotResolved")<{
   name: string;
 }> {}
 
@@ -220,12 +218,7 @@ const toBody = (news: AppsToolProps): ces.Tool => ({
   systemTool: news.systemTool,
 });
 
-const toAttrs = (
-  tool: ces.Tool,
-  project: string,
-  region: string,
-  appHint?: string,
-) => {
+const toAttrs = (tool: ces.Tool, project: string, region: string, appHint?: string) => {
   const name = tool.name ?? "";
   const parsed = parseResourceName(name, "tools", region);
   const unstamped = unstampToolDescription(tool);
@@ -267,11 +260,7 @@ const listAt = (parent: string, project: string, region: string) =>
   collectPages(
     ces.listProjectsLocationsAppsTools.pages({ parent, pageSize: 100 }),
     (page) => page.tools,
-  ).pipe(
-    Effect.map((tools) =>
-      tools.map((tool) => toAttrs(tool, project, region, parent)),
-    ),
-  );
+  ).pipe(Effect.map((tools) => tools.map((tool) => toAttrs(tool, project, region, parent))));
 
 export const AppsToolProvider = () =>
   Provider.succeed(AppsTool, {
@@ -292,22 +281,14 @@ export const AppsToolProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const app = olds?.app
-        ? expandApp(olds.app, env.project, location)
-        : output?.app;
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const app = olds?.app ? expandApp(olds.app, env.project, location) : output?.app;
       const toolId = yield* toPhysicalId(id, olds?.toolId, output?.toolId);
-      const name =
-        output?.name ?? (app !== undefined ? resourceName(app, toolId) : "");
+      const name = output?.name ?? (app !== undefined ? resourceName(app, toolId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, app);
-      return output !== undefined || olds?.toolId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.toolId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -322,10 +303,7 @@ export const AppsToolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const app = expandApp(news.app, env.project, location);
       const toolId = yield* toPhysicalId(id, news.toolId, output?.toolId);
       const name = output?.name ?? resourceName(app, toolId);
@@ -350,19 +328,10 @@ export const AppsToolProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      const executionChanged = !sameText(
-        current.executionType,
-        body.executionType,
-      );
+      const executionChanged = !sameText(current.executionType, body.executionType);
       const timeoutChanged = !sameText(current.timeout, body.timeout);
-      const fakeChanged = !sameJson(
-        current.toolFakeConfig,
-        body.toolFakeConfig,
-      );
-      const variantChanged = !sameJson(
-        variantOf(current, kind),
-        variantOf(body, kind),
-      );
+      const fakeChanged = !sameJson(current.toolFakeConfig, body.toolFakeConfig);
+      const variantChanged = !sameJson(variantOf(current, kind), variantOf(body, kind));
 
       if (executionChanged || timeoutChanged || fakeChanged || variantChanged) {
         current = yield* retryTransient(
