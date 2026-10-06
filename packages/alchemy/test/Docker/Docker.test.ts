@@ -53,56 +53,6 @@ describe("Docker.materialize", (it) => {
   );
 });
 
-describe("Docker.container", (it) => {
-  it.effect(
-    "forwards env files in order before explicit environment",
-    () =>
-      Effect.gen(function* () {
-        const fake = fakeDocker(undefined);
-        yield* Effect.gen(function* () {
-          const docker = yield* Docker;
-          yield* docker.container.create({
-            name: "env-file-container",
-            image: "busybox:latest",
-            volume: undefined,
-            env: { EXPLICIT: "wins" },
-            "env-file": ["base.env", "override.env"],
-            restart: "no",
-            rm: false,
-            "health-cmd": undefined,
-            "health-interval": undefined,
-            "health-timeout": undefined,
-            "health-retries": undefined,
-            "health-start-period": undefined,
-            "health-start-interval": undefined,
-            "stop-timeout": undefined,
-            p: undefined,
-            command: ["env"],
-          });
-        }).pipe(Effect.provide(fake.layer));
-        const args = fake.calls[0]!.args;
-        expect(args).toEqual([
-          "container",
-          "create",
-          "--name",
-          "env-file-container",
-          "--env-file",
-          "base.env",
-          "--env-file",
-          "override.env",
-          "--restart",
-          "no",
-          "--env",
-          "EXPLICIT",
-          "busybox:latest",
-          "env",
-        ]);
-        expect(fake.calls[0]!.env.EXPLICIT).toBe("wins");
-      }),
-    { tags: ["unit", "provider:docker", "local"] },
-  );
-});
-
 describe("Docker registry errors", (it) => {
   for (const [description, tag] of [
     [

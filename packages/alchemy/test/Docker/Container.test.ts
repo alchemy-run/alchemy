@@ -1,6 +1,9 @@
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
@@ -59,68 +62,6 @@ test.provider(
         },
       });
       expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
-    }),
-  { tags: ["provider:docker", "provider:docker:container", "local"] },
-);
-
-test.provider(
-  "diff replaces a container when env file paths or order changes",
-  () =>
-    Effect.gen(function* () {
-      const containerProvider = yield* Provider.findProvider(Docker.Container);
-      const containerDiff = yield* containerProvider.diff!({
-        id: "web",
-        fqn: "web",
-        instanceId: "instance",
-        olds: {
-          name: "web",
-          image: "nginx:alpine",
-          envFiles: ["./base.env", "./local.env"],
-        },
-        news: {
-          name: "web",
-          image: "nginx:alpine",
-          envFiles: ["./local.env", "./base.env"],
-        },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "web",
-          name: "web",
-          status: "created",
-          createdAt: 0,
-          imageRef: "nginx:alpine",
-          ports: {},
-        },
-      });
-      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
-    }),
-  { tags: ["provider:docker", "provider:docker:container", "local"] },
-);
-
-test.provider(
-  "normalizes omitted and empty env files as equivalent",
-  () =>
-    Effect.gen(function* () {
-      const containerProvider = yield* Provider.findProvider(Docker.Container);
-      const containerDiff = yield* containerProvider.diff!({
-        id: "web",
-        fqn: "web",
-        instanceId: "instance",
-        olds: { name: "web", image: "nginx:alpine", envFiles: [] },
-        news: { name: "web", image: "nginx:alpine" },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "web",
-          name: "web",
-          status: "created",
-          createdAt: 0,
-          imageRef: "nginx:alpine",
-          ports: {},
-        },
-      });
-      expect(containerDiff).toBeUndefined();
     }),
   { tags: ["provider:docker", "provider:docker:container", "local"] },
 );
@@ -403,6 +344,94 @@ describe(
           expect.arrayContaining(["PLAIN_VALUE=plain-value", "SECRET_VALUE=secret-value"]),
         );
       }),
+    );
+
+    const writeEnvFiles = Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-env-files-" });
+      const base = path.join(dir, "base.env");
+      const override = path.join(dir, "override.env");
+      yield* fs.writeFileString(base, "FROM_BASE=base\nLAYERED=base\nEXPLICIT=base\n");
+      yield* fs.writeFileString(override, "LAYERED=override\nEXPLICIT=override\n");
+      return { base, override };
+    });
+
+    // Docker keeps every duplicate in `Config.Env`; what matters is the value
+    // the process sees, so the container prints its environment and exits.
+    const printEnv = ["sh", "-c", 'echo "$FROM_BASE $LAYERED $EXPLICIT"'];
+    const readPrintedEnv = (name: string) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        return yield* docker.run(["logs", name]).pipe(
+          Effect.map((result) => result.stdout.trim()),
+          Effect.repeat({
+            schedule: Schedule.spaced("250 millis"),
+            until: (output) => output.length > 0,
+            times: 40,
+          }),
+        );
+      });
+
+    test.provider("loads env files in order with explicit environment winning", (stack) =>
+      Effect.gen(function* () {
+        const { base, override } = yield* writeEnvFiles;
+        const container = yield* stack.deploy(
+          Docker.Container("env-file-container", {
+            image: "nginx:alpine",
+            command: printEnv,
+            envFiles: [base, override],
+            environment: { EXPLICIT: "explicit" },
+            start: true,
+          }),
+        );
+
+        expect(yield* readPrintedEnv(container.name)).toBe("base override explicit");
+      }),
+    );
+
+    test.provider("replaces the container when env file order changes", (stack) =>
+      Effect.gen(function* () {
+        const { base, override } = yield* writeEnvFiles;
+        const deploy = (envFiles: string[]) =>
+          stack.deploy(
+            Docker.Container("env-file-order-container", {
+              image: "nginx:alpine",
+              command: printEnv,
+              envFiles,
+              start: true,
+            }),
+          );
+
+        const first = yield* deploy([base, override]);
+        expect(yield* readPrintedEnv(first.name)).toBe("base override override");
+        const second = yield* deploy([override, base]);
+
+        expect(second.id).not.toBe(first.id);
+        expect(yield* readPrintedEnv(second.name)).toBe("base base base");
+      }),
+    );
+
+    test.provider(
+      "does not replace the container when env files go from empty to omitted",
+      (stack) =>
+        Effect.gen(function* () {
+          const first = yield* stack.deploy(
+            Docker.Container("env-file-empty-container", {
+              image: "nginx:alpine",
+              envFiles: [],
+              start: false,
+            }),
+          );
+          const omitted = Docker.Container("env-file-empty-container", {
+            image: "nginx:alpine",
+            start: false,
+          });
+          const plan = yield* stack.plan(omitted);
+          expect(plan.resources["env-file-empty-container"]?.action).not.toBe("replace");
+          const second = yield* stack.deploy(omitted);
+          expect(second.id).toBe(first.id);
+        }),
     );
 
     test.provider("applies a healthcheck with unit-suffixed durations", (stack) =>
