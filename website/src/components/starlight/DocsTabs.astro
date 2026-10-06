@@ -201,17 +201,12 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     max-height: calc(100dvh - var(--sl-nav-height) - 1rem);
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: var(--alc-hairline-3) transparent;
     z-index: 30;
     background: var(--alc-bg);
     border: 1px solid var(--alc-hairline-2);
     border-radius: 10px;
     padding: 6px 0;
     box-shadow: var(--alc-shadow-md, 0 8px 24px rgb(0 0 0 / 0.12));
-  }
-  .alc-tabs__menu:hover {
-    scrollbar-color: var(--alc-fg-4) transparent;
   }
   .alc-tabs__more:hover .alc-tabs__menu,
   .alc-tabs__more:focus-within .alc-tabs__menu {
