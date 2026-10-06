@@ -45,17 +45,19 @@ const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: tr
 // rejects. The race isn't reproducible on demand, so this file-scoped
 // provider stack forwards every call to the real API except the two
 // settings reads after the precreated class is first observed.
-const precreateRace = { observed: false, injected: 0 };
+const precreateRace = { hostPath: undefined as string | undefined, injected: 0 };
 const settingsPath = /\/workers\/scripts\/[^/]+\/settings$/;
 const precreateRaceFetch = async (
   input: Parameters<typeof fetch>[0],
   init?: Parameters<typeof fetch>[1],
 ) => {
   const request = input instanceof Request ? input : new Request(input, init);
-  if (request.method !== "GET" || !settingsPath.test(new URL(request.url).pathname)) {
+  const path = new URL(request.url).pathname;
+  if (request.method !== "GET" || !settingsPath.test(path)) {
     return fetch(input, init);
   }
-  if (precreateRace.observed && precreateRace.injected < 2) {
+  // Only the Durable Object host's own settings reads race.
+  if (path === precreateRace.hostPath && precreateRace.injected < 2) {
     precreateRace.injected++;
     return new Response(
       JSON.stringify({
@@ -68,8 +70,12 @@ const precreateRaceFetch = async (
     );
   }
   const response = await fetch(input, init);
-  if (response.status === 200 && (await response.clone().text()).includes('"namespace_id"')) {
-    precreateRace.observed = true;
+  if (
+    precreateRace.hostPath === undefined &&
+    response.status === 200 &&
+    (await response.clone().text()).includes('"namespace_id"')
+  ) {
+    precreateRace.hostPath = path;
   }
   return response;
 };
@@ -2060,7 +2066,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          precreateRace.observed = false;
+          precreateRace.hostPath = undefined;
           precreateRace.injected = 0;
           yield* stack.destroy();
 
