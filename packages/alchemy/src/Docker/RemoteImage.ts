@@ -6,6 +6,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName } from "./Docker.ts";
+import { DockerImageOptionsConflict } from "./ImageError.ts";
 import {
   ImagePublication,
   ImagePublicationLive,
@@ -258,13 +259,21 @@ const makeRemoteImageProvider = (localMode: boolean) =>
         reconcile: Effect.fn(function* ({ news, session }) {
           if (news.context && news.dockerContext)
             return yield* Effect.fail(
-              new Error("Declare dockerContext, not both context and dockerContext"),
+              new DockerImageOptionsConflict({
+                options: ["context", "dockerContext"],
+                message: "Declare dockerContext, not both context and dockerContext",
+              }),
             );
           if (
             news.publish &&
             (news.registry || news.targetName || news.targetTag || news.skipPush !== undefined)
           )
-            return yield* Effect.fail(new Error("Use publish without legacy destination options"));
+            return yield* Effect.fail(
+              new DockerImageOptionsConflict({
+                options: ["publish", "registry", "targetName", "targetTag", "skipPush"],
+                message: "Use publish without legacy destination options",
+              }),
+            );
           const context = dockerContextName(news.dockerContext ?? news.context);
           const source = yield* observeSource(news);
           const requestedPublish = publishOf(news);

@@ -3,6 +3,7 @@ export * from "./Context.ts";
 export * from "./Docker.ts";
 export * as Dockerfile from "./Dockerfile.ts";
 export * from "./Image.ts";
+export * from "./ImageError.ts";
 export type { ImageOptions, BuildImageOptions, RemoteImageOptions } from "./ImageOptions.ts";
 export { RegistryAuth, ImageRegistryError } from "./ImageRegistry.ts";
 export * from "./Network.ts";

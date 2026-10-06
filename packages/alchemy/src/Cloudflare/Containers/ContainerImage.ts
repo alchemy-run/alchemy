@@ -21,6 +21,12 @@ import {
   bundleContainerProgram,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
+import {
+  ContainerImageDigestMissing,
+  ContainerImageSourceConflict,
+  ContainerImageSourceMissing,
+  ContainerImageUnresolved,
+} from "./ContainerImageError.ts";
 
 const imageInput = Effect.fn(function* (value: Input<string>) {
   if (Output.isOutput(value)) return value.as<string>();
@@ -46,21 +52,32 @@ export const composeContainerImage = Effect.fn(function* (
   if (globalThis.__ALCHEMY_RUNTIME__ || props === undefined || props.imageArtifact) return props;
   if (!props.main && (props.baseImage || props.bundle))
     return yield* Effect.fail(
-      new Error(
-        "baseImage and bundle configure a generated program image; use image: { context } or image: { ref } for finished images",
-      ),
+      new ContainerImageSourceConflict({
+        options: ["baseImage", "bundle", "main"],
+        message:
+          "baseImage and bundle configure a generated program image; use image: { context } or image: { ref } for finished images",
+      }),
     );
   if (!props.main && props.publish && isImageOptions(props.image))
     return yield* Effect.fail(
-      new Error("Declare publish inside image when using embedded image options"),
+      new ContainerImageSourceConflict({
+        options: ["publish", "image"],
+        message: "Declare publish inside image when using embedded image options",
+      }),
     );
   if (props.baseImage && props.image)
     return yield* Effect.fail(
-      new Error("Declare baseImage rather than combining it with the legacy image base"),
+      new ContainerImageSourceConflict({
+        options: ["baseImage", "image"],
+        message: "Declare baseImage rather than combining it with the legacy image base",
+      }),
     );
   if (props.bundle && props.build)
     return yield* Effect.fail(
-      new Error("Declare bundle rather than combining it with the legacy build bundler options"),
+      new ContainerImageSourceConflict({
+        options: ["bundle", "build"],
+        message: "Declare bundle rather than combining it with the legacy build bundler options",
+      }),
     );
   const normalized = props.main
     ? {
@@ -70,6 +87,40 @@ export const composeContainerImage = Effect.fn(function* (
       }
     : props;
   yield* validateContainerImageProps(normalized);
+  // Validate the image source before resolving accounts or registering children.
+  const imageSource = normalized.image;
+  if (isImageOptions(imageSource)) {
+    if (normalized.main)
+      return yield* Effect.fail(
+        new ContainerImageSourceConflict({
+          options: ["image", "main"],
+          message: "image and main are mutually exclusive; use baseImage with main",
+        }),
+      );
+    if (isRemoteImageOptions(imageSource)) {
+      if (
+        [
+          "context",
+          "dockerfile",
+          "files",
+          "args",
+          "target",
+          "cacheFrom",
+          "cacheTo",
+          "options",
+          "extraHash",
+        ].some((key) => key in imageSource)
+      )
+        return yield* Effect.fail(
+          new ContainerImageSourceConflict({
+            options: ["image.ref", "image.context", "image.dockerfile"],
+            message: "image.ref cannot be combined with Dockerfile build inputs",
+          }),
+        );
+    } else if (!("context" in imageSource) && !("dockerfile" in imageSource)) {
+      return yield* Effect.fail(new ContainerImageSourceMissing({ id }));
+    }
+  }
   // Local images are never published, so dev must not require credentials.
   const accountId =
     (yield* defaultProviderMode) === "local"
@@ -101,33 +152,6 @@ export const composeContainerImage = Effect.fn(function* (
   const image = yield* Namespace.push(
     id,
     Effect.gen(function* () {
-      const imageSource = normalized.image;
-      if (isImageOptions(imageSource)) {
-        if (normalized.main)
-          return yield* Effect.fail(
-            new Error("image and main are mutually exclusive; use baseImage with main"),
-          );
-        if (isRemoteImageOptions(imageSource)) {
-          if (
-            [
-              "context",
-              "dockerfile",
-              "files",
-              "args",
-              "target",
-              "cacheFrom",
-              "cacheTo",
-              "options",
-              "extraHash",
-            ].some((key) => key in imageSource)
-          )
-            return yield* Effect.fail(
-              new Error("image.ref cannot be combined with Dockerfile build inputs"),
-            );
-        } else if (!("context" in imageSource) && !("dockerfile" in imageSource)) {
-          return yield* Effect.fail(new Error("image requires ref, context, or dockerfile"));
-        }
-      }
       if (isImageOptions(imageSource) && !isRemoteImageOptions(imageSource)) {
         const { publish: destination, dockerContext, ...build } = imageSource;
         return yield* Image("Image", {
@@ -253,11 +277,11 @@ export const resolveContainerImage = Effect.fn(function* (
 ) {
   const artifact = props.imageArtifact;
   if (!artifact || typeof artifact.ref !== "string") {
-    return yield* Effect.fail(new Error("Container image resource has not resolved"));
+    return yield* Effect.fail(new ContainerImageUnresolved());
   }
   const digest = artifact.ref.split("@")[1];
   if (!local && !digest)
-    return yield* Effect.fail(new Error("Cloudflare containers require a published image digest"));
+    return yield* Effect.fail(new ContainerImageDigestMissing({ ref: artifact.ref }));
   return {
     imageRef: artifact.ref,
     imageHash: artifact.hash ?? (yield* sha256Object({ ref: artifact.ref })),

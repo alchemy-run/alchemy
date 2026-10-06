@@ -7,6 +7,7 @@ import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import { prepareImageBuild, type DockerBuildOptions } from "./ImageBuild.ts";
+import { DockerImageOptionsConflict, DockerPublishedImageMissing } from "./ImageError.ts";
 import {
   ImagePublication,
   ImagePublicationLive,
@@ -155,14 +156,19 @@ const makeImageProvider = (localMode: boolean) =>
           (props.registry || props.skipPush !== undefined || props.name || props.tag)
         ) {
           return yield* Effect.fail(
-            new Error(
-              "Use publish.repository/tags instead of combining publish with legacy image naming or registry options",
-            ),
+            new DockerImageOptionsConflict({
+              options: ["publish", "name", "tag", "registry", "skipPush"],
+              message:
+                "Use publish.repository/tags instead of combining publish with legacy image naming or registry options",
+            }),
           );
         }
         if (props.context && props.dockerContext)
           return yield* Effect.fail(
-            new Error("Declare dockerContext, not both context and dockerContext"),
+            new DockerImageOptionsConflict({
+              options: ["context", "dockerContext"],
+              message: "Declare dockerContext, not both context and dockerContext",
+            }),
           );
         const localName = yield* dockerPhysicalName(id, props, instanceId);
         const requestedPublish =
@@ -306,7 +312,7 @@ const makeImageProvider = (localMode: boolean) =>
                 const manifest = yield* findImageManifest(inputRef, credentials);
                 if (!manifest)
                   return yield* Effect.fail(
-                    new Error("Published image is missing from the registry"),
+                    new DockerPublishedImageMissing({ reference: inputRef }),
                   );
                 return manifest;
               }),

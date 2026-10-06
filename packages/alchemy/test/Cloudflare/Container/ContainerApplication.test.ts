@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -113,20 +114,20 @@ describe.concurrent(
     test.provider("rejects ambiguous or empty embedded image options", (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
-        for (const image of [
-          { ref: "alpine:3.19", context: "." },
-          { ref: "alpine:3.19", args: { VERSION: "1" } },
-          {},
-        ]) {
+        for (const [image, tag] of [
+          [{ ref: "alpine:3.19", context: "." }, "ContainerImageSourceConflict"],
+          [{ ref: "alpine:3.19", args: { VERSION: "1" } }, "ContainerImageSourceConflict"],
+          [{}, "ContainerImageSourceMissing"],
+        ] as const) {
           const application = Cloudflare.Container("Invalid", {
             // @ts-expect-error JavaScript callers must receive the same validation as typed callers.
             image,
           }).Application;
           const result = yield* stack.plan(application).pipe(Effect.exit);
           assert(Exit.isFailure(result));
-          expect(Cause.pretty(result.cause)).toMatch(
-            /cannot be combined|requires ref, context, or dockerfile/,
-          );
+          expect(Option.getOrUndefined(Cause.findErrorOption(result.cause))).toMatchObject({
+            _tag: tag,
+          });
         }
         yield* stack.destroy();
       }),
@@ -1867,7 +1868,10 @@ describe(
             )
             .pipe(Effect.exit);
           assert(Exit.isFailure(conflict));
-          expect(Cause.pretty(conflict.cause)).toMatch(/Declare publish inside image/);
+          expect(Option.getOrUndefined(Cause.findErrorOption(conflict.cause))).toMatchObject({
+            _tag: "ContainerImageSourceConflict",
+            options: ["publish", "image"],
+          });
           yield* stack.destroy();
         }),
     );

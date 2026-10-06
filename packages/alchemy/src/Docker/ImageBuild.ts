@@ -5,6 +5,11 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "./BuildHash.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
+import {
+  DockerBuildInputConflict,
+  DockerBuildInputUnresolved,
+  DockerGeneratedFileInvalid,
+} from "./ImageError.ts";
 
 /** Dockerfile build inputs, shared by standalone and generated images. */
 export interface DockerBuildOptions {
@@ -49,12 +54,16 @@ export const prepareImageBuild = Effect.fn(function* (build: DockerBuildOptions)
   if (build.dockerfile !== undefined && isInlineDockerfile(build.dockerfile)) {
     if (build.context !== undefined)
       return yield* Effect.fail(
-        new Error("Inline Dockerfiles use generated files, not a filesystem context"),
+        new DockerBuildInputConflict({
+          message: "Inline Dockerfiles use generated files, not a filesystem context",
+        }),
       );
     const content = build.dockerfile.content;
     if (typeof content !== "string")
       return yield* Effect.fail(
-        new Error("Dockerfile inputs must be resolved before preparing an image"),
+        new DockerBuildInputUnresolved({
+          message: "Dockerfile inputs must be resolved before preparing an image",
+        }),
       );
     const files = [...(build.files ?? [])].sort((a, b) => a.path.localeCompare(b.path));
     const seen = new Set<string>();
@@ -67,7 +76,7 @@ export const prepareImageBuild = Effect.fn(function* (build: DockerBuildOptions)
         normalized === "Dockerfile" ||
         seen.has(normalized)
       ) {
-        return yield* Effect.fail(new Error(`Invalid generated image path: ${file.path}`));
+        return yield* Effect.fail(new DockerGeneratedFileInvalid({ path: file.path }));
       }
       seen.add(normalized);
     }
@@ -87,7 +96,9 @@ export const prepareImageBuild = Effect.fn(function* (build: DockerBuildOptions)
     }
   } else {
     if (build.files !== undefined)
-      return yield* Effect.fail(new Error("Generated files require an inline Dockerfile"));
+      return yield* Effect.fail(
+        new DockerBuildInputConflict({ message: "Generated files require an inline Dockerfile" }),
+      );
     ({ context, dockerfile } = yield* resolveDockerBuildPaths({
       context: build.context ?? ".",
       dockerfile: build.dockerfile ?? "Dockerfile",
