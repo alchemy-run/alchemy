@@ -8882,6 +8882,22 @@ importers:
         specifier: 'catalog:'
         version: 26.2.0
 
+  submodules/distilled/packages/iceberg:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
+
   submodules/distilled/packages/infisical:
     dependencies:
       '@distilled.cloud/core':
