@@ -36,10 +36,10 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Cloudflare from "../Cloudflare/index.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Database } from "../Cloudflare/D1/Database.ts";
 import type { QueryDatabaseClient } from "../Cloudflare/D1/QueryDatabase.ts";
+import * as Cloudflare from "../Cloudflare/index.ts";
+import type { RuntimeContext } from "../RuntimeContext.ts";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
 import { StoreError } from "./Protocol/Store.ts";
 import {
@@ -81,15 +81,12 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
   Layer.effect(
     RegistryStore,
     Effect.gen(function* () {
-      const db: QueryDatabaseClient =
-        yield* Cloudflare.D1.QueryDatabase(database);
+      const db: QueryDatabaseClient = yield* Cloudflare.D1.QueryDatabase(database);
 
       // The DDL is shared with the DO (Store/Sql.ts) — one definition, so
       // the backends can never drift apart.
       const ready = Effect.suspend(() =>
-        Effect.forEach(REGISTRY_DDL, (statement) =>
-          d1("schema", db.prepare(statement).run()),
-        ),
+        Effect.forEach(REGISTRY_DDL, (statement) => d1("schema", db.prepare(statement).run())),
       ).pipe(Effect.asVoid, Effect.cached);
       const schema = yield* ready;
 
@@ -148,9 +145,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
             yield* d1(
               "recordFork",
               db
-                .prepare(
-                  `UPDATE repos SET fork_count = fork_count + 1 WHERE repo_id = ?`,
-                )
+                .prepare(`UPDATE repos SET fork_count = fork_count + 1 WHERE repo_id = ?`)
                 .bind(input.forkOf)
                 .run(),
             );
@@ -188,12 +183,8 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
 
         list: Effect.fn(function* (input: ListReposInput) {
           yield* schema;
-          const limit = Math.max(
-            1,
-            Math.min(input.limit ?? DEFAULT_LIST_LIMIT, 100),
-          );
-          const after =
-            input.cursor === undefined ? undefined : decodeCursor(input.cursor);
+          const limit = Math.max(1, Math.min(input.limit ?? DEFAULT_LIST_LIMIT, 100));
+          const after = input.cursor === undefined ? undefined : decodeCursor(input.cursor);
           const conditions: Array<string> = ["deleted_at IS NULL"];
           const bindings: Array<string | number> = [];
           if (input.publicOnly === true) {
@@ -223,10 +214,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
           const last = items[items.length - 1];
           return {
             items: items.map(toEntry),
-            nextCursor:
-              hasMore && last !== undefined
-                ? encodeCursor(last.owner, last.name)
-                : null,
+            nextCursor: hasMore && last !== undefined ? encodeCursor(last.owner, last.name) : null,
             hasMore,
           } satisfies ListReposResult;
         }),
@@ -239,9 +227,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
             yield* d1(
               "bumpForkCount",
               db
-                .prepare(
-                  `UPDATE repos SET fork_count = MAX(0, fork_count + ?) WHERE repo_id = ?`,
-                )
+                .prepare(`UPDATE repos SET fork_count = MAX(0, fork_count + ?) WHERE repo_id = ?`)
                 .bind(delta, repoId)
                 .run(),
             );
@@ -272,18 +258,13 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
           yield* d1(
             "markDeleted",
             db
-              .prepare(
-                `UPDATE repos SET deleted_at = ? WHERE repo_id = ? AND deleted_at IS NULL`,
-              )
+              .prepare(`UPDATE repos SET deleted_at = ? WHERE repo_id = ? AND deleted_at IS NULL`)
               .bind(Date.now(), repoId)
               .run(),
           );
         }),
 
-        updateSummary: Effect.fn(function* (
-          repoId: string,
-          summary: RepoSummary,
-        ) {
+        updateSummary: Effect.fn(function* (repoId: string, summary: RepoSummary) {
           yield* schema;
           yield* d1(
             "updateSummary",

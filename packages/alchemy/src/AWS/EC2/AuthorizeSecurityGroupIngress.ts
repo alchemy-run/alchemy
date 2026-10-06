@@ -54,7 +54,6 @@ export interface AuthorizeSecurityGroupIngress extends Binding.Service<
   >
 > {}
 
-export const AuthorizeSecurityGroupIngress =
-  Binding.Service<AuthorizeSecurityGroupIngress>(
-    "AWS.EC2.AuthorizeSecurityGroupIngress",
-  );
+export const AuthorizeSecurityGroupIngress = Binding.Service<AuthorizeSecurityGroupIngress>(
+  "AWS.EC2.AuthorizeSecurityGroupIngress",
+);

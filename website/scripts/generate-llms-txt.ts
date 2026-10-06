@@ -118,12 +118,7 @@ const SECTIONS: Section[] = [
     intro:
       "Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.",
     pages: {
-      slugs: [
-        "apis/index",
-        "apis/schemaless",
-        "apis/effect-rpc",
-        "apis/effect-http",
-      ],
+      slugs: ["apis/index", "apis/schemaless", "apis/effect-rpc", "apis/effect-http"],
     },
   },
   {
@@ -311,6 +306,21 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — Networking",
     pages: { directory: "aws/networking" },
+  },
+  {
+    heading: "GCP",
+    intro:
+      "Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.",
+    pages: {
+      slugs: [
+        "gcp/index",
+        "gcp/setup",
+        "gcp/guides/cloud-run-api",
+        "gcp/guides/event-pipeline",
+        "gcp/guides/memorystore",
+        "gcp/guides/bindings",
+      ],
+    },
   },
   {
     heading: "Fly — start here",
@@ -502,11 +512,34 @@ const SECTIONS: Section[] = [
     intro:
       "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",
     pages: {
+      slugs: ["docker/index", "docker/setup", "docker/local-services", "docker/build-and-push"],
+    },
+  },
+  {
+    heading: "Kubernetes",
+    intro:
+      "Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs (as images or Effect programs), raw manifests, and Helm charts — on a local cluster or any cluster reachable through a kubeconfig, token, client certificate, or exec plugin.",
+    pages: {
       slugs: [
-        "docker/index",
-        "docker/setup",
-        "docker/local-services",
-        "docker/build-and-push",
+        "kubernetes/index",
+        "kubernetes/setup",
+        "kubernetes/tutorial/part-1",
+        "kubernetes/tutorial/part-2",
+        "kubernetes/tutorial/part-3",
+        "kubernetes/tutorial/part-4",
+        "kubernetes/tutorial/part-5",
+        "kubernetes/clusters/connecting",
+        "kubernetes/clusters/registries",
+        "kubernetes/clusters/local",
+        "kubernetes/clusters/eks",
+        "kubernetes/clusters/cluster-adapters",
+        "kubernetes/workloads/deployments",
+        "kubernetes/workloads/jobs",
+        "kubernetes/workloads/images",
+        "kubernetes/workloads/bindings",
+        "kubernetes/workloads/object-lifecycle",
+        "kubernetes/objects/manifests",
+        "kubernetes/objects/helm-charts",
       ],
     },
   },
@@ -673,10 +706,7 @@ async function loadPage(slug: string): Promise<Page> {
   throw new Error(`Page not found: ${slug} (looked for .mdx and .md)`);
 }
 
-async function listSlugs(
-  directory: string,
-  exclude: string[] = [],
-): Promise<string[]> {
+async function listSlugs(directory: string, exclude: string[] = []): Promise<string[]> {
   const dir = path.join(docsDir, directory);
   const entries = await readdir(dir, { withFileTypes: true });
   const slugs: string[] = [];
@@ -717,9 +747,7 @@ async function main() {
       "slugs" in section.pages
         ? section.pages.slugs
         : await listSlugs(section.pages.directory, section.pages.exclude);
-    const pages = (await Promise.all(slugs.map(loadPage))).filter(
-      (p) => !p.draft,
-    );
+    const pages = (await Promise.all(slugs.map(loadPage))).filter((p) => !p.draft);
     // Directory sections mirror the sidebar's `sidebar.order` ordering; slug
     // sections keep the curated order they were declared in.
     if (isDirectory) pages.sort(byOrderThenTitle);
@@ -729,9 +757,7 @@ async function main() {
     sections.push(pages.map(renderPage).join("\n"));
   }
 
-  const fullBody =
-    [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") +
-    "\n";
+  const fullBody = [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") + "\n";
   await writeFile(outFullFile, fullBody, "utf8");
   console.log(`Wrote ${outFullFile}`);
 

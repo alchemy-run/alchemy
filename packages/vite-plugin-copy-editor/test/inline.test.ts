@@ -59,9 +59,7 @@ describe("inline markdown", () => {
   });
 
   test("rejects stale edits", () => {
-    expect(() =>
-      writeInline(PAGE, 0, { base: "old", markdown: "new" }),
-    ).toThrow(/changed/);
+    expect(() => writeInline(PAGE, 0, { base: "old", markdown: "new" })).toThrow(/changed/);
   });
 });
 
@@ -73,7 +71,5 @@ test("line breaks round-trip as <br>", () => {
     markdown: "Reach for the\nbetter `primitives`.",
   });
   expect(out).toContain("Reach for the<br>better <code>primitives</code>.");
-  expect(inlineSource(out, 0).markdown).toBe(
-    "Reach for the\nbetter `primitives`.",
-  );
+  expect(inlineSource(out, 0).markdown).toBe("Reach for the\nbetter `primitives`.");
 });

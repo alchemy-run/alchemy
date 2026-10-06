@@ -1,5 +1,4 @@
 import { Server } from "foldkit/experimental";
-
 import { renderPage } from "./entry.server.ts";
 
 // Minimal binding shape, so the example needs no Workers type package.
@@ -12,8 +11,8 @@ interface Env {
 // one names the hashed bundle, and it is the only copy that cannot disagree
 // with what the browser will be asked to load.
 const shell = (env: Env, url: URL): Promise<string> =>
-  env.ASSETS.fetch(new Request(new URL("/index.html", url.origin))).then(
-    (response) => response.text(),
+  env.ASSETS.fetch(new Request(new URL("/index.html", url.origin))).then((response) =>
+    response.text(),
   );
 
 export default {

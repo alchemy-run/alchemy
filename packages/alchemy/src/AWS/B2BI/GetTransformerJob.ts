@@ -41,12 +41,7 @@ export interface GetTransformerJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetTransformerJobRequest,
-    ) => Effect.Effect<
-      b2bi.GetTransformerJobResponse,
-      b2bi.GetTransformerJobError
-    >
+    ) => Effect.Effect<b2bi.GetTransformerJobResponse, b2bi.GetTransformerJobError>
   >
 > {}
-export const GetTransformerJob = Binding.Service<GetTransformerJob>(
-  "AWS.B2BI.GetTransformerJob",
-);
+export const GetTransformerJob = Binding.Service<GetTransformerJob>("AWS.B2BI.GetTransformerJob");

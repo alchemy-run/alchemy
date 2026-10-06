@@ -37,11 +37,7 @@ export interface PutKey extends Binding.Service<
   "AWS.CloudFront.PutKey",
   (
     store: KeyValueStore,
-  ) => Effect.Effect<
-    (
-      request: PutKeyRequest,
-    ) => Effect.Effect<kvs.PutKeyResponse, kvs.PutKeyError>
-  >
+  ) => Effect.Effect<(request: PutKeyRequest) => Effect.Effect<kvs.PutKeyResponse, kvs.PutKeyError>>
 > {}
 
 export const PutKey = Binding.Service<PutKey>("AWS.CloudFront.PutKey");

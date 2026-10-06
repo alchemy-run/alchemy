@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import OpenSearchDataPlaneFunctionLive, {
-  OpenSearchDataPlaneFunction,
-} from "./data-plane-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import OpenSearchDataPlaneFunctionLive, { OpenSearchDataPlaneFunction } from "./data-plane-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "OpenSearchDataPlane");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,35 +32,26 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
 // The fixture provisions a real OpenSearch domain (~15-25 minutes, billed
 // per instance-hour) — gated behind AWS_TEST_SLOW=1 like the Domain
 // lifecycle test. The suite stays skip-clean without the flag.
-const describeGated = process.env.AWS_TEST_SLOW
-  ? describe.sequential
-  : describe.skip;
+const describeGated = process.env.AWS_TEST_SLOW ? describe.sequential : describe.skip;
 
 describeGated("OpenSearch Data Plane", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "OpenSearch data-plane setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("OpenSearch data-plane setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo(
@@ -81,9 +67,7 @@ describeGated("OpenSearch Data Plane", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `OpenSearch data-plane setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`OpenSearch data-plane setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -107,20 +91,13 @@ describeGated("OpenSearch Data Plane", () => {
 
   describe(
     "binding registration",
-    {
-      tags: [
-        "provider:aws",
-        "provider:aws:lambda",
-        "provider:aws:opensearch",
-        "live",
-      ],
-    },
+    { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:opensearch", "live"] },
     () => {
       test.provider("all 3 data-plane capabilities initialize", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/bindings`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(response.bound).toEqual(["reader", "writer", "client"]);
         }),
       );
@@ -129,22 +106,15 @@ describeGated("OpenSearch Data Plane", () => {
 
   describe(
     "DomainWrite",
-    {
-      tags: [
-        "provider:aws",
-        "provider:aws:lambda",
-        "provider:aws:opensearch",
-        "live",
-      ],
-    },
+    { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:opensearch", "live"] },
     () => {
       test.provider(
         "indexDocument writes a document (es:ESHttpPut)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/doc`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/doc`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(["created", "updated"]).toContain(response.result);
           }),
         { timeout: 120_000 },
@@ -154,9 +124,9 @@ describeGated("OpenSearch Data Plane", () => {
         "bulk applies NDJSON operations (es:ESHttpPost)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/bulk`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/bulk`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(response.errors).toBe(false);
             expect(response.items).toBe(1);
           }),
@@ -167,9 +137,9 @@ describeGated("OpenSearch Data Plane", () => {
         "updateDocument partially updates (es:ESHttpPost _update)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/update`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/update`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(["updated", "noop"]).toContain(response.result);
           }),
         { timeout: 120_000 },
@@ -179,22 +149,15 @@ describeGated("OpenSearch Data Plane", () => {
 
   describe(
     "DomainRead",
-    {
-      tags: [
-        "provider:aws",
-        "provider:aws:lambda",
-        "provider:aws:opensearch",
-        "live",
-      ],
-    },
+    { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:opensearch", "live"] },
     () => {
       test.provider(
         "getDocument reads back the stored document (es:ESHttpGet)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/doc`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/doc`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(response.found).toBe(true);
             expect(response.title).toBe("The Wind Cries Mary");
           }),
@@ -205,9 +168,9 @@ describeGated("OpenSearch Data Plane", () => {
         "getDocument on a missing id is found:false, not an error",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/doc-missing`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/doc-missing`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(response.found).toBe(false);
           }),
         { timeout: 120_000 },
@@ -217,9 +180,9 @@ describeGated("OpenSearch Data Plane", () => {
         "existsDocument distinguishes present from missing (es:ESHttpHead)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/exists`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/exists`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(response.exists).toBe(true);
             expect(response.missing).toBe(false);
           }),
@@ -230,9 +193,9 @@ describeGated("OpenSearch Data Plane", () => {
         "search matches via the source query parameter (es:ESHttpGet)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/search`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/search`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(response.total).toBeGreaterThanOrEqual(1);
             expect(response.firstTitle).toBe("The Wind Cries Mary");
           }),
@@ -243,9 +206,9 @@ describeGated("OpenSearch Data Plane", () => {
         "count counts documents in the index",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/count`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/count`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(response.count).toBeGreaterThanOrEqual(1);
           }),
         { timeout: 120_000 },
@@ -255,22 +218,15 @@ describeGated("OpenSearch Data Plane", () => {
 
   describe(
     "DomainReadWrite",
-    {
-      tags: [
-        "provider:aws",
-        "provider:aws:lambda",
-        "provider:aws:opensearch",
-        "live",
-      ],
-    },
+    { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:opensearch", "live"] },
     () => {
       test.provider(
         "raw request reads cluster health (es:ESHttp*)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/health`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/health`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(["green", "yellow", "red"]).toContain(response.status);
           }),
         { timeout: 120_000 },
@@ -280,9 +236,9 @@ describeGated("OpenSearch Data Plane", () => {
         "deleteDocument deletes and tolerates not_found (es:ESHttpDelete)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/delete`),
-            ).pipe(Effect.flatMap((r) => r.json))) as any;
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/delete`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as any;
             expect(response.first).toBe("deleted");
             expect(response.second).toBe("not_found");
           }),

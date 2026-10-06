@@ -82,33 +82,31 @@ export interface ComponentVersion extends Resource<
  *
  * @resource
  */
-export const ComponentVersion = Resource<ComponentVersion>(
-  "AWS.GreengrassV2.ComponentVersion",
-);
+export const ComponentVersion = Resource<ComponentVersion>("AWS.GreengrassV2.ComponentVersion");
 
 /**
  * Raised when the inline recipe does not declare a `ComponentName` and
  * `ComponentVersion` that Alchemy can derive the component identity from.
  */
-export class GreengrassInvalidRecipe extends Data.TaggedError(
-  "GreengrassInvalidRecipe",
-)<{ message: string }> {}
+export class GreengrassInvalidRecipe extends Data.TaggedError("GreengrassInvalidRecipe")<{
+  message: string;
+}> {}
 
 /**
  * Raised when the cloud reports the component version entered the `FAILED`
  * or `DEPRECATED` state instead of becoming `DEPLOYABLE`.
  */
-export class GreengrassComponentFailed extends Data.TaggedError(
-  "GreengrassComponentFailed",
-)<{ message: string }> {}
+export class GreengrassComponentFailed extends Data.TaggedError("GreengrassComponentFailed")<{
+  message: string;
+}> {}
 
 /**
  * Internal signal used to poll a freshly created component version until the
  * cloud marks it `DEPLOYABLE`.
  */
-export class GreengrassComponentNotReady extends Data.TaggedError(
-  "GreengrassComponentNotReady",
-)<{ message: string }> {}
+export class GreengrassComponentNotReady extends Data.TaggedError("GreengrassComponentNotReady")<{
+  message: string;
+}> {}
 
 // Explicitly-typed pipeable retry helper — inlining `Effect.retry` in a
 // provider lifecycle op leaks `Retry.Return`'s conditional into declaration
@@ -142,9 +140,7 @@ const parseRecipeIdentity = Effect.fn(function* (recipe: string) {
   });
   if (fromJson !== undefined) return fromJson;
   const yamlValue = (key: string) => {
-    const match = recipe.match(
-      new RegExp(`^${key}:[ \\t]*['"]?([^'"#\\s]+)`, "m"),
-    );
+    const match = recipe.match(new RegExp(`^${key}:[ \\t]*['"]?([^'"#\\s]+)`, "m"));
     return match?.[1];
   };
   const componentName = yamlValue("ComponentName");
@@ -164,9 +160,7 @@ const normalizeTags = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 export const ComponentVersionProvider = () =>
@@ -177,8 +171,7 @@ export const ComponentVersionProvider = () =>
       // so read/reconcile never depend on persisted output to find it.
       const componentArn = Effect.fn(function* (recipe: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        const { componentName, componentVersion } =
-          yield* parseRecipeIdentity(recipe);
+        const { componentName, componentVersion } = yield* parseRecipeIdentity(recipe);
         return {
           componentName,
           componentVersion,
@@ -189,11 +182,7 @@ export const ComponentVersionProvider = () =>
       const observeComponent = (arn: string) =>
         greengrassv2
           .describeComponent({ arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       return ComponentVersion.Provider.of({
         stables: ["arn", "componentName", "componentVersion"],
@@ -213,9 +202,7 @@ export const ComponentVersionProvider = () =>
                 .items({ arn: component.arn })
                 .pipe(
                   Stream.runCollect,
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed([] as const),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as const)),
                 );
               for (const version of versions) {
                 if (
@@ -236,9 +223,7 @@ export const ComponentVersionProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.arn ??
-            (olds !== undefined
-              ? (yield* componentArn(olds.recipe)).arn
-              : undefined);
+            (olds !== undefined ? (yield* componentArn(olds.recipe)).arn : undefined);
           if (arn === undefined) return undefined;
           const found = yield* observeComponent(arn);
           if (
@@ -253,9 +238,7 @@ export const ComponentVersionProvider = () =>
             componentName: found.componentName,
             componentVersion: found.componentVersion,
           };
-          return (yield* hasAlchemyTags(id, normalizeTags(found.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, normalizeTags(found.tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -283,9 +266,8 @@ export const ComponentVersionProvider = () =>
                 tags: desiredTags,
               })
               .pipe(
-                Effect.catchTag(
-                  ["ConflictException", "RequestAlreadyInProgressException"],
-                  () => Effect.succeed(undefined),
+                Effect.catchTag(["ConflictException", "RequestAlreadyInProgressException"], () =>
+                  Effect.succeed(undefined),
                 ),
               );
             // Wait until the cloud marks the version DEPLOYABLE (bounded ~30s;
@@ -330,9 +312,7 @@ export const ComponentVersionProvider = () =>
             });
           }
 
-          yield* session.note(
-            `${identity.componentName}@${identity.componentVersion}`,
-          );
+          yield* session.note(`${identity.componentName}@${identity.componentVersion}`);
           return {
             arn: identity.arn,
             componentName: identity.componentName,
@@ -342,9 +322,7 @@ export const ComponentVersionProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* greengrassv2
             .deleteComponent({ arn: output.arn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

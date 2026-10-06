@@ -142,17 +142,11 @@ export interface ClientVpnEndpoint extends Resource<
     /** Self-service configuration download URL, when enabled. */
     selfServicePortalUrl: string | undefined;
     /** Observed connection logging settings. */
-    connectionLogOptions: NonNullable<
-      ClientVpnEndpointProps["connectionLogOptions"]
-    >;
+    connectionLogOptions: NonNullable<ClientVpnEndpointProps["connectionLogOptions"]>;
     /** Observed connection handler settings. */
-    clientConnectOptions: NonNullable<
-      ClientVpnEndpointProps["clientConnectOptions"]
-    >;
+    clientConnectOptions: NonNullable<ClientVpnEndpointProps["clientConnectOptions"]>;
     /** Observed login banner settings. */
-    clientLoginBannerOptions: NonNullable<
-      ClientVpnEndpointProps["clientLoginBannerOptions"]
-    >;
+    clientLoginBannerOptions: NonNullable<ClientVpnEndpointProps["clientLoginBannerOptions"]>;
     /** Observed tags, including ownership tags. */
     tags: Record<string, string>;
   },
@@ -207,40 +201,28 @@ export interface ClientVpnEndpoint extends Resource<
  *
  * @resource
  */
-export const ClientVpnEndpoint = Resource<ClientVpnEndpoint>(
-  "AWS.EC2.ClientVpnEndpoint",
-);
+export const ClientVpnEndpoint = Resource<ClientVpnEndpoint>("AWS.EC2.ClientVpnEndpoint");
 
-class ClientVpnEndpointNotReady extends Data.TaggedError(
-  "ClientVpnEndpointNotReady",
-)<{
+class ClientVpnEndpointNotReady extends Data.TaggedError("ClientVpnEndpointNotReady")<{
   endpointId: string;
   status: string;
   pendingSettings?: string[];
 }> {
   get message() {
     return `Client VPN endpoint ${this.endpointId} is ${this.status}${
-      this.pendingSettings?.length
-        ? `; waiting for ${this.pendingSettings.join(", ")}`
-        : ""
+      this.pendingSettings?.length ? `; waiting for ${this.pendingSettings.join(", ")}` : ""
     }`;
   }
 }
 
-const gone = (endpoint: EC2.ClientVpnEndpoint) =>
-  endpoint.Status?.Code === "deleted";
+const gone = (endpoint: EC2.ClientVpnEndpoint) => endpoint.Status?.Code === "deleted";
 const usable = (endpoint: EC2.ClientVpnEndpoint) =>
-  endpoint.Status?.Code === "pending-associate" ||
-  endpoint.Status?.Code === "available";
+  endpoint.Status?.Code === "pending-associate" || endpoint.Status?.Code === "available";
 
 const describe = (endpointId: string) =>
   EC2.describeClientVpnEndpoints({ ClientVpnEndpointIds: [endpointId] }).pipe(
-    Effect.map((result) =>
-      result.ClientVpnEndpoints?.find((endpoint) => !gone(endpoint)),
-    ),
-    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.map((result) => result.ClientVpnEndpoints?.find((endpoint) => !gone(endpoint))),
+    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.succeed(undefined)),
   );
 
 const authentication = (
@@ -252,13 +234,11 @@ const authentication = (
       DirectoryId: option.activeDirectory.directoryId,
     },
     MutualAuthentication: option.mutualAuthentication && {
-      ClientRootCertificateChainArn:
-        option.mutualAuthentication.clientRootCertificateChainArn,
+      ClientRootCertificateChainArn: option.mutualAuthentication.clientRootCertificateChainArn,
     },
     FederatedAuthentication: option.federatedAuthentication && {
       SAMLProviderArn: option.federatedAuthentication.samlProviderArn,
-      SelfServiceSAMLProviderArn:
-        option.federatedAuthentication.selfServiceSamlProviderArn,
+      SelfServiceSAMLProviderArn: option.federatedAuthentication.selfServiceSamlProviderArn,
     },
   }));
 
@@ -294,10 +274,7 @@ const settings = (props: ClientVpnEndpointProps) => ({
   },
 });
 
-const observedSettings = (
-  endpoint: EC2.ClientVpnEndpoint,
-  props: ClientVpnEndpointProps,
-) => ({
+const observedSettings = (endpoint: EC2.ClientVpnEndpoint, props: ClientVpnEndpointProps) => ({
   ServerCertificateArn: endpoint.ServerCertificateArn,
   Description: endpoint.Description ?? "",
   SplitTunnel: endpoint.SplitTunnel ?? false,
@@ -365,9 +342,7 @@ const toAttrs = Effect.fn(function* (endpoint: EC2.ClientVpnEndpoint) {
       enabled: endpoint.ClientLoginBannerOptions?.Enabled ?? false,
       bannerText: endpoint.ClientLoginBannerOptions?.BannerText,
     },
-    tags: tagRecord(
-      endpoint.Tags?.map((tag) => ({ Key: tag.Key!, Value: tag.Value! })),
-    ),
+    tags: tagRecord(endpoint.Tags?.map((tag) => ({ Key: tag.Key!, Value: tag.Value! }))),
   } satisfies ClientVpnEndpoint["Attributes"];
 });
 
@@ -380,8 +355,7 @@ const changesFor = Effect.fn(function* (
   const changes: EC2.ModifyClientVpnEndpointRequest = {
     ...Object.fromEntries(
       Object.entries(desired).filter(
-        ([key, value]) =>
-          !deepEqual(value, observed[key as keyof typeof observed]),
+        ([key, value]) => !deepEqual(value, observed[key as keyof typeof observed]),
       ),
     ),
   };
@@ -405,10 +379,7 @@ const changesFor = Effect.fn(function* (
   if (
     vpcId &&
     groups?.length &&
-    !deepEqual(
-      [...groups].sort(),
-      [...(endpoint.SecurityGroupIds ?? [])].sort(),
-    )
+    !deepEqual([...groups].sort(), [...(endpoint.SecurityGroupIds ?? [])].sort())
   ) {
     changes.VpcId = vpcId;
     changes.SecurityGroupIds = groups;
@@ -435,11 +406,7 @@ export const ClientVpnEndpointProvider = () =>
       return {
         stables: ["clientVpnEndpointId", "clientVpnEndpointArn"],
         nuke: {
-          dependsOn: [
-            "AWS.EC2.VPC",
-            "AWS.EC2.SecurityGroup",
-            "AWS.ACM.Certificate",
-          ],
+          dependsOn: ["AWS.EC2.VPC", "AWS.EC2.SecurityGroup", "AWS.ACM.Certificate"],
         },
         diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           if (!("authenticationOptions" in news)) return { action: "replace" };
@@ -457,8 +424,7 @@ export const ClientVpnEndpointProvider = () =>
             )
               return { action: "replace" };
           }
-          if (!isResolved<ClientVpnEndpointProps>(news))
-            return { action: "update" };
+          if (!isResolved<ClientVpnEndpointProps>(news)) return { action: "update" };
           if (!output) return;
           const endpoint = yield* describe(output.clientVpnEndpointId);
           if (!endpoint || endpoint.Status?.Code === "deleting")
@@ -488,14 +454,10 @@ export const ClientVpnEndpointProvider = () =>
             : yield* recover(id, instanceId);
           if (!endpoint) return undefined;
           const attrs = yield* toAttrs(endpoint);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         list: Effect.fn(function* () {
-          const endpoints = yield* EC2.describeClientVpnEndpoints
-            .items({})
-            .pipe(Stream.runCollect);
+          const endpoints = yield* EC2.describeClientVpnEndpoints.items({}).pipe(Stream.runCollect);
           return yield* Effect.forEach(
             endpoints.filter((endpoint) => !gone(endpoint)),
             toAttrs,
@@ -507,9 +469,7 @@ export const ClientVpnEndpointProvider = () =>
             ...(yield* createInternalTags(id)),
             "alchemy::instance": instanceId,
           };
-          let endpoint = output
-            ? yield* describe(output.clientVpnEndpointId)
-            : undefined;
+          let endpoint = output ? yield* describe(output.clientVpnEndpointId) : undefined;
           endpoint ??= yield* recover(id, instanceId);
           if (endpoint?.Status?.Code === "deleting") {
             const endpointId = endpoint.ClientVpnEndpointId!;
@@ -525,10 +485,7 @@ export const ClientVpnEndpointProvider = () =>
                   : Effect.void,
               ),
               (effect) =>
-                retryClientVpn(
-                  effect,
-                  (error) => error._tag === "ClientVpnEndpointNotReady",
-                ),
+                retryClientVpn(effect, (error) => error._tag === "ClientVpnEndpointNotReady"),
             );
             endpoint = undefined;
           }
@@ -564,17 +521,11 @@ export const ClientVpnEndpointProvider = () =>
                     ),
               ),
               (effect) =>
-                retryClientVpn(
-                  effect,
-                  (error) => error._tag === "ClientVpnEndpointNotReady",
-                ),
+                retryClientVpn(effect, (error) => error._tag === "ClientVpnEndpointNotReady"),
             );
           }
           const endpointId = endpoint.ClientVpnEndpointId!;
-          const { changes, desired, groups } = yield* changesFor(
-            news,
-            endpoint,
-          );
+          const { changes, desired, groups } = yield* changesFor(news, endpoint);
           if (Object.keys(changes).length) {
             yield* EC2.modifyClientVpnEndpoint({
               ClientVpnEndpointId: endpointId,
@@ -592,10 +543,7 @@ export const ClientVpnEndpointProvider = () =>
                   matches &&
                   deepEqual(value.DnsServers ?? [], news.dnsServers ?? []) &&
                   (!groups ||
-                    deepEqual(
-                      [...(value.SecurityGroupIds ?? [])].sort(),
-                      [...groups].sort(),
-                    )) &&
+                    deepEqual([...(value.SecurityGroupIds ?? [])].sort(), [...groups].sort())) &&
                   // Disabled hooks can remain "applying" before a subnet is associated.
                   (!news.clientConnectOptions?.enabled ||
                     value.ClientConnectOptions?.Status?.Code !== "applying")
@@ -608,20 +556,14 @@ export const ClientVpnEndpointProvider = () =>
                           .filter(
                             ([key, expected]) =>
                               !current ||
-                              !deepEqual(
-                                current[key as keyof typeof current],
-                                expected,
-                              ),
+                              !deepEqual(current[key as keyof typeof current], expected),
                           )
                           .map(([key]) => key),
                       }),
                     );
               }),
               (effect) =>
-                retryClientVpn(
-                  effect,
-                  (error) => error._tag === "ClientVpnEndpointNotReady",
-                ),
+                retryClientVpn(effect, (error) => error._tag === "ClientVpnEndpointNotReady"),
             );
           }
           const { removed, upsert } = diffTags(
@@ -638,8 +580,7 @@ export const ClientVpnEndpointProvider = () =>
               Resources: [endpointId],
               Tags: removed.map((Key) => ({ Key })),
             });
-          if (upsert.length)
-            yield* EC2.createTags({ Resources: [endpointId], Tags: upsert });
+          if (upsert.length) yield* EC2.createTags({ Resources: [endpointId], Tags: upsert });
           const final = yield* describe(endpointId);
           if (!final)
             return yield* Effect.fail(
@@ -654,12 +595,7 @@ export const ClientVpnEndpointProvider = () =>
           if (endpoint.Status?.Code !== "deleting") {
             yield* EC2.deleteClientVpnEndpoint({
               ClientVpnEndpointId: endpointId,
-            }).pipe(
-              Effect.catchTag(
-                "InvalidClientVpnEndpointId.NotFound",
-                () => Effect.void,
-              ),
-            );
+            }).pipe(Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.void));
           }
           yield* describe(endpointId).pipe(
             Effect.flatMap((value) =>
@@ -673,10 +609,7 @@ export const ClientVpnEndpointProvider = () =>
                 : Effect.void,
             ),
             (effect) =>
-              retryClientVpn(
-                effect,
-                (error) => error._tag === "ClientVpnEndpointNotReady",
-              ),
+              retryClientVpn(effect, (error) => error._tag === "ClientVpnEndpointNotReady"),
           );
         }),
       };

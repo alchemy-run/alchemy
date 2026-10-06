@@ -45,7 +45,6 @@ export interface GenerateAs2805KekValidation extends Binding.Service<
   >
 > {}
 
-export const GenerateAs2805KekValidation =
-  Binding.Service<GenerateAs2805KekValidation>(
-    "AWS.PaymentCryptography.GenerateAs2805KekValidation",
-  );
+export const GenerateAs2805KekValidation = Binding.Service<GenerateAs2805KekValidation>(
+  "AWS.PaymentCryptography.GenerateAs2805KekValidation",
+);

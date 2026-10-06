@@ -33,11 +33,7 @@ declare namespace Env {
    * Durable Object actors on a remote workerd instance.
    */
   interface WorkerdDebugPortClient {
-    getEntrypoint(
-      service: string,
-      entrypoint?: string,
-      props?: Record<string, unknown>,
-    ): Fetcher;
+    getEntrypoint(service: string, entrypoint?: string, props?: Record<string, unknown>): Fetcher;
     getActor(service: string, entrypoint: string, actorId: string): Fetcher;
   }
 }
@@ -160,14 +156,9 @@ export function makeExternalDurableObject(
 /**
  * Forwards queue consumer requests to the queue broker in the consuming worker.
  */
-export class ExternalQueueConsumer extends WorkerEntrypoint<
-  Env,
-  Subscriber.QueueConsumer
-> {
+export class ExternalQueueConsumer extends WorkerEntrypoint<Env, Subscriber.QueueConsumer> {
   private target = Target.makeResolver(this.ctx.props, (service) =>
-    this.env.REGISTRY_DEBUG_PORT.connect(
-      service.debugPortAddress,
-    ).getEntrypoint(service.service),
+    this.env.REGISTRY_DEBUG_PORT.connect(service.debugPortAddress).getEntrypoint(service.service),
   );
 
   async fetch(request: Request): Promise<Response> {
@@ -258,14 +249,10 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
     if (controller.scheduledTime) {
       params.set("time", String(controller.scheduledTime));
     }
-    const response = await fetcher.fetch(
-      `http://localhost/cdn-cgi/handler/scheduled?${params}`,
-    );
+    const response = await fetcher.fetch(`http://localhost/cdn-cgi/handler/scheduled?${params}`);
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(
-        `Scheduled handler returned HTTP ${response.status}: ${body}`,
-      );
+      throw new Error(`Scheduled handler returned HTTP ${response.status}: ${body}`);
     }
   }
 
@@ -279,12 +266,7 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
     }
     // Filter out tail events to prevent infinite recursion (the remote tail() call would itself produce a tail event).
     const filtered = events.filter(
-      (item) =>
-        !(
-          item.event &&
-          "rpcMethod" in item.event &&
-          item.event.rpcMethod === "tail"
-        ),
+      (item) => !(item.event && "rpcMethod" in item.event && item.event.rpcMethod === "tail"),
     );
     const serializedEvents = JSON.parse(
       JSON.stringify(filtered, ExternalService.tailEventsReplacer),
@@ -381,10 +363,7 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
 /**
  * Forwards a workflow binding to the workflow engine in the owner worker.
  */
-export class ExternalWorkflow extends WorkerEntrypoint<
-  Env,
-  Subscriber.Workflow
-> {
+export class ExternalWorkflow extends WorkerEntrypoint<Env, Subscriber.Workflow> {
   private target: Target.Resolver;
 
   constructor(ctx: ExecutionContext<Subscriber.Workflow>, env: Env) {

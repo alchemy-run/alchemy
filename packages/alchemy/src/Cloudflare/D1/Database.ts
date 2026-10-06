@@ -1,11 +1,10 @@
 import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
@@ -24,11 +23,7 @@ import { hashImports, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localAccountId } from "../LocalAccount.ts";
-import {
-  generateLocalId,
-  LOCAL_PROVIDERS_URL,
-  localRuntimeServices,
-} from "../LocalRuntime.ts";
+import { generateLocalId, LOCAL_PROVIDERS_URL, localRuntimeServices } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
@@ -39,19 +34,20 @@ export const isDatabase = (value: unknown): value is Database =>
   isResourceOfType(value, "Cloudflare.D1Database");
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
-export type PrimaryLocationHint =
-  | "wnam"
-  | "enam"
-  | "weur"
-  | "eeur"
-  | "apac"
-  | "oc";
+export type PrimaryLocationHint = "wnam" | "enam" | "weur" | "eeur" | "apac" | "oc";
 
 export type CloneSource = Database | { databaseId: string } | { name: string };
 
 export type DatabaseProps = {
   /**
    * Name of the database. If omitted, a unique name will be generated.
+   *
+   * D1 names are unique per account. When an explicit name is kept across a
+   * replacement (e.g. `primaryLocationHint` or `jurisdiction` changes), the
+   * existing database and its data are deleted before the new one is created.
+   * Generated names get a new name on replacement, so the new database is
+   * created first.
+   *
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -73,9 +69,7 @@ export type DatabaseProps = {
    *
    * @default { mode: "disabled" }
    */
-  readReplication?: {
-    mode: "auto" | "disabled";
-  };
+  readReplication?: { mode: "auto" | "disabled" };
   /**
    * Jurisdiction in which the database data is guaranteed to be stored.
    * Cannot be changed after creation.
@@ -285,26 +279,30 @@ export const ProviderLive = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
+      const oldName = output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
       const name = news.name ?? oldName;
-      const oldJurisdiction =
-        output?.jurisdiction ?? olds.jurisdiction ?? "default";
+      const oldJurisdiction = output?.jurisdiction ?? olds.jurisdiction ?? "default";
       if (
         oldName !== name ||
         oldJurisdiction !== (news.jurisdiction ?? "default") ||
         (olds.primaryLocationHint !== news.primaryLocationHint &&
           news.primaryLocationHint !== undefined)
       ) {
-        return { action: "replace" } as const;
+        // D1 names are unique per account, so a replacement that keeps an
+        // explicit name cannot coexist with its predecessor: create-first
+        // would adopt the existing database by name and garbage collection
+        // would then delete it. Delete the old generation first instead.
+        // Generated names change with the new instance id, so they stay
+        // create-first.
+        return news.name !== undefined && news.name === oldName
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       const oldReplicationMode =
-        output?.readReplication?.mode ??
-        olds.readReplication?.mode ??
-        "disabled";
+        output?.readReplication?.mode ?? olds.readReplication?.mode ?? "disabled";
       const newReplicationMode = news.readReplication?.mode ?? "disabled";
       if (oldReplicationMode !== newReplicationMode) {
         return { action: "update" } as const;
@@ -333,8 +331,7 @@ export const ProviderLive = () =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
               .filter(
-                (db): db is (typeof page.result)[number] & { uuid: string } =>
-                  db.uuid != null,
+                (db): db is (typeof page.result)[number] & { uuid: string } => db.uuid != null,
               )
               .map((db) => ({
                 databaseId: db.uuid,
@@ -355,10 +352,7 @@ export const ProviderLive = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.databaseId) {
         return yield* d1
-          .getDatabase({
-            accountId: output.accountId,
-            databaseId: output.databaseId,
-          })
+          .getDatabase({ accountId: output.accountId, databaseId: output.databaseId })
           .pipe(
             Effect.map((db) => ({
               databaseId: db.uuid ?? output.databaseId,
@@ -374,9 +368,7 @@ export const ProviderLive = () =>
               migrationsHashes: output.migrationsHashes,
               importHashes: output.importHashes,
             })),
-            Effect.catchTag("DatabaseNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)),
           );
       }
       const name = yield* createDatabaseName(id, olds?.name);
@@ -420,24 +412,15 @@ export const ProviderLive = () =>
         | undefined;
       if (output?.databaseId) {
         observed = yield* d1
-          .getDatabase({
-            accountId: acct,
-            databaseId: output.databaseId,
-          })
-          .pipe(
-            Effect.catchTag("DatabaseNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .getDatabase({ accountId: acct, databaseId: output.databaseId })
+          .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)));
       }
       if (!observed) {
-        observed = yield* d1.listDatabases
-          .items({ accountId: acct, name })
-          .pipe(
-            Stream.filter((db) => db.name === name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-          );
+        observed = yield* d1.listDatabases.items({ accountId: acct, name }).pipe(
+          Stream.filter((db) => db.name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -457,13 +440,11 @@ export const ProviderLive = () =>
           .pipe(
             Effect.catchTag("InvalidProperty", () =>
               Effect.gen(function* () {
-                const match = yield* d1.listDatabases
-                  .items({ accountId: acct, name })
-                  .pipe(
-                    Stream.filter((db) => db.name === name),
-                    Stream.runHead,
-                    Effect.map(Option.getOrUndefined),
-                  );
+                const match = yield* d1.listDatabases.items({ accountId: acct, name }).pipe(
+                  Stream.filter((db) => db.name === name),
+                  Stream.runHead,
+                  Effect.map(Option.getOrUndefined),
+                );
                 if (match) {
                   return match;
                 }
@@ -484,8 +465,7 @@ export const ProviderLive = () =>
       // database resource itself. Always patch with the desired mode
       // so adoption converges drifted state.
       const desiredReplicationMode = news.readReplication?.mode ?? "disabled";
-      const observedReplicationMode =
-        observed?.readReplication?.mode ?? "disabled";
+      const observedReplicationMode = observed?.readReplication?.mode ?? "disabled";
       if (
         isFirstCreation
           ? desiredReplicationMode !== "disabled"
@@ -525,9 +505,7 @@ export const ProviderLive = () =>
               Effect.gen(function* () {
                 const queryDb = yield* d1.queryDatabase;
                 yield* apply(
-                  makeD1MigrationExecutor((sql) =>
-                    queryDb({ accountId: acct, databaseId, sql }),
-                  ),
+                  makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, sql })),
                 );
               }),
           })
@@ -564,10 +542,7 @@ export const ProviderLive = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* d1
-        .deleteDatabase({
-          accountId: output.accountId,
-          databaseId: output.databaseId,
-        })
+        .deleteDatabase({ accountId: output.accountId, databaseId: output.databaseId })
         .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
     }),
   });
@@ -600,9 +575,7 @@ export const ProviderLocal = () =>
       // the HTTP client are resolved once at layer build and closed over —
       // lifecycle effects run with the engine's call-time context, which
       // doesn't include them.
-      const runtimeContext = yield* Effect.context<
-        RuntimeServices | HttpClient.HttpClient
-      >();
+      const runtimeContext = yield* Effect.context<RuntimeServices | HttpClient.HttpClient>();
 
       return {
         stables: ["accountId"],
@@ -619,10 +592,7 @@ export const ProviderLocal = () =>
             return { action: "update" } as const;
           }
           if (news.importFiles?.length) {
-            const newHashes = yield* hashImports(
-              news.importFiles,
-              yield* rootDir,
-            );
+            const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
             if (!recordsEqual(newHashes, output.importHashes ?? {})) {
               return { action: "update" } as const;
             }
@@ -655,13 +625,10 @@ export const ProviderLocal = () =>
           // Sync imports — locally an import file is just multi-statement
           // SQL, executed through the same gateway. Files whose hash matches
           // previously-imported state are skipped (mirroring `runImports`).
-          const importHashes: Record<string, string> = {
-            ...(output?.importHashes ?? {}),
-          };
+          const importHashes: Record<string, string> = { ...output?.importHashes };
           if (news.importFiles?.length) {
             const importRootDir = yield* rootDir;
-            const pending: Array<{ path: string; sql: string; hash: string }> =
-              [];
+            const pending: Array<{ path: string; sql: string; hash: string }> = [];
             for (const filePath of news.importFiles) {
               const file = yield* readSqlFile(importRootDir, filePath);
               if (importHashes[filePath] === file.hash) continue;
@@ -669,9 +636,7 @@ export const ProviderLocal = () =>
             }
             if (pending.length > 0) {
               yield* withLocalD1Executor(databaseId, (executor) =>
-                Effect.forEach(pending, (file) => executor(file.sql), {
-                  discard: true,
-                }),
+                Effect.forEach(pending, (file) => executor(file.sql), { discard: true }),
               ).pipe(Effect.provideContext(runtimeContext));
               for (const file of pending) {
                 importHashes[file.path] = file.hash;
@@ -685,11 +650,7 @@ export const ProviderLocal = () =>
             jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
             readReplication: news.readReplication,
             accountId: output?.accountId ?? accountId,
-            ...migrationsAttrs({
-              input: migrationsInput,
-              run: migrations,
-              output,
-            }),
+            ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
             importHashes,
           };
         }),
@@ -739,15 +700,11 @@ const resolveCloneSource = (source: CloneSource, accountId: string) =>
         Effect.map(Option.getOrUndefined),
       );
       if (!match?.uuid) {
-        return yield* Effect.die(
-          `Source database "${name}" not found for cloning`,
-        );
+        return yield* Effect.die(`Source database "${name}" not found for cloning`);
       }
       return match.uuid;
     }
-    return yield* Effect.die(
-      "Invalid clone source: must provide databaseId or name",
-    );
+    return yield* Effect.die("Invalid clone source: must provide databaseId or name");
   });
 
 /**
@@ -769,12 +726,7 @@ const runImports = (
         hashes[filePath] = file.hash;
         continue;
       }
-      yield* importD1Database({
-        accountId,
-        databaseId,
-        sqlData: file.sql,
-        filename: file.id,
-      });
+      yield* importD1Database({ accountId, databaseId, sqlData: file.sql, filename: file.id });
       hashes[filePath] = file.hash;
     }
     // Drop entries for files no longer listed.

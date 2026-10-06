@@ -12,9 +12,6 @@ export const DisassociateVehicleFleetHttp = Layer.effect(
     actions: ["iotfleetwise:DisassociateVehicleFleet"],
     requestKey: "fleetId",
     identifier: (fleet: Fleet) => fleet.fleetId,
-    resources: (fleet: Fleet) => [
-      fleet.fleetArn,
-      "arn:aws:iotfleetwise:*:*:vehicle/*",
-    ],
+    resources: (fleet: Fleet) => [fleet.fleetArn, "arn:aws:iotfleetwise:*:*:vehicle/*"],
   }),
 );

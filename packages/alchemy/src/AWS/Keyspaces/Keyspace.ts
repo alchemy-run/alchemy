@@ -69,9 +69,7 @@ export interface Keyspace extends Resource<
  */
 export const Keyspace = Resource<Keyspace>("AWS.Keyspaces.Keyspace");
 
-const toTagRecord = (
-  tags: keyspaces.Tag[] | undefined,
-): Record<string, string> =>
+const toTagRecord = (tags: keyspaces.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.key, t.value]));
 
 /**
@@ -100,21 +98,15 @@ export const KeyspaceProvider = () =>
       const readKeyspace = Effect.fn(function* (name: string) {
         return yield* keyspaces
           .getKeyspace({ keyspaceName: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
-        const tags = yield* keyspaces.listTagsForResource
-          .items({ resourceArn: arn })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((c) => Array.from(c)),
-            Effect.catch(() => Effect.succeed<keyspaces.Tag[]>([])),
-          );
+        const tags = yield* keyspaces.listTagsForResource.items({ resourceArn: arn }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)),
+          Effect.catch(() => Effect.succeed<keyspaces.Tag[]>([])),
+        );
         return toTagRecord(tags);
       });
 
@@ -169,10 +161,7 @@ export const KeyspaceProvider = () =>
                   : Effect.succeed(k),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
               }),
             );
           }
@@ -209,10 +198,7 @@ export const KeyspaceProvider = () =>
             // ConflictException; retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
           // Deletion is asynchronous — wait (bounded) until the keyspace is
@@ -225,10 +211,7 @@ export const KeyspaceProvider = () =>
                 : Effect.fail(new Error(`Keyspace '${name}' still deleting`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
             Effect.catch(() => Effect.void),
           );

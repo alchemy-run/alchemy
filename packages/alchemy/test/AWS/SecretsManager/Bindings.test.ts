@@ -1,23 +1,21 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import SecretsManagerTestFunctionLive, {
-  SecretsManagerTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import GetSecretOnlyTestFunctionLive, {
   GetSecretOnlyTestFunction,
 } from "./fixtures/get-secret-only-handler.ts";
+import SecretsManagerTestFunctionLive, { SecretsManagerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -30,10 +28,7 @@ const sharedStack = Core.scratchStack(
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load. Budget ~150s
 // of readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let getOnlyUrl: string;
@@ -56,40 +51,24 @@ const policyDocument = Schema.fromJsonString(
 );
 
 const secretRolePermissions = Effect.fn(function* (roleName: string) {
-  const pages = yield* IAM.listRolePolicies
-    .pages({ RoleName: roleName })
-    .pipe(Stream.runCollect);
+  const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
     pages.flatMap((page) => page.PolicyNames),
     Effect.fn(function* (PolicyName) {
-      const policy = yield* IAM.getRolePolicy({
-        RoleName: roleName,
-        PolicyName,
-      });
-      const decoded = yield* Effect.try(() =>
-        decodeURIComponent(policy.PolicyDocument),
+      const policy = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });
+      const decoded = yield* Effect.try(() => decodeURIComponent(policy.PolicyDocument));
+      return yield* Schema.decodeUnknownEffect(policyDocument, { onExcessProperty: "error" })(
+        decoded,
       );
-      return yield* Schema.decodeUnknownEffect(policyDocument, {
-        onExcessProperty: "error",
-      })(decoded);
     }),
   );
   return policies.flatMap((policy) =>
     policy.Statement.flatMap((statement) => {
-      const actions =
-        typeof statement.Action === "string"
-          ? [statement.Action]
-          : statement.Action;
+      const actions = typeof statement.Action === "string" ? [statement.Action] : statement.Action;
       const resources =
-        typeof statement.Resource === "string"
-          ? [statement.Resource]
-          : statement.Resource;
+        typeof statement.Resource === "string" ? [statement.Resource] : statement.Resource;
       return actions.flatMap((action) =>
-        resources.map((resource) => ({
-          effect: statement.Effect,
-          action,
-          resource,
-        })),
+        resources.map((resource) => ({ effect: statement.Effect, action, resource })),
       );
     }),
   );
@@ -121,27 +100,19 @@ const assertGetOnlyResourcesDeleted = Effect.gen(function* () {
   yield* Effect.all(
     [
       getOnlySecret
-        ? secretsmanager
-            .describeSecret({ SecretId: getOnlySecret.secretArn })
-            .pipe(
-              Effect.flatMap(() =>
-                Effect.fail(new FixtureStillExists({ resource: "secret" })),
-              ),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (error) => error._tag === "FixtureStillExists",
-                schedule: Schedule.spaced("2 seconds"),
-                times: 10,
-              }),
-            )
+        ? secretsmanager.describeSecret({ SecretId: getOnlySecret.secretArn }).pipe(
+            Effect.flatMap(() => Effect.fail(new FixtureStillExists({ resource: "secret" }))),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (error) => error._tag === "FixtureStillExists",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+            }),
+          )
         : Effect.void,
       getOnlyFunction
-        ? Lambda.getFunction({
-            FunctionName: getOnlyFunction.functionName,
-          }).pipe(
-            Effect.flatMap(() =>
-              Effect.fail(new FixtureStillExists({ resource: "function" })),
-            ),
+        ? Lambda.getFunction({ FunctionName: getOnlyFunction.functionName }).pipe(
+            Effect.flatMap(() => Effect.fail(new FixtureStillExists({ resource: "function" }))),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
               while: (error) => error._tag === "FixtureStillExists",
@@ -172,19 +143,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -210,9 +176,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "SecretsManager test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("SecretsManager test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("SecretsManager test setup: deploying fixture");
@@ -235,16 +199,11 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap(
             Schema.decodeUnknownEffect(
-              Schema.Struct({
-                secretArn: Schema.String,
-                secretName: Schema.String,
-              }),
+              Schema.Struct({ secretArn: Schema.String, secretName: Schema.String }),
             ),
           ),
           Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
@@ -254,22 +213,16 @@ describe.sequential(
         baseUrl = shared.functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/describe`;
 
-        yield* Effect.logInfo(
-          `SecretsManager test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`SecretsManager test setup: probing readiness at ${readinessUrl}`);
 
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tap(() =>
-            Effect.logInfo(
-              "SecretsManager test setup: fixture responded successfully",
-            ),
+            Effect.logInfo("SecretsManager test setup: fixture responded successfully"),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -340,9 +293,7 @@ describe.sequential(
               attached.flatMap((page) =>
                 (page.AttachedPolicies ?? []).map((policy) => policy.PolicyArn),
               ),
-            ).toEqual([
-              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-            ]);
+            ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
           }),
         { tags: ["provider:aws:iam"], timeout: 120_000 },
       );
@@ -355,16 +306,12 @@ describe.sequential(
             expect(value.secretString).toBe("alchemy-sm-get-only-value");
             expect(value.arn).toBe(getOnlySecret!.secretArn);
 
-            const response = yield* HttpClient.get(
-              `${getOnlyUrl}/describe-denied`,
-            );
+            const response = yield* HttpClient.get(`${getOnlyUrl}/describe-denied`);
             expect(response.status).toBe(200);
             const denied = yield* response.json.pipe(
               Effect.flatMap(
                 Schema.decodeUnknownEffect(
-                  Schema.Struct({
-                    tag: Schema.Literal("AccessDeniedException"),
-                  }),
+                  Schema.Struct({ tag: Schema.Literal("AccessDeniedException") }),
                 ),
               ),
             );
@@ -384,9 +331,7 @@ describe.sequential(
             (body) => body?.secretString === "alchemy-sm-fixture-value",
           );
 
-          expect((response as any).secretString).toBe(
-            "alchemy-sm-fixture-value",
-          );
+          expect((response as any).secretString).toBe("alchemy-sm-fixture-value");
           expect((response as any).arn).toContain("arn:aws:secretsmanager:");
           expect((response as any).versionId).toBeTruthy();
         }),
@@ -397,10 +342,9 @@ describe.sequential(
       test.provider("rotates the string secret value", (_stack) =>
         Effect.gen(function* () {
           const put = yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/put-string`),
-              { value: "alchemy-sm-rotated-value" },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/put-string`), {
+              value: "alchemy-sm-rotated-value",
+            }),
           ).pipe(Effect.flatMap((r) => r.json));
 
           expect((put as any).versionId).toBeTruthy();
@@ -422,10 +366,9 @@ describe.sequential(
       test.provider("writes and reads back a binary secret value", (_stack) =>
         Effect.gen(function* () {
           const put = yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/put-binary`),
-              { base64: BINARY_BASE64 },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/put-binary`), {
+              base64: BINARY_BASE64,
+            }),
           ).pipe(Effect.flatMap((r) => r.json));
 
           expect((put as any).versionId).toBeTruthy();
@@ -450,15 +393,13 @@ describe.sequential(
     describe("DescribeSecret", () => {
       test.provider("describes the bound secret", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/describe`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/describe`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
 
           expect((response as any).arn).toContain("arn:aws:secretsmanager:");
           expect((response as any).name).toBeTruthy();
-          expect((response as any).description).toBe(
-            "alchemy binding fixture (string value)",
-          );
+          expect((response as any).description).toBe("alchemy binding fixture (string value)");
         }),
       );
     });
@@ -479,19 +420,17 @@ describe.sequential(
     describe("ListSecrets", () => {
       test.provider("lists the bound secret by name filter", (_stack) =>
         Effect.gen(function* () {
-          const described = yield* send(
-            HttpClientRequest.get(`${baseUrl}/describe`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const described = yield* send(HttpClientRequest.get(`${baseUrl}/describe`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           const name = (described as any).name as string;
 
           // ListSecrets is eventually consistent; poll until the freshly
           // created secret surfaces in the filtered listing.
           const response = yield* fetchUntil(
-            send(
-              HttpClientRequest.get(
-                `${baseUrl}/list?name=${encodeURIComponent(name)}`,
-              ),
-            ).pipe(Effect.flatMap((r) => r.json)),
+            send(HttpClientRequest.get(`${baseUrl}/list?name=${encodeURIComponent(name)}`)).pipe(
+              Effect.flatMap((r) => r.json),
+            ),
             (body) => Array.isArray(body?.names) && body.names.includes(name),
           );
 
@@ -501,26 +440,20 @@ describe.sequential(
     });
 
     describe("ListSecretVersionIds", () => {
-      test.provider(
-        "lists the string secret's versions with stages",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* fetchUntil(
-              send(HttpClientRequest.get(`${baseUrl}/versions`)).pipe(
-                Effect.flatMap((r) => r.json),
-              ),
-              (body) =>
-                Array.isArray(body?.versions) &&
-                body.versions.some((version: any) =>
-                  version.stages?.includes("AWSCURRENT"),
-                ),
-            );
+      test.provider("lists the string secret's versions with stages", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* fetchUntil(
+            send(HttpClientRequest.get(`${baseUrl}/versions`)).pipe(Effect.flatMap((r) => r.json)),
+            (body) =>
+              Array.isArray(body?.versions) &&
+              body.versions.some((version: any) => version.stages?.includes("AWSCURRENT")),
+          );
 
-            const current = (response as any).versions.find((version: any) =>
-              version.stages.includes("AWSCURRENT"),
-            );
-            expect(current.versionId).toBeTruthy();
-          }),
+          const current = (response as any).versions.find((version: any) =>
+            version.stages.includes("AWSCURRENT"),
+          );
+          expect(current.versionId).toBeTruthy();
+        }),
       );
     });
 
@@ -530,16 +463,13 @@ describe.sequential(
           // BatchGetSecretValue is eventually consistent right after the
           // fixture secrets are created; poll until both values are served.
           const response = yield* fetchUntil(
-            send(HttpClientRequest.get(`${baseUrl}/batch`)).pipe(
-              Effect.flatMap((r) => r.json),
-            ),
+            send(HttpClientRequest.get(`${baseUrl}/batch`)).pipe(Effect.flatMap((r) => r.json)),
             (body) =>
               Array.isArray(body?.values) &&
               body.values.length === 2 &&
               body.values.every(
                 (entry: any) =>
-                  typeof entry.secretString === "string" &&
-                  entry.secretString.length > 0,
+                  typeof entry.secretString === "string" && entry.secretString.length > 0,
               ),
           );
 
@@ -558,9 +488,9 @@ describe.sequential(
     describe("RotationEventSource", () => {
       test.provider("rotation is configured on the secret", (_stack) =>
         Effect.gen(function* () {
-          const status = yield* send(
-            HttpClientRequest.get(`${baseUrl}/rotation-status`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const status = yield* send(HttpClientRequest.get(`${baseUrl}/rotation-status`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
 
           expect((status as any).rotationEnabled).toBe(true);
         }),
@@ -577,9 +507,9 @@ describe.sequential(
               (body) => typeof body?.secretString === "string",
             );
 
-            const rotate = yield* send(
-              HttpClientRequest.post(`${baseUrl}/rotate`),
-            ).pipe(Effect.flatMap((r) => r.json));
+            const rotate = yield* send(HttpClientRequest.post(`${baseUrl}/rotate`)).pipe(
+              Effect.flatMap((r) => r.json),
+            );
             // The fixture surfaces typed RotateSecret failures as
             // `{ error, message }` — assert none so failures are readable.
             expect(rotate).not.toHaveProperty("error");
@@ -598,9 +528,7 @@ describe.sequential(
             );
 
             expect((after as any).secretString).toMatch(/^alchemy-sm-rotated-/);
-            expect((after as any).versionId).not.toBe(
-              (before as any).versionId,
-            );
+            expect((after as any).versionId).not.toBe((before as any).versionId);
           }),
         { timeout: 150_000 },
       );
@@ -619,15 +547,10 @@ const fetchUntil = <A>(
 ) =>
   fetch.pipe(
     Effect.flatMap((body) =>
-      ready(body)
-        ? Effect.succeed(body as A)
-        : Effect.fail(new BindingNotConsistent()),
+      ready(body) ? Effect.succeed(body as A) : Effect.fail(new BindingNotConsistent()),
     ),
     Effect.retry({
       while: (e) => e._tag === "BindingNotConsistent",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(attempts),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(attempts)]),
     }),
   );

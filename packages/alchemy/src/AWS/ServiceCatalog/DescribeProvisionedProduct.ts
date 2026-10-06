@@ -36,7 +36,6 @@ export interface DescribeProvisionedProduct extends Binding.Service<
     >
   >
 > {}
-export const DescribeProvisionedProduct =
-  Binding.Service<DescribeProvisionedProduct>(
-    "AWS.ServiceCatalog.DescribeProvisionedProduct",
-  );
+export const DescribeProvisionedProduct = Binding.Service<DescribeProvisionedProduct>(
+  "AWS.ServiceCatalog.DescribeProvisionedProduct",
+);

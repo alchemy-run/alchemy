@@ -110,9 +110,7 @@ export const consumePredictionEvents = <StreamReq = never, Req = never>(
               ...(props.eventTypeNames !== undefined
                 ? { eventTypeName: [...props.eventTypeNames] }
                 : {}),
-              ...(props.detectorIds !== undefined
-                ? { detectorId: [...props.detectorIds] }
-                : {}),
+              ...(props.detectorIds !== undefined ? { detectorId: [...props.detectorIds] } : {}),
             },
           }
         : {}),

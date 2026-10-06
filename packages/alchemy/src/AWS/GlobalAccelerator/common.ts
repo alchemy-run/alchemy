@@ -26,9 +26,7 @@ export const retryGaTransaction = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "TransactionInProgressException" ||
-      e._tag === "ConflictException",
+    while: (e) => e._tag === "TransactionInProgressException" || e._tag === "ConflictException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
@@ -54,11 +52,7 @@ export const retryGaDeletion = <A, E extends { _tag: string }, R>(
  * `updateAccelerator` / dependent deletes return, so retry the delete on a
  * bounded schedule (~3 minutes) until the disable transaction propagates.
  */
-export const retryUntilAcceleratorDeletable = <
-  A,
-  E extends { _tag: string },
-  R,
->(
+export const retryUntilAcceleratorDeletable = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {

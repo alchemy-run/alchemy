@@ -30,10 +30,7 @@ export interface DescribeCollection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DescribeCollectionRequest,
-    ) => Effect.Effect<
-      rekognition.DescribeCollectionResponse,
-      rekognition.DescribeCollectionError
-    >
+    ) => Effect.Effect<rekognition.DescribeCollectionResponse, rekognition.DescribeCollectionError>
   >
 > {}
 export const DescribeCollection = Binding.Service<DescribeCollection>(

@@ -74,11 +74,7 @@ export interface PresignGetObject extends Binding.Service<
   "AWS.S3.PresignGetObject",
   (
     bucket: Bucket,
-  ) => Effect.Effect<
-    (request: PresignGetObjectRequest) => Effect.Effect<string, PresignError>
-  >
+  ) => Effect.Effect<(request: PresignGetObjectRequest) => Effect.Effect<string, PresignError>>
 > {}
 
-export const PresignGetObject = Binding.Service<PresignGetObject>(
-  "AWS.S3.PresignGetObject",
-);
+export const PresignGetObject = Binding.Service<PresignGetObject>("AWS.S3.PresignGetObject");

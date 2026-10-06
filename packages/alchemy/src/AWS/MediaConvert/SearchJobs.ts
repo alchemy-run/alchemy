@@ -32,12 +32,7 @@ export interface SearchJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: mediaconvert.SearchJobsRequest,
-    ) => Effect.Effect<
-      mediaconvert.SearchJobsResponse,
-      mediaconvert.SearchJobsError
-    >
+    ) => Effect.Effect<mediaconvert.SearchJobsResponse, mediaconvert.SearchJobsError>
   >
 > {}
-export const SearchJobs = Binding.Service<SearchJobs>(
-  "AWS.MediaConvert.SearchJobs",
-);
+export const SearchJobs = Binding.Service<SearchJobs>("AWS.MediaConvert.SearchJobs");

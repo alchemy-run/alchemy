@@ -1,6 +1,6 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
-import type * as Cloudflare from "@/Cloudflare/index.ts";
 import { AwsClient } from "aws4fetch";
+import type * as Cloudflare from "@/Cloudflare/index.ts";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -28,9 +28,7 @@ export default {
       case "/presign-get":
         return Response.json({
           url: await presign(env, key, "GET", {
-            query: contentType
-              ? { "response-content-type": contentType }
-              : undefined,
+            query: contentType ? { "response-content-type": contentType } : undefined,
           }),
         });
       case "/read": {

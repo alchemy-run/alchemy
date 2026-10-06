@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { EmailContact } from "@/AWS/NotificationsContacts";
-import * as Test from "@/Test/Alchemy";
 import * as contacts from "@distilled.cloud/aws/notificationscontacts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EmailContact } from "@/AWS/NotificationsContacts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,10 +22,7 @@ const assertContactGone = (arn: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -39,10 +36,7 @@ describe(
         Effect.gen(function* () {
           yield* stack.destroy();
 
-          const deployContact = (props: {
-            emailAddress: string;
-            tags: Record<string, string>;
-          }) =>
+          const deployContact = (props: { emailAddress: string; tags: Record<string, string> }) =>
             stack.deploy(
               Effect.gen(function* () {
                 const contact = yield* EmailContact("OnCall", {
@@ -72,14 +66,10 @@ describe(
           expect(created.status).toBe("inactive");
 
           // Out-of-band: the contact and its tags are live.
-          const observed = yield* contacts.getEmailContact({
-            arn: created.arn,
-          });
+          const observed = yield* contacts.getEmailContact({ arn: created.arn });
           expect(unwrap(observed.emailContact.address)).toBe(EMAIL_A);
           expect(observed.emailContact.status).toBe("inactive");
-          const tags = yield* contacts.listTagsForResource({
-            arn: created.arn,
-          });
+          const tags = yield* contacts.listTagsForResource({ arn: created.arn });
           expect(tags.tags?.purpose).toBe("alchemy-test");
           expect(tags.tags?.["alchemy::id"]).toBe("OnCall");
 
@@ -89,9 +79,7 @@ describe(
             tags: { purpose: "alchemy-test", updated: "true" },
           });
           expect(updated.arn).toBe(created.arn);
-          const tagsAfterUpdate = yield* contacts.listTagsForResource({
-            arn: created.arn,
-          });
+          const tagsAfterUpdate = yield* contacts.listTagsForResource({ arn: created.arn });
           expect(tagsAfterUpdate.tags?.updated).toBe("true");
 
           // REPLACE — contacts have no update API, so changing the address

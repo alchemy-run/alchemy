@@ -23,9 +23,7 @@ export interface StopBuild extends Binding.Service<
   <P extends Project>(
     project: P,
   ) => Effect.Effect<
-    (
-      request: SVC.StopBuildInput,
-    ) => Effect.Effect<SVC.StopBuildOutput, SVC.StopBuildError>
+    (request: SVC.StopBuildInput) => Effect.Effect<SVC.StopBuildOutput, SVC.StopBuildError>
   >
 > {}
 export const StopBuild = Binding.Service<StopBuild>("AWS.CodeBuild.StopBuild");

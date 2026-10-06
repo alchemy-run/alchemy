@@ -12,9 +12,7 @@ import type { Providers } from "../Providers.ts";
  * Raised when a freshly created Chatbot association has not become visible
  * to `listAssociations` within the bounded eventual-consistency window.
  */
-export class AssociationNotVisible extends Data.TaggedError(
-  "AssociationNotVisible",
-)<{
+export class AssociationNotVisible extends Data.TaggedError("AssociationNotVisible")<{
   readonly chatConfiguration: string;
   readonly resource: string;
 }> {}
@@ -93,23 +91,14 @@ export const AssociationProvider = () =>
       // configuration ARN yields an empty list (verified live), while a
       // malformed ARN surfaces the typed InvalidRequestException — both are
       // treated as "no association".
-      const observeAssociation = Effect.fn(function* (
-        chatConfiguration: string,
-        resource: string,
-      ) {
-        return yield* chatbot.listAssociations
-          .items({ ChatConfiguration: chatConfiguration })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((listings) =>
-              Array.from(listings).find(
-                (listing) => listing.Resource === resource,
-              ),
-            ),
-            Effect.catchTag("InvalidRequestException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const observeAssociation = Effect.fn(function* (chatConfiguration: string, resource: string) {
+        return yield* chatbot.listAssociations.items({ ChatConfiguration: chatConfiguration }).pipe(
+          Stream.runCollect,
+          Effect.map((listings) =>
+            Array.from(listings).find((listing) => listing.Resource === resource),
+          ),
+          Effect.catchTag("InvalidRequestException", () => Effect.succeed(undefined)),
+        );
       });
 
       const toAttributes = (chatConfiguration: string, resource: string) => ({
@@ -125,15 +114,13 @@ export const AssociationProvider = () =>
           if (!isResolved(news)) return undefined;
           if (
             olds !== undefined &&
-            (olds.chatConfiguration !== news.chatConfiguration ||
-              olds.resource !== news.resource)
+            (olds.chatConfiguration !== news.chatConfiguration || olds.resource !== news.resource)
           ) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const chatConfiguration =
-            output?.chatConfigurationArn ?? olds?.chatConfiguration;
+          const chatConfiguration = output?.chatConfigurationArn ?? olds?.chatConfiguration;
           const resource = output?.resourceArn ?? olds?.resource;
           if (chatConfiguration === undefined || resource === undefined) {
             return undefined;
@@ -148,10 +135,7 @@ export const AssociationProvider = () =>
         // no mutable aspect to sync.
         reconcile: Effect.fn(function* ({ news, session }) {
           // 1. OBSERVE — cloud state is authoritative.
-          const observed = yield* observeAssociation(
-            news.chatConfiguration,
-            news.resource,
-          );
+          const observed = yield* observeAssociation(news.chatConfiguration, news.resource);
 
           // 2. ENSURE — associate when missing. The API is an idempotent
           //    upsert, so a concurrent associate converges naturally.
@@ -162,10 +146,7 @@ export const AssociationProvider = () =>
             });
 
             // 3. RETURN — bounded wait until the association is visible.
-            yield* observeAssociation(
-              news.chatConfiguration,
-              news.resource,
-            ).pipe(
+            yield* observeAssociation(news.chatConfiguration, news.resource).pipe(
               Effect.flatMap((listing) =>
                 listing !== undefined
                   ? Effect.void
@@ -178,10 +159,7 @@ export const AssociationProvider = () =>
               ),
               Effect.retry({
                 while: (e): boolean => e._tag === "AssociationNotVisible",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
               }),
             );
           }
