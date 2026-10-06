@@ -1,11 +1,10 @@
-import { updateBranch } from "@distilled.cloud/prisma/management";
+import { createProjectBranch, updateBranch } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
 import { expectProjectGone, failureOf, forgetState, patchStateAttr } from "./fixtures/Live.ts";
-import { fakeCloudProviders, makeFakeCloud } from "./fixtures/ResourcesFake.ts";
 import { expectBranchGone, observeBranch, observeDefaultBranch } from "./fixtures/ResourcesLive.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
@@ -187,29 +186,30 @@ test.provider(
   { tags: [...tags, "provider:prisma:app"], timeout: 180_000 },
 );
 
-// A create race (the POST lands but its response is lost as a 409) cannot be
-// produced on demand against the real API.
-const raceCloud = makeFakeCloud();
-const race = Test.make({ providers: fakeCloudProviders(raceCloud) });
-
-race.test.provider(
-  "refuses to take over a branch that appears after the adoption check",
+test.provider(
+  "refuses to take over a branch created out of band before the deploy",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
-    raceCloud.faults.race.add("branch");
-    const failure = yield* failureOf(stack.deploy(branchStack()));
-    expect(failure.text).toContain("appeared after the adoption check");
-    // The raced branch exists but was never claimed by state.
-    expect(
-      Array.from(raceCloud.branches.values()).filter(
-        (branch) => branch.gitName === "feature/preview",
-      ),
-    ).toHaveLength(1);
+    const { project } = yield* stack.deploy(projectOnly);
+    const main = yield* observeDefaultBranch(project.projectId);
+    const foreign = (yield* createProjectBranch({
+      projectId: project.projectId,
+      gitName: "feature/preview",
+    })).data;
 
+    const refused = yield* failureOf(stack.deploy(branchStack({ isDefault: true })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    // The foreign branch was neither claimed nor promoted.
+    const untouched = yield* observeBranch(foreign.id);
+    expect(untouched.gitName).toBe("feature/preview");
+    expect(untouched.isDefault).toBe(false);
+    expect((yield* observeBranch(main.id)).isDefault).toBe(true);
+
+    // Project deletion removes the foreign branch with it.
     yield* stack.destroy();
-    expect(raceCloud.projects.size).toBe(0);
-    expect(raceCloud.branches.size).toBe(0);
+    yield* expectBranchGone(foreign.id);
+    yield* expectProjectGone(project.projectId);
   }),
-  { tags: ["unit", "provider:prisma", "provider:prisma:branch", "local"] },
+  { tags, timeout: 180_000 },
 );

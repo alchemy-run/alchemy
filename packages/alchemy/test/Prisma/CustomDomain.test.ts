@@ -1,16 +1,28 @@
-import { getServiceDomains } from "@distilled.cloud/prisma/management";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import {
+  createServiceDomain,
+  deleteDomain,
+  getDomain,
+  getServiceDomains,
+} from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Output from "@/Output";
 import * as Prisma from "@/Prisma";
-import { PrismaApiError, type PrismaManagementClient } from "@/Prisma/Client";
-import type { CustomDomain as ApiCustomDomain } from "@/Prisma/Types";
+import { PrismaApiError } from "@/Prisma/Client";
 import * as Test from "@/Test/Alchemy";
-import { expectProjectGone, failureOf, patchStateAttr } from "./fixtures/Live.ts";
-import { fakeCustomDomainProviders } from "./fixtures/ResourcesFake.ts";
+import { artifactV1Path, expectDeploymentGone } from "./fixtures/DeploymentLive.ts";
+import { expectGone, expectProjectGone, failureOf, patchStateAttr } from "./fixtures/Live.ts";
 import { expectAppGone, expectBranchGone } from "./fixtures/ResourcesLive.ts";
 
-const { test } = Test.make({ providers: Prisma.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Prisma.providers(), Cloudflare.providers()),
+});
 
 const liveTags = [
   "provider:prisma",
@@ -20,10 +32,8 @@ const liveTags = [
   "live",
 ];
 
-// A live domain needs an App with a started and promoted deployment, which
-// needs a real Compute build (see Compute.live.test.ts). Without one the API
-// refuses the create, which is what the live tests below pin; the domain
-// lifecycle itself runs against the fake further down.
+// A live domain needs an App with a started and promoted deployment. Without
+// one the API refuses the create.
 test.provider(
   "creating a domain on an App without a promoted deployment is rejected by Prisma",
   Effect.fn(function* (stack: Test.ScratchStack) {
@@ -92,221 +102,156 @@ test.provider(
   { tags: [...liveTags, "provider:prisma:branch"], timeout: 180_000 },
 );
 
-const createdAt = "2026-01-01T00:00:00.000Z";
+// Prisma verifies DNS before it accepts a domain, so the lifecycle owns a
+// CNAME in the Cloudflare test zone pointing at the App region's switchboard.
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const HOSTNAME = `alchemy-prisma-domain.${zoneName}`;
+const SWITCHBOARD = "switchboard.ewr.prisma.build";
+
+const resolveZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: zoneName });
+  if (!zone) {
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
+  }
+  return zone.id;
+});
+
+const expectDomainGone = (domainId: string) =>
+  expectGone(
+    getDomain({ domainId }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
+  );
 
 /**
- * A client-shaped domain cloud: CustomDomain still calls `PrismaClient`. Every
- * App sits on the default branch.
+ * A default-branch App serving a promoted deployment of the checked-in
+ * artifact, plus the CNAME. Prisma accepts a domain only once a deployment is
+ * promoted, so the domain is deployed in a later step than the deployment. It
+ * references the App rather than the deployment because an asserted
+ * promotion reconciles on every deploy.
  */
-const makeDomainCloud = () => {
-  const domains = new Map<string, ApiCustomDomain>();
-  const calls: Array<[string, unknown?]> = [];
-  let nextId = 1;
-  const state = { createAnswers200: false };
-  const notFound = (path: string) =>
-    new PrismaApiError({ method: "GET", path, status: 404, message: "not found" });
-  const domain = (appId: string, hostname: string): ApiCustomDomain => {
-    const id = `domain-${nextId++}`;
-    return {
-      id,
-      type: "custom-domain",
-      url: `https://api.prisma.test/v1/domains/${id}`,
-      hostname,
-      appId,
-      status: "pending_dns",
-      foundryStatus: "pending_dns",
-      failureReason: null,
-      failureCategory: null,
-      certExpiresAt: null,
-      dnsRecords: [{ type: "CNAME", name: hostname, value: `${appId}.prisma.build`, ttl: null }],
-      createdAt,
-      updatedAt: createdAt,
-    };
-  };
-  const client = {
-    listApps: () => Effect.succeed([]),
-    listAppDomains: (appId: string) =>
-      Effect.sync(() => {
-        calls.push(["listAppDomains", appId]);
-        return Array.from(domains.values()).filter((d) => d.appId === appId);
-      }),
-    getCustomDomain: (id: string) =>
-      Effect.suspend(() => {
-        const found = domains.get(id);
-        return found ? Effect.succeed(found) : Effect.fail(notFound(`/v1/domains/${id}`));
-      }),
-    getApp: (appId: string) =>
-      Effect.succeed({
-        id: appId,
-        type: "app",
-        url: `https://api.prisma.test/v1/services/${appId}`,
-        name: "api",
-        region: { id: "us-east-1", name: "US East" },
-        projectId: "project-1",
-        branchId: "branch-main",
-        latestDeploymentId: "deployment-1",
-        appEndpointDomain: `${appId}.prisma.build`,
-        createdAt,
-      }),
-    getBranch: (branchId: string) =>
-      Effect.succeed({
-        id: branchId,
-        type: "branch",
-        url: `https://api.prisma.test/v1/branches/${branchId}`,
-        gitName: "main",
-        isDefault: true,
-        role: "production",
-        createdAt,
-        updatedAt: createdAt,
-        project: {
-          id: "project-1",
-          url: "https://api.prisma.test/v1/projects/project-1",
-          name: "app",
-        },
-      }),
-    createAppDomain: (appId: string, input: { hostname: string }) =>
-      Effect.sync(() => {
-        calls.push(["createAppDomain", { appId, input }]);
-        const created = domain(appId, input.hostname);
-        domains.set(created.id, created);
-        return state.createAnswers200
-          ? { status: 200 as const, domain: created }
-          : { status: 201 as const, domain: created };
-      }),
-    retryCustomDomain: (id: string) =>
-      Effect.sync(() => {
-        calls.push(["retryCustomDomain", id]);
-        const retried: ApiCustomDomain = {
-          ...domains.get(id)!,
-          status: "verifying",
-          foundryStatus: "provisioning",
-          failureReason: null,
-          failureCategory: null,
-        };
-        domains.set(id, retried);
-        return retried;
-      }),
-    deleteCustomDomain: (id: string) =>
-      Effect.sync(() => {
-        calls.push(["deleteCustomDomain", id]);
-        domains.delete(id);
-      }),
-  } as unknown as PrismaManagementClient;
-  return { client, domains, calls, state, domain };
-};
+const domainStack = (zoneId: string, options: { domain?: boolean; adopt?: boolean } = {}) =>
+  Effect.gen(function* () {
+    const project = yield* Prisma.Project("Project", { createDatabase: false });
+    const app = yield* Prisma.App("Web", { project });
+    const deployment = yield* Prisma.Deployment("Deployment", {
+      app,
+      artifactPath: artifactV1Path,
+      promote: true,
+    });
+    const record = yield* Cloudflare.DNS.Record("Cname", {
+      zoneId,
+      name: HOSTNAME,
+      type: "CNAME",
+      content: SWITCHBOARD,
+      ttl: 60,
+      proxied: false,
+    });
+    if (!options.domain) {
+      return { project, app, deployment, record, domain: undefined };
+    }
+    const resource = Prisma.CustomDomain("Domain", {
+      app,
+      // Spelled differently from the record; Prisma receives it normalized.
+      hostname: Output.map(record.name, (name) => `${name.toUpperCase()}.`),
+    });
+    const domain = yield* options.adopt ? resource.pipe(adopt(true)) : resource;
+    return { project, app, deployment, record, domain };
+  });
 
-const fakeTags = ["unit", "provider:prisma", "provider:prisma:customdomain", "local"];
+const pendingStatuses = [
+  "pending_dns",
+  "verifying",
+  "verified_routing_blocked",
+  "provisioning_tls",
+  "active",
+];
 
-const lifecycleCloud = makeDomainCloud();
-const lifecycle = Test.make({ providers: fakeCustomDomainProviders(lifecycleCloud.client) });
-
-lifecycle.test.provider(
-  "creates a domain with a normalized hostname, retries a failed one once, and deletes it",
+test.provider(
+  "attaches a domain to a promoted App, requires adoption for a foreign one, and deletes it",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
+    const zoneId = yield* resolveZoneId;
 
-    const resources = (hostname: string) =>
-      Prisma.CustomDomain("Domain", { app: "app-1", hostname });
+    const serving = yield* stack.deploy(domainStack(zoneId));
+    expect(serving.deployment.status).toBe("running");
+    const created = yield* stack.deploy(domainStack(zoneId, { domain: true }));
+    const domain = created.domain!;
+    expect(domain.appId).toBe(created.app.appId);
+    expect(domain.hostname).toBe(HOSTNAME);
+    // DNS is in place, so provisioning has started and has not failed.
+    expect(pendingStatuses).toContain(domain.status);
+    expect(domain.dnsRecords.length).toBeGreaterThan(0);
+    const observed = (yield* getDomain({ domainId: domain.customDomainId })).data;
+    expect(observed.appId).toBe(created.app.appId);
+    expect(observed.hostname).toBe(HOSTNAME);
+    expect(
+      (yield* getServiceDomains({ serviceId: created.app.appId })).data.map((d) => d.id),
+    ).toEqual([domain.customDomainId]);
 
-    const created = yield* stack.deploy(resources("API.Example.COM."));
-    expect(created.appId).toBe("app-1");
-    expect(created.hostname).toBe("api.example.com");
-    expect(created.status).toBe("pending_dns");
-    expect(created.dnsRecords[0]).toMatchObject({ type: "CNAME", name: "api.example.com" });
-    expect(lifecycleCloud.calls).toContainEqual([
-      "createAppDomain",
-      { appId: "app-1", input: { hostname: "api.example.com" } },
-    ]);
-
-    const settled = yield* stack.plan(resources("API.Example.COM."));
+    const settled = yield* stack.plan(domainStack(zoneId, { domain: true }));
     expect(settled.resources["Domain"]).toMatchObject({ action: "noop" });
 
-    // A failed provisioning attempt reaches the retry endpoint exactly once.
-    lifecycleCloud.domains.set(created.customDomainId, {
-      ...lifecycleCloud.domains.get(created.customDomainId)!,
-      status: "failed",
-      failureReason: "DNS verification failed",
-      failureCategory: "dns",
-    });
+    // A failed status in state forces a reconcile; the live domain has not
+    // failed, so it is observed rather than retried.
     yield* patchStateAttr(stack, "Domain", { status: "failed" });
-    const retryPlan = yield* stack.plan(resources("API.Example.COM."));
+    const retryPlan = yield* stack.plan(domainStack(zoneId, { domain: true }));
     expect(retryPlan.resources["Domain"]).toMatchObject({ action: "update" });
-    const retried = yield* stack.deploy(resources("API.Example.COM."));
-    expect(retried.customDomainId).toBe(created.customDomainId);
-    expect(retried.status).toBe("verifying");
-    expect(lifecycleCloud.calls.filter(([operation]) => operation === "retryCustomDomain")).toEqual(
-      [["retryCustomDomain", created.customDomainId]],
-    );
+    const reobserved = yield* stack.deploy(domainStack(zoneId, { domain: true }));
+    expect(reobserved.domain!.customDomainId).toBe(domain.customDomainId);
+    expect(pendingStatuses).toContain(reobserved.domain!.status);
 
-    // Hostname (and App) changes cannot be replaced without risking traffic.
-    const rename = yield* failureOf(stack.plan(resources("other.example.com")));
+    // Hostname changes cannot be replaced without risking traffic.
+    const rename = yield* failureOf(
+      stack.plan(
+        Effect.gen(function* () {
+          const project = yield* Prisma.Project("Project", { createDatabase: false });
+          const app = yield* Prisma.App("Web", { project });
+          const domain = yield* Prisma.CustomDomain("Domain", {
+            app,
+            hostname: `alchemy-prisma-domain-other.${zoneName}`,
+          });
+          return { project, app, domain };
+        }),
+      ),
+    );
     expect(rename.text).toContain("cannot atomically replace");
 
-    yield* stack.destroy();
-    expect(lifecycleCloud.calls).toContainEqual(["deleteCustomDomain", created.customDomainId]);
-    expect(lifecycleCloud.domains.size).toBe(0);
-  }),
-  { tags: fakeTags },
-);
+    // Removing the resource deletes the domain and leaves the App in place.
+    yield* stack.deploy(domainStack(zoneId));
+    yield* expectDomainGone(domain.customDomainId);
+    expect((yield* getServiceDomains({ serviceId: created.app.appId })).data).toEqual([]);
 
-const existingCloud = makeDomainCloud();
-const existing = Test.make({ providers: fakeCustomDomainProviders(existingCloud.client) });
-
-existing.test.provider(
-  "requires explicit adoption for an existing domain matched by normalized hostname",
-  Effect.fn(function* (stack: Test.ScratchStack) {
-    yield* stack.destroy();
-
-    const foreign = {
-      ...existingCloud.domain("app-1", "api.example.com"),
-      status: "active" as const,
-    };
-    existingCloud.domains.set(foreign.id, foreign);
-    const resources = Prisma.CustomDomain("Domain", {
-      app: "app-1",
-      hostname: "API.EXAMPLE.COM.",
-    });
-
-    const refused = yield* failureOf(stack.deploy(resources));
+    // A domain attached out of band is refused, then adopted explicitly.
+    const foreign = (yield* createServiceDomain({
+      serviceId: created.app.appId,
+      hostname: HOSTNAME,
+    })).data;
+    const refused = yield* failureOf(stack.deploy(domainStack(zoneId, { domain: true })));
     expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
-    expect(existingCloud.calls.map(([operation]) => operation)).not.toContain("createAppDomain");
+    expect((yield* getDomain({ domainId: foreign.id })).data.appId).toBe(created.app.appId);
+    const adopted = yield* stack.deploy(domainStack(zoneId, { domain: true, adopt: true }));
+    expect(adopted.domain!.customDomainId).toBe(foreign.id);
 
-    const adopted = yield* stack.deploy(resources.pipe(adopt(true)));
-    expect(adopted.customDomainId).toBe(foreign.id);
-    expect(adopted.status).toBe("active");
+    // Deleted out of band: destroy treats it as already gone.
+    yield* deleteDomain({ domainId: foreign.id });
+    yield* expectDomainGone(foreign.id);
 
-    // Deleted out of band: destroy treats the 404 as already gone.
-    existingCloud.domains.delete(foreign.id);
     yield* stack.destroy();
-    expect(existingCloud.calls.map(([operation]) => operation)).not.toContain("deleteCustomDomain");
+    yield* expectDeploymentGone(created.deployment.deploymentId);
+    yield* expectAppGone(created.app.appId);
+    yield* expectProjectGone(created.project.projectId);
+    yield* expectGone(
+      dns.getRecord({ zoneId, dnsRecordId: created.record.recordId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("RecordNotFound", () => Effect.succeed(true)),
+      ),
+    );
   }),
-  { tags: fakeTags },
-);
-
-const raceCloud = makeDomainCloud();
-const race = Test.make({ providers: fakeCustomDomainProviders(raceCloud.client) });
-
-race.test.provider(
-  "routes a 200 create race through explicit adoption",
-  Effect.fn(function* (stack: Test.ScratchStack) {
-    yield* stack.destroy();
-
-    raceCloud.state.createAnswers200 = true;
-    const resources = Prisma.CustomDomain("Domain", { app: "app-1", hostname: "api.example.com" });
-    const raced = yield* failureOf(stack.deploy(resources));
-    raceCloud.state.createAnswers200 = false;
-    expect(raced.text).toContain("explicit adoption");
-    const [visible] = Array.from(raceCloud.domains.values());
-    expect(visible?.hostname).toBe("api.example.com");
-
-    const refused = yield* failureOf(stack.deploy(resources));
-    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
-
-    const adopted = yield* stack.deploy(resources.pipe(adopt(true)));
-    expect(adopted.customDomainId).toBe(visible!.id);
-
-    yield* stack.destroy();
-    expect(raceCloud.domains.size).toBe(0);
-  }),
-  { tags: fakeTags },
+  {
+    tags: [...liveTags, "provider:prisma:deployment", "provider:cloudflare:dns"],
+    timeout: 300_000,
+  },
 );

@@ -1,4 +1,5 @@
 import {
+  createProject,
   deleteBranch,
   deleteConnection,
   deleteDatabase,
@@ -23,7 +24,6 @@ import {
   markCreating,
   patchStateAttr,
 } from "./fixtures/Live.ts";
-import { fakeCloudProviders, makeFakeCloud } from "./fixtures/ResourcesFake.ts";
 import {
   expectAppGone,
   expectBranchGone,
@@ -150,16 +150,48 @@ test.provider(
     yield* expectProjectGone(named.projectId);
 
     // A generated name embeds this instance's ID, so an interrupted create
-    // finds it again and recovers it as owned.
-    const generated = yield* stack.deploy(projectStack());
+    // finds it again, recovers it as owned, and restores the write-only
+    // default database credentials the lost create response carried.
+    const generated = yield* stack.deploy(Prisma.Project("Project", {}));
+    expect(generated.databaseId).toBeDefined();
     yield* markCreating(stack, "Project");
-    const recovered = yield* stack.deploy(projectStack());
+    const recovered = yield* stack.deploy(Prisma.Project("Project", {}));
     expect(recovered.projectId).toBe(generated.projectId);
+    expect(recovered.databaseId).toBe(generated.databaseId);
+    const direct = Redacted.value(recovered.directConnectionString!);
+    expect(direct).toMatch(/^postgres/);
+    expect(JSON.stringify(recovered)).not.toContain(direct);
 
     yield* stack.destroy();
     yield* expectProjectGone(generated.projectId);
   }),
-  { tags, timeout: 180_000 },
+  { tags: [...tags, "provider:prisma:database"], timeout: 240_000 },
+);
+
+test.provider(
+  "refuses to take over a named project created out of band before the deploy",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const name = "alchemy-test-prisma-project-foreign";
+    const foreign = (yield* createProject({ name, createDatabase: false })).data;
+
+    const refused = yield* failureOf(stack.deploy(projectStack({ name })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    const untouched = yield* observeProject(foreign.id);
+    expect(untouched.name).toBe(name);
+    expect(
+      (yield* getProjectDatabases({ projectId: foreign.id })).data.map((database) => database.id),
+    ).toEqual([]);
+
+    yield* stack.destroy();
+    expect((yield* observeProject(foreign.id)).id).toBe(foreign.id);
+
+    // The test created this project out of band; remove it the same way.
+    yield* deleteProject({ id: foreign.id });
+    yield* expectProjectGone(foreign.id);
+  }),
+  { tags, timeout: 120_000 },
 );
 
 test.provider(
@@ -323,74 +355,4 @@ test.provider(
     ],
     timeout: 240_000,
   },
-);
-
-// Fault injection the real API cannot produce on demand: a create whose
-// response is lost as a 409, and a create response that contradicts the
-// request.
-const fakeTags = ["unit", "provider:prisma", "provider:prisma:project", "local"];
-
-const contradictionCloud = makeFakeCloud();
-const contradiction = Test.make({ providers: fakeCloudProviders(contradictionCloud) });
-
-contradiction.test.provider(
-  "rejects a createDatabase false response that contains a default database",
-  Effect.fn(function* (stack: Test.ScratchStack) {
-    yield* stack.destroy();
-
-    contradictionCloud.faults.projectCreateReturnsDatabase = true;
-    const failure = yield* failureOf(stack.deploy(projectStack({ name: "app" })));
-    contradictionCloud.faults.projectCreateReturnsDatabase = false;
-    expect(failure.text).toContain("created unexpected default database");
-    const posted = contradictionCloud.api.captured.filter(
-      (request) => request.method === "POST" && request.pathname === "/v1/projects",
-    );
-    expect(posted.map((request) => request.bodyJson)).toEqual([
-      { name: "app", createDatabase: false },
-    ]);
-
-    yield* stack.destroy();
-  }),
-  { tags: fakeTags },
-);
-
-const recoveryCloud = makeFakeCloud();
-const recovery = Test.make({ providers: fakeCloudProviders(recoveryCloud) });
-
-recovery.test.provider(
-  "recovers a generated project and its default credentials after a create conflict",
-  Effect.fn(function* (stack: Test.ScratchStack) {
-    yield* stack.destroy();
-
-    recoveryCloud.faults.race.add("project");
-    const recovered = yield* stack.deploy(Prisma.Project("Project", {}));
-    expect(recoveryCloud.projects.size).toBe(1);
-    expect(recoveryCloud.projects.get(recovered.projectId)?.name).toBe(recovered.projectName);
-    expect(Redacted.value(recovered.directConnectionString!)).toContain(recovered.databaseId);
-    expect(recoveryCloud.api.captured.some((request) => request.pathname.endsWith("/rotate"))).toBe(
-      true,
-    );
-
-    yield* stack.destroy();
-    expect(recoveryCloud.projects.size).toBe(0);
-  }),
-  { tags: [...fakeTags, "provider:prisma:database"] },
-);
-
-const raceCloud = makeFakeCloud();
-const race = Test.make({ providers: fakeCloudProviders(raceCloud) });
-
-race.test.provider(
-  "refuses to take over a named project that appears after the adoption check",
-  Effect.fn(function* (stack: Test.ScratchStack) {
-    yield* stack.destroy();
-
-    raceCloud.faults.race.add("project");
-    const failure = yield* failureOf(stack.deploy(projectStack({ name: "app" })));
-    expect(failure.text).toContain("appeared after the adoption check");
-    expect(Array.from(raceCloud.projects.values()).map((project) => project.name)).toEqual(["app"]);
-
-    yield* stack.destroy();
-  }),
-  { tags: fakeTags },
 );

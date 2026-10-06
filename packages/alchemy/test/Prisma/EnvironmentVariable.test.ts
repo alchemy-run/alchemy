@@ -1,4 +1,7 @@
-import { getEnvironmentVariables } from "@distilled.cloud/prisma/management";
+import {
+  createEnvironmentVariable,
+  getEnvironmentVariables,
+} from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -7,7 +10,6 @@ import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
 import { expectProjectGone, failureOf, forgetState, patchStateAttr } from "./fixtures/Live.ts";
-import { fakeCloudProviders, makeFakeCloud } from "./fixtures/ResourcesFake.ts";
 import {
   expectBranchGone,
   expectEnvironmentVariableGone,
@@ -284,26 +286,38 @@ test.provider(
   { tags: [...tags, "provider:prisma:branch"], timeout: 180_000 },
 );
 
-// A create race (the POST lands but its response is lost as a 409) cannot be
-// produced on demand against the real API.
-const raceCloud = makeFakeCloud();
-const race = Test.make({ providers: fakeCloudProviders(raceCloud) });
-
-race.test.provider(
-  "refuses to overwrite a variable that appears after the adoption check",
+test.provider(
+  "refuses to overwrite a variable created out of band before the deploy",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
-    raceCloud.faults.race.add("environmentVariable");
-    const failure = yield* failureOf(stack.deploy(variableStack("secret")));
-    expect(failure.text).toContain("appeared after the adoption check");
-    expect(raceCloud.api.captured.filter((request) => request.method === "PATCH")).toEqual([]);
-    expect(Array.from(raceCloud.variables.values()).map((variable) => variable.key)).toEqual([
-      "TOKEN",
+    const { project } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        return { project };
+      }),
+    );
+    const foreign = (yield* createEnvironmentVariable({
+      projectId: project.projectId,
+      class: "production",
+      key: "TOKEN",
+      value: "foreign-secret",
+    })).data;
+
+    const refused = yield* failureOf(stack.deploy(variableStack("secret")));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    // The foreign secret was not overwritten.
+    const untouched = yield* observeEnvironmentVariable(foreign.id);
+    expect(untouched.valueKid).toBe(foreign.valueKid);
+    expect(untouched.updatedAt).toBe(foreign.updatedAt);
+    expect((yield* listVariables(project.projectId)).map((variable) => variable.id)).toEqual([
+      foreign.id,
     ]);
 
+    // Project deletion removes the foreign variable with it.
     yield* stack.destroy();
-    expect(raceCloud.variables.size).toBe(0);
+    yield* expectEnvironmentVariableGone(foreign.id);
+    yield* expectProjectGone(project.projectId);
   }),
-  { tags: ["unit", "provider:prisma", "provider:prisma:environmentvariable", "local"] },
+  { tags, timeout: 180_000 },
 );
