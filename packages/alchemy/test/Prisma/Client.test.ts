@@ -154,7 +154,7 @@ test.provider(
 
     // Path-confusing IDs are refused locally (status 0) before any request.
     for (const request of [
-      client.getProject("../workspaces"),
+      client.getProject("../workspaces") as Effect.Effect<unknown, unknown>,
       client.getProject("project-1/databases"),
       client.getDeploymentLogsRequest("deployment-1/../../projects"),
       client.getBuildLogsRequest("build-1?token=leak"),

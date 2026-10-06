@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetServiceDeploymentsResponse,
   getServiceDeployments,
@@ -27,6 +26,7 @@ import {
 } from "./Internal/ArtifactFile.ts";
 import { executeArtifactUpload } from "./Internal/ArtifactUpload.ts";
 import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import { startDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
 import { ensureDeploymentMembership } from "./Internal/DeploymentIdentity.ts";
 import { observeDeployment } from "./Internal/DeploymentObserve.ts";
@@ -624,7 +624,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would make a second deployment; the retry
               // policy cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => response.data),
             );
             createdDeploymentId = created.id;

@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetConnectionsResponse,
   deleteConnection,
@@ -18,6 +17,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { extractConnectionSecrets } from "./Client.ts";
 import type { Database } from "./Database.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import {
   deriveConnectionAttrs,
   hasCanonicalConnectionSecrets,
@@ -557,7 +557,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would mint a second connection; the retry
               // policy cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => response.data),
             );
             connection = yield* physicalName === expectedName
@@ -584,7 +584,7 @@ const ProviderLive = () =>
             }).pipe(
               // Rotation mints new credentials; a replay would revoke the
               // ones we just persisted, so opt out of the retry policy.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => response.data),
             );
             if (
