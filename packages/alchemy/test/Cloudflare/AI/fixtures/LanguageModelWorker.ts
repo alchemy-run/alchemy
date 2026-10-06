@@ -104,8 +104,12 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
           });
         }
 
+        // `?model=` overrides the default model so streaming tests can cover
+        // the different Workers AI chunk shapes (#1907).
+        const modelParam = url.searchParams.get("model");
+
         if (url.pathname === "/raw-stream") {
-          const model = url.searchParams.get("model") ?? MODEL;
+          const model = modelParam ?? MODEL;
           const includeUsage = url.searchParams.get("include_usage") === "1";
           return yield* dumpRawStream(
             model,
@@ -190,7 +194,14 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
           }).pipe(
             Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
             Stream.provide(WeatherToolkitLayer),
-            Stream.provide(toolLanguageModel),
+            Stream.provide(
+              modelParam
+                ? aiGateway.model({
+                    model: modelParam,
+                    parameters: { temperature: 0.2, maxTokens: 1024 },
+                  })
+                : toolLanguageModel,
+            ),
             Stream.provideContext(ctx),
           );
           return HttpServerResponse.stream(body, {
@@ -202,7 +213,14 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
           const encoder = new TextEncoder();
           const body = AiLanguageModel.streamText({ prompt }).pipe(
             Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
-            Stream.provide(languageModel),
+            Stream.provide(
+              modelParam
+                ? aiGateway.model({
+                    model: modelParam,
+                    parameters: { temperature: 0.7, maxTokens: 1024 },
+                  })
+                : languageModel,
+            ),
             Stream.provideContext(ctx),
           );
           return HttpServerResponse.stream(body, {

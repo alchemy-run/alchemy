@@ -288,79 +288,125 @@ test(
   },
 );
 
-const normalize = (text: string) => text.toLowerCase().replace(/[^a-z]/g, "");
+// `qwq-32b` streams its chain of thought inline as text, closed by
+// `</think>`; only the answer after it is compared.
+const normalize = (text: string) =>
+  text
+    .split("</think>")
+    .at(-1)!
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
 
-test(
-  "streamed text deltas are emitted exactly once",
+// Workers AI models disagree on where a streamed text fragment lives: some
+// mirror it in both the native `response` field and
+// `choices[0].delta.content` of one chunk (llama, qwen3, mistral), some set
+// only the OpenAI delta (kimi, gpt-oss), and some set only `response` (qwq).
+// Each shape must yield every fragment exactly once (#1907).
+const TEXT_MODELS = [
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-4-scout-17b-16e-instruct",
+  "@cf/qwen/qwen3-30b-a3b-fp8",
+  "@cf/mistralai/mistral-small-3.1-24b-instruct",
+  "@cf/moonshotai/kimi-k2.6",
+  "@cf/openai/gpt-oss-120b",
+  "@cf/qwen/qwq-32b",
+];
+
+// Models that reliably make a tool call under `tool_choice: "required"`.
+const TOOL_MODELS = [
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-4-scout-17b-16e-instruct",
+  "@cf/qwen/qwen3-30b-a3b-fp8",
+  "@cf/mistralai/mistral-small-3.1-24b-instruct",
+  "@cf/openai/gpt-oss-120b",
+];
+
+const PONG = "Say the word 'pong' and nothing else.";
+
+const fetchParts = (path: string) =>
   Effect.gen(function* () {
     const out = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    return yield* client.get(`${out.url}${path}`).pipe(
+      Effect.flatMap((res) => res.text),
+      Effect.map(parseSse),
+      Effect.flatMap((parts) =>
+        parts.some((p) => p.type === "finish")
+          ? Effect.succeed(parts)
+          : Effect.fail(new Error("AI stream not ready: unfinished")),
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+  });
 
-    const res = yield* client
-      .get(
-        `${out.url}/stream?prompt=${encodeURIComponent("Say the word 'pong' and nothing else.")}`,
-      )
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
+const streamedText = (parts: ReadonlyArray<StreamPart>) =>
+  parts
+    .filter((p) => p.type === "text-delta")
+    .map((p) => p.delta ?? "")
+    .join("");
+
+for (const model of TEXT_MODELS) {
+  test(
+    `streamed text deltas are emitted exactly once (${model})`,
+    Effect.gen(function* () {
+      const parts = yield* fetchParts(
+        `/stream?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(PONG)}`,
       );
-    expect(res.status).toBe(200);
+      expect(normalize(streamedText(parts))).toBe("pong");
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
 
-    // Llama-family Workers AI models mirror every delta into both the native
-    // `response` field and `choices[0].delta.content` of the same chunk; each
-    // must be emitted once, not twice (#1907).
-    const parts = parseSse(yield* res.text);
-    const text = parts
-      .filter((p) => p.type === "text-delta")
-      .map((p) => p.delta ?? "")
-      .join("");
-    expect(normalize(text)).toBe("pong");
-  }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
-  },
-);
-
-test(
-  "streamed text with tools available is emitted exactly once",
-  Effect.gen(function* () {
-    const out = yield* stack;
-    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-
-    const res = yield* client
-      .get(
-        `${out.url}/tool-stream?toolChoice=auto&prompt=${encodeURIComponent(
-          "Do not call any tools. Say the word 'pong' and nothing else.",
+  test(
+    `streamed text with tools available is emitted exactly once (${model})`,
+    Effect.gen(function* () {
+      // With tools passed, the mirrored native `response` text used to be
+      // buffered as a candidate tool call and re-emitted as a second copy
+      // of the whole reply on finalize.
+      const parts = yield* fetchParts(
+        `/tool-stream?toolChoice=auto&model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(
+          `Do not call any tools. ${PONG}`,
         )}`,
-      )
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
       );
-    expect(res.status).toBe(200);
+      expect(parts.some((p) => p.type === "tool-call")).toBe(false);
+      expect(normalize(streamedText(parts))).toBe("pong");
+      expect(parts.filter((p) => p.type === "text-start")).toHaveLength(1);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+}
 
-    // With tools passed, the mirrored native `response` text used to be
-    // buffered as a candidate tool call and re-emitted as a second copy of
-    // the whole reply on finalize (#1907).
-    const parts = parseSse(yield* res.text);
-    expect(parts.some((p) => p.type === "tool-call")).toBe(false);
-    const text = parts
-      .filter((p) => p.type === "text-delta")
-      .map((p) => p.delta ?? "")
-      .join("");
-    expect(normalize(text)).toBe("pong");
-    expect(parts.filter((p) => p.type === "text-start")).toHaveLength(1);
-  }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
-  },
-);
+for (const model of TOOL_MODELS) {
+  test(
+    `streams a resolvable tool-call part (${model})`,
+    Effect.gen(function* () {
+      const parts = yield* fetchParts(
+        `/tool-stream?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(
+          "What's the weather in Paris?",
+        )}`,
+      );
+      // Effect AI only sees (and resolves) a streamed tool call through a
+      // `tool-call` part.
+      const call = parts.find((p) => p.type === "tool-call");
+      expect(call?.name).toBe("get_weather");
+      expect(call?.params?.city?.toLowerCase()).toContain("paris");
+      expect(parts.some((p) => p.type === "tool-result" && p.id === call?.id)).toBe(true);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+}
 
 test(
   "stream emits multiple text-delta chunks for a long-form response",
