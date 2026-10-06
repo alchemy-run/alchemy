@@ -22,6 +22,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  * ```
  *
  * @binding
+ * @product Customer
  */
 export interface CreateCustomer extends Binding.Service<
   CreateCustomer,
@@ -33,6 +34,4 @@ export interface CreateCustomer extends Binding.Service<
   >
 > {}
 
-export const CreateCustomer = Binding.Service<CreateCustomer>(
-  "Stripe.CreateCustomer",
-);
+export const CreateCustomer = Binding.Service<CreateCustomer>("Stripe.CreateCustomer");

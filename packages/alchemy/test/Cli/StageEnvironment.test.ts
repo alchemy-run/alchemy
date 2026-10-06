@@ -1,6 +1,3 @@
-import { UserInputError } from "@/Cli/commands/errors.ts";
-import { resolveStage, stage, userStage } from "@/Cli/commands/flags.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -8,12 +5,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import { UserInputError } from "@/Cli/commands/errors.ts";
+import { resolveStage, stage, userStage } from "@/Cli/commands/flags.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const envLayer = (env: Record<string, string>) =>
-  Layer.mergeAll(
-    PlatformServices,
-    ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
-  );
+  Layer.mergeAll(PlatformServices, ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
 
 const TestEnv = envLayer({ USER: "sam" });
 
@@ -50,7 +47,7 @@ const withoutProcessStage = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     );
   });
 
-describe("--stage flag", () => {
+describe("--stage flag", { tags: ["unit", "local"] }, () => {
   test.effect("yields an omitted flag as undefined", () =>
     Effect.gen(function* () {
       const [, selected] = yield* stage.parse({ arguments: [], flags: {} });
@@ -72,15 +69,13 @@ describe("--stage flag", () => {
 const provideStageTest = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, withoutProcessStage, Effect.provide(TestEnv));
 
-describe("ALCHEMY_STAGE", () => {
+describe("ALCHEMY_STAGE", { tags: ["unit", "local"] }, () => {
   test.effect(
     "overrides the user default from --env-file / .env",
     () =>
       Effect.gen(function* () {
         const file = yield* writeEnvFile("ALCHEMY_STAGE=production\n");
-        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe(
-          "production",
-        );
+        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe("production");
       }).pipe(provideStageTest),
     { exclusive: true },
   );
@@ -90,9 +85,7 @@ describe("ALCHEMY_STAGE", () => {
     () =>
       Effect.gen(function* () {
         const file = yield* writeEnvFile("ALCHEMY_STAGE=production\n");
-        expect(yield* resolveStage("live", "preview", Option.some(file))).toBe(
-          "preview",
-        );
+        expect(yield* resolveStage("live", "preview", Option.some(file))).toBe("preview");
       }).pipe(provideStageTest),
     { exclusive: true },
   );
@@ -102,9 +95,7 @@ describe("ALCHEMY_STAGE", () => {
     () =>
       Effect.gen(function* () {
         const file = yield* writeEnvFile("STAGE=production\n");
-        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe(
-          "live_sam",
-        );
+        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe("live_sam");
       }).pipe(provideStageTest),
     { exclusive: true },
   );
@@ -114,9 +105,7 @@ describe("ALCHEMY_STAGE", () => {
     () =>
       Effect.gen(function* () {
         const file = yield* writeEnvFile("ALCHEMY_STAGE=production\n");
-        expect(yield* resolveStage("dev", undefined, Option.some(file))).toBe(
-          "production",
-        );
+        expect(yield* resolveStage("dev", undefined, Option.some(file))).toBe("production");
       }).pipe(provideStageTest),
     { exclusive: true },
   );
@@ -127,9 +116,7 @@ describe("ALCHEMY_STAGE", () => {
       Effect.gen(function* () {
         process.env.ALCHEMY_STAGE = "production";
         const file = yield* writeEnvFile("");
-        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe(
-          "production",
-        );
+        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe("production");
       }).pipe(provideStageTest),
     { exclusive: true },
   );
@@ -139,11 +126,9 @@ describe("ALCHEMY_STAGE", () => {
     () =>
       Effect.gen(function* () {
         const file = yield* writeEnvFile("ALCHEMY_STAGE=not a stage\n");
-        const result = yield* resolveStage(
-          "live",
-          undefined,
-          Option.some(file),
-        ).pipe(Effect.result);
+        const result = yield* resolveStage("live", undefined, Option.some(file)).pipe(
+          Effect.result,
+        );
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
           expect(result.failure).toBeInstanceOf(UserInputError);
@@ -154,15 +139,13 @@ describe("ALCHEMY_STAGE", () => {
   );
 });
 
-describe("default stages", () => {
+describe("default stages", { tags: ["unit", "local"] }, () => {
   test.effect(
     "deploy/destroy default to live_${USER}",
     () =>
       Effect.gen(function* () {
         const file = yield* writeEnvFile("");
-        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe(
-          "live_sam",
-        );
+        expect(yield* resolveStage("live", undefined, Option.some(file))).toBe("live_sam");
       }).pipe(provideStageTest),
     { exclusive: true },
   );
@@ -172,9 +155,7 @@ describe("default stages", () => {
     () =>
       Effect.gen(function* () {
         const file = yield* writeEnvFile("");
-        expect(yield* resolveStage("dev", undefined, Option.some(file))).toBe(
-          "dev_sam",
-        );
+        expect(yield* resolveStage("dev", undefined, Option.some(file))).toBe("dev_sam");
       }).pipe(provideStageTest),
     { exclusive: true },
   );

@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Docker from "@/Docker";
 import * as Effect from "effect/Effect";
-import * as Output from "@/Output.ts";
+import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Docker from "@/Docker";
+import * as Output from "@/Output.ts";
 
 export const descriptorApplications = (
   context: string,
@@ -19,17 +19,12 @@ export const descriptorApplications = (
     const first = includeFirst
       ? yield* Cloudflare.Container("DescriptorFirst", { image }).Application
       : undefined;
-    const second = yield* Cloudflare.Container("DescriptorSecond", { image })
-      .Application;
+    const second = yield* Cloudflare.Container("DescriptorSecond", { image }).Application;
     const remote = yield* Cloudflare.Container("DescriptorRemote", {
       image: {
-        ref: second.configuration.pipe(
-          Output.map((configuration) => configuration.image),
-        ),
+        ref: second.configuration.pipe(Output.map((configuration) => configuration.image)),
         publish: {
-          repository: second.applicationId.pipe(
-            Output.map(() => mirrorRepository),
-          ),
+          repository: second.applicationId.pipe(Output.map(() => mirrorRepository)),
           tags: ["release"],
         },
       },
@@ -111,9 +106,7 @@ export const historyApplications = (converge = false) =>
           image: "docker.io/alpine:3.19",
         }).Application
       : undefined;
-    const image = target?.configuration.pipe(
-      Output.map((configuration) => configuration.image),
-    );
+    const image = target?.configuration.pipe(Output.map((configuration) => configuration.image));
     const first = yield* Cloudflare.Container("HistoryFirst", {
       image: image ?? "alpine:3.19",
     }).Application;
@@ -123,11 +116,7 @@ export const historyApplications = (converge = false) =>
     return { first, second, target };
   });
 
-export const recoveryApplications = (
-  delay: number,
-  includeSecond = false,
-  seed = "",
-) =>
+export const recoveryApplications = (delay: number, includeSecond = false, seed = "") =>
   Effect.gen(function* () {
     const props = {
       image: {
@@ -137,8 +126,7 @@ export const recoveryApplications = (
       },
       maxInstances: 2,
     };
-    const first = yield* Cloudflare.Container("RecoveryFirst", props)
-      .Application;
+    const first = yield* Cloudflare.Container("RecoveryFirst", props).Application;
     const second = includeSecond
       ? yield* Cloudflare.Container("RecoverySecond", props).Application
       : undefined;

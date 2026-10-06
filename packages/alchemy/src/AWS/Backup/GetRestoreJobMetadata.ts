@@ -31,10 +31,7 @@ export interface GetRestoreJobMetadata extends Binding.Service<
   () => Effect.Effect<
     (
       request: backup.GetRestoreJobMetadataInput,
-    ) => Effect.Effect<
-      backup.GetRestoreJobMetadataOutput,
-      backup.GetRestoreJobMetadataError
-    >
+    ) => Effect.Effect<backup.GetRestoreJobMetadataOutput, backup.GetRestoreJobMetadataError>
   >
 > {}
 export const GetRestoreJobMetadata = Binding.Service<GetRestoreJobMetadata>(

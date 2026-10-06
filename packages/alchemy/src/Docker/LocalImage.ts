@@ -22,9 +22,7 @@ export const ensureLocalImage = Effect.fn(function* (
   const imageRef = `${source.name}:${source.tag ?? build.hash}`;
   let image = yield* docker.image
     .inspect(inputRef, source.dockerContext)
-    .pipe(
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
-    );
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
   if (!image) {
     yield* docker.image.build({
       context: build.context,
@@ -40,8 +38,7 @@ export const ensureLocalImage = Effect.fn(function* (
     });
     image = yield* docker.image.inspect(inputRef, source.dockerContext);
   }
-  if (imageRef !== inputRef)
-    yield* docker.image.tag(inputRef, imageRef, source.dockerContext);
+  if (imageRef !== inputRef) yield* docker.image.tag(inputRef, imageRef, source.dockerContext);
   return {
     ref: image.Id,
     imageRef,

@@ -24,6 +24,7 @@ export interface RetrievePaymentMethodConfigurationRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Payment Methods
  */
 export interface RetrievePaymentMethodConfiguration extends Binding.Service<
   RetrievePaymentMethodConfiguration,
@@ -42,6 +43,4 @@ export interface RetrievePaymentMethodConfiguration extends Binding.Service<
 > {}
 
 export const RetrievePaymentMethodConfiguration =
-  Binding.Service<RetrievePaymentMethodConfiguration>(
-    "Stripe.RetrievePaymentMethodConfiguration",
-  );
+  Binding.Service<RetrievePaymentMethodConfiguration>("Stripe.RetrievePaymentMethodConfiguration");

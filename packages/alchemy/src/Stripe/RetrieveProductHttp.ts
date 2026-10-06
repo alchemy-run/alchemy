@@ -20,6 +20,7 @@ type ProductInput = string | Product;
  * string, or an Effect resolving to a Product.
  *
  * @layer
+ * @product Product
  * @provides Stripe.RetrieveProduct
  */
 export const RetrieveProductHttp = Layer.effect(
@@ -31,28 +32,21 @@ export const RetrieveProductHttp = Layer.effect(
       const host = yield* Binding.Host;
       const isId = typeof product === "string";
       const resource = isId ? undefined : (product as unknown as ResourceLike);
-      const bound = yield* attachStripeToken(
-        resource,
-        ["products_read"],
-        "Stripe.RetrieveProduct",
-      );
-      const id = yield* asStringEffect(
-        isId ? product : (product as Product).id,
-      );
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const bound = yield* attachStripeToken(resource, ["products_read"], "Stripe.RetrieveProduct");
+      const id = yield* asStringEffect(isId ? product : (product as Product).id);
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
       const label = isId ? product : (product as Product).LogicalId;
 
-      return Effect.fn(`Stripe.RetrieveProduct(${label})`)(
-        function* (request?: { expand?: string[] }) {
-          return yield* auth(
-            GetProduct({
-              ...(request ?? {}),
-              id: yield* id,
-            }),
-          );
-        },
-      );
+      return Effect.fn(`Stripe.RetrieveProduct(${label})`)(function* (request?: {
+        expand?: string[];
+      }) {
+        return yield* auth(
+          GetProduct({
+            ...(request ?? {}),
+            id: yield* id,
+          }),
+        );
+      });
     });
   }),
 );

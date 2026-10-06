@@ -47,6 +47,4 @@ export interface SearchJobs extends Binding.Service<
     ) => Effect.Effect<deadline.SearchJobsResponse, deadline.SearchJobsError>
   >
 > {}
-export const SearchJobs = Binding.Service<SearchJobs>(
-  "AWS.Deadline.SearchJobs",
-);
+export const SearchJobs = Binding.Service<SearchJobs>("AWS.Deadline.SearchJobs");

@@ -1,3 +1,8 @@
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import { Region } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   Campaign,
@@ -10,11 +15,6 @@ import {
 } from "@/AWS/IoTFleetWise";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,9 +25,7 @@ const TELEMETRY_BUCKET = "alchemy-test-iotfleetwise-telemetry";
 // AWS IoT FleetWise is offered in us-east-1/eu-central-1 only — pin every
 // out-of-band distilled call to the service's home region (the providers
 // pin themselves the same way).
-const inHomeRegion = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const inHomeRegion = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   effect.pipe(Effect.provideService(Region, Effect.succeed("us-east-1")));
 
 // Ungated typed-error probe: prove the distilled error union carries the
@@ -46,10 +44,9 @@ test.provider(
           .getSignalCatalog({ name: "alchemy-nonexistent-catalog-probe" })
           .pipe(inHomeRegion),
       );
-      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
     }),
+  { tags: ["provider:aws", "provider:aws:iotfleetwise", "live"] },
 );
 
 // Same ungated probe for the state-template API — proves the typed tags the
@@ -60,15 +57,12 @@ test.provider(
     Effect.gen(function* () {
       const error = yield* Effect.flip(
         iotfleetwise
-          .getStateTemplate({
-            identifier: "alchemy-nonexistent-state-template-probe",
-          })
+          .getStateTemplate({ identifier: "alchemy-nonexistent-state-template-probe" })
           .pipe(inHomeRegion),
       );
-      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
     }),
+  { tags: ["provider:aws", "provider:aws:iotfleetwise", "live"] },
 );
 
 // Typed wait-until-gone for the gated lifecycle teardown.
@@ -76,22 +70,13 @@ const assertCatalogGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* iotfleetwise.getSignalCatalog({ name }).pipe(
       inHomeRegion,
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`signal catalog '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`signal catalog '${name}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]) }),
   );
 
 // Full lifecycle across all six resources. AWS IoT FleetWise requires the
@@ -111,19 +96,8 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
             description: "alchemy fleetwise test signals",
             nodes: [
               { branch: { fullyQualifiedName: "Vehicle" } },
-              {
-                sensor: {
-                  fullyQualifiedName: "Vehicle.Speed",
-                  dataType: "DOUBLE",
-                  unit: "km/h",
-                },
-              },
-              {
-                attribute: {
-                  fullyQualifiedName: "Vehicle.VIN",
-                  dataType: "STRING",
-                },
-              },
+              { sensor: { fullyQualifiedName: "Vehicle.Speed", dataType: "DOUBLE", unit: "km/h" } },
+              { attribute: { fullyQualifiedName: "Vehicle.VIN", dataType: "STRING" } },
             ],
             tags: { fixture: "iotfleetwise" },
           });
@@ -203,34 +177,18 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
           const campaign = yield* Campaign("SpeedTelemetry", {
             signalCatalogArn: catalog.signalCatalogArn,
             targetArn: fleet.fleetArn,
-            collectionScheme: {
-              timeBasedCollectionScheme: { period: "10 seconds" },
-            },
+            collectionScheme: { timeBasedCollectionScheme: { period: "10 seconds" } },
             signalsToCollect: [{ name: "Vehicle.Speed" }],
-            dataDestinationConfigs: [
-              { s3Config: { bucketArn: bucket.bucketArn } },
-            ],
+            dataDestinationConfigs: [{ s3Config: { bucketArn: bucket.bucketArn } }],
           });
 
-          return {
-            catalog,
-            model,
-            decoder,
-            fleet,
-            vehicle,
-            stateTemplate,
-            campaign,
-          };
+          return { catalog, model, decoder, fleet, vehicle, stateTemplate, campaign };
         }),
       );
 
       expect(deployed.catalog.signalCatalogArn).toContain(":signal-catalog/");
-      expect(deployed.stateTemplate.stateTemplateArn).toContain(
-        ":state-template/",
-      );
-      expect(deployed.stateTemplate.stateTemplateProperties).toEqual([
-        "Vehicle.Speed",
-      ]);
+      expect(deployed.stateTemplate.stateTemplateArn).toContain(":state-template/");
+      expect(deployed.stateTemplate.stateTemplateProperties).toEqual(["Vehicle.Speed"]);
       expect(deployed.model.status).toBe("ACTIVE");
       expect(deployed.decoder.status).toBe("ACTIVE");
       expect(deployed.fleet.fleetArn).toContain(":fleet/");
@@ -245,12 +203,13 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
       const observedVehicle = yield* iotfleetwise
         .getVehicle({ vehicleName: deployed.vehicle.vehicleName })
         .pipe(inHomeRegion);
-      expect(observedVehicle.attributes?.["Vehicle.VIN"]).toBe(
-        "1HGBH41JXMN109186",
-      );
+      expect(observedVehicle.attributes?.["Vehicle.VIN"]).toBe("1HGBH41JXMN109186");
 
       yield* stack.destroy();
       yield* assertCatalogGone(deployed.catalog.signalCatalogName);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iotfleetwise", "provider:aws:s3", "live"],
+    timeout: 600_000,
+  },
 );

@@ -38,35 +38,25 @@ export interface DockerBuildOptions {
 }
 
 /** Hash and prepare Docker inputs without executing a Docker build. */
-export const prepareImageBuild = Effect.fn(function* (
-  build: DockerBuildOptions,
-) {
+export const prepareImageBuild = Effect.fn(function* (build: DockerBuildOptions) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform =
     build.platform ??
-    (yield* Effect.sync(
-      () => `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`,
-    ));
+    (yield* Effect.sync(() => `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`));
   let context: string;
   let dockerfile: string;
   if (build.dockerfile !== undefined && isInlineDockerfile(build.dockerfile)) {
     if (build.context !== undefined)
       return yield* Effect.fail(
-        new Error(
-          "Inline Dockerfiles use generated files, not a filesystem context",
-        ),
+        new Error("Inline Dockerfiles use generated files, not a filesystem context"),
       );
     const content = build.dockerfile.content;
     if (typeof content !== "string")
       return yield* Effect.fail(
-        new Error(
-          "Dockerfile inputs must be resolved before preparing an image",
-        ),
+        new Error("Dockerfile inputs must be resolved before preparing an image"),
       );
-    const files = [...(build.files ?? [])].sort((a, b) =>
-      a.path.localeCompare(b.path),
-    );
+    const files = [...(build.files ?? [])].sort((a, b) => a.path.localeCompare(b.path));
     const seen = new Set<string>();
     for (const file of files) {
       const normalized = path.normalize(file.path);
@@ -77,9 +67,7 @@ export const prepareImageBuild = Effect.fn(function* (
         normalized === "Dockerfile" ||
         seen.has(normalized)
       ) {
-        return yield* Effect.fail(
-          new Error(`Invalid generated image path: ${file.path}`),
-        );
+        return yield* Effect.fail(new Error(`Invalid generated image path: ${file.path}`));
       }
       seen.add(normalized);
     }
@@ -99,9 +87,7 @@ export const prepareImageBuild = Effect.fn(function* (
     }
   } else {
     if (build.files !== undefined)
-      return yield* Effect.fail(
-        new Error("Generated files require an inline Dockerfile"),
-      );
+      return yield* Effect.fail(new Error("Generated files require an inline Dockerfile"));
     ({ context, dockerfile } = yield* resolveDockerBuildPaths({
       context: build.context ?? ".",
       dockerfile: build.dockerfile ?? "Dockerfile",

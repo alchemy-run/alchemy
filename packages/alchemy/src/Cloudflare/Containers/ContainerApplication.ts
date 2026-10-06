@@ -1,19 +1,15 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
+import type { ImageOptions } from "../../Docker/ImageOptions.ts";
+import type { ImagePublish } from "../../Docker/ImageRegistry.ts";
+import type { LocalImageBuild } from "../../Docker/LocalImage.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
-import {
-  type Main,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
+import { type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
 import type { ProcessServices } from "../../Server/Process.ts";
 import type { Providers } from "../Providers.ts";
-import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
-import type { ImagePublish } from "../../Docker/ImageRegistry.ts";
-import type { ImageOptions } from "../../Docker/ImageOptions.ts";
-import type { LocalImageBuild } from "../../Docker/LocalImage.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
@@ -60,8 +56,7 @@ export namespace ContainerApplication {
   export type Affinities = {
     colocation?: "datacenter";
   };
-  export type Configuration =
-    Containers.CreateContainerApplicationRequest["configuration"];
+  export type Configuration = Containers.CreateContainerApplicationRequest["configuration"];
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";
@@ -198,6 +193,37 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   registryId?: string;
   /**
+   * Publication destination for the image Alchemy builds or mirrors: the
+   * generated program image (`main`), a top-level `context`/`dockerfile`
+   * build, or an external `image` reference. Embedded image options declare
+   * `publish` inside `image` instead.
+   *
+   * A relative `repository` such as `"web"` resolves inside the current
+   * account's registry (`registry.cloudflare.com/<account-id>/web` with the
+   * default `registryId`); fully qualified destinations are used as-is. When
+   * omitted, images publish to a repository shared by the stack and stage.
+   *
+   * Builds publish a content-hash tag plus an inline layer cache at
+   * `:buildcache` and deploy the immutable manifest digest. Matching build
+   * inputs in the same repository reuse the published image without invoking
+   * a builder, so applications and stages that share `repository` share
+   * finished images and build layers. Pin base images and downloaded
+   * dependencies: changes outside the build context cannot invalidate the
+   * input hash. Images already in the target registry keep their existing
+   * repository; this option does not copy them into another one.
+   *
+   * @example
+   * ```typescript
+   * const app = yield* Cloudflare.Container("WebProduction", {
+   *   context: "./web",
+   *   publish: { repository: "web" },
+   * }).Application;
+   * // Deployed image (app.configuration.image):
+   * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+   * ```
+   */
+  publish?: ImagePublish;
+  /**
    * Environment variables passed to the container runtime.
    */
   env?: Record<string, any>;
@@ -219,8 +245,6 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
   baseImage?: string;
   /** JavaScript bundler configuration for the program. */
   bundle?: Bundle.BundleConfig;
-  /** Publication configuration for the generated Docker.Image. Defaults to the account's managed registry. */
-  publish?: ImagePublish;
   /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
   /**
@@ -361,7 +385,6 @@ export type ContainerApplicationProps =
 export interface AnyContainerApplicationProps extends ContainerApplicationPropsBase {
   baseImage?: string;
   bundle?: Bundle.BundleConfig;
-  publish?: ImagePublish;
   main?: string;
   image?: string | ImageOptions;
   context?: string;
@@ -373,10 +396,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
   build?: Bundle.BundleConfig;
 }
 
-export type ContainerServices =
-  | ContainerApplication
-  | PlatformServices
-  | ProcessServices;
+export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
 
 export type ContainerShape = Main<ContainerServices>;
 

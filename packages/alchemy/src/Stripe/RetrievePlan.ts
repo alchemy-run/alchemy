@@ -21,6 +21,7 @@ export interface RetrievePlanRequest extends Omit<GetPlanRequest, "plan"> {}
  * ```
  *
  * @binding
+ * @product Product
  */
 export interface RetrievePlan extends Binding.Service<
   RetrievePlan,
@@ -28,12 +29,8 @@ export interface RetrievePlan extends Binding.Service<
   (
     plan: Plan,
   ) => Effect.Effect<
-    (
-      request?: RetrievePlanRequest,
-    ) => Effect.Effect<StripePlan, GetPlanError, RuntimeContext>
+    (request?: RetrievePlanRequest) => Effect.Effect<StripePlan, GetPlanError, RuntimeContext>
   >
 > {}
 
-export const RetrievePlan = Binding.Service<RetrievePlan>(
-  "Stripe.RetrievePlan",
-);
+export const RetrievePlan = Binding.Service<RetrievePlan>("Stripe.RetrievePlan");

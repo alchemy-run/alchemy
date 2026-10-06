@@ -24,6 +24,7 @@ export interface RetrieveWebhookEndpointRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Webhook
  */
 export interface RetrieveWebhookEndpoint extends Binding.Service<
   RetrieveWebhookEndpoint,
@@ -33,11 +34,7 @@ export interface RetrieveWebhookEndpoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveWebhookEndpointRequest,
-    ) => Effect.Effect<
-      StripeWebhookEndpoint,
-      GetWebhookEndpointError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeWebhookEndpoint, GetWebhookEndpointError, RuntimeContext>
   >
 > {}
 

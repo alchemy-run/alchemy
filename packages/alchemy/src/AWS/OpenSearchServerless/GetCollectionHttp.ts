@@ -20,25 +20,23 @@ export const GetCollectionHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.OpenSearchServerless.GetCollection(${collection}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["aoss:BatchGetCollection"],
-                  Resource: [Output.interpolate`${collection.collectionArn}`],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.OpenSearchServerless.GetCollection(${collection}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["aoss:BatchGetCollection"],
+                Resource: [Output.interpolate`${collection.collectionArn}`],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.OpenSearchServerless.GetCollection(${collection.LogicalId})`,
-      )(function* () {
-        const response = yield* op({ ids: [yield* CollectionId] });
-        return response.collectionDetails?.[0];
-      });
+      return Effect.fn(`AWS.OpenSearchServerless.GetCollection(${collection.LogicalId})`)(
+        function* () {
+          const response = yield* op({ ids: [yield* CollectionId] });
+          return response.collectionDetails?.[0];
+        },
+      );
     });
   }),
 );

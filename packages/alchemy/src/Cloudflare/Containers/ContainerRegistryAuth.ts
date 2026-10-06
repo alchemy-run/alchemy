@@ -2,10 +2,7 @@ import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import {
-  RegistryAuth,
-  ImageRegistryError,
-} from "../../Docker/ImageRegistry.ts";
+import { RegistryAuth, ImageRegistryError } from "../../Docker/ImageRegistry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 
 export const ContainerRegistryAuth = Layer.effect(
@@ -13,9 +10,7 @@ export const ContainerRegistryAuth = Layer.effect(
   Effect.gen(function* () {
     const services = yield* Effect.context<
       | CloudflareEnvironment
-      | Effect.Services<
-          ReturnType<typeof Containers.createContainerRegistryCredentials>
-        >
+      | Effect.Services<ReturnType<typeof Containers.createContainerRegistryCredentials>>
     >();
     const resolve = Effect.fn(function* (
       server: string,

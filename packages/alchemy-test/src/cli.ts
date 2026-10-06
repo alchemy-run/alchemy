@@ -5,6 +5,7 @@
  * alchemy-test [paths...] [-t pattern] [--exclude path]... [--timeout ms]
  *              [--retry n] [--concurrency n] [--sequential] [--tui]
  *              [--profile name] [--fast]
+ *              [--tags 'unit || (e2e && !live)']
  * ```
  *
  * Runs every `*.test.ts` under the given paths (default `./test`) in a single
@@ -21,18 +22,18 @@
 
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
+import * as Argument from "effect/cli/Argument";
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Runtime from "effect/Runtime";
-import * as Argument from "effect/unstable/cli/Argument";
-import * as Command from "effect/unstable/cli/Command";
-import * as Flag from "effect/unstable/cli/Flag";
-
 import packageJson from "../package.json" with { type: "json" };
 import { PlainReporterLive, printSummary } from "./PlainReporter.ts";
+import { parsePlan } from "./Plan.ts";
 import { Reporter } from "./Reporter.ts";
 import { run, type RunOptions } from "./Runner.ts";
 import { captureStrayOutput } from "./StrayOutput.ts";
@@ -56,15 +57,32 @@ const exclude = Flag.String("exclude").pipe(
   Flag.atLeast(0),
 );
 
+const tagsFilter = Flag.String("tags").pipe(
+  Flag.withDescription(
+    'Select tags using &&, ||, !, parentheses and * wildcards (e.g. "e2e && provider:aws && !slow"). Repeated filters are ANDed.',
+  ),
+  Flag.atLeast(0),
+);
+
+const plan = Flag.String("plan").pipe(
+  Flag.withDescription(
+    "JSON array of sequential phases; nested arrays run branches in parallel. Each branch has tags (ANDed expressions) and optional file concurrency. First match wins; shared hooks live until the file's final phase.",
+  ),
+  Flag.optional,
+);
+
+const dryRun = Flag.Boolean("dry-run").pipe(
+  Flag.withDescription("Collect tests and show the execution plan without running tests or hooks"),
+  Flag.withDefault(false),
+);
+
 const timeout = Flag.Int("timeout").pipe(
   Flag.withDescription("Default per-test timeout in milliseconds"),
   Flag.withDefault(120_000),
 );
 
 const retry = Flag.Int("retry").pipe(
-  Flag.withDescription(
-    "Times a failing test is retried before failing the run",
-  ),
+  Flag.withDescription("Times a failing test is retried before failing the run"),
   Flag.withDefault(2),
 );
 
@@ -80,9 +98,7 @@ const toConcurrency = (value: string): number | "unbounded" => {
   if (value === "unbounded") return "unbounded";
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 1) {
-    throw new Error(
-      `--concurrency must be a positive integer or "unbounded", got: ${value}`,
-    );
+    throw new Error(`--concurrency must be a positive integer or "unbounded", got: ${value}`);
   }
   return parsed;
 };
@@ -93,9 +109,7 @@ const sequential = Flag.Boolean("sequential").pipe(
 );
 
 const tui = Flag.Boolean("tui").pipe(
-  Flag.withDescription(
-    "Opt in to the interactive TUI (default is plain line output)",
-  ),
+  Flag.withDescription("Opt in to the interactive TUI (default is plain line output)"),
   Flag.withDefault(false),
 );
 
@@ -119,9 +133,7 @@ const fast = Flag.Boolean("fast").pipe(
  * A syntactically INVALID regex (e.g. `-t "[worker"`) degrades to a literal
  * substring match instead of erroring.
  */
-const toFilter = (
-  pattern: Option.Option<string>,
-): ((fullTitle: string) => boolean) | undefined =>
+const toFilter = (pattern: Option.Option<string>): ((fullTitle: string) => boolean) | undefined =>
   Option.match(pattern, {
     onNone: () => undefined,
     onSome: (source) => {
@@ -141,6 +153,9 @@ const rootCommand = Command.make(
   {
     paths,
     testNamePattern,
+    tagsFilter,
+    plan,
+    dryRun,
     exclude,
     timeout,
     retry,
@@ -177,15 +192,12 @@ const rootCommand = Command.make(
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
     // an interactive terminal.
-    const interactive = args.tui && process.stdout.isTTY === true;
+    const interactive = !args.dryRun && args.tui && process.stdout.isTTY === true;
     const path = yield* Path.Path;
     const root = process.cwd();
     // Per-run log file (timestamp + pid) so concurrent runs in different
     // terminals never trample each other's logs.
-    const timestamp = new Date()
-      .toISOString()
-      .slice(0, 19)
-      .replaceAll(":", "-");
+    const timestamp = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
     const logFile = path.resolve(
       root,
       ".alchemy",
@@ -199,6 +211,9 @@ const rootCommand = Command.make(
       paths: args.paths,
       exclude: args.exclude,
       filter: toFilter(args.testNamePattern),
+      tagsFilter: args.tagsFilter,
+      dryRun: args.dryRun,
+      plan: Option.isSome(args.plan) ? parsePlan(args.plan.value) : undefined,
       timeout: args.timeout,
       retry: args.retry,
       concurrency: toConcurrency(args.concurrency),
@@ -210,9 +225,7 @@ const rootCommand = Command.make(
     // run log for the duration of the run (the reporter writes through the
     // real stream); the TUI installs its own diversion after the renderer
     // is created.
-    const restoreStrayCapture = interactive
-      ? undefined
-      : captureStrayOutput(logFile);
+    const restoreStrayCapture = interactive ? undefined : captureStrayOutput(logFile);
 
     const summary = yield* Effect.gen(function* () {
       const reporter = yield* Reporter;
@@ -234,18 +247,12 @@ const rootCommand = Command.make(
     // knows what they're getting into before opening it.
     yield* Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const stats = yield* fs
-        .stat(logFile)
-        .pipe(Effect.orElseSucceed(() => undefined));
-      const contents = yield* fs
-        .readFileString(logFile)
-        .pipe(Effect.orElseSucceed(() => ""));
+      const stats = yield* fs.stat(logFile).pipe(Effect.orElseSucceed(() => undefined));
+      const contents = yield* fs.readFileString(logFile).pipe(Effect.orElseSucceed(() => ""));
       const lines = contents === "" ? 0 : contents.split("\n").length;
       const kb = stats === undefined ? 0 : Number(stats.size) / 1024;
       yield* Effect.sync(() => {
-        process.stdout.write(
-          `\nFull log: ${logFile} (${lines} lines, ${kb.toFixed(1)} KB)\n`,
-        );
+        process.stdout.write(`\nFull log: ${logFile} (${lines} lines, ${kb.toFixed(1)} KB)\n`);
       });
     });
 
@@ -261,24 +268,20 @@ const cli = Command.run(rootCommand, {
   version: packageJson.version,
 });
 
-cli.pipe(
-  Effect.provide(Layer.mergeAll(BunServices.layer)),
-  Effect.scoped,
-  (effect) =>
-    BunRuntime.runMain(effect as Effect.Effect<void>, {
-      // ALWAYS exit once the main effect completes. runMain's default only
-      // force-exits on failure/signal — but tests can leak live handles
-      // (vite watchers, workerd sidecar sockets, keep-alive agents) that
-      // keep bun's event loop alive forever after a green run. Everything
-      // is already flushed by now (summary + log written in the main
-      // effect); the macrotask hop lets any buffered stdout drain.
-      teardown: (exit, onExit) => {
-        Runtime.defaultTeardown(exit, (code) => {
-          const finalCode =
-            code !== 0 ? code : Number(process.exitCode ?? 0) || 0;
-          setTimeout(() => process.exit(finalCode), 0);
-          onExit(finalCode);
-        });
-      },
-    }),
+cli.pipe(Effect.provide(Layer.mergeAll(BunServices.layer)), Effect.scoped, (effect) =>
+  BunRuntime.runMain(effect as Effect.Effect<void>, {
+    // ALWAYS exit once the main effect completes. runMain's default only
+    // force-exits on failure/signal — but tests can leak live handles
+    // (vite watchers, workerd sidecar sockets, keep-alive agents) that
+    // keep bun's event loop alive forever after a green run. Everything
+    // is already flushed by now (summary + log written in the main
+    // effect); the macrotask hop lets any buffered stdout drain.
+    teardown: (exit, onExit) => {
+      Runtime.defaultTeardown(exit, (code) => {
+        const finalCode = code !== 0 ? code : Number(process.exitCode ?? 0) || 0;
+        setTimeout(() => process.exit(finalCode), 0);
+        onExit(finalCode);
+      });
+    },
+  }),
 );

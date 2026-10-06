@@ -1,17 +1,14 @@
-import * as railway from "@distilled.cloud/railway";
-import {
-  Sandbox,
-  SandboxProvider,
-  type SandboxProps,
-} from "@/Railway/Sandbox.ts";
+import { CredentialsFromToken, GraphQLLive, toConfig } from "@distilled.cloud/railway";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
-import { RailwayEnvironment } from "@/Railway/Environment.ts";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { RailwayEnvironment } from "@/Railway/Environment.ts";
+import { Sandbox, SandboxProvider, type SandboxProps } from "@/Railway/Sandbox.ts";
 
 const testLayer = (client: HttpClient.HttpClient) =>
   SandboxProvider().pipe(
@@ -20,11 +17,12 @@ const testLayer = (client: HttpClient.HttpClient) =>
         Layer.succeed(
           RailwayEnvironment,
           Effect.succeed({
-            ...railway.toConfig({ token: "fixture" }),
+            ...toConfig({ token: Redacted.make("fixture") }),
             workspaceId: "workspace",
           }),
         ),
-        railway.CredentialsFromToken({ token: "fixture" }),
+        CredentialsFromToken({ token: Redacted.make("fixture") }),
+        GraphQLLive,
         Layer.succeed(HttpClient.HttpClient, client),
       ),
     ),
@@ -62,13 +60,9 @@ const cloud = (status: Sandbox["Attributes"]["status"]) => ({
 const http = (respond: (query: string) => unknown) =>
   HttpClient.make((request) =>
     Effect.sync(() => {
-      if (request.body._tag !== "Uint8Array")
-        throw new Error("Expected JSON request");
+      if (request.body._tag !== "Uint8Array") throw new Error("Expected JSON request");
       const { query } = JSON.parse(new TextDecoder().decode(request.body.body));
-      return HttpClientResponse.fromWeb(
-        request,
-        Response.json({ data: respond(query) }),
-      );
+      return HttpClientResponse.fromWeb(request, Response.json({ data: respond(query) }));
     }),
   );
 
@@ -83,27 +77,67 @@ const immutable: Partial<SandboxProps>[] = [
   { sourceSandboxId: "source" },
 ];
 
-describe("Railway Sandbox provider", () => {
-  for (const option of immutable) {
-    const name = Object.keys(option)[0];
-    it.effect(`replaces when ${name} is changed or removed`, () =>
+describe(
+  "Railway Sandbox provider",
+  { tags: ["unit", "provider:railway", "provider:railway:sandbox", "local"] },
+  () => {
+    for (const option of immutable) {
+      const name = Object.keys(option)[0];
+      it.effect(`replaces when ${name} is changed or removed`, () =>
+        Effect.gen(function* () {
+          const provider = yield* Sandbox.Provider;
+          for (const [olds, news] of [
+            [props, { ...props, ...option }],
+            [{ ...props, ...option }, props],
+          ]) {
+            expect(
+              yield* provider.diff!({
+                ...context,
+                olds: olds!,
+                news: news!,
+                output: attrs,
+                oldBindings: [],
+                newBindings: [],
+              }),
+            ).toEqual({ action: "replace" });
+          }
+        }).pipe(
+          Effect.provide(
+            testLayer(
+              http(() => {
+                throw new Error("Diff must not perform I/O");
+              }),
+            ),
+          ),
+        ),
+      );
+    }
+
+    it.effect("ignores variable and route ordering", () =>
       Effect.gen(function* () {
         const provider = yield* Sandbox.Provider;
-        for (const [olds, news] of [
-          [props, { ...props, ...option }],
-          [{ ...props, ...option }, props],
-        ]) {
-          expect(
-            yield* provider.diff!({
-              ...context,
-              olds: olds!,
-              news: news!,
-              output: attrs,
-              oldBindings: [],
-              newBindings: [],
-            }),
-          ).toEqual({ action: "replace" });
-        }
+        const olds = {
+          ...props,
+          variables: { A: "1", B: "2" },
+          template: { variables: { A: "1", B: "2" } },
+          publicDomains: [{ port: 3000 }, { port: 8080, prefix: "api" }],
+        };
+        const news = {
+          ...props,
+          variables: { B: "2", A: "1" },
+          template: { variables: { B: "2", A: "1" } },
+          publicDomains: [{ prefix: "api", port: 8080 }, { port: 3000 }],
+        };
+        expect(
+          yield* provider.diff!({
+            ...context,
+            olds,
+            news,
+            output: attrs,
+            oldBindings: [],
+            newBindings: [],
+          }),
+        ).toBeUndefined();
       }).pipe(
         Effect.provide(
           testLayer(
@@ -114,56 +148,12 @@ describe("Railway Sandbox provider", () => {
         ),
       ),
     );
-  }
 
-  it.effect("ignores variable and route ordering", () =>
-    Effect.gen(function* () {
-      const provider = yield* Sandbox.Provider;
-      const olds = {
-        ...props,
-        variables: { A: "1", B: "2" },
-        template: { variables: { A: "1", B: "2" } },
-        publicDomains: [{ port: 3000 }, { port: 8080, prefix: "api" }],
-      };
-      const news = {
-        ...props,
-        variables: { B: "2", A: "1" },
-        template: { variables: { B: "2", A: "1" } },
-        publicDomains: [{ prefix: "api", port: 8080 }, { port: 3000 }],
-      };
-      expect(
-        yield* provider.diff!({
-          ...context,
-          olds,
-          news,
-          output: attrs,
-          oldBindings: [],
-          newBindings: [],
-        }),
-      ).toBeUndefined();
-    }).pipe(
-      Effect.provide(
-        testLayer(
-          http(() => {
-            throw new Error("Diff must not perform I/O");
-          }),
-        ),
-      ),
-    ),
-  );
-
-  it.effect(
-    "fails rather than returning a sandbox that never becomes ready",
-    () =>
+    it.effect("fails rather than returning a sandbox that never becomes ready", () =>
       Effect.gen(function* () {
         const provider = yield* Sandbox.Provider;
         const fiber = yield* provider
-          .reconcile({
-            ...context,
-            news: props,
-            olds: undefined,
-            output: undefined,
-          })
+          .reconcile({ ...context, news: props, olds: undefined, output: undefined })
           .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }));
         yield* TestClock.adjust("30 seconds");
         expect(yield* Fiber.join(fiber)).toMatchObject({
@@ -182,11 +172,9 @@ describe("Railway Sandbox provider", () => {
           ),
         ),
       ),
-  );
+    );
 
-  it.effect(
-    "recreates a missing cached sandbox and preserves an existing adopted one",
-    () => {
+    it.effect("recreates a missing cached sandbox and preserves an existing adopted one", () => {
       let creates = 0;
       let exists = false;
       return Effect.gen(function* () {
@@ -199,12 +187,7 @@ describe("Railway Sandbox provider", () => {
         });
         expect(recreated.status).toBe("RUNNING");
         expect(creates).toBe(1);
-        yield* provider.reconcile({
-          ...context,
-          news: props,
-          olds: undefined,
-          output: recreated,
-        });
+        yield* provider.reconcile({ ...context, news: props, olds: undefined, output: recreated });
         expect(creates).toBe(1);
       }).pipe(
         Effect.provide(
@@ -220,12 +203,9 @@ describe("Railway Sandbox provider", () => {
           ),
         ),
       );
-    },
-  );
+    });
 
-  it.effect(
-    "waits for DESTROYED instead of treating DESTROYING as absent",
-    () => {
+    it.effect("waits for DESTROYED instead of treating DESTROYING as absent", () => {
       let reads = 0;
       return Effect.gen(function* () {
         const provider = yield* Sandbox.Provider;
@@ -246,6 +226,6 @@ describe("Railway Sandbox provider", () => {
           ),
         ),
       );
-    },
-  );
-});
+    });
+  },
+);

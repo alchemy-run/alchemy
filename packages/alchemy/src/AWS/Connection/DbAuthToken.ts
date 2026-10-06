@@ -57,9 +57,7 @@ export const generateDbAuthToken: (
   Credentials.Credentials | Region.Region
 > = Effect.fn(function* (options: GenerateDbAuthTokenOptions) {
   const hostAndPort =
-    options.port !== undefined
-      ? `${options.hostname}:${options.port}`
-      : options.hostname;
+    options.port !== undefined ? `${options.hostname}:${options.port}` : options.hostname;
   const url = new URL(`https://${hostAndPort}/`);
   if (options.service === "rds-db") {
     url.searchParams.set("Action", "connect");
@@ -76,9 +74,7 @@ export const generateDbAuthToken: (
     service: options.service,
     region: options.region,
     expiresIn:
-      options.expiresIn !== undefined
-        ? Math.floor(Duration.toSeconds(options.expiresIn))
-        : 900,
+      options.expiresIn !== undefined ? Math.floor(Duration.toSeconds(options.expiresIn)) : 900,
   });
 
   return Redacted.make(signed.slice("https://".length));

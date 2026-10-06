@@ -13,6 +13,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
   LOCAL_PROVIDERS_URL,
@@ -175,23 +176,14 @@ export const detachQueueConsumersOfScript = Effect.fn(function* (
     targets,
     ({ queueId, consumerId }) =>
       queues.deleteConsumer({ accountId, queueId, consumerId }).pipe(
-        Effect.catchTag(
-          ["ConsumerNotFound", "QueueNotFound"],
-          () => Effect.void,
-        ),
+        Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void),
         Effect.andThen(
           queues.getConsumer({ accountId, queueId, consumerId }).pipe(
             Effect.flatMap(() => Effect.fail("still-attached" as const)),
-            Effect.catchTag(
-              ["ConsumerNotFound", "QueueNotFound"],
-              () => Effect.void,
-            ),
+            Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void),
             Effect.retry({
               while: (e) => e === "still-attached",
-              schedule: Schedule.max([
-                Schedule.spaced("1 second"),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(30)]),
             }),
             Effect.ignore,
           ),
@@ -233,9 +225,7 @@ export const ConsumerProviderLive = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? [])
-              .map((q) => q.queueId)
-              .filter((id): id is string => id != null),
+            (page.result ?? []).map((q) => q.queueId).filter((id): id is string => id != null),
           ),
         ),
         // Account not entitled for Queues — nothing to enumerate.
@@ -309,12 +299,9 @@ export const ConsumerProviderLive = () =>
       // place (Cloudflare's PUT silently ignores `script_name`
       // changes, so reconcile does delete-then-create).
       if (
-        JSON.stringify(olds.settings ?? {}) !==
-          JSON.stringify(news.settings ?? {}) ||
-        (olds.deadLetterQueue ?? undefined) !==
-          (news.deadLetterQueue ?? undefined) ||
-        (output?.scriptName !== undefined &&
-          news.scriptName !== output.scriptName)
+        JSON.stringify(olds.settings ?? {}) !== JSON.stringify(news.settings ?? {}) ||
+        (olds.deadLetterQueue ?? undefined) !== (news.deadLetterQueue ?? undefined) ||
+        (output?.scriptName !== undefined && news.scriptName !== output.scriptName)
       ) {
         return { action: "update" } as const;
       }
@@ -333,20 +320,15 @@ export const ConsumerProviderLive = () =>
         yield* queues
           .deleteConsumer({ accountId: acct, queueId, consumerId })
           .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
-        yield* queues
-          .getConsumer({ accountId: acct, queueId, consumerId })
-          .pipe(
-            Effect.flatMap(() => Effect.fail("still-attached" as const)),
-            Effect.catchTag("ConsumerNotFound", () => Effect.void),
-            Effect.retry({
-              while: (e) => e === "still-attached",
-              schedule: Schedule.max([
-                Schedule.spaced("1 second"),
-                Schedule.recurs(30),
-              ]),
-            }),
-            Effect.ignore,
-          );
+        yield* queues.getConsumer({ accountId: acct, queueId, consumerId }).pipe(
+          Effect.flatMap(() => Effect.fail("still-attached" as const)),
+          Effect.catchTag("ConsumerNotFound", () => Effect.void),
+          Effect.retry({
+            while: (e) => e === "still-attached",
+            schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(30)]),
+          }),
+          Effect.ignore,
+        );
       });
 
       // Observe — prefer the cached consumerId, then fall back to
@@ -361,16 +343,8 @@ export const ConsumerProviderLive = () =>
       let owned = false;
       if (isLiveId(output?.consumerId)) {
         const fetched = yield* queues
-          .getConsumer({
-            accountId: acct,
-            queueId,
-            consumerId: output.consumerId,
-          })
-          .pipe(
-            Effect.catchTag("ConsumerNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .getConsumer({ accountId: acct, queueId, consumerId: output.consumerId })
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
         if (fetched) {
           observed = toObserved(fetched);
           owned = observed !== undefined;
@@ -415,29 +389,20 @@ export const ConsumerProviderLive = () =>
       ) {
         const scriptTags = Effect.fn(function* (scriptName: string) {
           const settings = yield* workers
-            .getScriptScriptAndVersionSetting({
-              accountId: acct,
-              scriptName,
-            })
+            .getScriptScriptAndVersionSetting({ accountId: acct, scriptName })
             .pipe(
               Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
                 Effect.succeed(undefined),
               ),
             );
-          return settings === undefined
-            ? undefined
-            : new Set(settings.tags ?? []);
+          return settings === undefined ? undefined : new Set(settings.tags ?? []);
         });
         const observedTags = yield* scriptTags(observed.scriptName);
         let staleGeneration = observedTags === undefined;
         if (observedTags !== undefined) {
           const stack = yield* Stack;
-          const desiredTags = news.scriptName
-            ? yield* scriptTags(news.scriptName)
-            : undefined;
-          const observedId = Array.from(observedTags).find((t) =>
-            t.startsWith("alchemy:id:"),
-          );
+          const desiredTags = news.scriptName ? yield* scriptTags(news.scriptName) : undefined;
+          const observedId = Array.from(observedTags).find((t) => t.startsWith("alchemy:id:"));
           staleGeneration =
             observedId !== undefined &&
             observedTags.has(`alchemy:stack:${stack.name}`) &&
@@ -496,8 +461,7 @@ export const ConsumerProviderLive = () =>
                 : Effect.void,
             ),
             Effect.retry({
-              while: (e) =>
-                e._tag === "QueueHandlerMissing" || e._tag === "QueueNotFound",
+              while: (e) => e._tag === "QueueHandlerMissing" || e._tag === "QueueNotFound",
               schedule: queueHandlerReadinessSchedule,
             }),
             Effect.catchTag("ConsumerAlreadyExists", (cause) =>
@@ -512,10 +476,7 @@ export const ConsumerProviderLive = () =>
                       `state. Underlying error: ${cause.message}`,
                   );
                 }
-                if (
-                  match.scriptName !== undefined &&
-                  match.scriptName !== news.scriptName
-                ) {
+                if (match.scriptName !== undefined && match.scriptName !== news.scriptName) {
                   return yield* Effect.die(
                     `Cloudflare queue "${queueId}" already has a ` +
                       `worker consumer for script "${match.scriptName}", ` +
@@ -563,9 +524,7 @@ export const ConsumerProviderLive = () =>
             ? Effect.void
             : Effect.fail("ScriptUnbound" as const),
         ),
-        Effect.catchTag("ConsumerNotFound", () =>
-          Effect.fail("ScriptUnbound" as const),
-        ),
+        Effect.catchTag("ConsumerNotFound", () => Effect.fail("ScriptUnbound" as const)),
         Effect.retry({
           while: (e) => e === "ScriptUnbound",
           schedule: queueHandlerReadinessSchedule,
@@ -609,10 +568,7 @@ export const ConsumerProviderLive = () =>
           Effect.catchTag("ConsumerNotFound", () => Effect.void),
           Effect.retry({
             while: (e) => e === "still-attached",
-            schedule: Schedule.max([
-              Schedule.spaced("1 second"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(30)]),
           }),
           Effect.ignore,
         );
@@ -625,11 +581,7 @@ export const ConsumerProviderLive = () =>
             queueId: output.queueId,
             consumerId: output.consumerId,
           })
-          .pipe(
-            Effect.catchTag("ConsumerNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
         if (fetched) {
           return {
             consumerId: fetched.consumerId!,
@@ -646,10 +598,7 @@ export const ConsumerProviderLive = () =>
       // queue allows only one worker consumer, so finding it via
       // listConsumers is unambiguous.
       if (output?.queueId && output?.accountId) {
-        const match = yield* findWorkerConsumer(
-          output.accountId,
-          output.queueId,
-        );
+        const match = yield* findWorkerConsumer(output.accountId, output.queueId);
         if (match) {
           return {
             consumerId: match.consumerId,
@@ -665,10 +614,7 @@ export const ConsumerProviderLive = () =>
     }),
   });
 
-type ObservedConsumer = {
-  consumerId: string;
-  scriptName: string | undefined;
-};
+type ObservedConsumer = { consumerId: string; scriptName: string | undefined };
 
 const toObserved = (c: {
   consumerId?: string | null;
@@ -701,25 +647,16 @@ export const ConsumerProviderLocal = () =>
         Effect.forEach(
           scriptNames,
           (scriptName) =>
-            MutableHashMap.get(
-              localRuntimeState.workerRestarts,
-              scriptName,
-            ).pipe(
-              Option.match({
-                onNone: () => Effect.void,
-                onSome: (restart) => restart,
-              }),
+            MutableHashMap.get(localRuntimeState.workerRestarts, scriptName).pipe(
+              Option.match({ onNone: () => Effect.void, onSome: (restart) => restart }),
             ),
           { discard: true },
         );
 
       return {
         list: () =>
-          Effect.sync(() =>
-            Array.from(MutableHashMap.values(localRuntimeState.queueConsumers)),
-          ),
+          Effect.sync(() => Array.from(MutableHashMap.values(localRuntimeState.queueConsumers))),
         diff: Effect.fn(function* ({ news, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
           if (!output) return { action: "update" };
           // A real (non-`dev:`) consumerId on a local-mode row is legacy
           // damage from pre-stamping dev runs — replace so the new
@@ -729,15 +666,14 @@ export const ConsumerProviderLocal = () =>
             return { action: "replace" };
           }
           if (!isResolved(news)) return undefined;
-          if (
-            output.queueId !== news.queueId ||
-            output.accountId !== accountId
-          ) {
+          const accountId = isLiveId(news.queueId)
+            ? (yield* yield* CloudflareEnvironment).accountId
+            : yield* localAccountId;
+          if (output.queueId !== news.queueId || output.accountId !== accountId) {
             return { action: "replace" };
           }
           if (
-            JSON.stringify(output.settings ?? {}) !==
-              JSON.stringify(news.settings ?? {}) ||
+            JSON.stringify(output.settings ?? {}) !== JSON.stringify(news.settings ?? {}) ||
             output.scriptName !== news.scriptName ||
             output.deadLetterQueue !== news.deadLetterQueue
           ) {
@@ -745,22 +681,19 @@ export const ConsumerProviderLocal = () =>
           }
           // If the resource is a noop, add it to the local runtime state so it's available downstream.
           // We do it here instead of in the reconcile function so it doesn't appear as an update.
-          MutableHashMap.set(
-            localRuntimeState.queueConsumers,
-            output.consumerId,
-            output,
-          );
+          MutableHashMap.set(localRuntimeState.queueConsumers, output.consumerId, output);
           return { action: "noop" };
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.consumerId) return undefined;
-          return MutableHashMap.get(
-            localRuntimeState.queueConsumers,
-            output.consumerId,
-          ).pipe(Option.getOrUndefined);
+          return MutableHashMap.get(localRuntimeState.queueConsumers, output.consumerId).pipe(
+            Option.getOrUndefined,
+          );
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+          const accountId = isLiveId(news.queueId)
+            ? (yield* yield* CloudflareEnvironment).accountId
+            : yield* localAccountId;
           // A LIVE queue (`Alchemy.remote()`) consumed by a LOCAL worker:
           // Cloudflare only pushes to deployed consumers, so the local
           // runtime drains the real queue via the HTTP pull API instead.
@@ -769,14 +702,9 @@ export const ConsumerProviderLocal = () =>
           let queueName: string | undefined;
           let pullConsumerId: string | undefined;
           if (isLiveId(news.queueId)) {
-            const queue = yield* queues.getQueue({
-              accountId,
-              queueId: news.queueId,
-            });
+            const queue = yield* queues.getQueue({ accountId, queueId: news.queueId });
             queueName = queue.queueName ?? undefined;
-            const existingPull = (queue.consumers ?? []).find(
-              (c) => c.type === "http_pull",
-            );
+            const existingPull = (queue.consumers ?? []).find((c) => c.type === "http_pull");
             if (existingPull?.consumerId) {
               pullConsumerId = existingPull.consumerId;
             } else {
@@ -791,8 +719,7 @@ export const ConsumerProviderLocal = () =>
                 },
               });
               pullConsumerId =
-                ("consumerId" in created ? created.consumerId : undefined) ??
-                undefined;
+                ("consumerId" in created ? created.consumerId : undefined) ?? undefined;
             }
           }
           const consumer: Consumer["Attributes"] = {
@@ -811,11 +738,7 @@ export const ConsumerProviderLocal = () =>
             queueName,
             pullConsumerId,
           };
-          MutableHashMap.set(
-            localRuntimeState.queueConsumers,
-            consumer.consumerId,
-            consumer,
-          );
+          MutableHashMap.set(localRuntimeState.queueConsumers, consumer.consumerId, consumer);
           // A local workerd instance only reads its queue-consumer wiring
           // at start time, and this reconcile races the sibling Worker's
           // start (the Worker's `precreate` resolves `scriptName` before
@@ -830,10 +753,7 @@ export const ConsumerProviderLocal = () =>
           return consumer;
         }),
         delete: Effect.fn(function* ({ output }) {
-          MutableHashMap.remove(
-            localRuntimeState.queueConsumers,
-            output.consumerId,
-          );
+          MutableHashMap.remove(localRuntimeState.queueConsumers, output.consumerId);
           yield* restartScripts([output.scriptName]);
           // Legacy local-mode rows written before providerMode stamping can
           // carry a real consumer's id — detach the live consumer too so
@@ -847,12 +767,7 @@ export const ConsumerProviderLocal = () =>
                 queueId: output.queueId,
                 consumerId: output.consumerId,
               })
-              .pipe(
-                Effect.catchTag(
-                  ["ConsumerNotFound", "QueueNotFound"],
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void));
           }
           // Remove the http_pull consumer this row attached to its live
           // queue. Idempotent: gone-already (or queue deleted first) is
@@ -864,12 +779,7 @@ export const ConsumerProviderLocal = () =>
                 queueId: output.queueId,
                 consumerId: output.pullConsumerId,
               })
-              .pipe(
-                Effect.catchTag(
-                  ["ConsumerNotFound", "QueueNotFound"],
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () => Effect.void));
           }
         }),
       };
@@ -878,7 +788,6 @@ export const ConsumerProviderLocal = () =>
 
 export const ConsumerProvider = () =>
   ProviderLayer.dual(Consumer, {
-    local: () =>
-      ConsumerProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+    local: () => ConsumerProviderLocal().pipe(Layer.provide(localRuntimeServices())),
     live: () => ConsumerProviderLive(),
   });

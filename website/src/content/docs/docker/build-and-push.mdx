@@ -60,6 +60,12 @@ digest. Alchemy maintains an input-hash tag; optional `tags` are additional alia
 `image.ref` always uses the resolved digest, so moving an alias does not change an
 already-deployed consumer.
 
+Pass `image.ref` to whatever runs the container:
+[Cloudflare Containers](/cloudflare/compute/containers), an
+[ECS task definition](/aws/compute/ecs), or a
+[Kubernetes Deployment or Job](/kubernetes/workloads/images#build-images-with-dockerimage)
+all accept it as their image.
+
 Authentication comes from a registered integration or your Docker configuration,
 including credential helpers. To supply credentials explicitly:
 

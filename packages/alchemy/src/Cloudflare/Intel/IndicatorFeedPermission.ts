@@ -1,7 +1,6 @@
 import * as intel from "@distilled.cloud/cloudflare/intel";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -72,15 +71,12 @@ export type IndicatorFeedPermission = Resource<
  * @product Intel
  * @category Observability & Analytics
  */
-export const IndicatorFeedPermission =
-  Resource<IndicatorFeedPermission>(TypeId);
+export const IndicatorFeedPermission = Resource<IndicatorFeedPermission>(TypeId);
 
 /**
  * Returns true if the given value is an IndicatorFeedPermission resource.
  */
-export const isIndicatorFeedPermission = (
-  value: unknown,
-): value is IndicatorFeedPermission =>
+export const isIndicatorFeedPermission = (value: unknown): value is IndicatorFeedPermission =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IndicatorFeedPermissionProvider = () =>
@@ -103,10 +99,7 @@ export const IndicatorFeedPermissionProvider = () =>
       if (typeof olds?.feedId === "number" && olds.feedId !== news.feedId) {
         return { action: "replace" } as const;
       }
-      if (
-        typeof olds?.accountTag === "string" &&
-        olds.accountTag !== news.accountTag
-      ) {
+      if (typeof olds?.accountTag === "string" && olds.accountTag !== news.accountTag) {
         return { action: "replace" } as const;
       }
       return undefined;

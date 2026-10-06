@@ -1,40 +1,30 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import type { ScopedPlanStatusSession } from "@/Report.ts";
-import {
-  normalizePolicyDocument,
-  type PolicyDocument,
-} from "@/AWS/IAM/Policy.ts";
-import { Registry } from "@/AWS/Schemas";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as schemas from "@distilled.cloud/aws/schemas";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { normalizePolicyDocument, type PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { Registry } from "@/AWS/Schemas";
+import * as Provider from "@/Provider";
+import type { ScopedPlanStatusSession } from "@/Report.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
-const stubSession = {
-  note: () => Effect.void,
-} as unknown as ScopedPlanStatusSession;
+const stubSession = { note: () => Effect.void } as unknown as ScopedPlanStatusSession;
 
 const assertRegistryGone = (registryName: string) =>
   schemas.describeRegistry({ RegistryName: registryName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`registry ${registryName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`registry ${registryName} still exists`))),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
-describe("AWS.Schemas.Registry", () => {
+describe("AWS.Schemas.Registry", { tags: ["provider:aws", "provider:aws:schemas", "live"] }, () => {
   test.provider(
     "creates, updates, replaces on rename, and deletes a registry",
     (stack) =>
@@ -48,17 +38,12 @@ describe("AWS.Schemas.Registry", () => {
               description: "alchemy schemas test registry",
               tags: { purpose: "alchemy-test" },
             });
-            return {
-              registryName: registry.registryName,
-              registryArn: registry.registryArn,
-            };
+            return { registryName: registry.registryName, registryArn: registry.registryArn };
           }),
         );
 
         // Verify out-of-band via distilled.
-        const observed = yield* schemas.describeRegistry({
-          RegistryName: created.registryName,
-        });
+        const observed = yield* schemas.describeRegistry({ RegistryName: created.registryName });
         expect(observed.RegistryArn).toEqual(created.registryArn);
         expect(observed.Description).toEqual("alchemy schemas test registry");
         expect(observed.Tags?.purpose).toEqual("alchemy-test");
@@ -67,9 +52,7 @@ describe("AWS.Schemas.Registry", () => {
         // list() enumerates the deployed registry (LOCAL scope only).
         const provider = yield* Provider.findProvider(Registry);
         const all = yield* provider.list();
-        expect(all.some((r) => r.registryName === created.registryName)).toBe(
-          true,
-        );
+        expect(all.some((r) => r.registryName === created.registryName)).toBe(true);
         expect(all.some((r) => r.registryName === "aws.events")).toBe(false);
 
         // POLICY — attach a PolicyDocument-valued resource policy in place.
@@ -123,17 +106,12 @@ describe("AWS.Schemas.Registry", () => {
             const registry = yield* Registry("TestRegistry", {
               description: "updated description",
             });
-            return {
-              registryName: registry.registryName,
-              registryArn: registry.registryArn,
-            };
+            return { registryName: registry.registryName, registryArn: registry.registryArn };
           }),
         );
         expect(updated.registryName).toEqual(created.registryName);
 
-        const afterUpdate = yield* schemas.describeRegistry({
-          RegistryName: created.registryName,
-        });
+        const afterUpdate = yield* schemas.describeRegistry({ RegistryName: created.registryName });
         expect(afterUpdate.Description).toEqual("updated description");
         expect(afterUpdate.Tags?.purpose).toBeUndefined();
         expect(afterUpdate.Tags?.["alchemy::id"]).toEqual("TestRegistry");
@@ -153,26 +131,19 @@ describe("AWS.Schemas.Registry", () => {
             const registry = yield* Registry("TestRegistry", {
               registryName: "alchemy-test-schemas-registry-renamed",
             });
-            return {
-              registryName: registry.registryName,
-              registryArn: registry.registryArn,
-            };
+            return { registryName: registry.registryName, registryArn: registry.registryArn };
           }),
         );
-        expect(renamed.registryName).toEqual(
-          "alchemy-test-schemas-registry-renamed",
-        );
+        expect(renamed.registryName).toEqual("alchemy-test-schemas-registry-renamed");
         yield* assertRegistryGone(created.registryName);
-        const afterRename = yield* schemas.describeRegistry({
-          RegistryName: renamed.registryName,
-        });
+        const afterRename = yield* schemas.describeRegistry({ RegistryName: renamed.registryName });
         expect(afterRename.RegistryArn).toEqual(renamed.registryArn);
 
         // DELETE
         yield* stack.destroy();
         yield* assertRegistryGone(renamed.registryName);
       }),
-    { timeout: 120_000 },
+    { tags: ["provider:aws:iam"], timeout: 120_000 },
   );
 
   test.provider(
@@ -209,9 +180,7 @@ describe("AWS.Schemas.Registry", () => {
           session: stubSession,
           bindings: [],
         };
-        const protectedDelete = yield* Effect.result(
-          provider.delete(deleteInput),
-        );
+        const protectedDelete = yield* Effect.result(provider.delete(deleteInput));
         expect(Result.isFailure(protectedDelete)).toBe(true);
         yield* schemas.describeSchema({
           RegistryName: registry.registryName,

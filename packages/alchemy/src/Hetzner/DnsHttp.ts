@@ -1,6 +1,6 @@
 import { Credentials } from "@distilled.cloud/hetzner";
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Zone } from "./Zone.ts";
 
@@ -19,9 +19,7 @@ export const makeHttpDnsBinding = <Client>(options: {
   makeClient: (auth: DnsAuth, zoneId: Effect.Effect<number>) => Client;
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (zone: Zone) {
       const zoneId = yield* zone.zoneId;

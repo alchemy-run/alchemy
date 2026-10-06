@@ -10,17 +10,12 @@ import { Service, ServiceProvider } from "./Service.ts";
 import { Swarm, SwarmProvider } from "./Swarm.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Docker",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Docker") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /** Shared image provider layers for container-platform integrations. */
-export const imageProviders = Layer.mergeAll(
-  ImageProvider(),
-  RemoteImageProvider(),
-);
+export const imageProviders = Layer.mergeAll(ImageProvider(), RemoteImageProvider());
 
 /**
  * Registers all Docker resource providers.
@@ -31,16 +26,7 @@ export const imageProviders = Layer.mergeAll(
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([
-      Container,
-      Image,
-      Network,
-      RemoteImage,
-      Volume,
-      Context,
-      Service,
-      Swarm,
-    ]),
+    Provider.collection([Container, Image, Network, RemoteImage, Volume, Context, Service, Swarm]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(

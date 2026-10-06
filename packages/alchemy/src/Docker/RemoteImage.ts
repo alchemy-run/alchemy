@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { deepEqual, isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName } from "./Docker.ts";
@@ -133,22 +133,19 @@ export interface RemoteImage extends Resource<
  * ```
  *
  * @resource
+ * @product Image
  */
 export const RemoteImage = Resource<RemoteImage>("Docker.RemoteImage");
 
 const sourceOf = (props: RemoteImageProps) =>
   props.source ?? `${props.name}:${props.tag ?? "latest"}`;
 const localRefOf = (props: RemoteImageProps) =>
-  props.source ??
-  `${props.targetName ?? props.name}:${props.targetTag ?? props.tag ?? "latest"}`;
+  props.source ?? `${props.targetName ?? props.name}:${props.targetTag ?? props.tag ?? "latest"}`;
 const publishOf = (props: RemoteImageProps): ImagePublish | undefined =>
   props.publish ??
   (props.registry && !props.skipPush
     ? {
-        repository: withRegistryHost(
-          props.targetName ?? props.name,
-          props.registry,
-        ),
+        repository: withRegistryHost(props.targetName ?? props.name, props.registry),
         tags: [props.targetTag ?? props.tag ?? "latest"],
         credentials: {
           username: props.registry.username,
@@ -158,10 +155,7 @@ const publishOf = (props: RemoteImageProps): ImagePublish | undefined =>
     : undefined);
 
 const effectivePlatform = (props: RemoteImageProps) =>
-  Effect.sync(
-    () =>
-      props.platform ?? `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`,
-  );
+  Effect.sync(() => props.platform ?? `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`);
 
 export const RemoteImageProvider = () =>
   ProviderLayer.dual(RemoteImage, {
@@ -178,13 +172,7 @@ const makeRemoteImageProvider = (localMode: boolean) =>
       const local = (ref: string, context?: string) =>
         docker.image
           .inspect(ref, context)
-          .pipe(
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
-          );
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
       const observeSource = Effect.fn(function* (props: RemoteImageProps) {
         const source = sourceOf(props);
         if (source.startsWith("sha256:")) {
@@ -194,10 +182,9 @@ const makeRemoteImageProvider = (localMode: boolean) =>
           );
           return { ref: source, digest: image.Id, credentials: undefined };
         }
-        const credentials = yield* resolveRegistryCredentials(
-          parseImageReference(source).server,
-          ["pull"],
-        );
+        const credentials = yield* resolveRegistryCredentials(parseImageReference(source).server, [
+          "pull",
+        ]);
         return {
           ...(yield* resolveImageManifest(source, credentials)),
           credentials,
@@ -209,8 +196,7 @@ const makeRemoteImageProvider = (localMode: boolean) =>
         read: Effect.fn(function* ({ olds, output }) {
           const publish = localMode ? undefined : publishOf(olds);
           if (publish) {
-            const reference =
-              output?.repoDigest ?? output?.ref ?? output?.imageRef;
+            const reference = output?.repoDigest ?? output?.ref ?? output?.imageRef;
             if (!reference) return undefined;
             const credentials = yield* resolveRegistryCredentials(
               parseImageReference(publish.repository).server,
@@ -229,10 +215,7 @@ const makeRemoteImageProvider = (localMode: boolean) =>
             };
           }
           const ref = output?.imageRef ?? localRefOf(olds);
-          const image = yield* local(
-            ref,
-            dockerContextName(olds.dockerContext ?? olds.context),
-          );
+          const image = yield* local(ref, dockerContextName(olds.dockerContext ?? olds.context));
           if (!image) return undefined;
           return {
             ...output,
@@ -261,42 +244,31 @@ const makeRemoteImageProvider = (localMode: boolean) =>
               ["pull"],
               publish.credentials,
             );
-            if (!(yield* findImageManifest(output.ref, credentials)))
-              return { action: "update" };
+            if (!(yield* findImageManifest(output.ref, credentials))) return { action: "update" };
           }
           // Preserve legacy alwaysPull behavior while migrating existing callers.
           if (news.source === undefined)
             return news.alwaysPull !== false ? { action: "update" } : undefined;
           const platform = yield* effectivePlatform(news);
           const sourceDigest =
-            news.alwaysPull === false
-              ? output.sourceDigest
-              : (yield* observeSource(news)).digest;
+            news.alwaysPull === false ? output.sourceDigest : (yield* observeSource(news)).digest;
           const hash = yield* sha256Object({ source: sourceDigest, platform });
           if (hash !== output.hash) return { action: "update" };
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
           if (news.context && news.dockerContext)
             return yield* Effect.fail(
-              new Error(
-                "Declare dockerContext, not both context and dockerContext",
-              ),
+              new Error("Declare dockerContext, not both context and dockerContext"),
             );
           if (
             news.publish &&
-            (news.registry ||
-              news.targetName ||
-              news.targetTag ||
-              news.skipPush !== undefined)
+            (news.registry || news.targetName || news.targetTag || news.skipPush !== undefined)
           )
-            return yield* Effect.fail(
-              new Error("Use publish without legacy destination options"),
-            );
+            return yield* Effect.fail(new Error("Use publish without legacy destination options"));
           const context = dockerContextName(news.dockerContext ?? news.context);
           const source = yield* observeSource(news);
           const requestedPublish = publishOf(news);
-          if (requestedPublish)
-            yield* validateImageRepository(requestedPublish.repository);
+          if (requestedPublish) yield* validateImageRepository(requestedPublish.repository);
           const publish = localMode ? undefined : requestedPublish;
           const platform = yield* effectivePlatform(news);
           const hash = yield* sha256Object({ source: source.digest, platform });
@@ -314,36 +286,19 @@ const makeRemoteImageProvider = (localMode: boolean) =>
                 : yield* publication.withLock(
                     inputRef,
                     Effect.gen(function* () {
-                      const cached = yield* findImageManifest(
-                        inputRef,
-                        credentials,
-                      );
+                      const cached = yield* findImageManifest(inputRef, credentials);
                       if (cached) return cached;
                       yield* session.note(`Mirroring image ${source.ref}`);
                       if (!source.ref.startsWith("sha256:"))
-                        yield* docker.image.pull(
-                          source.ref,
-                          platform,
-                          context,
-                          source.credentials,
-                        );
+                        yield* docker.image.pull(source.ref, platform, context, source.credentials);
                       yield* docker.image.tag(source.ref, inputRef, context);
                       yield* docker.image
-                        .push(
-                          inputRef,
-                          credentials ?? { server: target.server },
-                          platform,
-                          context,
-                        )
+                        .push(inputRef, credentials ?? { server: target.server }, platform, context)
                         .pipe(retryImagePublication);
                       return yield* resolveImageManifest(inputRef, credentials);
                     }),
                   );
-            yield* syncImageTags(
-              result.ref,
-              [hash, ...(publish.tags ?? [])],
-              credentials,
-            );
+            yield* syncImageTags(result.ref, [hash, ...(publish.tags ?? [])], credentials);
             return {
               ref: result.ref,
               imageRef: news.registry
@@ -358,16 +313,10 @@ const makeRemoteImageProvider = (localMode: boolean) =>
           }
           if (!source.ref.startsWith("sha256:")) {
             yield* session.note(`Pulling image ${source.ref}`);
-            yield* docker.image.pull(
-              source.ref,
-              platform,
-              context,
-              source.credentials,
-            );
+            yield* docker.image.pull(source.ref, platform, context, source.credentials);
           }
           const alias = localRefOf(news);
-          if (alias !== source.ref)
-            yield* docker.image.tag(source.ref, alias, context);
+          if (alias !== source.ref) yield* docker.image.tag(source.ref, alias, context);
           const image = yield* docker.image.inspect(source.ref, context);
           return {
             ref: image.Id,

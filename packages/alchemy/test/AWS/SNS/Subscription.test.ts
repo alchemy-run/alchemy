@@ -1,13 +1,12 @@
-import * as AWS from "@/AWS";
-import { Subscription } from "@/AWS/SNS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
+import * as AWS from "@/AWS";
+import { Subscription } from "@/AWS/SNS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import {
   SubscriptionTargetFunction,
   SubscriptionTargetFunctionLive,
@@ -44,9 +43,7 @@ test.provider(
       const attributes = yield* SNS.getSubscriptionAttributes({
         SubscriptionArn: deployed.subscription.subscriptionArn,
       }).pipe(
-        Effect.tapError((err) =>
-          Effect.logError(deployed.subscription.subscriptionArn, err),
-        ),
+        Effect.tapError((err) => Effect.logError(deployed.subscription.subscriptionArn, err)),
         Effect.retry({
           while: (error) => error._tag === "NotFoundException",
           schedule: Schedule.fixed(300),
@@ -61,7 +58,10 @@ test.provider(
     }),
   // ~60s in isolation (Lambda bundling + role propagation + SNS eventual
   // consistency); budget headroom for full-suite contention.
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sns", "live"],
+    timeout: 180_000,
+  },
 );
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
@@ -93,25 +93,22 @@ test.provider(
       const provider = yield* Provider.findProvider(Subscription);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (s) => s.subscriptionArn === deployed.subscription.subscriptionArn,
-        ),
-      ).toBe(true);
+      expect(all.some((s) => s.subscriptionArn === deployed.subscription.subscriptionArn)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
       yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:sns", "provider:aws:sqs", "live"],
+    timeout: 180_000,
+  },
 );
 
-class SubscriptionStillExists extends Data.TaggedError(
-  "SubscriptionStillExists",
-) {}
+class SubscriptionStillExists extends Data.TaggedError("SubscriptionStillExists") {}
 
-const assertSubscriptionDeleted = Effect.fn(function* (
-  subscriptionArn: string,
-) {
+const assertSubscriptionDeleted = Effect.fn(function* (subscriptionArn: string) {
   yield* SNS.getSubscriptionAttributes({
     SubscriptionArn: subscriptionArn,
   }).pipe(

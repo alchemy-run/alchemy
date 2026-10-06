@@ -1,17 +1,18 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ecs from "@distilled.cloud/aws/ecs";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as iam from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2/Subnet.ts";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import { Service } from "@/AWS/ECS/Service.ts";
+import { Service, ServiceDidNotStabilize } from "@/AWS/ECS/Service.ts";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as ecs from "@distilled.cloud/aws/ecs";
-import * as iam from "@distilled.cloud/aws/iam";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
@@ -29,87 +30,80 @@ const { test } = Test.make({ providers: AWS.providers() });
 // so `createService` returns immediately without waiting for Fargate task
 // placement. Networking is a stack-owned subnet in the standing default VPC
 // (no NAT/IGW needed since no task is ever launched).
-test.provider("list enumerates the deployed service", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    // Reclaim any revisions a previously-killed run left behind, and
-    // guarantee full deletion (deregister + delete) on success, failure,
-    // and interruption.
-    const family = "alchemy-test-ecs-service-list";
-    yield* reclaimTaskDefinitionFamily(family);
-    yield* Effect.addFinalizer(() =>
-      reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
-    );
+      // Reclaim any revisions a previously-killed run left behind, and
+      // guarantee full deletion (deregister + delete) on success, failure,
+      // and interruption.
+      const family = "alchemy-test-ecs-service-list";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() => reclaimTaskDefinitionFamily(family).pipe(Effect.ignore));
 
-    // Register a minimal Fargate task definition pointing at a public image.
-    const registered = yield* ecs.registerTaskDefinition({
-      family,
-      networkMode: "awsvpc",
-      requiresCompatibilities: ["FARGATE"],
-      cpu: "256",
-      memory: "512",
-      containerDefinitions: [
-        {
-          name: "app",
-          image: "public.ecr.aws/nginx/nginx:stable",
-          essential: true,
-          portMappings: [{ containerPort: 80, protocol: "tcp" }],
-        },
-      ],
-    });
-    const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn;
-    if (!taskDefinitionArn) {
-      return yield* Effect.die(
-        new Error("registerTaskDefinition returned no task definition ARN"),
-      );
-    }
-    const defaultVpc = yield* getDefaultVpc;
-
-    const service = yield* stack.deploy(
-      Effect.gen(function* () {
-        const subnet = yield* Subnet("ListServiceSubnet", {
-          vpcId: defaultVpc.vpcId,
-          cidrBlock: defaultVpc.subnetCidrBlock(234),
-        });
-        const cluster = yield* Cluster("ListServiceCluster", {
-          clusterName: "alchemy-test-ecs-service-list",
-        });
-        return yield* Service("ListService", {
-          cluster,
-          task: {
-            taskDefinitionArn,
-            containerName: "app",
-            port: 80,
+      // Register a minimal Fargate task definition pointing at a public image.
+      const registered = yield* ecs.registerTaskDefinition({
+        family,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "256",
+        memory: "512",
+        containerDefinitions: [
+          {
+            name: "app",
+            image: "public.ecr.aws/nginx/nginx:stable",
+            essential: true,
+            portMappings: [{ containerPort: 80, protocol: "tcp" }],
           },
-          desiredCount: 0,
-          vpcId: defaultVpc.vpcId,
-          subnets: [subnet.subnetId],
-        });
-      }),
-    );
+        ],
+      });
+      const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn;
+      if (!taskDefinitionArn) {
+        return yield* Effect.die(
+          new Error("registerTaskDefinition returned no task definition ARN"),
+        );
+      }
+      const defaultVpc = yield* getDefaultVpc;
 
-    const provider = yield* Provider.findProvider(Service);
-    const all = yield* provider.list();
+      const service = yield* stack.deploy(
+        Effect.gen(function* () {
+          const subnet = yield* Subnet("ListServiceSubnet", {
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(234),
+          });
+          const cluster = yield* Cluster("ListServiceCluster", {
+            clusterName: "alchemy-test-ecs-service-list",
+          });
+          return yield* Service("ListService", {
+            cluster,
+            task: { taskDefinitionArn, containerName: "app", port: 80 },
+            desiredCount: 0,
+            vpcId: defaultVpc.vpcId,
+            subnets: [subnet.subnetId],
+          });
+        }),
+      );
 
-    expect(all.some((s) => s.serviceArn === service.serviceArn)).toBe(true);
-    const found = all.find((s) => s.serviceArn === service.serviceArn);
-    expect(found?.serviceName).toEqual(service.serviceName);
-    expect(found?.clusterArn).toEqual(service.clusterArn);
+      const provider = yield* Provider.findProvider(Service);
+      const all = yield* provider.list();
 
-    yield* stack.destroy();
+      expect(all.some((s) => s.serviceArn === service.serviceArn)).toBe(true);
+      const found = all.find((s) => s.serviceArn === service.serviceArn);
+      expect(found?.serviceName).toEqual(service.serviceName);
+      expect(found?.clusterArn).toEqual(service.clusterArn);
 
-    yield* reclaimTaskDefinitionFamily(family);
+      yield* stack.destroy();
 
-    // Out-of-band gone-proof: the cluster (deleted after its service) is
-    // INACTIVE or absent, so nothing this test created is left ACTIVE.
-    const after = yield* ecs.describeClusters({
-      clusters: ["alchemy-test-ecs-service-list"],
-    });
-    expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
-      false,
-    );
-  }),
+      yield* reclaimTaskDefinitionFamily(family);
+
+      // Out-of-band gone-proof: the cluster (deleted after its service) is
+      // INACTIVE or absent, so nothing this test created is left ACTIVE.
+      const after = yield* ecs.describeClusters({ clusters: ["alchemy-test-ecs-service-list"] });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
+    }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"] },
 );
 
 // In-place reconcile coverage: create a service at desiredCount 0 (so
@@ -127,9 +121,7 @@ test.provider(
 
       const family = "alchemy-test-ecs-service-inplace";
       yield* reclaimTaskDefinitionFamily(family);
-      yield* Effect.addFinalizer(() =>
-        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => reclaimTaskDefinitionFamily(family).pipe(Effect.ignore));
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -215,17 +207,11 @@ test.provider(
       expect(svc?.deployments).toHaveLength(1);
       expect(svc?.deployments?.[0]?.status).toBe("PRIMARY");
       expect(svc?.deployments?.[0]?.rolloutState).toBe("COMPLETED");
-      expect(
-        svc?.deploymentConfiguration?.deploymentCircuitBreaker?.enable,
-      ).toBe(true);
-      expect(
-        svc?.networkConfiguration?.awsvpcConfiguration?.assignPublicIp,
-      ).toBe("ENABLED");
+      expect(svc?.deploymentConfiguration?.deploymentCircuitBreaker?.enable).toBe(true);
+      expect(svc?.networkConfiguration?.awsvpcConfiguration?.assignPublicIp).toBe("ENABLED");
 
       // Tag reconcile: `keep` removed, `added` present, `env` retained.
-      const tagMap = Object.fromEntries(
-        (svc?.tags ?? []).map((t) => [t.key, t.value]),
-      );
+      const tagMap = Object.fromEntries((svc?.tags ?? []).map((t) => [t.key, t.value]));
       expect(tagMap.added).toBe("new");
       expect(tagMap.env).toBe("test");
       expect(tagMap.keep).toBeUndefined();
@@ -235,14 +221,169 @@ test.provider(
 
       // Out-of-band gone-proof: the cluster (deleted after its service) is
       // INACTIVE or absent.
-      const after = yield* ecs.describeClusters({
-        clusters: ["alchemy-test-ecs-service-inplace"],
-      });
-      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
-        false,
-      );
+      const after = yield* ecs.describeClusters({ clusters: ["alchemy-test-ecs-service-inplace"] });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"], timeout: 240_000 },
+);
+
+test.provider(
+  "a stale failed deployment does not fail the replacement deployment",
+  (stack) =>
+    Effect.gen(function* () {
+      const family = "alchemy-test-ecs-service-failed-rollout";
+      const stableImage = "public.ecr.aws/nginx/nginx:stable";
+      const failingImage = "public.ecr.aws/docker/library/alpine:3.20";
+
+      const registerTaskDefinition = (image: string, command?: string[]) =>
+        ecs.registerTaskDefinition({
+          family,
+          networkMode: "awsvpc",
+          requiresCompatibilities: ["FARGATE"],
+          cpu: "256",
+          memory: "512",
+          containerDefinitions: [
+            {
+              name: "app",
+              image,
+              command,
+              essential: true,
+              portMappings: [{ containerPort: 80, protocol: "tcp" }],
+            },
+          ],
+        });
+
+      const deployService = (taskDefinitionArn: string, generation: string, desiredCount: number) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const defaultVpc = yield* getDefaultVpc;
+            const subnet = yield* Subnet("FailedRolloutSubnet", {
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(246),
+            });
+            const cluster = yield* Cluster("FailedRolloutCluster", { clusterName: family });
+            return yield* Service("FailedRolloutService", {
+              cluster,
+              task: { taskDefinitionArn, containerName: "app", port: 80 },
+              desiredCount,
+              vpcId: defaultVpc.vpcId,
+              subnets: [subnet.subnetId],
+              assignPublicIp: true,
+              tags: { generation },
+              deploymentStabilizationTimeout: "8 minutes",
+              deploymentConfiguration: {
+                minimumHealthyPercent: 0,
+                maximumPercent: 200,
+                deploymentCircuitBreaker: { enable: true, rollback: false },
+              },
+            });
+          }),
+        );
+
+      // Register cleanup before creating out-of-band task definitions.
+      yield* stack.destroy();
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        Effect.gen(function* () {
+          yield* stack.destroy().pipe(Effect.ignore);
+          yield* reclaimTaskDefinitionFamily(family).pipe(Effect.ignore);
+        }),
+      );
+
+      const initialTask = yield* registerTaskDefinition(stableImage);
+      const failingTask = yield* registerTaskDefinition(failingImage, ["sh", "-c", "exit 1"]);
+      const recoveryTask = yield* registerTaskDefinition(stableImage);
+      const initialTaskArn = initialTask.taskDefinition?.taskDefinitionArn!;
+      const failingTaskArn = failingTask.taskDefinition?.taskDefinitionArn!;
+      const recoveryTaskArn = recoveryTask.taskDefinition?.taskDefinitionArn!;
+
+      const created = yield* deployService(initialTaskArn, "initial", 0);
+      const describeService = ecs.describeServices({
+        cluster: created.clusterArn,
+        services: [created.serviceName],
+      });
+      const initialSnapshot = yield* describeService;
+
+      const failed = yield* deployService(failingTaskArn, "failed", 1).pipe(Effect.result);
+      expect(Result.isFailure(failed)).toBe(true);
+      if (Result.isFailure(failed)) {
+        expect(failed.failure).toBeInstanceOf(ServiceDidNotStabilize);
+        if (failed.failure instanceof ServiceDidNotStabilize) {
+          expect(failed.failure.message).toContain("reported a failed deployment");
+          expect(failed.failure.expectedTaskDefinitionArn).toBe(failingTaskArn);
+        }
+      }
+      const failedSnapshot = yield* describeService;
+      const failedDeployment = failedSnapshot.services?.[0]?.deployments?.find(
+        (deployment) => deployment.status === "PRIMARY",
+      );
+      expect(failedDeployment?.id).toBeDefined();
+      expect(failedDeployment?.taskDefinition).toBe(failingTaskArn);
+      expect(failedDeployment?.rolloutState).toBe("FAILED");
+      const failedDeploymentId = failedDeployment!.id!;
+
+      const [recovered, overlapping] = yield* Effect.all(
+        [
+          deployService(recoveryTaskArn, "recovered", 1),
+          describeService.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 120,
+              until: (response) => {
+                const deployments = response.services?.[0]?.deployments ?? [];
+                const primary = deployments.find((d) => d.status === "PRIMARY");
+                return (
+                  primary?.taskDefinition === recoveryTaskArn &&
+                  primary.id !== failedDeploymentId &&
+                  (primary.rolloutState === "COMPLETED" ||
+                    deployments.some(
+                      (d) => d.id === failedDeploymentId && d.rolloutState === "FAILED",
+                    ))
+                );
+              },
+            }),
+          ),
+        ],
+        { concurrency: 2 },
+      );
+      expect(recovered.serviceArn).toBe(created.serviceArn);
+      expect(recovered.taskDefinitionArn).toBe(recoveryTaskArn);
+      const overlappingDeployments = overlapping.services?.[0]?.deployments ?? [];
+      expect(
+        overlappingDeployments.some(
+          (d) => d.id === failedDeploymentId && d.rolloutState === "FAILED",
+        ),
+      ).toBe(true);
+      const recoveryDeploymentId = overlappingDeployments.find((d) => d.status === "PRIMARY")?.id;
+      expect(recoveryDeploymentId).toBeDefined();
+      expect(recoveryDeploymentId).not.toBe(failedDeploymentId);
+
+      const recoveredSnapshot = yield* describeService;
+      const recoveredService = recoveredSnapshot.services?.[0];
+      expect(recoveredService?.createdAt).toEqual(initialSnapshot.services?.[0]?.createdAt);
+      expect(recoveredService?.deployments).toHaveLength(1);
+      expect(recoveredService?.deployments?.[0]?.id).toBe(recoveryDeploymentId);
+      expect(recoveredService?.deployments?.[0]?.rolloutState).toBe("COMPLETED");
+      expect(recoveredService?.runningCount).toBe(1);
+      expect(recoveredService?.pendingCount).toBe(0);
+
+      yield* deployService(recoveryTaskArn, "forced-same-revision", 1);
+      const forcedSnapshot = yield* describeService;
+      const forcedService = forcedSnapshot.services?.[0];
+      expect(forcedService?.deployments).toHaveLength(1);
+      expect(forcedService?.deployments?.[0]?.id).not.toBe(recoveryDeploymentId);
+      expect(forcedService?.deployments?.[0]?.taskDefinition).toBe(recoveryTaskArn);
+      expect(forcedService?.deployments?.[0]?.rolloutState).toBe("COMPLETED");
+      expect(forcedService?.runningCount).toBe(1);
+      expect(forcedService?.pendingCount).toBe(0);
+
+      yield* stack.destroy();
+      yield* reclaimTaskDefinitionFamily(family);
+
+      const after = yield* ecs.describeClusters({ clusters: [family] });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
+    }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"], timeout: 900_000 },
 );
 
 // Manual (user-supplied) load balancer: create an ALB + target group OUT OF
@@ -288,27 +429,20 @@ test.provider(
         .describeTargetGroups({ Names: ["alchemy-test-ecs-manuallb"] })
         .pipe(Effect.catch(() => Effect.succeed({ TargetGroups: [] })));
       for (const tg of existingTgs.TargetGroups ?? []) {
-        yield* elbv2
-          .deleteTargetGroup({ TargetGroupArn: tg.TargetGroupArn! })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "ResourceInUseException",
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(5),
-              ]),
-            }),
-            Effect.catch(() => Effect.void),
-          );
+        yield* elbv2.deleteTargetGroup({ TargetGroupArn: tg.TargetGroupArn! }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "ResourceInUseException",
+            schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(5)]),
+          }),
+          Effect.catch(() => Effect.void),
+        );
       }
 
       yield* stack.destroy();
 
       const family = "alchemy-test-ecs-service-manuallb";
       yield* reclaimTaskDefinitionFamily(family);
-      yield* Effect.addFinalizer(() =>
-        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => reclaimTaskDefinitionFamily(family).pipe(Effect.ignore));
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -375,9 +509,7 @@ test.provider(
       // Safety-net finalizers (run LIFO on scope close): listener -> TG -> ALB,
       // so the out-of-band ELBv2 resources are reclaimed even if the body fails.
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteLoadBalancer({ LoadBalancerArn: loadBalancerArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteLoadBalancer({ LoadBalancerArn: loadBalancerArn }).pipe(Effect.ignore),
       );
 
       const targetGroup = yield* elbv2.createTargetGroup({
@@ -389,9 +521,7 @@ test.provider(
       });
       const targetGroupArn = targetGroup.TargetGroups?.[0]?.TargetGroupArn!;
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteTargetGroup({ TargetGroupArn: targetGroupArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteTargetGroup({ TargetGroupArn: targetGroupArn }).pipe(Effect.ignore),
       );
 
       const listener = yield* elbv2.createListener({
@@ -429,9 +559,7 @@ test.provider(
             public: false,
             vpcId: defaultVpc.vpcId,
             subnets: [subnetA.subnetId, subnetB.subnetId],
-            loadBalancers: [
-              { targetGroupArn, containerName: "app", containerPort: 80 },
-            ],
+            loadBalancers: [{ targetGroupArn, containerName: "app", containerPort: 80 }],
             // Duration.Input audit coverage: only valid on services with a
             // load balancer — assert the wire value round-trips as seconds.
             healthCheckGracePeriod: "45 seconds",
@@ -458,11 +586,7 @@ test.provider(
       // Delete the service first (it references the target group), then tear
       // down the out-of-band ELBv2 resources, then the rest of the stack.
       yield* ecs
-        .deleteService({
-          cluster: service.clusterArn,
-          service: service.serviceName,
-          force: true,
-        })
+        .deleteService({ cluster: service.clusterArn, service: service.serviceName, force: true })
         .pipe(Effect.catch(() => Effect.void));
       yield* elbv2
         .deleteListener({ ListenerArn: listenerArn })
@@ -477,7 +601,7 @@ test.provider(
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"], timeout: 240_000 },
 );
 
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
@@ -502,9 +626,7 @@ test.provider(
 
       const family = "alchemy-test-ecs-service-wedged";
       yield* reclaimTaskDefinitionFamily(family);
-      yield* Effect.addFinalizer(() =>
-        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => reclaimTaskDefinitionFamily(family).pipe(Effect.ignore));
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -554,18 +676,14 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
           isResourceState(r.row) && r.row.resourceType === "AWS.ECS.Service",
       );
       if (!wedged) {
-        return yield* Effect.die(
-          new Error("no AWS.ECS.Service state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no AWS.ECS.Service state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -594,7 +712,7 @@ test.provider(
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"], timeout: 240_000 },
 );
 
 // Regression: the image-owning `ServiceProps` form inherits
@@ -633,16 +751,12 @@ test.provider(
       const created = yield* deployService();
       const taskRoleName = created.taskRoleName;
       if (!taskRoleName) {
-        return yield* Effect.die(
-          new Error("image-form service returned no taskRoleName"),
-        );
+        return yield* Effect.die(new Error("image-form service returned no taskRoleName"));
       }
 
       const listAttachedArns = iam
         .listAttachedRolePolicies({ RoleName: taskRoleName })
-        .pipe(
-          Effect.map((r) => (r.AttachedPolicies ?? []).map((p) => p.PolicyArn)),
-        );
+        .pipe(Effect.map((r) => (r.AttachedPolicies ?? []).map((p) => p.PolicyArn)));
 
       expect(yield* listAttachedArns).toContain(managedPolicyArn);
 
@@ -662,5 +776,5 @@ test.provider(
       );
       expect(roleGone).toBe(true);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:ecs", "provider:aws:iam", "live"], timeout: 240_000 },
 );

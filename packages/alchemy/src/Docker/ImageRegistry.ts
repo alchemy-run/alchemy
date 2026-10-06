@@ -1,17 +1,17 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type { RegistryCredentials } from "./Docker.ts";
 
 export class ImageRegistryError extends Schema.TaggedError<ImageRegistryError>()(
@@ -77,8 +77,7 @@ export const parseImageReference = (reference: string) => {
   return {
     server,
     repository: `${server}/${server === "docker.io" && !name.includes("/") ? `library/${name}` : name}`,
-    name:
-      server === "docker.io" && !name.includes("/") ? `library/${name}` : name,
+    name: server === "docker.io" && !name.includes("/") ? `library/${name}` : name,
     selector:
       digestAt >= 0
         ? reference.slice(digestAt + 1)
@@ -106,10 +105,7 @@ export const validateImageRepository = (repository: string) => {
 
 const DockerConfig = Schema.Struct({
   auths: Schema.optional(
-    Schema.Record(
-      Schema.String,
-      Schema.Struct({ auth: Schema.optional(Schema.String) }),
-    ),
+    Schema.Record(Schema.String, Schema.Struct({ auth: Schema.optional(Schema.String) })),
   ),
   credHelpers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   credsStore: Schema.optional(Schema.String),
@@ -124,15 +120,11 @@ const configCredentials = Effect.fn(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* Effect.sync(
-      () =>
-        process.env.DOCKER_CONFIG ??
-        path.join(process.env.HOME ?? ".", ".docker"),
+      () => process.env.DOCKER_CONFIG ?? path.join(process.env.HOME ?? ".", ".docker"),
     );
     const inline = yield* Effect.sync(() => process.env.DOCKER_AUTH_CONFIG);
     const filename = path.join(directory, "config.json");
-    const decode = Schema.decodeUnknownEffect(
-      Schema.fromJsonString(DockerConfig),
-    );
+    const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(DockerConfig));
     const disk = (yield* fs.exists(filename))
       ? yield* decode(yield* fs.readFileString(filename))
       : undefined;
@@ -144,12 +136,9 @@ const configCredentials = Effect.fn(
       disk?.auths?.[server]?.auth ??
       disk?.auths?.[key]?.auth;
     if (auth !== undefined) {
-      const decoded = Encoding.decodeBase64String(auth);
+      const decoded = Base64.decodeString(auth);
       if (Result.isFailure(decoded) || decoded.success.indexOf(":") < 1) {
-        return yield* failure(
-          "AuthenticationFailed",
-          "Invalid Docker registry credentials",
-        );
+        return yield* failure("AuthenticationFailed", "Invalid Docker registry credentials");
       }
       const colon = decoded.success.indexOf(":");
       return {
@@ -161,9 +150,7 @@ const configCredentials = Effect.fn(
     const helper = disk?.credHelpers?.[server] ?? disk?.credsStore;
     if (!helper) return undefined;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const input = yield* Effect.sync(() =>
-      new TextEncoder().encode(`${key}\n`),
-    );
+    const input = yield* Effect.sync(() => new TextEncoder().encode(`${key}\n`));
     const child = yield* spawner.spawn(
       ChildProcess.make(`docker-credential-${helper}`, ["get"], {
         stdin: Stream.succeed(input),
@@ -178,16 +165,12 @@ const configCredentials = Effect.fn(
       { concurrency: "unbounded" },
     );
     if (exit !== 0) {
-      if (output.trim() === "credentials not found in native keychain")
-        return undefined;
-      return yield* failure(
-        "AuthenticationFailed",
-        "Docker credential helper failed",
-      );
+      if (output.trim() === "credentials not found in native keychain") return undefined;
+      return yield* failure("AuthenticationFailed", "Docker credential helper failed");
     }
-    const credentials = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(CredentialResult),
-    )(output);
+    const credentials = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CredentialResult))(
+      output,
+    );
     if (!credentials.Username && !credentials.Secret) return undefined;
     return {
       server,
@@ -197,10 +180,7 @@ const configCredentials = Effect.fn(
   },
   Effect.scoped,
   Effect.mapError(() =>
-    failure(
-      "AuthenticationFailed",
-      "Unable to read Docker registry credentials",
-    ),
+    failure("AuthenticationFailed", "Unable to read Docker registry credentials"),
   ),
 );
 
@@ -218,9 +198,7 @@ export const resolveRegistryCredentials = Effect.fn(function* (
   return yield* configCredentials(server);
 });
 
-const Digest = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/)),
-);
+const Digest = Schema.String.pipe(Schema.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/)));
 const Token = Schema.Struct({
   token: Schema.optional(Schema.String),
   access_token: Schema.optional(Schema.String),
@@ -235,11 +213,8 @@ const requestManifest = Effect.fn(function* (
   const parsed = parseImageReference(reference);
   if (!parsed.name || /\s/.test(reference))
     return yield* failure("InvalidReference", "Invalid image reference");
-  const host =
-    parsed.server === "docker.io" ? "registry-1.docker.io" : parsed.server;
-  const protocol = /^(localhost|127\.0\.0\.1)(:|$)/.test(host)
-    ? "http"
-    : "https";
+  const host = parsed.server === "docker.io" ? "registry-1.docker.io" : parsed.server;
+  const protocol = /^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https";
   const client = yield* HttpClient.HttpClient;
   const url = `${protocol}://${host}/v2/${parsed.name.split("/").map(encodeURIComponent).join("/")}/manifests/${encodeURIComponent(parsed.selector).replaceAll("%3A", ":")}`;
   let request = HttpClientRequest.make(method)(url).pipe(
@@ -248,15 +223,10 @@ const requestManifest = Effect.fn(function* (
       "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json",
     ),
   );
-  if (content)
-    request = request.pipe(
-      HttpClientRequest.bodyText(content.text, content.type),
-    );
+  if (content) request = request.pipe(HttpClientRequest.bodyText(content.text, content.type));
   const execute = (request: HttpClientRequest.HttpClientRequest) =>
     client.execute(request).pipe(
-      Effect.mapError(() =>
-        failure("RequestFailed", "Image registry request failed"),
-      ),
+      Effect.mapError(() => failure("RequestFailed", "Image registry request failed")),
       Effect.flatMap((response) =>
         response.status === 429 || response.status >= 500
           ? Effect.fail(
@@ -276,37 +246,22 @@ const requestManifest = Effect.fn(function* (
     );
   let response = yield* execute(
     credentials
-      ? request.pipe(
-          HttpClientRequest.basicAuth(
-            credentials.username,
-            credentials.password,
-          ),
-        )
+      ? request.pipe(HttpClientRequest.basicAuth(credentials.username, credentials.password))
       : request,
   );
   const challenge = response.headers["www-authenticate"];
-  if (
-    response.status === 401 &&
-    challenge?.toLowerCase().startsWith("bearer ")
-  ) {
+  if (response.status === 401 && challenge?.toLowerCase().startsWith("bearer ")) {
     const fields = Object.fromEntries(
-      Array.from(
-        challenge.matchAll(/([a-z]+)="([^"]*)"/gi),
-        ([, key, value]) => [key!.toLowerCase(), value!],
-      ),
+      Array.from(challenge.matchAll(/([a-z]+)="([^"]*)"/gi), ([, key, value]) => [
+        key!.toLowerCase(),
+        value!,
+      ]),
     );
     const realm = yield* Effect.try({
       try: () => new URL(fields.realm!),
-      catch: () =>
-        failure(
-          "AuthenticationFailed",
-          "Invalid registry authentication challenge",
-        ),
+      catch: () => failure("AuthenticationFailed", "Invalid registry authentication challenge"),
     });
-    if (
-      realm.protocol !== "https:" &&
-      !(protocol === "http" && realm.host === host)
-    ) {
+    if (realm.protocol !== "https:" && !(protocol === "http" && realm.host === host)) {
       return yield* failure(
         "AuthenticationFailed",
         "Registry authentication requires a secure token endpoint",
@@ -344,19 +299,12 @@ const requestManifest = Effect.fn(function* (
       });
     const body = yield* tokenResponse.json.pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(Token)),
-      Effect.mapError(() =>
-        failure("AuthenticationFailed", "Invalid registry token response"),
-      ),
+      Effect.mapError(() => failure("AuthenticationFailed", "Invalid registry token response")),
     );
     const token = body.token ?? body.access_token;
     if (!token)
-      return yield* failure(
-        "AuthenticationFailed",
-        "Registry token response is missing a token",
-      );
-    response = yield* execute(
-      request.pipe(HttpClientRequest.bearerToken(Redacted.make(token))),
-    );
+      return yield* failure("AuthenticationFailed", "Registry token response is missing a token");
+    response = yield* execute(request.pipe(HttpClientRequest.bearerToken(Redacted.make(token))));
   }
   if (response.status < 200 || response.status >= 300) {
     return yield* new ImageRegistryError({
@@ -383,9 +331,7 @@ export const resolveImageManifest = Effect.fn(function* (
   const digest = yield* Schema.decodeUnknownEffect(Digest)(
     response.headers["docker-content-digest"],
   ).pipe(
-    Effect.mapError(() =>
-      failure("InvalidManifest", "Registry manifest has no valid digest"),
-    ),
+    Effect.mapError(() => failure("InvalidManifest", "Registry manifest has no valid digest")),
   );
   return { ref: `${parsed.repository}@${digest}`, digest };
 });
@@ -405,28 +351,17 @@ export const syncImageTags = Effect.fn(function* (
     if (current?.digest === source.selector) continue;
     const manifest = yield* requestManifest(reference, "GET", credentials);
     const text = yield* manifest.text.pipe(
-      Effect.mapError(() =>
-        failure("RequestFailed", "Failed to read image manifest"),
-      ),
+      Effect.mapError(() => failure("RequestFailed", "Failed to read image manifest")),
     );
     const type = manifest.headers["content-type"];
-    if (!type)
-      return yield* failure(
-        "InvalidManifest",
-        "Image manifest has no media type",
-      );
+    if (!type) return yield* failure("InvalidManifest", "Image manifest has no media type");
     yield* requestManifest(target, "PUT", credentials, { text, type });
   }
 });
 
-export const findImageManifest = (
-  reference: string,
-  credentials?: RegistryCredentials,
-) =>
+export const findImageManifest = (reference: string, credentials?: RegistryCredentials) =>
   resolveImageManifest(reference, credentials).pipe(
     Effect.catchTag("ImageRegistryError", (error) =>
-      error.reason === "ImageNotFound"
-        ? Effect.succeed(undefined)
-        : Effect.fail(error),
+      error.reason === "ImageNotFound" ? Effect.succeed(undefined) : Effect.fail(error),
     ),
   );

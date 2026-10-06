@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Neon from "@/Neon/index.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Neon from "@/Neon/index.ts";
 import HyperdriveEffectWorker from "./effect-worker.ts";
 
 /**
@@ -17,10 +17,9 @@ export const AsyncWorker = Cloudflare.Worker("HyperdriveAsyncWorker", {
   env: {
     HD: Effect.gen(function* () {
       const project = yield* Neon.Project("HyperdriveBindingProject");
-      return yield* Cloudflare.Hyperdrive.Connection(
-        "HyperdriveBindingConnection",
-        { origin: project.origin },
-      );
+      return yield* Cloudflare.Hyperdrive.Connection("HyperdriveBindingConnection", {
+        origin: project.origin,
+      });
     }),
   },
 });

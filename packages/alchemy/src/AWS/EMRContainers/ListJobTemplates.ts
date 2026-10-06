@@ -28,10 +28,7 @@ export interface ListJobTemplates extends Binding.Service<
   () => Effect.Effect<
     (
       request?: emrc.ListJobTemplatesRequest,
-    ) => Effect.Effect<
-      emrc.ListJobTemplatesResponse,
-      emrc.ListJobTemplatesError
-    >
+    ) => Effect.Effect<emrc.ListJobTemplatesResponse, emrc.ListJobTemplatesError>
   >
 > {}
 export const ListJobTemplates = Binding.Service<ListJobTemplates>(

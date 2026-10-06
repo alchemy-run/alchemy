@@ -1,6 +1,6 @@
 import type { Docker } from "./Docker.ts";
-import type { DockerBuildOptions } from "./ImageBuild.ts";
 import type { InlineDockerfile } from "./Dockerfile.ts";
+import type { DockerBuildOptions } from "./ImageBuild.ts";
 import type { ImagePublish } from "./ImageRegistry.ts";
 
 /** Options shared by embedded build and existing-image specifications. */

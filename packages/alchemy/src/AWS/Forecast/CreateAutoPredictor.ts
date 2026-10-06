@@ -36,10 +36,7 @@ export interface CreateAutoPredictor extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.CreateAutoPredictorRequest,
-    ) => Effect.Effect<
-      forecast.CreateAutoPredictorResponse,
-      forecast.CreateAutoPredictorError
-    >
+    ) => Effect.Effect<forecast.CreateAutoPredictorResponse, forecast.CreateAutoPredictorError>
   >
 > {}
 export const CreateAutoPredictor = Binding.Service<CreateAutoPredictor>(

@@ -21,6 +21,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  * ```
  *
  * @binding
+ * @product Files
  */
 export interface CreateFileLink extends Binding.Service<
   CreateFileLink,
@@ -32,6 +33,4 @@ export interface CreateFileLink extends Binding.Service<
   >
 > {}
 
-export const CreateFileLink = Binding.Service<CreateFileLink>(
-  "Stripe.CreateFileLink",
-);
+export const CreateFileLink = Binding.Service<CreateFileLink>("Stripe.CreateFileLink");

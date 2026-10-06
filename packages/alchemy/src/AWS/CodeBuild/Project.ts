@@ -356,9 +356,7 @@ const toTagRecord = (
 const toWireTags = (tags: Record<string, string>): codebuild.Tag[] =>
   Object.entries(tags).map(([key, value]) => ({ key, value }));
 
-const toWireSource = (
-  source: ProjectSourceConfig,
-): codebuild.ProjectSource => ({
+const toWireSource = (source: ProjectSourceConfig): codebuild.ProjectSource => ({
   type: source.type,
   location: source.location,
   buildspec: source.buildspec,
@@ -404,11 +402,7 @@ const toWireEnvironment = (
  * keeps the retry's conditional type out of declaration emit (which would
  * otherwise widen the provider layer — see PATTERNS §7).
  */
-const retryIamPropagation = <
-  A,
-  E extends { readonly _tag: string; readonly message?: string },
-  R,
->(
+const retryIamPropagation = <A, E extends { readonly _tag: string; readonly message?: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   effect.pipe(
@@ -416,10 +410,7 @@ const retryIamPropagation = <
       while: (e) =>
         e._tag === "InvalidInputException" &&
         (e.message ?? "").toLowerCase().includes("not authorized"),
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -443,9 +434,7 @@ export const ProjectProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -494,13 +483,9 @@ export const ProjectProvider = () =>
           // just-deleted project; updateProject then reports the truth with
           // a typed ResourceNotFoundException — treat it as missing.
           if (observed !== undefined) {
-            observed = yield* retryIamPropagation(
-              codebuild.updateProject({ name, ...spec }),
-            ).pipe(
+            observed = yield* retryIamPropagation(codebuild.updateProject({ name, ...spec })).pipe(
               Effect.map((updated) => updated.project),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           }
 
@@ -518,9 +503,7 @@ export const ProjectProvider = () =>
 
           if (observed === undefined || observed.arn === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `CodeBuild project '${name}' disappeared while reconciling`,
-              ),
+              new Error(`CodeBuild project '${name}' disappeared while reconciling`),
             );
           }
 
@@ -538,9 +521,7 @@ export const ProjectProvider = () =>
             .getResourcePolicy({ resourceArn: observed.arn })
             .pipe(
               Effect.map((res) => res.policy),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           if (desiredPolicy === undefined) {
             if (observedPolicy !== undefined && observedPolicy !== "") {
@@ -550,8 +531,7 @@ export const ProjectProvider = () =>
             }
           } else if (
             observedPolicy === undefined ||
-            normalizePolicyDocument(observedPolicy) !==
-              normalizePolicyDocument(desiredPolicy)
+            normalizePolicyDocument(observedPolicy) !== normalizePolicyDocument(desiredPolicy)
           ) {
             yield* codebuild.putResourcePolicy({
               resourceArn: observed.arn,
@@ -575,14 +555,10 @@ export const ProjectProvider = () =>
         list: () =>
           codebuild.listProjects.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.projects ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.projects ?? [])),
             Effect.flatMap((names) =>
               names.length === 0
-                ? Effect.succeed(
-                    [] as { projectName: string; projectArn: string }[],
-                  )
+                ? Effect.succeed([] as { projectName: string; projectArn: string }[])
                 : Effect.forEach(
                     // batchGetProjects accepts up to 100 names per call.
                     chunkNames(names, 100),

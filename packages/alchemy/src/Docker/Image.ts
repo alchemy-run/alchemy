@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { deepEqual, isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import { prepareImageBuild, type DockerBuildOptions } from "./ImageBuild.ts";
@@ -19,8 +19,8 @@ import {
   validateImageRepository,
   type ImagePublish,
 } from "./ImageRegistry.ts";
-import type { Providers } from "./Providers.ts";
 import { ensureLocalImage, type LocalImageBuild } from "./LocalImage.ts";
+import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
   parseCreatedAt,
@@ -123,6 +123,7 @@ export interface Image extends Resource<
  * ```
  *
  * @resource
+ * @product Image
  */
 export const Image = Resource<Image>("Docker.Image");
 
@@ -139,17 +140,10 @@ const makeImageProvider = (localMode: boolean) =>
       const docker = yield* Docker;
       const publication = yield* ImagePublication;
 
-      const location = Effect.fn(function* (
-        id: string,
-        props: ImageProps,
-        instanceId: string,
-      ) {
+      const location = Effect.fn(function* (id: string, props: ImageProps, instanceId: string) {
         if (
           props.publish &&
-          (props.registry ||
-            props.skipPush !== undefined ||
-            props.name ||
-            props.tag)
+          (props.registry || props.skipPush !== undefined || props.name || props.tag)
         ) {
           return yield* Effect.fail(
             new Error(
@@ -159,9 +153,7 @@ const makeImageProvider = (localMode: boolean) =>
         }
         if (props.context && props.dockerContext)
           return yield* Effect.fail(
-            new Error(
-              "Declare dockerContext, not both context and dockerContext",
-            ),
+            new Error("Declare dockerContext, not both context and dockerContext"),
           );
         const localName = yield* dockerPhysicalName(id, props, instanceId);
         const requestedPublish =
@@ -176,8 +168,7 @@ const makeImageProvider = (localMode: boolean) =>
                 },
               }
             : undefined);
-        if (requestedPublish)
-          yield* validateImageRepository(requestedPublish.repository);
+        if (requestedPublish) yield* validateImageRepository(requestedPublish.repository);
         const publish = localMode ? undefined : requestedPublish;
         return {
           name: publish?.repository ?? localName,
@@ -189,13 +180,7 @@ const makeImageProvider = (localMode: boolean) =>
       const observeLocal = (ref: string, context: string | undefined) =>
         docker.image
           .inspect(ref, context)
-          .pipe(
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
-          );
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
       return Image.Provider.of({
         list: () => Effect.succeed([]),
@@ -207,8 +192,7 @@ const makeImageProvider = (localMode: boolean) =>
               ["pull"],
               target.publish.credentials,
             );
-            const reference =
-              output?.repoDigest ?? output?.ref ?? output?.imageRef;
+            const reference = output?.repoDigest ?? output?.ref ?? output?.imageRef;
             if (!reference) return undefined;
             const manifest = yield* findImageManifest(reference, credentials);
             if (!manifest) return undefined;
@@ -222,8 +206,7 @@ const makeImageProvider = (localMode: boolean) =>
               tag: output?.tag ?? olds.tag ?? "latest",
             };
           }
-          const imageRef =
-            output?.imageRef ?? `${target.name}:${olds.tag ?? "latest"}`;
+          const imageRef = output?.imageRef ?? `${target.name}:${olds.tag ?? "latest"}`;
           const image = yield* observeLocal(imageRef, target.context);
           if (!image) return undefined;
           return {
@@ -258,8 +241,7 @@ const makeImageProvider = (localMode: boolean) =>
               ["pull"],
               target.publish.credentials,
             );
-            if (!(yield* findImageManifest(output.ref, credentials)))
-              return { action: "update" };
+            if (!(yield* findImageManifest(output.ref, credentials))) return { action: "update" };
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
@@ -303,19 +285,14 @@ const makeImageProvider = (localMode: boolean) =>
                     {
                       ...options,
                       tag: [...new Set(tags)] as [string, ...string[]],
-                      "cache-from": news.build.cacheFrom ?? [
-                        `type=registry,ref=${cacheRef}`,
-                      ],
+                      "cache-from": news.build.cacheFrom ?? [`type=registry,ref=${cacheRef}`],
                       "cache-to": news.build.cacheTo ?? ["type=inline"],
                     },
                     undefined,
                     credentials ?? { server },
                   )
                   .pipe(retryImagePublication);
-                const manifest = yield* findImageManifest(
-                  inputRef,
-                  credentials,
-                );
+                const manifest = yield* findImageManifest(inputRef, credentials);
                 if (!manifest)
                   return yield* Effect.fail(
                     new Error("Published image is missing from the registry"),
@@ -323,16 +300,10 @@ const makeImageProvider = (localMode: boolean) =>
                 return manifest;
               }),
             );
-            yield* syncImageTags(
-              published.ref,
-              publish.tags ?? [],
-              credentials,
-            );
+            yield* syncImageTags(published.ref, publish.tags ?? [], credentials);
             return {
               ref: published.ref,
-              imageRef: news.registry
-                ? `${target.name}:${news.tag ?? "latest"}`
-                : published.ref,
+              imageRef: news.registry ? `${target.name}:${news.tag ?? "latest"}` : published.ref,
               repoDigest: published.ref,
               name: target.name,
               tag: news.tag ?? tag,
@@ -351,8 +322,7 @@ const makeImageProvider = (localMode: boolean) =>
           ).pipe(Effect.provide(Layer.succeed(Docker, docker)));
         }),
         delete: Effect.fn(function* ({ olds, output }) {
-          if (!localMode && (olds.publish || (olds.registry && !olds.skipPush)))
-            return;
+          if (!localMode && (olds.publish || (olds.registry && !olds.skipPush))) return;
           // Generated repositories belong to one resource instance, including dev reloads.
           const context = dockerContextName(olds.dockerContext ?? olds.context);
           const cachedRefs =
@@ -382,18 +352,8 @@ const makeImageProvider = (localMode: boolean) =>
           ];
           for (const ref of refs)
             yield* docker.image
-              .remove(
-                ref,
-                false,
-                dockerContextName(olds.dockerContext ?? olds.context),
-              )
-              .pipe(
-                Effect.catchReason(
-                  "PlatformError",
-                  "NotFound",
-                  () => Effect.void,
-                ),
-              );
+              .remove(ref, false, dockerContextName(olds.dockerContext ?? olds.context))
+              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
         }),
       });
     }),

@@ -1,21 +1,15 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
-import type { ResourceBinding } from "../../Resource.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId, LOCAL_PROVIDERS_URL } from "../LocalRuntime.ts";
-import type {
-  AnyContainerApplicationProps,
-  ContainerApplication,
-} from "./ContainerApplication.ts";
-import {
-  createContainerApplicationName,
-  makeContainerEnv,
-} from "./ContainerBundle.ts";
-import { ContainerPlatform } from "./ContainerPlatform.ts";
+import type { AnyContainerApplicationProps, ContainerApplication } from "./ContainerApplication.ts";
+import { createContainerApplicationName, makeContainerEnv } from "./ContainerBundle.ts";
 import { resolveContainerImage } from "./ContainerImage.ts";
+import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /** Local application metadata; Docker image resources prepare the runtime image. */
 export const LocalContainerProvider = () =>
@@ -61,13 +55,9 @@ export const LocalContainerProvider = () =>
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         output: ContainerApplication["Attributes"] | undefined;
       }) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+        const accountId = yield* localAccountId;
         const env = makeContainerEnv(news, accountId, bindings);
-        const { dev, imageHash } = yield* resolveContainerImage(
-          news,
-          env,
-          true,
-        );
+        const { dev, imageHash } = yield* resolveContainerImage(news, env, true);
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
           applicationName: yield* createContainerApplicationName(id, news.name),

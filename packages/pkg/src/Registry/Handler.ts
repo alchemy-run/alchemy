@@ -4,18 +4,18 @@ import { sha256 } from "alchemy/Util/sha256";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Hex } from "effect/encoding";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Etag from "effect/unstable/http/Etag";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { ManifestJson, type ManifestPackage } from "../Manifest.ts";
 import {
   BadRequest,
@@ -28,14 +28,7 @@ import {
   RunRef,
   Upstream,
 } from "../Protocol.ts";
-import {
-  Bucket,
-  Cache,
-  COMMENT_MARKER,
-  Database,
-  RegistryConfig,
-  tarballKey,
-} from "./Bindings.ts";
+import { Bucket, Cache, COMMENT_MARKER, Database, RegistryConfig, tarballKey } from "./Bindings.ts";
 import * as GitHub from "./GitHub.ts";
 import * as KVCache from "./KVCache.ts";
 import { sweep } from "./Sweep.ts";
@@ -81,24 +74,24 @@ const isFork = (run: Run) => run.headRepo !== run.repo;
 /**
  * Tags every package in a publication receives, all derived from the run.
  * Runs on the repository's own commits get the head commit, the short
- * commit, `branch:<name>`, and `pr:N` for pull requests. A fork's run gets
- * only `pr:N`: commit tags are shared by every publisher, and a fork can
+ * commit, `branch:<name>`, and `pr:N` plus `pr:N:<short-sha>` for pull requests.
+ * A fork's run gets only `pr:N:<short-sha>`: commit tags are shared by every publisher, and a fork can
  * run any commit it likes, including one already published from the
  * repository, so letting it write them would let it repoint them.
  */
 export const tagsFor = (run: Run): string[] => {
   if (isFork(run)) {
-    return run.pr === null ? [] : [`pr:${run.pr}`];
+    return run.pr === null ? [] : [installTag(run)];
   }
   const tags = [run.headSha, run.headSha.slice(0, SHORT)];
-  if (run.pr !== null) tags.push(`pr:${run.pr}`);
+  if (run.pr !== null) tags.push(`pr:${run.pr}`, installTag(run));
   if (run.headBranch) tags.push(`branch:${run.headBranch}`);
   return tags;
 };
 
 /** The tag install commands are written against. */
 export const installTag = (run: Run) =>
-  isFork(run) ? `pr:${run.pr}` : run.headSha.slice(0, SHORT);
+  run.pr !== null ? `pr:${run.pr}:${run.headSha.slice(0, SHORT)}` : run.headSha.slice(0, SHORT);
 
 const upstream = (e: { readonly _tag: string; readonly message?: string }) =>
   new Upstream({ message: GitHub.describe(e) });
@@ -121,9 +114,7 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
   if (!policy.repos.includes(ref.repo)) {
     return yield* new Forbidden({ message: `${ref.repo} may not publish` });
   }
-  const data = yield* github
-    .getRun(ref.repo, ref.runId)
-    .pipe(Effect.mapError(upstream));
+  const data = yield* github.getRun(ref.repo, ref.runId).pipe(Effect.mapError(upstream));
   if (
     data.status !== "in_progress" ||
     (data.run_attempt !== undefined && data.run_attempt !== ref.attempt)
@@ -138,18 +129,23 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
   const headRepo = data.head_repository?.full_name ?? data.repository.full_name;
   let pr: number | null = null;
   if (data.event === "pull_request") {
+    if (data.head_branch === null) {
+      return yield* new BadRequest({
+        message: `pull request run ${ref.runId} has no head branch`,
+      });
+    }
     // The pull request whose head is this run's head, from the repository
     // the run's head lives in. The same commit can head several pull
     // requests, including one opened from a fork against a commit the
     // repository already published; matching the head repository keeps a
     // run's publication on its own pull request.
     const pulls = yield* github
-      .pullRequestsForCommit(ref.repo, headRepo, data.head_sha)
+      .pullRequestsForCommit(ref.repo, headRepo, data.head_branch, data.head_sha)
       .pipe(Effect.mapError(upstream));
     const first = pulls[0];
     if (first === undefined) {
       return yield* new BadRequest({
-        message: `no pull request from ${headRepo} has head ${data.head_sha}`,
+        message: `no open pull request from ${headRepo} has head ${data.head_sha}`,
       });
     }
     pr = first.number;
@@ -173,10 +169,7 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
  * run, and GitHub reports the run's artifacts to the App, so a matching
  * name means this run vouched for exactly this manifest text.
  */
-const requireVouched = Effect.fn("requireVouched")(function* (
-  run: Run,
-  manifestText: string,
-) {
+const requireVouched = Effect.fn("requireVouched")(function* (run: Run, manifestText: string) {
   const github = yield* GitHub.GitHubApp;
   const expected = manifestArtifactName(yield* sha256(manifestText));
   const artifacts = yield* github
@@ -189,22 +182,15 @@ const requireVouched = Effect.fn("requireVouched")(function* (
   }
 });
 
-const publish = Effect.fn("publish")(function* (
-  run: Run,
-  manifestText: string,
-) {
+const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) {
   const { policy } = yield* RegistryConfig;
   const r2 = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
   const github = yield* GitHub.GitHubApp;
   const base = yield* origin;
 
   yield* requireVouched(run, manifestText);
-  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(
-    manifestText,
-  ).pipe(
-    Effect.mapError(
-      (e) => new BadRequest({ message: `invalid manifest: ${String(e)}` }),
-    ),
+  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText).pipe(
+    Effect.mapError((e) => new BadRequest({ message: `invalid manifest: ${String(e)}` })),
   );
   // The run vouched for the manifest, but the tags come from the run's
   // head, so the packed checkout has to be that commit: a `pull_request`
@@ -218,9 +204,7 @@ const publish = Effect.fn("publish")(function* (
   const packages = manifest.packages;
   const maxSize = policy.maxPackageSize;
   const tooLarge =
-    maxSize === undefined
-      ? undefined
-      : packages.find((pkg) => BigInt(pkg.size) > maxSize);
+    maxSize === undefined ? undefined : packages.find((pkg) => BigInt(pkg.size) > maxSize);
   if (tooLarge !== undefined) {
     return yield* new PackageTooLarge({
       message: `${tooLarge.name} exceeds ${maxSize} bytes`,
@@ -230,15 +214,9 @@ const publish = Effect.fn("publish")(function* (
   const missing = yield* Effect.filter(
     packages,
     (pkg) =>
-      r2
-        .head(tarballKey(pkg.name, pkg.sha256))
-        .pipe(Effect.map((object) => object === null)),
+      r2.head(tarballKey(pkg.name, pkg.sha256)).pipe(Effect.map((object) => object === null)),
     { concurrency: 8 },
-  ).pipe(
-    Effect.map((packages) =>
-      packages.map(({ name, sha256 }) => ({ name, sha256 })),
-    ),
-  );
+  ).pipe(Effect.map((packages) => packages.map(({ name, sha256 }) => ({ name, sha256 }))));
   if (missing.length > 0) {
     return yield* new MissingTarballs({ missing });
   }
@@ -285,9 +263,7 @@ const publish = Effect.fn("publish")(function* (
     })
     .pipe(
       Effect.catch((e) =>
-        Effect.logWarning(
-          `check run on ${run.repo}@${run.headSha} failed: ${GitHub.describe(e)}`,
-        ),
+        Effect.logWarning(`check run on ${run.repo}@${run.headSha} failed: ${GitHub.describe(e)}`),
       ),
     );
   if (run.pr !== null) {
@@ -299,9 +275,7 @@ const publish = Effect.fn("publish")(function* (
       .upsertComment(run.repo, run.pr, COMMENT_MARKER, body)
       .pipe(
         Effect.catch((e) =>
-          Effect.logWarning(
-            `comment on ${run.repo}#${run.pr} failed: ${GitHub.describe(e)}`,
-          ),
+          Effect.logWarning(`comment on ${run.repo}#${run.pr} failed: ${GitHub.describe(e)}`),
         ),
       );
   }
@@ -339,13 +313,9 @@ const uploadTarball = Effect.fn("uploadTarball")(function* (
     .put(key, request.stream, {
       contentLength,
       // The params schema already constrained this to 64 hex chars.
-      sha256: Result.getOrThrow(Encoding.decodeHex(sha256)),
+      sha256: Result.getOrThrow(Hex.decode(sha256)),
     })
-    .pipe(
-      Effect.mapError(
-        (e) => new BadRequest({ message: `upload rejected: ${String(e)}` }),
-      ),
-    );
+    .pipe(Effect.mapError((e) => new BadRequest({ message: `upload rejected: ${String(e)}` })));
   return { name, sha256, size: contentLength, uploaded: true };
 });
 
@@ -368,9 +338,7 @@ export const parseInstallPath = (
     // Malformed percent-encoding is a path nothing can be published under.
     return undefined;
   }
-  const tarball = path.match(
-    /^(@[^/]+\/[^/@]+|[^/@]+)\/-\/([a-f0-9]{64})\.tgz$/,
-  );
+  const tarball = path.match(/^(@[^/]+\/[^/@]+|[^/@]+)\/-\/([a-f0-9]{64})\.tgz$/);
   if (tarball) {
     return {
       kind: "tarball",
@@ -391,8 +359,7 @@ export const parseInstallPath = (
 const qualify = (name: string, scope: string | undefined) =>
   scope !== undefined && !name.startsWith("@") ? `${scope}/${name}` : name;
 
-const notFound = (message: string) =>
-  HttpServerResponse.json({ error: message }, { status: 404 });
+const notFound = (message: string) => HttpServerResponse.json({ error: message }, { status: 404 });
 
 /**
  * Install URLs: `/<name>/<tag>` redirects to the immutable tarball URL,
@@ -405,16 +372,10 @@ const install = Effect.gen(function* () {
   const r2 = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    return yield* HttpServerResponse.json(
-      { error: "method not allowed" },
-      { status: 405 },
-    );
+    return yield* HttpServerResponse.json({ error: "method not allowed" }, { status: 405 });
   }
   const host = request.headers.host ?? "localhost";
-  const target = parseInstallPath(
-    new URL(request.url, `https://${host}`).pathname,
-    aliases[host],
-  );
+  const target = parseInstallPath(new URL(request.url, `https://${host}`).pathname, aliases[host]);
   if (target === undefined) {
     return yield* notFound("not found");
   }
@@ -444,7 +405,7 @@ const install = Effect.gen(function* () {
 
 const banner = Effect.map(origin, (base) =>
   HttpServerResponse.text(
-    `Preview package registry. Install with: bun add ${base}/<package>/<commit|branch:name|pr:N>\n`,
+    `Preview package registry. Install with: bun add ${base}/<package>/<commit|branch:name|pr:N|pr:N:short-sha>\n`,
   ),
 );
 
@@ -478,9 +439,7 @@ export const handler = Effect.gen(function* () {
 
   // Built once per isolate. The D1 client memoizes its connection on each
   // event's scope, so its layer is safe to share.
-  const github = yield* GitHub.GitHubApp.pipe(
-    Effect.provide(GitHub.GitHubAppLive),
-  );
+  const github = yield* GitHub.GitHubApp.pipe(Effect.provide(GitHub.GitHubAppLive));
   const services = Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
     Cloudflare.KV.ReadWriteNamespaceBinding,
@@ -497,23 +456,20 @@ export const handler = Effect.gen(function* () {
     (ref) => Effect.map(lookupRun(ref), (value) => ({ value, ttl: RUN_CACHE })),
   );
 
-  yield* Cloudflare.Workers.cron(config.cron, () =>
-    sweep.pipe(Effect.provide(services)),
-  );
+  yield* Cloudflare.Workers.cron(config.cron, () => sweep.pipe(Effect.provide(services)));
 
   const registry = HttpApiBuilder.group(PkgApi, "Registry", (handlers) =>
     handlers
       .handle("publish", ({ payload }) =>
-        Effect.flatMap(runs(payload.run), (run) =>
-          publish(run, payload.manifest),
-        ).pipe(Effect.catchTag(storageFailures, (e) => Effect.die(e))),
+        Effect.flatMap(runs(payload.run), (run) => publish(run, payload.manifest)).pipe(
+          Effect.catchTag(storageFailures, (e) => Effect.die(e)),
+        ),
       )
       // Raw so the body streams into R2 instead of being buffered.
       .handleRaw("uploadTarball", ({ query, params, request }) =>
-        Effect.andThen(
-          runs(query),
-          uploadTarball(request, params.name, params.sha256),
-        ).pipe(Effect.catchTag("R2Error", (e) => Effect.die(e))),
+        Effect.andThen(runs(query), uploadTarball(request, params.name, params.sha256)).pipe(
+          Effect.catchTag("R2Error", (e) => Effect.die(e)),
+        ),
       ),
   );
 

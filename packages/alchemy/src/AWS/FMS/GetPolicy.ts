@@ -29,9 +29,7 @@ export interface GetPolicy extends Binding.Service<
   GetPolicy,
   "AWS.FMS.GetPolicy",
   () => Effect.Effect<
-    (
-      request: GetPolicyRequest,
-    ) => Effect.Effect<fms.GetPolicyResponse, fms.GetPolicyError>
+    (request: GetPolicyRequest) => Effect.Effect<fms.GetPolicyResponse, fms.GetPolicyError>
   >
 > {}
 

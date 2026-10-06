@@ -24,6 +24,7 @@ export interface UpdateTerminalReaderRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Terminal
  */
 export interface UpdateTerminalReader extends Binding.Service<
   UpdateTerminalReader,
@@ -33,11 +34,7 @@ export interface UpdateTerminalReader extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateTerminalReaderRequest,
-    ) => Effect.Effect<
-      UpdateTerminalReaderResponse,
-      UpdateTerminalReaderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<UpdateTerminalReaderResponse, UpdateTerminalReaderError, RuntimeContext>
   >
 > {}
 

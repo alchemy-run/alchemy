@@ -71,11 +71,7 @@ export const makeStreamMediaHttpBinding = <
         request?: Omit<I, "StreamARN" | "StreamName">,
       ) {
         const streamArn = yield* StreamArn;
-        const endpoint = yield* discoverDataEndpoint(
-          streamArn,
-          options.apiName,
-          getDataEndpoint,
-        );
+        const endpoint = yield* discoverDataEndpoint(streamArn, options.apiName, getDataEndpoint);
         return yield* op({ ...request, StreamARN: streamArn } as I).pipe(
           Effect.provideService(Endpoint.Endpoint, Effect.succeed(endpoint)),
         );
@@ -139,9 +135,7 @@ export const makeChannelSignalingHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${channel.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${channel.LogicalId})`)(function* (request?: Omit<I, K>) {
         const channelArn = yield* ChannelArn;
         const endpoint = yield* discoverSignalingEndpoint(
           channelArn,
@@ -152,9 +146,7 @@ export const makeChannelSignalingHttpBinding = <
         return yield* op({
           ...request,
           [options.key]: channelArn,
-        } as I).pipe(
-          Effect.provideService(Endpoint.Endpoint, Effect.succeed(endpoint)),
-        );
+        } as I).pipe(Effect.provideService(Endpoint.Endpoint, Effect.succeed(endpoint)));
       });
     });
   });

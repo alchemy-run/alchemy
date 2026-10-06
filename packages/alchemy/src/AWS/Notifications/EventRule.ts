@@ -102,14 +102,8 @@ export interface EventRule extends Resource<
 export const EventRule = Resource<EventRule>("AWS.Notifications.EventRule");
 
 /** Normalize an `eventPattern` prop to the wire JSON string ("" = none). */
-const toPatternString = (
-  pattern: string | Record<string, any> | undefined,
-): string =>
-  pattern === undefined
-    ? ""
-    : typeof pattern === "string"
-      ? pattern
-      : JSON.stringify(pattern);
+const toPatternString = (pattern: string | Record<string, any> | undefined): string =>
+  pattern === undefined ? "" : typeof pattern === "string" ? pattern : JSON.stringify(pattern);
 
 /** Order-insensitive region list equality. */
 const sameRegions = (a: readonly string[], b: readonly string[]): boolean =>
@@ -172,9 +166,7 @@ const hasPendingRegion = (rule: {
   Object.values(rule.statusSummaryByRegion).some(
     (s) =>
       s !== undefined &&
-      (s.status === "CREATING" ||
-        s.status === "UPDATING" ||
-        s.status === "DELETING"),
+      (s.status === "CREATING" || s.status === "UPDATING" || s.status === "DELETING"),
   );
 
 export const EventRuleProvider = () =>
@@ -185,11 +177,7 @@ export const EventRuleProvider = () =>
         return yield* pinNotificationsRegion(
           notifications
             .getEventRule({ arn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
         );
       });
 
@@ -201,19 +189,12 @@ export const EventRuleProvider = () =>
         eventType: string,
       ) {
         return yield* pinNotificationsRegion(
-          notifications.listEventRules
-            .items({ notificationConfigurationArn })
-            .pipe(
-              Stream.filter(
-                (rule) =>
-                  rule.source === source && rule.eventType === eventType,
-              ),
-              Stream.runHead,
-              Effect.map(Option.getOrUndefined),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+          notifications.listEventRules.items({ notificationConfigurationArn }).pipe(
+            Stream.filter((rule) => rule.source === source && rule.eventType === eventType),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          ),
         );
       });
 
@@ -232,12 +213,7 @@ export const EventRuleProvider = () =>
       });
 
       return EventRule.Provider.of({
-        stables: [
-          "eventRuleArn",
-          "notificationConfigurationArn",
-          "source",
-          "eventType",
-        ],
+        stables: ["eventRuleArn", "notificationConfigurationArn", "source", "eventType"],
 
         // Sub-resource keyed by its parent notification configuration —
         // there is no account-wide enumeration without a parent ARN.
@@ -261,8 +237,7 @@ export const EventRuleProvider = () =>
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           if (
-            news.notificationConfigurationArn !==
-              olds.notificationConfigurationArn ||
+            news.notificationConfigurationArn !== olds.notificationConfigurationArn ||
             news.source !== olds.source ||
             news.eventType !== olds.eventType
           ) {
@@ -293,21 +268,14 @@ export const EventRuleProvider = () =>
             const created = yield* retryWhileConflict(
               pinNotificationsRegion(
                 notifications.createEventRule({
-                  notificationConfigurationArn:
-                    news.notificationConfigurationArn,
+                  notificationConfigurationArn: news.notificationConfigurationArn,
                   source: news.source,
                   eventType: news.eventType,
-                  ...(desiredPattern !== ""
-                    ? { eventPattern: desiredPattern }
-                    : {}),
+                  ...(desiredPattern !== "" ? { eventPattern: desiredPattern } : {}),
                   regions: news.regions,
                 }),
               ),
-            ).pipe(
-              Effect.catchTag("ConflictException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            ).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             live = created
               ? yield* getByArn(created.arn)
               : yield* findBySignature(
@@ -320,10 +288,7 @@ export const EventRuleProvider = () =>
 
           // SYNC — diff observed eventPattern/regions against desired and
           // apply only the delta.
-          if (
-            live!.eventPattern !== desiredPattern ||
-            !sameRegions(live!.regions, news.regions)
-          ) {
+          if (live!.eventPattern !== desiredPattern || !sameRegions(live!.regions, news.regions)) {
             yield* retryWhileConflict(
               pinNotificationsRegion(
                 notifications.updateEventRule({
@@ -350,12 +315,8 @@ export const EventRuleProvider = () =>
           // so the rule may already be gone. A ConflictException means a
           // sibling mutation is still settling — retry through it.
           yield* retryWhileConflict(
-            pinNotificationsRegion(
-              notifications.deleteEventRule({ arn: output.eventRuleArn }),
-            ),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+            pinNotificationsRegion(notifications.deleteEventRule({ arn: output.eventRuleArn })),
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Deletion is asynchronous — wait until the rule is actually gone
           // so follow-up mutations on the configuration don't hit the
           // transitional lock (bounded, fail-open).
