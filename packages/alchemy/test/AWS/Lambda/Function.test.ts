@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
@@ -140,6 +141,47 @@ test.provider(
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
+);
+
+// `logging.retention` makes Alchemy create the `/aws/lambda/<name>` log
+// group up front (Lambda would only create it on first invoke, with no
+// expiry) and keep its retention policy in sync; destroy reaps the group.
+test.provider(
+  "applies, updates, and clears log retention",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployWith = (retention: "10 days" | "forever") =>
+        stack.deploy(
+          AWS.Lambda.Function("RetentionFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+            logging: { retention },
+          }),
+        );
+      const describeGroup = (name: string) =>
+        Logs.describeLogGroups({ logGroupNamePrefix: name }).pipe(
+          Effect.map((r) => (r.logGroups ?? []).find((g) => g.logGroupName === name)),
+        );
+
+      // Never invoked: the group exists only because Alchemy created it.
+      const fn = yield* deployWith("10 days");
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      expect((yield* describeGroup(logGroupName))?.retentionInDays).toBe(14);
+
+      yield* deployWith("forever");
+      const cleared = yield* describeGroup(logGroupName);
+      expect(cleared).toBeDefined();
+      expect(cleared?.retentionInDays).toBeUndefined();
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      expect(yield* describeGroup(logGroupName)).toBeUndefined();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"], timeout: 360_000 },
 );
 
 test.provider(

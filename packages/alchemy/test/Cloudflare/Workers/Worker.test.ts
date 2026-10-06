@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -13,6 +14,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
 import * as Command from "@/Command/index.ts";
+import * as Drift from "@/Drift";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
@@ -113,6 +115,161 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "live"] },
+    );
+
+    test.provider(
+      "zero-traffic upload receipts do not cause drift or hide live changes",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (marker: string, traffic?: number) =>
+            Cloudflare.Worker("ReceiptWorker", {
+              script: `export default { fetch() { return new Response(${JSON.stringify(marker)}); } };`,
+              workersDev: false,
+              version: traffic === undefined ? undefined : { traffic },
+            });
+
+          // Establish a compatible live deployment before uploading the
+          // candidate; a greenfield gradual rollout takes 100% of traffic.
+          const stable = yield* stack.deploy(program("stable"));
+          const beforeUpload = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: stable.workerName,
+          });
+          expect(beforeUpload.deployments[0]).toBeDefined();
+
+          const candidate = yield* stack.deploy(program("candidate", 0));
+          expect(candidate.workerName).toEqual(stable.workerName);
+          expect(candidate.versionId).toBeDefined();
+          expect(candidate.deploymentId).toBeUndefined();
+          const uploaded = yield* workers.getScriptVersion({
+            accountId,
+            scriptName: candidate.workerName,
+            versionId: candidate.versionId!,
+          });
+          expect(uploaded.id).toEqual(candidate.versionId);
+
+          const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+          const unchanged = yield* detectDrift();
+          expect(unchanged.resources.ReceiptWorker?.action).toBe("unchanged");
+          expect(unchanged.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+
+          const afterRead = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: candidate.workerName,
+          });
+          expect(afterRead.deployments[0]).toEqual(beforeUpload.deployments[0]);
+          expect(
+            afterRead.deployments[0]?.versions.some(
+              (version) => version.versionId === candidate.versionId,
+            ),
+          ).toBe(false);
+
+          // Change real script settings outside Alchemy. Keeping the upload
+          // receipt must not mask genuine drift in the live configuration.
+          yield* workers.createScriptSubdomain({
+            accountId,
+            scriptName: candidate.workerName,
+            enabled: true,
+            previewsEnabled: false,
+          });
+          const changed = yield* detectDrift();
+          expect(changed.resources.ReceiptWorker?.action).toBe("drifted");
+          expect(changed.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+          expect(changed.resources.ReceiptWorker?.attr.url).toBeDefined();
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
+    // #1827: drift repair rebuilds the bundle from the `main` stored in
+    // state. Deploy from one checkout with an absolute `main`
+    // (`import.meta.url`), delete that checkout, then repair drift from
+    // another checkout of the same code.
+    test.provider(
+      "drift repair rebuilds a Worker after the checkout that deployed it is gone",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          // Real path: on macOS the temp dir is a symlink, and `cwd` is real.
+          const tempRoot = yield* fs.realPath(
+            yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-moved-checkout-" }),
+          );
+          const writeCheckout = (dir: string) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(pathe.join(dir, "src"), { recursive: true });
+              yield* fs.writeFileString(
+                pathe.join(dir, "package.json"),
+                JSON.stringify({ name: "moved-checkout", private: true, type: "module" }),
+              );
+              yield* fs.writeFileString(
+                pathe.join(dir, "src", "worker.ts"),
+                `export default { fetch() { return new Response("moved-checkout"); } };\n`,
+              );
+            });
+          const checkoutA = pathe.join(tempRoot, "checkout-a");
+          const checkoutB = pathe.join(tempRoot, "checkout-b");
+          yield* writeCheckout(checkoutA);
+          const mainUrl = yield* Effect.sync(
+            () => pathToFileURL(pathe.join(checkoutA, "src", "worker.ts")).href,
+          );
+          const originalCwd = yield* Effect.sync(() => process.cwd());
+
+          yield* stack.destroy();
+
+          const workerName = yield* Effect.gen(function* () {
+            yield* Effect.sync(() => process.chdir(checkoutA));
+            const worker = yield* stack.deploy(
+              Cloudflare.Worker("MovedCheckoutWorker", { main: mainUrl, workersDev: true }),
+            );
+
+            // State keeps `main` relative to the deploying checkout.
+            const row = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: "MovedCheckoutWorker",
+              });
+            }).pipe(Effect.provide(stack.state));
+            expect((row as { props?: { main?: unknown } } | undefined)?.props?.main).toEqual(
+              pathe.join("src", "worker.ts"),
+            );
+
+            // The deploying checkout is gone; another checkout repairs.
+            yield* writeCheckout(checkoutB);
+            yield* fs.remove(checkoutA, { recursive: true });
+            yield* Effect.sync(() => process.chdir(checkoutB));
+
+            yield* workers.createScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+              enabled: false,
+              previewsEnabled: false,
+            });
+            const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+              Effect.provide(stack.state),
+            );
+            expect(repaired.resources.MovedCheckoutWorker).toMatchObject({ action: "repaired" });
+            const subdomain = yield* workers.getScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(subdomain.enabled).toBe(true);
+            return worker.workerName;
+          }).pipe(Effect.ensuring(Effect.sync(() => process.chdir(originalCwd))));
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(workerName, accountId);
+        }).pipe(Effect.scoped, logLevel),
+      // mutates process-global cwd
+      { tags: ["live"], timeout: 180_000, exclusive: true },
     );
 
     test.provider(

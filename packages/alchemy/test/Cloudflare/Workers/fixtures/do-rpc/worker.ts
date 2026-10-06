@@ -83,6 +83,22 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           return yield* HttpServerResponse.json({ global, eu, euAgain });
         }
 
+        // Calling a method the object does not define fails instead of
+        // resolving to `undefined` (e.g. an untyped caller, or a stub newer
+        // than the deployed object).
+        if (request.method === "GET" && url.pathname === "/unknown-rpc") {
+          const object = objects.getByName("unknown-rpc") as unknown as {
+            missing: () => Effect.Effect<unknown, Error>;
+          };
+          const missing = yield* object.missing().pipe(
+            Effect.match({
+              onFailure: (error) => String(error.message),
+              onSuccess: (value) => `unexpected success: ${String(value)}`,
+            }),
+          );
+          return yield* HttpServerResponse.json({ missing });
+        }
+
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the
         // Stream returned by the DO's `tick` RPC method straight onto the
         // HTTP response.

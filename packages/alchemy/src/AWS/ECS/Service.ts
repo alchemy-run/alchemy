@@ -1,4 +1,3 @@
-import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
@@ -22,7 +21,7 @@ import { Resource } from "../../Resource.ts";
 import type { HostRuntimeContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
-import { toMillis, toSeconds, toWireSeconds } from "../../Util/Duration.ts";
+import { toMillis, toWireSeconds } from "../../Util/Duration.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
@@ -49,6 +48,7 @@ import { ListenerRule } from "../ELBv2/ListenerRule.ts";
 import { LoadBalancer } from "../ELBv2/LoadBalancer.ts";
 import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
@@ -466,15 +466,7 @@ export interface ServiceContainerHealthCheck {
 }
 
 /** Retention policy for the service's auto-created CloudWatch log group. */
-export interface ServiceLoggingConfig {
-  /**
-   * How long to retain logs, e.g. `"2 weeks"`, or `"forever"` to clear the
-   * retention policy. Rounded up to the nearest CloudWatch-supported
-   * retention. When omitted the log group's existing retention is left
-   * untouched (new log groups default to never-expire).
-   */
-  retention?: Duration.Input | "forever";
-}
+export type ServiceLoggingConfig = LogRetentionConfig;
 
 /** EFS volume sugar for {@link ImageOwningServicePropsBase.volumes}. */
 export interface ServiceEfsVolume {
@@ -805,12 +797,6 @@ export interface ImageOwningServicePropsBase
    * `secretsmanager:GetSecretValue` on exactly the referenced ARNs.
    */
   secrets?: Record<string, string>;
-
-  /**
-   * Retention for the auto-created CloudWatch log group, e.g.
-   * `{ retention: "2 weeks" }` or `{ retention: "forever" }`.
-   */
-  logging?: ServiceLoggingConfig;
 
   /**
    * Container-level health check (Docker `HEALTHCHECK`) for the primary
@@ -1609,6 +1595,10 @@ const transformServiceProps = (
     }).pipe(Namespace.push(id));
   });
 
+// Tasks in `host`/`bridge` mode have no ENI of their own.
+const usesAwsvpc = (props: ServiceProps) =>
+  !("networkMode" in props) || (props.networkMode ?? "awsvpc") === "awsvpc";
+
 const composeManagedIngress = (
   id: string,
   props: ServiceProps,
@@ -1998,7 +1988,7 @@ const composeManagedIngress = (
           vpcId: network.vpcId as string,
           port: spec.port as number,
           protocol: spec.protocol,
-          targetType: "ip",
+          targetType: usesAwsvpc(props) ? "ip" : "instance",
           healthCheckPath: isNetworkTg
             ? wantsHttpCheck
               ? (health?.path ?? "/")
@@ -2386,42 +2376,6 @@ const syncTaskSecretsPolicy = Effect.fn(function* ({
           : []),
       ],
     }),
-  });
-});
-
-/** CloudWatch Logs' allowed retention values, in days, ascending. */
-const LOG_RETENTION_DAYS = [
-  1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288,
-  3653,
-];
-
-/**
- * Apply the `logging.retention` prop to the auto-created log group: round
- * the duration UP to the nearest CloudWatch-supported retention, or clear
- * the policy for `"forever"`. Leaves the group untouched when unset.
- */
-const syncLogGroupRetention = Effect.fn(function* ({
-  logGroupName,
-  retention,
-}: {
-  logGroupName: string;
-  retention: Duration.Input | "forever" | undefined;
-}) {
-  if (retention === undefined) {
-    return;
-  }
-  if (retention === "forever") {
-    yield* logs
-      .deleteRetentionPolicy({ logGroupName })
-      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-    return;
-  }
-  const days = Math.max(1, Math.ceil((toSeconds(retention) ?? 0) / 86_400));
-  yield* logs.putRetentionPolicy({
-    logGroupName,
-    retentionInDays:
-      LOG_RETENTION_DAYS.find((allowed) => allowed >= days) ??
-      LOG_RETENTION_DAYS[LOG_RETENTION_DAYS.length - 1]!,
   });
 });
 
@@ -3099,7 +3053,9 @@ export const ServiceProvider = () =>
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
         healthCheckGracePeriodSeconds: toWireSeconds(news.healthCheckGracePeriod),
-        networkConfiguration: networkConfigurationOf(network, securityGroups),
+        networkConfiguration: usesAwsvpc(news)
+          ? networkConfigurationOf(network, securityGroups)
+          : undefined,
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,
         placementStrategy: news.placementStrategy,

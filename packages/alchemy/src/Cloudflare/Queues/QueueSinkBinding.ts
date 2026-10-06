@@ -32,6 +32,4 @@ import { WriteQueueBinding } from "./WriteQueueBinding.ts";
  * @product Queues
  * @category Storage & Databases
  */
-export const QueueSinkBinding = QueueSinkFromWriteQueue.pipe(
-  Layer.provide(WriteQueueBinding),
-);
+export const QueueSinkBinding = QueueSinkFromWriteQueue.pipe(Layer.provide(WriteQueueBinding));

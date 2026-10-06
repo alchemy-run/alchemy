@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
@@ -81,6 +82,50 @@ test.provider(
       expect(liveV1!.FunctionVersion).toBe(version1);
       expect(liveV1!.Description).toBe("live v1");
       expect(liveV1!.RoutingConfig?.AdditionalVersionWeights ?? {}).toEqual({});
+
+      // --- crash before the Version reference resolved ---
+      // An interrupted first create persists the Version reference as missing
+      // (it was still an unresolved Output at checkpoint time). The recovery
+      // read finds nothing to recover instead of crashing (#2002), and the
+      // re-driven create converges on the same alias.
+      const state = yield* yield* State;
+      const fqns = yield* state.list({ stack: stack.name, stage: stack.stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage: stack.stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const aliasRow = rows.find(
+        (row): row is { fqn: string; row: ResourceState } =>
+          isResourceState(row.row) && row.row.resourceType === "AWS.Lambda.Alias",
+      );
+      if (!aliasRow?.row.props) {
+        return yield* Effect.die(
+          new Error("no persisted AWS.Lambda.Alias props found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: aliasRow.fqn,
+        value: {
+          ...aliasRow.row,
+          props: { ...aliasRow.row.props, version: undefined },
+          status: "creating",
+          attr: undefined,
+        },
+      });
+      const recovered = yield* stack.deploy(
+        program({
+          envVersion: "1",
+          alias: {
+            aliasName: "live",
+            description: "live v1",
+          },
+        }),
+      );
+      expect(recovered.live!.aliasArn).toBe(createdAlias.aliasArn);
+      expect(recovered.live!.functionVersion).toBe(version1);
 
       // --- update (function version + weighted routing + description) ---
       const updated = yield* stack.deploy(

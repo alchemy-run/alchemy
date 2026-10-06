@@ -1,7 +1,7 @@
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { deepEqual } from "@/Diff";
+import { relativeWorkerMain } from "@/Cloudflare/Workers/Worker.ts";
 import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
@@ -17,6 +17,7 @@ import {
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
+import { deepEqual } from "@/Diff";
 
 describe(
   "WorkerProvider",
@@ -447,23 +448,24 @@ describe(
         const persisted = [auth, api, docs];
         const listed = [docs, api, auth];
         expect(deepEqual(listed, persisted)).toBe(false);
-        expect(
-          deepEqual(orderObservedWorkerRoutes(listed, persisted), persisted),
-        ).toBe(true);
+        expect(deepEqual(orderObservedWorkerRoutes(listed, persisted), persisted)).toBe(true);
       });
 
       test("appends routes missing from state in listing order", () => {
         const extra = { id: "r4", pattern: "example.com/x/*", zoneId: "z1" };
-        expect(
-          orderObservedWorkerRoutes([extra, docs, auth], [auth, api]),
-        ).toEqual([auth, extra, docs]);
+        expect(orderObservedWorkerRoutes([extra, docs, auth], [auth, api])).toEqual([
+          auth,
+          extra,
+          docs,
+        ]);
       });
 
       test("keys routes by zone and pattern", () => {
         const sameInZ2 = { id: "r5", pattern: auth.pattern, zoneId: "z2" };
-        expect(
-          orderObservedWorkerRoutes([sameInZ2, auth], [auth, sameInZ2]),
-        ).toEqual([auth, sameInZ2]);
+        expect(orderObservedWorkerRoutes([sameInZ2, auth], [auth, sameInZ2])).toEqual([
+          auth,
+          sameInZ2,
+        ]);
       });
     });
 
@@ -480,6 +482,31 @@ describe(
 
       test("observes when prior state has crons (e.g. Effect-native cron())", () => {
         expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(true);
+      });
+    });
+
+    // The live drift-repair test in Worker.test.ts covers a moved checkout
+    // end to end; these pin the path edge cases it doesn't exercise.
+    describe("relativeWorkerMain", () => {
+      test("relativizes a file URL or absolute path inside cwd", () => {
+        expect(relativeWorkerMain("file:///repo/apps/api/src/index.ts", "/repo")).toEqual(
+          "apps/api/src/index.ts",
+        );
+        expect(relativeWorkerMain("/repo/src/worker.ts", "/repo")).toEqual("src/worker.ts");
+      });
+
+      test("keeps relative paths and paths outside cwd", () => {
+        expect(relativeWorkerMain("./src/worker.ts", "/repo")).toEqual("./src/worker.ts");
+        expect(relativeWorkerMain("/other/worker.ts", "/repo")).toEqual("/other/worker.ts");
+        expect(relativeWorkerMain("file:///other/worker.ts", "/repo")).toEqual(
+          "file:///other/worker.ts",
+        );
+      });
+
+      test("decodes escaped characters in file URLs", () => {
+        expect(relativeWorkerMain("file:///my%20repo/src/worker.ts", "/my repo")).toEqual(
+          "src/worker.ts",
+        );
       });
     });
   },

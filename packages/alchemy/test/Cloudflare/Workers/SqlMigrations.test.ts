@@ -2,10 +2,12 @@ import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import type { HistoryRow } from "./fixtures/sql-migrations/object.ts";
 import SqlMigrationsWorker from "./fixtures/sql-migrations/worker.ts";
 
@@ -110,10 +112,13 @@ for (const dev of [true, false]) {
       const json = <A>(method: "GET" | "POST", path: string) =>
         Effect.gen(function* () {
           const { url } = yield* stack;
-          const client = yield* HttpClient.HttpClient;
-          const response = yield* method === "GET"
-            ? client.get(`${url}${path}`)
-            : client.post(`${url}${path}`);
+          // A fresh workers.dev route reaches edge nodes one at a time; retry
+          // only Cloudflare's not-yet-routed page, never application errors.
+          const response = yield* requestWorker(
+            method === "GET"
+              ? HttpClientRequest.get(`${url}${path}`)
+              : HttpClientRequest.post(`${url}${path}`),
+          );
           if (response.status !== 200) {
             return yield* Effect.fail(
               new Error(`${method} ${url}${path}: ${response.status}: ${yield* response.text}`),

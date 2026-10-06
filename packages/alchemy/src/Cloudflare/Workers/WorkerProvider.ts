@@ -928,8 +928,7 @@ export const shouldObserveWorkerRoutes = (
   output: Pick<Worker["Attributes"], "routes"> | undefined,
 ): boolean => olds?.routes !== undefined || (output?.routes?.length ?? 0) > 0;
 
-const routeKey = (route: { pattern: string; zoneId: string }) =>
-  `${route.zoneId}:${route.pattern}`;
+const routeKey = (route: { pattern: string; zoneId: string }) => `${route.zoneId}:${route.pattern}`;
 
 /**
  * Order observed zone routes the way state records them. `listRoutes`
@@ -940,15 +939,11 @@ const routeKey = (route: { pattern: string; zoneId: string }) =>
  *
  * @internal exported for unit testing.
  */
-export const orderObservedWorkerRoutes = <
-  Route extends { pattern: string; zoneId: string },
->(
+export const orderObservedWorkerRoutes = <Route extends { pattern: string; zoneId: string }>(
   observed: readonly Route[],
   known: readonly { pattern: string; zoneId: string }[] | undefined,
 ): Route[] => {
-  const position = new Map(
-    (known ?? []).map((route, index) => [routeKey(route), index]),
-  );
+  const position = new Map((known ?? []).map((route, index) => [routeKey(route), index]));
   const rank = (route: Route) => position.get(routeKey(route)) ?? position.size;
   return [...observed].sort((a, b) => rank(a) - rank(b));
 };
@@ -1836,11 +1831,7 @@ export const LiveWorkerProvider = () =>
         listWorkerRoutesInZones(
           scriptName,
           (knownRoutes ?? []).map((route) => route.zoneId),
-        ).pipe(
-          Effect.map((routes) =>
-            orderObservedWorkerRoutes(routes, knownRoutes),
-          ),
-        );
+        ).pipe(Effect.map((routes) => orderObservedWorkerRoutes(routes, knownRoutes)));
 
       // Converge the zone routes attached to `scriptName` to `desired`.
       // Observed cloud state (not `previous`) is the diff baseline —
@@ -2059,6 +2050,23 @@ export const LiveWorkerProvider = () =>
                 schedule: Schedule.spaced("2 seconds"),
                 times: 5,
               }),
+              // The `alchemy:dos:` tag alone is stale on a *former* host: after
+              // a `transferred_classes` migration Cloudflare rewrites the old
+              // host's local binding to a className-less reference to the moved
+              // namespace (left dangling once the new host is deleted), but the
+              // former host's tags are only rewritten on its next deploy. Such a
+              // script no longer hosts the class — it is not a transfer source.
+              Effect.catchTag("MissingDurableObjects", (error) =>
+                localBinding === undefined &&
+                settings.bindings?.some(
+                  (binding) =>
+                    binding.type === "durable_object_namespace" &&
+                    !binding.className &&
+                    (binding.scriptName == null || binding.scriptName === script),
+                )
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
+              ),
             );
           }
           if (namespace?.script === script && namespace.class === params.className) {
@@ -4992,6 +5000,20 @@ export const LiveWorkerProvider = () =>
             // with this Worker — see readWorkerRoutes. Empty-array props
             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
             // can detect drift and converge deletions.
+            // This is the last gradual-rollout upload receipt, not the active
+            // traffic deployment. Preserve it only while that version exists.
+            const uploadedVersionId = output?.versionId
+              ? yield* workers
+                  .getScriptVersion({
+                    accountId,
+                    scriptName: workerName,
+                    versionId: output.versionId,
+                  })
+                  .pipe(
+                    Effect.map(() => output.versionId),
+                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                  )
+              : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
             const observeCrons = shouldObserveWorkerCrons(olds, output);
@@ -5077,6 +5099,7 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              versionId: uploadedVersionId,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s

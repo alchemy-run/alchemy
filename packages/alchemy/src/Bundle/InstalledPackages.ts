@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import { parse as parseYaml } from "yaml";
+import { parseAllDocuments, parse as parseYaml } from "yaml";
 import { exec } from "../Util/exec.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { BundleError } from "./Bundle.ts";
@@ -819,6 +819,17 @@ const parsePackageLock = (options: {
   return { resolved, overrides };
 };
 
+/**
+ * pnpm 12 writes `pnpm-lock.yaml` as multiple YAML documents: pnpm's own
+ * environment lock (`packageManagerDependencies`) first, then the project
+ * lockfile. The project lockfile is always the last document.
+ */
+const parsePnpmLockDocument = (content: string): unknown => {
+  const last = parseAllDocuments(content).at(-1);
+  if (last?.errors.length) throw last.errors[0];
+  return last?.toJS();
+};
+
 const parsePnpmLock = (options: {
   readonly content: string;
   readonly importer: string;
@@ -826,7 +837,7 @@ const parsePnpmLock = (options: {
   readonly packageJson: PackageJson;
   readonly resolved: Readonly<Record<string, string>>;
 }): PackageInstallPlan => {
-  const lockfile = asRecord(parseYaml(options.content));
+  const lockfile = asRecord(parsePnpmLockDocument(options.content));
   const importers = asRecord(lockfile?.importers);
   const importerKey = options.importer === "" ? "." : options.importer;
   const importer =

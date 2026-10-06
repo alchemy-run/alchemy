@@ -53,7 +53,7 @@ const waitForReady = Effect.fn(function* (url: string) {
 });
 
 const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWorkflow") {
-  const ready = yield* Effect.gen(function* () {
+  const probe = Effect.gen(function* () {
     const started = yield* request(`${url}/probe`, "POST");
     const { id } = yield* Effect.try(() => JSON.parse(started) as { id: string });
     const status = yield* request(`${url}/probe/${id}`).pipe(
@@ -65,12 +65,15 @@ const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWo
       }),
     );
     yield* Effect.logInfo(`Workflow readiness probe ${id}: ${JSON.stringify(status)}`);
-    // Only a probe may be recreated when Workflow execution still sees the stub.
+    // A brand-new script reaches Workflow hosts one at a time, and Cloudflare
+    // exposes no propagation API. Only a probe may observe the script (or its
+    // entrypoint) as absent; scenario instances never retry.
     if (
       status.status === "errored" &&
-      status.error?.name === "TypeError" &&
-      status.error.message ===
-        `The entrypoint name ${className} was not found in this worker. Ensure the worker exports an entrypoint with that name.`
+      ((status.error?.name === "Error" && status.error.message === "Worker not found.") ||
+        (status.error?.name === "TypeError" &&
+          status.error.message ===
+            `The entrypoint name ${className} was not found in this worker. Ensure the worker exports an entrypoint with that name.`))
     ) {
       return false;
     }
@@ -79,9 +82,17 @@ const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWo
       output: ["workflow-ready"],
     });
     return true;
-  }).pipe(
+  });
+  // Each probe is a fresh instance that may land on a different host.
+  const ready = yield* Effect.all(
+    Array.from({ length: 4 }, () => probe),
+    {
+      concurrency: "unbounded",
+    },
+  ).pipe(
+    Effect.map((results) => results.every(Boolean)),
     Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 8, until: (ready) => ready }),
-    Effect.timeout("45 seconds"),
+    Effect.timeout("60 seconds"),
   );
   expect(ready, "Workflow entrypoint did not propagate").toBe(true);
 });
@@ -193,7 +204,7 @@ describe.concurrent.each([
         yield* probeWorkflow(output.url);
         return output;
       }),
-      { timeout: 120_000 },
+      { timeout: 180_000 },
     );
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 30_000 });
 
