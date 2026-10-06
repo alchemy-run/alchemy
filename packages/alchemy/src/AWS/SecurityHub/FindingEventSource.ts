@@ -98,8 +98,7 @@ export const consumeFindings = <StreamReq = never, Req = never>(
     {
       source: ["aws.securityhub"],
       "detail-type": ["Security Hub Findings - Imported"],
-      ...(props.severityLabels !== undefined ||
-      props.workflowStatuses !== undefined
+      ...(props.severityLabels !== undefined || props.workflowStatuses !== undefined
         ? {
             detail: {
               findings: {
@@ -162,9 +161,7 @@ export const consumeCustomActions = <StreamReq = never, Req = never>(
     {
       source: ["aws.securityhub"],
       "detail-type": ["Security Hub Findings - Custom Action"],
-      ...(props.actionArns !== undefined
-        ? { resources: [...props.actionArns] }
-        : {}),
+      ...(props.actionArns !== undefined ? { resources: [...props.actionArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,20 +9,15 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 
 export type FutureReservationTimeWindow = compute.FutureReservationTimeWindow;
-export type FutureReservationSpecificSKUProperties =
-  compute.FutureReservationSpecificSKUProperties;
-export type FutureReservationCommitmentInfo =
-  compute.FutureReservationCommitmentInfo;
+export type FutureReservationSpecificSKUProperties = compute.FutureReservationSpecificSKUProperties;
+export type FutureReservationCommitmentInfo = compute.FutureReservationCommitmentInfo;
 
 export type FutureReservationProps = {
   /**
@@ -68,7 +62,9 @@ export type FutureReservationProps = {
    */
   reservationName?: string;
   /**
-   * Auto-delete auto-created reservations at end time.
+   * Auto-delete auto-created reservations at end time. Compute requires this
+   * field on insert.
+   * @default false
    */
   autoDeleteAutoCreatedReservations?: boolean;
   /**
@@ -78,9 +74,7 @@ export type FutureReservationProps = {
   /**
    * Reservation mode (`DEFAULT` or `CALENDAR`).
    */
-  reservationMode?:
-    | compute.FutureReservationReservationModeEnum
-    | (string & {});
+  reservationMode?: compute.FutureReservationReservationModeEnum | (string & {});
   /**
    * Deployment type (`DENSE` or unspecified).
    */
@@ -161,9 +155,7 @@ export type FutureReservation = Resource<
  * @resource
  * @category Compute
  */
-export const FutureReservation = Resource<FutureReservation>(
-  "GCP.Compute.FutureReservation",
-);
+export const FutureReservation = Resource<FutureReservation>("GCP.Compute.FutureReservation");
 
 export class FutureReservationNotResolved extends Data.TaggedError(
   "GCP.Compute.FutureReservationNotResolved",
@@ -172,22 +164,13 @@ export class FutureReservationNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class FutureReservationOperationFailed extends Data.TaggedError(
-  "GCP.Compute.FutureReservationOperationFailed",
-)<{
-  futureReservationName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
   const parts = value.replace(/\/+$/, "").split("/");
   return parts[parts.length - 1] || value;
 };
 
-const zoneOf = (value: string | undefined): string =>
-  lastSegment(value) || DEFAULT_ZONE;
+const zoneOf = (value: string | undefined): string => lastSegment(value) || DEFAULT_ZONE;
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -260,7 +243,7 @@ const toBody = (
   planningStatus: props.planningStatus ?? "DRAFT",
   namePrefix: props.namePrefix,
   reservationName: props.reservationName,
-  autoDeleteAutoCreatedReservations: props.autoDeleteAutoCreatedReservations,
+  autoDeleteAutoCreatedReservations: props.autoDeleteAutoCreatedReservations ?? false,
   specificReservationRequired: props.specificReservationRequired,
   reservationMode: props.reservationMode,
   deploymentType: props.deploymentType,
@@ -290,21 +273,13 @@ const toAttrs = (
   };
 };
 
-const needsUpdate = (
-  current: compute.FutureReservation,
-  desired: compute.FutureReservation,
-) => {
+const needsUpdate = (current: compute.FutureReservation, desired: compute.FutureReservation) => {
   if ((current.description ?? "") !== (desired.description ?? "")) return true;
-  if (
-    (current.planningStatus ?? "DRAFT") !== (desired.planningStatus ?? "DRAFT")
-  ) {
+  if ((current.planningStatus ?? "DRAFT") !== (desired.planningStatus ?? "DRAFT")) {
     return true;
   }
   if (jsonOf(current.timeWindow) !== jsonOf(desired.timeWindow)) return true;
-  if (
-    jsonOf(current.specificSkuProperties) !==
-    jsonOf(desired.specificSkuProperties)
-  ) {
+  if (jsonOf(current.specificSkuProperties) !== jsonOf(desired.specificSkuProperties)) {
     return true;
   }
   if ((current.namePrefix ?? "") !== (desired.namePrefix ?? "")) return true;
@@ -331,65 +306,7 @@ const getByName = (project: string, zone: string, futureReservation: string) =>
     .getFutureReservations({ project, zone, futureReservation })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  futureReservationName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new FutureReservationOperationFailed({
-        futureReservationName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  zone: string,
-  futureReservationName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitZoneOperations(
-        {
-          project,
-          zone,
-          operation: operationName,
-        },
-        { times: 20 },
-      );
-    }
-    return yield* failIfErrored(futureReservationName, current);
-  });
-
-const awaitResource = (
-  project: string,
-  zone: string,
-  futureReservationName: string,
-) =>
+const awaitResource = (project: string, zone: string, futureReservationName: string) =>
   getByName(project, zone, futureReservationName).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -411,15 +328,12 @@ export const FutureReservationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.futureReservationName ?? output?.futureReservationName;
+      const previousName = olds?.futureReservationName ?? output?.futureReservationName;
       const nextName = news.futureReservationName;
       const previousZone = zoneOf(olds?.zone ?? output?.zone);
       const nextZone = zoneOf(news.zone ?? output?.zone);
       if (
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         previousZone !== nextZone
       ) {
         return {
@@ -442,11 +356,7 @@ export const FutureReservationProvider = () =>
         output?.futureReservationName,
       );
       const zone = zoneOf(olds?.zone ?? output?.zone);
-      const existing = yield* getByName(
-        env.project,
-        zone,
-        futureReservationName,
-      );
+      const existing = yield* getByName(env.project, zone, futureReservationName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -468,9 +378,7 @@ export const FutureReservationProvider = () =>
             (scoped?.futureReservations ?? [])
               .filter((item) => {
                 const { labels } = parseDescription(item.description);
-                return Object.keys(labels).some((key) =>
-                  key.startsWith("alchemy-"),
-                );
+                return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
               })
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -499,20 +407,13 @@ export const FutureReservationProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                zone,
-                futureReservationName,
-                operation,
-              ),
+              waitZoneOperation(env.project, zone, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        current = yield* awaitResource(
-          env.project,
-          zone,
-          futureReservationName,
-        );
+        current = yield* awaitResource(env.project, zone, futureReservationName);
       }
 
       if (current === undefined) {
@@ -530,16 +431,7 @@ export const FutureReservationProvider = () =>
             futureReservation: futureReservationName,
             body: desired,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                zone,
-                futureReservationName,
-                operation,
-              ),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)));
         current = yield* getByName(env.project, zone, futureReservationName);
         if (current === undefined) {
           return yield* new FutureReservationNotResolved({
@@ -570,12 +462,9 @@ export const FutureReservationProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          zone,
-          output.futureReservationName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitZoneOperation(env.project, zone, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

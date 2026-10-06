@@ -5,11 +5,25 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
+
+/**
+ * Dialogflow's "All other requests per minute" quota is shared by the whole
+ * project and distilled's default backoff gives up within ~30s, before the
+ * minute window resets. Lifecycles are idempotent, so re-run them once the
+ * window has rolled over.
+ */
+export const retryQuota = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "TooManyRequests",
+      times: 6,
+      schedule: Schedule.spaced("20 seconds"),
+    }),
+  );
 
 export const DEFAULT_LOCATION = "global";
 export const DEFAULT_SESSION = "alchemy";
@@ -25,9 +39,7 @@ export const MAX_ROUTE_GROUP_DISPLAY_NAME_LENGTH = 30;
 export const MAX_DESCRIPTION_LENGTH = 8000;
 export const MAX_SESSION_ID_LENGTH = 36;
 
-export class DialogflowOperationFailed extends Data.TaggedError(
-  "GCP.Dialogflow.OperationFailed",
-)<{
+export class DialogflowOperationFailed extends Data.TaggedError("GCP.Dialogflow.OperationFailed")<{
   operation: string;
   message: string;
 }> {}
@@ -38,9 +50,7 @@ export class DialogflowOperationPending extends Data.TaggedError(
   operation: string;
 }> {}
 
-export class DialogflowStillExists extends Data.TaggedError(
-  "GCP.Dialogflow.ResourceStillExists",
-)<{
+export class DialogflowStillExists extends Data.TaggedError("GCP.Dialogflow.ResourceStillExists")<{
   name: string;
 }> {}
 
@@ -92,14 +102,8 @@ export const locationParent = (project: string, location: string) =>
 export const normalizeLocation = (location: string | undefined) =>
   lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
 
-export const expandAgent = (
-  value: string,
-  project: string,
-  location: string,
-) =>
-  value.includes("/agents/")
-    ? value
-    : `${locationParent(project, location)}/agents/${value}`;
+export const expandAgent = (value: string, project: string, location: string) =>
+  value.includes("/agents/") ? value : `${locationParent(project, location)}/agents/${value}`;
 
 export const expandName = (
   value: string,
@@ -123,30 +127,19 @@ export const parseResourceName = (name: string, collection: string) => {
   const environmentsAt = parts.lastIndexOf("environments");
   const sessionsAt = parts.lastIndexOf("sessions");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     agentId: agentsAt >= 0 && parts[agentsAt + 1] ? parts[agentsAt + 1]! : "",
-    agent:
-      agentsAt >= 0 ? parts.slice(0, agentsAt + 2).join("/") : parentOf(name),
+    agent: agentsAt >= 0 ? parts.slice(0, agentsAt + 2).join("/") : parentOf(name),
     flowId: flowsAt >= 0 && parts[flowsAt + 1] ? parts[flowsAt + 1]! : "",
     flow: flowsAt >= 0 ? parts.slice(0, flowsAt + 2).join("/") : "",
     environmentId:
-      environmentsAt >= 0 && parts[environmentsAt + 1]
-        ? parts[environmentsAt + 1]!
-        : "",
-    environment:
-      environmentsAt >= 0 ? parts.slice(0, environmentsAt + 2).join("/") : "",
-    sessionId:
-      sessionsAt >= 0 && parts[sessionsAt + 1] ? parts[sessionsAt + 1]! : "",
+      environmentsAt >= 0 && parts[environmentsAt + 1] ? parts[environmentsAt + 1]! : "",
+    environment: environmentsAt >= 0 ? parts.slice(0, environmentsAt + 2).join("/") : "",
+    sessionId: sessionsAt >= 0 && parts[sessionsAt + 1] ? parts[sessionsAt + 1]! : "",
     session: sessionsAt >= 0 ? parts.slice(0, sessionsAt + 2).join("/") : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -178,11 +171,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -201,18 +192,11 @@ export const toResourceId = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `d${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `d${generated}`.slice(0, maxLength);
     return next.length >= 4 ? next : `${next}xxxx`.slice(0, maxLength);
   });
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const compactMarkerOf = (stack: string, stage: string, id: string) =>
@@ -227,10 +211,7 @@ const shrinkMarker = (
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = build(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -244,9 +225,7 @@ const shrinkMarker = (
 };
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) =>
-  shrinkMarker(labels, maxLength, (stack, stage, id) =>
-    markerOf(labels, stack, stage, id),
-  );
+  shrinkMarker(labels, maxLength, (stack, stage, id) => markerOf(labels, stack, stage, id));
 
 const fitCompactMarker = (labels: Record<string, string>, maxLength: number) =>
   shrinkMarker(labels, maxLength, compactMarkerOf);
@@ -265,11 +244,12 @@ export const encodeOwnershipLine = (
   text: string | undefined,
   maxLength = MAX_DISPLAY_NAME_LENGTH,
 ): string => {
-  const marker =
-    maxLength < 54
-      ? fitCompactMarker(labels, maxLength)
-      : fitMarker(labels, maxLength);
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
+  // Reserve room for the user's text so the marker shrinks instead of the
+  // text being cut off (a compact marker keeps all three ownership fields).
+  const reserved = trimmed ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 16)) : 0;
+  const room = maxLength - reserved;
+  const marker = room < 54 ? fitCompactMarker(labels, room) : fitMarker(labels, room);
   if (!trimmed) return marker;
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -308,14 +288,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -325,18 +301,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -344,33 +311,20 @@ export const internalLabels = (id: string) => createInternalLabels(id);
 
 export const ownershipLabels = (id: string) => createInternalLabels(id);
 
-export const ownershipText = (resource: {
-  displayName?: string;
-  description?: string;
-}) =>
-  hasOwnershipMarker(resource.description)
-    ? resource.description
-    : resource.displayName;
+export const ownershipText = (resource: { displayName?: string; description?: string }) =>
+  hasOwnershipMarker(resource.description) ? resource.description : resource.displayName;
 
-export const getByName = <A, E>(
-  name: string,
-  get: (name: string) => Effect.Effect<A, E, never>,
-) =>
+export const getByName = <A, E>(name: string, get: (name: string) => Effect.Effect<A, E, never>) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : get(name).pipe(
-        Effect.catchTag("NotFound" as never, () => Effect.succeed(undefined)),
-      );
+    : get(name).pipe(Effect.catchTag("NotFound" as never, () => Effect.succeed(undefined)));
 
-export const listPages = <A, E, R>(
-  pages: Stream.Stream<{ items: readonly A[] }, E, R>,
-) =>
+export const listPages = <A, E, R>(pages: Stream.Stream<{ items: readonly A[] }, E, R>) =>
   pages.pipe(
     Stream.flatMap((page) => Stream.fromIterable(page.items)),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound" as never, () => Effect.succeed([] as A[])),
-    Effect.catchTag("Forbidden" as never, () => Effect.succeed([] as A[])),
   );
 
 const collect = <Page, Item, E extends { _tag: string }, R>(
@@ -382,8 +336,7 @@ const collect = <Page, Item, E extends { _tag: string }, R>(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchIf(
-      (error): error is E =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E => error._tag === "NotFound",
       () => Effect.succeed([] as Item[]),
     ),
   );
@@ -399,7 +352,7 @@ export const listAgents = (project: string, location?: string) =>
         collect(
           dialogflow.listProjectsLocationsAgents.pages({
             parent: locationParent(project, loc),
-            pageSize: 1000,
+            pageSize: 100,
           }),
           (page) => page.agents,
         ),
@@ -424,7 +377,7 @@ export const listEntityTypes = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsEntityTypes.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.entityTypes,
   );
@@ -433,7 +386,7 @@ export const listEnvironments = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsEnvironments.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.environments,
   );
@@ -442,19 +395,17 @@ export const listExperiments = (environment: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsEnvironmentsExperiments.pages({
       parent: environment,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.experiments,
   );
 
 export const listSessionEntityTypes = (session: string) =>
   collect(
-    dialogflow.listProjectsLocationsAgentsEnvironmentsSessionsEntityTypes.pages(
-      {
-        parent: session,
-        pageSize: 1000,
-      },
-    ),
+    dialogflow.listProjectsLocationsAgentsEnvironmentsSessionsEntityTypes.pages({
+      parent: session,
+      pageSize: 100,
+    }),
     (page) => page.sessionEntityTypes,
   );
 
@@ -462,7 +413,7 @@ export const listFlows = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlows.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.flows,
   );
@@ -471,7 +422,7 @@ export const listPagesAt = (flow: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlowsPages.pages({
       parent: flow,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.pages,
   );
@@ -480,7 +431,7 @@ export const listTransitionRouteGroups = (flow: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlowsTransitionRouteGroups.pages({
       parent: flow,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.transitionRouteGroups,
   );
@@ -489,7 +440,7 @@ export const listAgentTransitionRouteGroups = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsTransitionRouteGroups.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.transitionRouteGroups,
   );
@@ -498,7 +449,7 @@ export const listWebhooks = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsWebhooks.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.webhooks,
   );
@@ -507,7 +458,7 @@ export const listVersions = (flow: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlowsVersions.pages({
       parent: flow,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.versions,
   );
@@ -516,18 +467,10 @@ export const listSecuritySettings = (parent: string) =>
   collect(
     dialogflow.listProjectsLocationsSecuritySettings.pages({
       parent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.securitySettings,
   );
-
-const alreadyExists = (error: dialogflow.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: dialogflow.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
 
 export const resourceNameFromOperation = (
   operation: dialogflow.GoogleLongrunningOperation,
@@ -549,78 +492,66 @@ export const resourceNameFromOperation = (
   return undefined;
 };
 
+/** Wait for an operation through the shared GCP waiter. */
 export const waitForOperation = (
   operation: dialogflow.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean },
+  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (alreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new DialogflowOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new DialogflowOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = dialogflow.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dialogflow.GoogleLongrunningOperation>({
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      dialogflow.getProjectsLocationsOperations({ name }).pipe(
+        Effect.catchTag("NotFound", (error) =>
+          options?.notFoundOk === true
+            ? Effect.succeed<dialogflow.GoogleLongrunningOperation>({
                 name,
                 done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DialogflowOperationPending({ operation: name }),
+              })
+            : Effect.fail(error),
+        ),
       ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error) return Effect.succeed(current);
-        if (alreadyExists(error)) return Effect.succeed(current);
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new DialogflowOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dialogflow.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("3 seconds"),
-      }),
-    );
-  });
+    { budget: "10 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6): a concurrent create won the race. NOT_FOUND (5)
+    // is success for a delete.
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        ((options?.alreadyExistsOk !== false && error.code === 6) ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    // Re-read the finished operation for its typed response and metadata.
+    Effect.flatMap(() =>
+      operation.name === undefined || operation.name.length === 0
+        ? Effect.succeed(operation)
+        : dialogflow
+            .getProjectsLocationsOperations({ name: operation.name })
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(operation))),
+    ),
+  );
+
+export class DialogflowNotYetReadable extends Data.TaggedError("GCP.Dialogflow.NotYetReadable")<{
+  name: string;
+}> {}
+
+/** Some Dialogflow creates are not readable for a few seconds afterwards. */
+export const waitUntilReadable = <A, E extends { readonly _tag: string }, R>(
+  name: string,
+  get: (name: string) => Effect.Effect<A | undefined, E, R>,
+) =>
+  get(name).pipe(
+    Effect.flatMap((value) =>
+      value === undefined
+        ? Effect.fail(new DialogflowNotYetReadable({ name }))
+        : Effect.succeed(value),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.Dialogflow.NotYetReadable",
+      times: 10,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
 
 export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   name: string,
@@ -628,9 +559,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get(name).pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new DialogflowStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new DialogflowStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dialogflow.ResourceStillExists",

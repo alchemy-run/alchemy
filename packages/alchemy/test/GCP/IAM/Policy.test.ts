@@ -1,20 +1,20 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/gcp/iam_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_IAM_DENY && !process.env.FAST;
+// Needs roles/iam.denyAdmin on the project (GCP_TEST_IAM_DENY_ADMIN=1); Owner
+// does not include it, so create fails with `Forbidden: Permission
+// iam.googleapis.com/denypolicies.create denied on resource ...`.
+const runLifecycle = !!process.env.GCP_TEST_IAM_DENY_ADMIN;
 
 const attachmentOf = (project: string) =>
   encodeURIComponent(`cloudresourcemanager.googleapis.com/projects/${project}`);
@@ -23,9 +23,7 @@ const missingNameOf = (project: string) =>
 
 const waitUntilGone = (name: string) =>
   iam.getPolicies({ name }).pipe(
-    Effect.map((policy) =>
-      policy.deleteTime ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((policy) => (policy.deleteTime ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -43,7 +41,7 @@ test.provider(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(iam.getPolicies({ name: missingName }));
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,16 +66,15 @@ test.provider.skipIf(runLifecycle)(
               {
                 denyRule: {
                   deniedPermissions: ["iam.googleapis.com/roles.list"],
-                  deniedPrincipals: [
-                    "principal://goog/subject/alchemy-deny-probe@example.invalid",
-                  ],
+                  deniedPrincipals: ["principal://goog/subject/alchemy-deny-probe@example.invalid"],
                 },
               },
             ],
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
+      expect(error.message).toContain("denypolicies.create");
 
       yield* stack.destroy();
     }).pipe(logLevel),

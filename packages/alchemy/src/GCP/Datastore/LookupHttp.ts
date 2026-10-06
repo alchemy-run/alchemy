@@ -1,6 +1,6 @@
 import * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import * as Layer from "effect/Layer";
-import { makeIndexeHttpBinding } from "./BindingHttp.ts";
+import { makeDatastoreHttpBinding } from "./BindingHttp.ts";
 import { Lookup } from "./Lookup.ts";
 
 /**
@@ -11,9 +11,9 @@ import { Lookup } from "./Lookup.ts";
  */
 export const LookupHttp = Layer.effect(
   Lookup,
-  makeIndexeHttpBinding({
+  makeDatastoreHttpBinding({
     tag: "GCP.Datastore.Lookup",
-    iam: { role: "roles/datastore.viewer" },
+    iam: { role: "roles/datastore.viewer", scopeByCondition: true },
     operation: datastore.lookupProjects,
   }),
 );

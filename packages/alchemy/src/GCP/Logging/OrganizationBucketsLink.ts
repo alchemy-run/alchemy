@@ -21,7 +21,7 @@ import {
   toPhysicalId,
   tryResolveOrganization,
 } from "./internal.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 export type OrganizationBucketsLinkProps = {
   /**
@@ -137,9 +137,7 @@ const parseLinkName = (name: string) => {
 };
 
 const parseBucketName = (name: string) => {
-  const match = name.match(
-    /^(organizations\/[^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/,
-  );
+  const match = name.match(/^(organizations\/[^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/);
   if (!match) return undefined;
   return {
     organization: match[1]!,
@@ -148,20 +146,14 @@ const parseBucketName = (name: string) => {
   };
 };
 
-const resourceName = (bucket: string, linkId: string) =>
-  `${bucket}/links/${linkId}`;
+const resourceName = (bucket: string, linkId: string) => `${bucket}/links/${linkId}`;
 
 const isDeleted = (link: logging.Link | undefined): link is undefined =>
   link === undefined || link.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
-const toAttrs = (
-  link: logging.Link,
-  fallbackBucket: string,
-  project: string,
-) => {
+const toAttrs = (link: logging.Link, fallbackBucket: string, project: string) => {
   const name = link.name ?? "";
   const parsed = parseLinkName(name);
   const bucket =
@@ -207,8 +199,7 @@ const waitUntilActive = (name: string) =>
     return link;
   }).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.OrganizationBucketsLinkNotResolved",
+      while: (error) => error._tag === "GCP.Logging.OrganizationBucketsLinkNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -217,13 +208,10 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link)
-        ? Effect.void
-        : Effect.fail(new OrganizationBucketsLinkNotResolved({ name })),
+      isDeleted(link) ? Effect.void : Effect.fail(new OrganizationBucketsLinkNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.OrganizationBucketsLinkNotResolved",
+      while: (error) => error._tag === "GCP.Logging.OrganizationBucketsLinkNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -247,12 +235,9 @@ export const OrganizationBucketsLinkProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.linkId ?? output?.linkId;
       const idChanged =
-        previousId !== undefined &&
-        news.linkId !== undefined &&
-        news.linkId !== previousId;
+        previousId !== undefined && news.linkId !== undefined && news.linkId !== previousId;
       const previousBucket = olds?.bucket ?? output?.bucket;
-      const bucketChanged =
-        previousBucket !== undefined && news.bucket !== previousBucket;
+      const bucketChanged = previousBucket !== undefined && news.bucket !== previousBucket;
       const previousOrg = olds?.organization ?? output?.organization;
       const orgChanged =
         previousOrg !== undefined &&
@@ -264,17 +249,11 @@ export const OrganizationBucketsLinkProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      yield* resolveOrganization(
-        olds?.organization ?? output?.organization,
-        output?.organization,
-      );
-      const linkId = yield* toPhysicalId(
-        id,
-        olds?.linkId,
-        output?.linkId,
-        "l",
-        { delimiter: "_", underscores: true },
-      );
+      yield* resolveOrganization(olds?.organization ?? output?.organization, output?.organization);
+      const linkId = yield* toPhysicalId(id, olds?.linkId, output?.linkId, "l", {
+        delimiter: "_",
+        underscores: true,
+      });
       const bucket = olds?.bucket ?? output?.bucket ?? "";
       const name = output?.name ?? resourceName(bucket, linkId);
       const existing = yield* getByName(name);
@@ -305,28 +284,19 @@ export const OrganizationBucketsLinkProvider = () =>
                         pageSize: 1000,
                       })
                       .pipe(
-                        Stream.flatMap((page) =>
-                          Stream.fromIterable(page.links ?? []),
-                        ),
+                        Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
                         Stream.filter(
-                          (link) =>
-                            !isDeleted(link) &&
-                            hasOwnershipMarker(link.description),
+                          (link) => !isDeleted(link) && hasOwnershipMarker(link.description),
                         ),
-                        Stream.map((link) =>
-                          toAttrs(link, bucket.name ?? "", env.project),
-                        ),
+                        Stream.map((link) => toAttrs(link, bucket.name ?? "", env.project)),
                         Stream.catchTag("NotFound", () => Stream.empty),
-                        Stream.catchTag("Forbidden", () => Stream.empty),
                       )
                   : Stream.empty,
               { concurrency: 4 },
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 
@@ -377,7 +347,7 @@ export const OrganizationBucketsLinkProvider = () =>
         .deleteOrganizationsLocationsBucketsLinks({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilDeleted(output.name);
     }),

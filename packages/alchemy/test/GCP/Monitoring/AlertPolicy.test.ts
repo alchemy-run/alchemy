@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const cpuFilter =
   'resource.type = "gce_instance" AND metric.type = "compute.googleapis.com/instance/cpu/utilization"';
@@ -65,9 +62,7 @@ test.provider(
       expect(created.enabled).toEqual(true);
       expect(created.conditions.length).toEqual(1);
       expect(created.conditions[0]?.displayName).toEqual("CPU > 90%");
-      expect(created.conditions[0]?.conditionThreshold?.thresholdValue).toEqual(
-        0.9,
-      );
+      expect(created.conditions[0]?.conditionThreshold?.thresholdValue).toEqual(0.9);
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.notificationChannels).toEqual([]);
 
@@ -76,14 +71,10 @@ test.provider(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.combiner).toEqual("OR");
-      expect(
-        fetched.conditions?.[0]?.conditionThreshold?.thresholdValue,
-      ).toEqual(0.9);
+      expect(fetched.conditions?.[0]?.conditionThreshold?.thresholdValue).toEqual(0.9);
       expect(fetched.userLabels?.env).toEqual("test");
       expect(
-        Object.keys(fetched.userLabels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(fetched.userLabels ?? {}).some((key) => key.startsWith("alchemy-")),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -117,18 +108,14 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.enabled).toEqual(false);
       expect(updated.conditions[0]?.displayName).toEqual("CPU > 50%");
-      expect(updated.conditions[0]?.conditionThreshold?.thresholdValue).toEqual(
-        0.5,
-      );
+      expect(updated.conditions[0]?.conditionThreshold?.thresholdValue).toEqual(0.5);
       expect(updated.labels).toMatchObject({ env: "prod", role: "alerts" });
 
       const fetchedUpdate = yield* monitoring.getProjectsAlertPolicies({
         name: updated.name,
       });
       expect(fetchedUpdate.enabled).toEqual(false);
-      expect(
-        fetchedUpdate.conditions?.[0]?.conditionThreshold?.thresholdValue,
-      ).toEqual(0.5);
+      expect(fetchedUpdate.conditions?.[0]?.conditionThreshold?.thresholdValue).toEqual(0.5);
       expect(fetchedUpdate.userLabels?.env).toEqual("prod");
 
       yield* stack.destroy();

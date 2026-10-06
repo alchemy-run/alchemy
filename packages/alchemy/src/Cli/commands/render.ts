@@ -9,12 +9,7 @@ import * as Report from "../../Report.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
 
 export const renderPlanning =
-  (options: {
-    operation: string;
-    stage: string;
-    computingLabel?: string;
-    readyLabel?: string;
-  }) =>
+  (options: { operation: string; stage: string; computingLabel?: string; readyLabel?: string }) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const phaseLabel: Record<Report.PlanningPhase, string> = {
@@ -53,15 +48,9 @@ export const renderPlanning =
                     spinning: event.phase !== "importing-module",
                   });
             case "state.bootstrap.started":
-              return planning.update(
-                `Bootstrapping state store '${event.store}'`,
-                options.stage,
-              );
+              return planning.update(`Bootstrapping state store '${event.store}'`, options.stage);
             case "state.bootstrap.completed":
-              return planning.update(
-                phaseLabel["loading-state"],
-                options.stage,
-              );
+              return planning.update(phaseLabel["loading-state"], options.stage);
             case "plan.resource.started":
               if (!interactive) return Effect.void;
               inFlight.add(event.fqn);
@@ -100,15 +89,12 @@ export const renderApply =
       }
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
-          event._tag === "apply.resource.status" ||
-          event._tag === "apply.resource.note"
+          event._tag === "apply.resource.status" || event._tag === "apply.resource.note"
             ? session.emit(event)
             : Effect.void,
         ),
         Effect.tap((value) =>
-          options?.dev && session.setOutput !== undefined
-            ? session.setOutput(value)
-            : Effect.void,
+          options?.dev && session.setOutput !== undefined ? session.setOutput(value) : Effect.void,
         ),
         Effect.onExit((exit) =>
           Exit.isSuccess(exit)

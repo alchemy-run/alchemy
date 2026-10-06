@@ -11,6 +11,7 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { isJobTerminal } from "./internal.ts";
 import {
   alchemyIdFilter,
   createInternalLabels,
@@ -182,30 +183,16 @@ const listPage = (parent: string, filter?: string) =>
     .pipe(
       Stream.runCollect,
       Effect.map((pages) =>
-        Array.from(pages).flatMap(
-          (page) => page.hyperparameterTuningJobs ?? [],
-        ),
+        Array.from(pages).flatMap((page) => page.hyperparameterTuningJobs ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(
-          [] as aiplatform.GoogleCloudAiplatformV1HyperparameterTuningJob[],
-        ),
+      Effect.catchTag("NotFound", () =>
+        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1HyperparameterTuningJob[]),
       ),
     );
 
-const findOwned = (
-  project: string,
-  location: string,
-  labels: Record<string, string>,
-) =>
-  listPage(
-    `projects/${project}/locations/${location}`,
-    alchemyIdFilter(labels),
-  ).pipe(
-    Effect.map(
-      (items) =>
-        items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined,
-    ),
+const findOwned = (project: string, location: string, labels: Record<string, string>) =>
+  listPage(`projects/${project}/locations/${location}`, alchemyIdFilter(labels)).pipe(
+    Effect.map((items) => items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined),
   );
 
 const waitUntilGone = (name: string) =>
@@ -216,8 +203,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.HyperparameterTuningJobStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.HyperparameterTuningJobStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -225,21 +211,12 @@ const waitUntilGone = (name: string) =>
 
 export const HyperparameterTuningJobProvider = () =>
   Provider.succeed(HyperparameterTuningJob, {
-    stables: [
-      "name",
-      "hyperparameterTuningJobId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "hyperparameterTuningJobId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -250,19 +227,15 @@ export const HyperparameterTuningJobProvider = () =>
         previousDisplay !== undefined &&
         news.displayName !== previousDisplay;
       const previousMax = olds?.maxTrialCount ?? output?.maxTrialCount;
-      const previousParallel =
-        olds?.parallelTrialCount ?? output?.parallelTrialCount;
+      const previousParallel = olds?.parallelTrialCount ?? output?.parallelTrialCount;
       const specsChanged =
-        (olds !== undefined &&
-          stableJson(olds.studySpec) !== stableJson(news.studySpec)) ||
-        (olds !== undefined &&
-          stableJson(olds.trialJobSpec) !== stableJson(news.trialJobSpec));
+        (olds !== undefined && stableJson(olds.studySpec) !== stableJson(news.studySpec)) ||
+        (olds !== undefined && stableJson(olds.trialJobSpec) !== stableJson(news.trialJobSpec));
       if (
         previousLocation !== nextLocation ||
         displayChanged ||
         (previousMax !== undefined && news.maxTrialCount !== previousMax) ||
-        (previousParallel !== undefined &&
-          news.parallelTrialCount !== previousParallel) ||
+        (previousParallel !== undefined && news.parallelTrialCount !== previousParallel) ||
         specsChanged
       ) {
         return { action: "replace" as const, deleteFirst: false };
@@ -272,20 +245,14 @@ export const HyperparameterTuningJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const ownership = yield* createInternalLabels(id);
       const existing =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(env.project, location, ownership));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(env.project, location, ownership));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -293,8 +260,7 @@ export const HyperparameterTuningJobProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listPage(`projects/${env.project}/locations/${location}`),
+          (location) => listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         return pages
@@ -305,24 +271,15 @@ export const HyperparameterTuningJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ??
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
         (yield* findOwned(env.project, location, desiredLabels));
 
       if (current === undefined) {
@@ -341,8 +298,7 @@ export const HyperparameterTuningJobProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        current =
-          created ?? (yield* findOwned(env.project, location, desiredLabels));
+        current = created ?? (yield* findOwned(env.project, location, desiredLabels));
       }
 
       if (current === undefined || current.name === undefined) {
@@ -360,12 +316,15 @@ export const HyperparameterTuningJobProvider = () =>
           name: output.name,
           body: {},
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "BadRequest", "Conflict", "Forbidden"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.void));
+      // Running jobs reject deletes; wait for the cancel to land.
+      yield* getByName(output.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("4 seconds"),
+          until: (job) => job === undefined || isJobTerminal(job.state),
+          times: 45,
+        }),
+      );
       const operation = yield* aiplatform
         .deleteProjectsLocationsHyperparameterTuningJobs({
           name: output.name,

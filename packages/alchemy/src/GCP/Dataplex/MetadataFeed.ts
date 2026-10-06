@@ -10,12 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
@@ -47,8 +42,7 @@ export type MetadataFeedFilters = {
   aspectTypes?: string[];
   /** Change types (`CREATE`, `UPDATE`, `DELETE`). */
   changeTypes?: Array<
-    | dataplex.GoogleCloudDataplexV1MetadataFeedFiltersChangeTypesItemEnum
-    | (string & {})
+    dataplex.GoogleCloudDataplexV1MetadataFeedFiltersChangeTypesItemEnum | (string & {})
   >;
 };
 
@@ -175,10 +169,7 @@ const scopeBody = (
   entryGroups: scope?.entryGroups,
 });
 
-const toAttrs = (
-  feed: dataplex.GoogleCloudDataplexV1MetadataFeed,
-  project: string,
-) => {
+const toAttrs = (feed: dataplex.GoogleCloudDataplexV1MetadataFeed, project: string) => {
   const name = feed.name ?? "";
   const parsed = parseResourceName(name, "metadataFeeds");
   return {
@@ -211,11 +202,7 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
     const resource = topicResource(topic, project);
     const projectResource = yield* resourcemanager
       .getProjects({ name: `projects/${project}` })
-      .pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     const projectNumber = lastSegment(projectResource?.name ?? "");
     if (projectNumber.length === 0) return;
     const member = `serviceAccount:service-${projectNumber}@gcp-sa-dataplex.iam.gserviceaccount.com`;
@@ -239,21 +226,16 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
     });
   }).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "Conflict" || error._tag === "TooManyRequests",
+      while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
       times: 5,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Forbidden", () => Effect.void),
-    Effect.catchTag("NotFound", () => Effect.void),
-    Effect.catchTag("BadRequest", () => Effect.void),
   );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (feed): feed is dataplex.GoogleCloudDataplexV1MetadataFeed =>
-        feed !== undefined,
+      (feed): feed is dataplex.GoogleCloudDataplexV1MetadataFeed => feed !== undefined,
       () => new MetadataFeedNotResolved({ name }),
     ),
     Effect.retry({
@@ -266,9 +248,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((feed) =>
-      feed === undefined
-        ? Effect.void
-        : Effect.fail(new MetadataFeedStillExists({ name })),
+      feed === undefined ? Effect.void : Effect.fail(new MetadataFeedStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.MetadataFeedStillExists",
@@ -279,24 +259,14 @@ const waitUntilGone = (name: string) =>
 
 export const MetadataFeedProvider = () =>
   Provider.succeed(MetadataFeed, {
-    stables: [
-      "name",
-      "metadataFeedId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "metadataFeedId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.metadataFeedId ?? output?.metadataFeedId;
       const nextId = news.metadataFeedId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -308,9 +278,7 @@ export const MetadataFeedProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -318,22 +286,13 @@ export const MetadataFeedProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const feedId = yield* toPhysicalRfc1035(
-        id,
-        olds?.metadataFeedId,
-        output?.metadataFeedId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const feedId = yield* toPhysicalRfc1035(id, olds?.metadataFeedId, output?.metadataFeedId);
       const name = output?.name ?? resourceName(env.project, location, feedId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -347,15 +306,8 @@ export const MetadataFeedProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const feedId = yield* toPhysicalRfc1035(
-        id,
-        news.metadataFeedId,
-        output?.metadataFeedId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const feedId = yield* toPhysicalRfc1035(id, news.metadataFeedId, output?.metadataFeedId);
       const name = output?.name ?? resourceName(env.project, location, feedId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -381,7 +333,7 @@ export const MetadataFeedProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { alreadyExistsOk: true });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(name);
       }
@@ -394,10 +346,8 @@ export const MetadataFeedProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const scopeChanged = fingerprint(current.scope) !== fingerprint(scope);
-      const filtersChanged =
-        fingerprint(current.filters) !== fingerprint(filters);
-      const topicChanged =
-        (current.pubsubTopic ?? "") !== (news.pubsubTopic ?? "");
+      const filtersChanged = fingerprint(current.filters) !== fingerprint(filters);
+      const topicChanged = (current.pubsubTopic ?? "") !== (news.pubsubTopic ?? "");
 
       if (labelsChanged || scopeChanged || filtersChanged || topicChanged) {
         const updateMask = [

@@ -143,9 +143,7 @@ export type InstanceConfig = Resource<
  * @resource
  * @category Spanner
  */
-export const InstanceConfig = Resource<InstanceConfig>(
-  "GCP.Spanner.InstanceConfig",
-);
+export const InstanceConfig = Resource<InstanceConfig>("GCP.Spanner.InstanceConfig");
 
 export class InstanceConfigNotResolved extends Data.TaggedError(
   "GCP.Spanner.InstanceConfigNotResolved",
@@ -153,9 +151,7 @@ export class InstanceConfigNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class InstanceConfigNotReady extends Data.TaggedError(
-  "GCP.Spanner.InstanceConfigNotReady",
-)<{
+export class InstanceConfigNotReady extends Data.TaggedError("GCP.Spanner.InstanceConfigNotReady")<{
   name: string;
   state: string;
 }> {}
@@ -182,9 +178,8 @@ const replicaOf = (replica: spanner.ReplicaInfo): ReplicaInfo => ({
   defaultLeaderLocation: replica.defaultLeaderLocation,
 });
 
-const replicasOf = (
-  items: spanner.ReplicaInfoList | undefined,
-): ReplicaInfo[] => (items ?? []).map(replicaOf);
+const replicasOf = (items: spanner.ReplicaInfoList | undefined): ReplicaInfo[] =>
+  (items ?? []).map(replicaOf);
 
 const replicaKey = (replicas: ReplicaInfo[] | undefined) =>
   JSON.stringify(
@@ -196,15 +191,11 @@ const replicaKey = (replicas: ReplicaInfo[] | undefined) =>
       }))
       .sort(
         (left, right) =>
-          left.location.localeCompare(right.location) ||
-          left.type.localeCompare(right.type),
+          left.location.localeCompare(right.location) || left.type.localeCompare(right.type),
       ),
   );
 
-const toAttrs = (
-  config: spanner.InstanceConfig,
-  project: string,
-): InstanceConfig["Attributes"] => {
+const toAttrs = (config: spanner.InstanceConfig, project: string): InstanceConfig["Attributes"] => {
   const name = config.name ?? "";
   const parsed = parseResourceName(name);
   return {
@@ -234,9 +225,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config
-        ? Effect.succeed(config)
-        : Effect.fail(new InstanceConfigNotResolved({ name })),
+      config ? Effect.succeed(config) : Effect.fail(new InstanceConfigNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceConfigNotResolved",
@@ -246,8 +235,7 @@ const waitUntilExists = (name: string) =>
   );
 
 const isReady = (config: spanner.InstanceConfig) =>
-  (config.state ?? "STATE_UNSPECIFIED") === "READY" &&
-  config.reconciling !== true;
+  (config.state ?? "STATE_UNSPECIFIED") === "READY" && config.reconciling !== true;
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
@@ -275,9 +263,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceConfigStillExists({ name })),
+      config === undefined ? Effect.void : Effect.fail(new InstanceConfigStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceConfigStillExists",
@@ -312,13 +298,7 @@ const desiredReplicas = (
 
 export const InstanceConfigProvider = () =>
   Provider.succeed(InstanceConfig, {
-    stables: [
-      "name",
-      "instanceConfigId",
-      "project",
-      "baseConfig",
-      "configType",
-    ],
+    stables: ["name", "instanceConfigId", "project", "baseConfig", "configType"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -326,23 +306,14 @@ export const InstanceConfigProvider = () =>
 
       const previousId = olds?.instanceConfigId ?? output?.instanceConfigId;
       const nextId = news.instanceConfigId ?? previousId;
-      const previousBase = configIdOf(
-        olds?.baseConfig ?? output?.baseConfig,
-        env.region,
-      );
-      const nextBase = configIdOf(
-        news.baseConfig ?? output?.baseConfig,
-        env.region,
-      );
+      const previousBase = configIdOf(olds?.baseConfig ?? output?.baseConfig, env.region);
+      const nextBase = configIdOf(news.baseConfig ?? output?.baseConfig, env.region);
       const replicasChanged =
         news.replicas !== undefined &&
         olds?.replicas !== undefined &&
         replicaKey(news.replicas) !== replicaKey(olds.replicas);
 
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        previousId !== nextId;
+      const idChanged = previousId !== undefined && nextId !== undefined && previousId !== nextId;
       const replace = idChanged || previousBase !== nextBase || replicasChanged;
       if (!replace) return undefined;
       return {
@@ -361,14 +332,11 @@ export const InstanceConfigProvider = () =>
         olds?.instanceConfigId,
         output?.instanceConfigId,
       );
-      const name =
-        output?.name ?? instanceConfigName(env.project, instanceConfigId);
+      const name = output?.name ?? instanceConfigName(env.project, instanceConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -380,22 +348,16 @@ export const InstanceConfigProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.instanceConfigs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.instanceConfigs ?? [])),
             Stream.filter(
               (config) =>
                 (config.configType ?? "") === "USER_MANAGED" &&
-                Object.keys(config.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(config.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((config) => toAttrs(config, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 

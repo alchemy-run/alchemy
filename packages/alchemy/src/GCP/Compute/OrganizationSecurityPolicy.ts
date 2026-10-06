@@ -1,26 +1,5 @@
-import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import {
-  encodeDescription,
-  failIfErrored,
-  hasOwnershipMarker,
-  lastSegment,
-  parseDescription,
-  sameJson,
-  sorted,
-  toPhysicalName,
-  waitOrg,
-} from "./internal.ts";
-import type {
-  SecurityPolicyAdaptiveProtectionConfig,
-  SecurityPolicyAdvancedOptionsConfig,
-  SecurityPolicyDdosProtectionConfig,
-  SecurityPolicyRecaptchaOptionsConfig,
-  SecurityPolicyRule,
-  SecurityPolicyRuleMatcher,
-  SecurityPolicyType,
-  SecurityPolicyUserDefinedField,
-} from "./SecurityPolicy.ts";
+import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -32,6 +11,27 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  ignoredCodes,
+  hasOwnershipMarker,
+  lastSegment,
+  parseDescription,
+  sameJson,
+  sorted,
+  toPhysicalName,
+} from "./internal.ts";
+import { waitOrganizationOperation } from "./operations.ts";
+import type {
+  SecurityPolicyAdaptiveProtectionConfig,
+  SecurityPolicyAdvancedOptionsConfig,
+  SecurityPolicyDdosProtectionConfig,
+  SecurityPolicyRecaptchaOptionsConfig,
+  SecurityPolicyRule,
+  SecurityPolicyRuleMatcher,
+  SecurityPolicyType,
+  SecurityPolicyUserDefinedField,
+} from "./SecurityPolicy.ts";
 
 const DEFAULT_TYPE = "CLOUD_ARMOR";
 const DEFAULT_RULE_PRIORITY = 2147483647;
@@ -122,9 +122,7 @@ export type OrganizationSecurityPolicy = Resource<
     /** Advanced WAF options, if configured. */
     advancedOptionsConfig: SecurityPolicyAdvancedOptionsConfig | undefined;
     /** Adaptive Protection config, if configured. */
-    adaptiveProtectionConfig:
-      | SecurityPolicyAdaptiveProtectionConfig
-      | undefined;
+    adaptiveProtectionConfig: SecurityPolicyAdaptiveProtectionConfig | undefined;
     /** reCAPTCHA options, if configured. */
     recaptchaOptionsConfig: SecurityPolicyRecaptchaOptionsConfig | undefined;
     /** DDoS protection config, if configured. */
@@ -203,16 +201,7 @@ export class OrganizationSecurityPolicyParentRequired extends Data.TaggedError(
   project: string;
 }> {}
 
-export class OrganizationSecurityPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.OrganizationSecurityPolicyOperationFailed",
-)<{
-  securityPolicyId: string;
-  operation: string;
-  message: string;
-}> {}
-
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const normalizeParent = (value: string): string => {
   const trimmed = value.trim().replace(/\/+$/, "");
@@ -229,22 +218,6 @@ const normalizeParent = (value: string): string => {
   return trimmed;
 };
 
-const envParent = () =>
-  Effect.sync(() => {
-    const explicit =
-      process.env.GCP_ORG_SECURITY_POLICY_PARENT ??
-      process.env.GCP_FIREWALL_POLICY_PARENT ??
-      process.env.GOOGLE_FIREWALL_POLICY_PARENT;
-    if (explicit !== undefined && explicit.length > 0) {
-      return normalizeParent(explicit);
-    }
-    const org = process.env.GOOGLE_ORGANIZATION_ID;
-    if (org !== undefined && org.length > 0) {
-      return normalizeParent(org);
-    }
-    return undefined;
-  });
-
 const projectParent = (project: string) =>
   resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
     Effect.map((resource) =>
@@ -252,20 +225,15 @@ const projectParent = (project: string) =>
         ? normalizeParent(resource.parent)
         : undefined,
     ),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const resolveParent = (
-  news: { parent?: string },
-  output: { parent?: string } | undefined,
-) =>
+const resolveParent = (news: { parent?: string }, output: { parent?: string } | undefined) =>
   Effect.gen(function* () {
     const explicit = news.parent ?? output?.parent;
     if (explicit !== undefined && explicit.length > 0) {
       return normalizeParent(explicit);
     }
-    const fromEnv = yield* envParent();
-    if (fromEnv !== undefined) return fromEnv;
     const env = yield* GcpEnvironment.current;
     const fromProject = yield* projectParent(env.project);
     if (fromProject !== undefined) return fromProject;
@@ -277,8 +245,6 @@ const resolveParent = (
 const listParents = (project: string) =>
   Effect.gen(function* () {
     const parents = new Set<string>();
-    const fromEnv = yield* envParent();
-    if (fromEnv !== undefined) parents.add(fromEnv);
     const fromProject = yield* projectParent(project);
     if (fromProject !== undefined) parents.add(fromProject);
     return [...parents];
@@ -288,9 +254,7 @@ const canonMatch = (match: SecurityPolicyRuleMatcher | undefined) => {
   if (match === undefined) return undefined;
   return {
     versionedExpr: match.versionedExpr,
-    config: match.config
-      ? { srcIpRanges: sorted(match.config.srcIpRanges) }
-      : undefined,
+    config: match.config ? { srcIpRanges: sorted(match.config.srcIpRanges) } : undefined,
     expr: match.expr,
     exprOptions: match.exprOptions,
   };
@@ -356,13 +320,8 @@ const desiredRules = (
     byPriority.set(rule.priority, rule);
   }
   if (!byPriority.has(DEFAULT_RULE_PRIORITY)) {
-    const observedDefault = observed.find(
-      (rule) => rule.priority === DEFAULT_RULE_PRIORITY,
-    );
-    byPriority.set(
-      DEFAULT_RULE_PRIORITY,
-      observedDefault ?? defaultAllowRule(),
-    );
+    const observedDefault = observed.find((rule) => rule.priority === DEFAULT_RULE_PRIORITY);
+    byPriority.set(DEFAULT_RULE_PRIORITY, observedDefault ?? defaultAllowRule());
   }
   return [...byPriority.values()].sort(
     (left, right) => (left.priority ?? 0) - (right.priority ?? 0),
@@ -434,29 +393,16 @@ const findByShortName = (parentId: string, shortName: string) =>
       Stream.filter((policy) => policy.shortName === shortName),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
-const observe = (
-  securityPolicyId: string | undefined,
-  parentId: string,
-  shortName: string,
-) =>
+const observe = (securityPolicyId: string | undefined, parentId: string, shortName: string) =>
   Effect.gen(function* () {
     if (securityPolicyId !== undefined && securityPolicyId.length > 0) {
       const existing = yield* getById(securityPolicyId);
       if (existing !== undefined) return existing;
     }
     return yield* findByShortName(parentId, shortName);
-  });
-
-const failOp = (securityPolicyId: string, operation: string, message: string) =>
-  new OrganizationSecurityPolicyOperationFailed({
-    securityPolicyId,
-    operation,
-    message,
   });
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -467,20 +413,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitOrg(operation, parentId).pipe(
-        Effect.flatMap((done) =>
-          failIfErrored(
-            done,
-            (message) =>
-              failOp(
-                securityPolicyId,
-                done.name ?? operation.name ?? "",
-                message,
-              ),
-            options,
-          ),
-        ),
-      ),
+      waitOrganizationOperation(operation, parentId, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -497,11 +432,7 @@ const idFromOperation = (operation: compute.Operation) => {
   return fromLink.length > 0 ? fromLink : "";
 };
 
-const awaitResource = (
-  securityPolicyId: string,
-  parentId: string,
-  shortName: string,
-) =>
+const awaitResource = (securityPolicyId: string, parentId: string, shortName: string) =>
   observe(securityPolicyId, parentId, shortName).pipe(
     Effect.flatMap((policy) =>
       policy !== undefined
@@ -514,8 +445,7 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.OrganizationSecurityPolicyNotResolved",
+      while: (error) => error._tag === "GCP.Compute.OrganizationSecurityPolicyNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -601,14 +531,9 @@ export const OrganizationSecurityPolicyProvider = () =>
       const previousName = olds?.shortName ?? output?.shortName;
       const nextName = news.shortName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const previousParent = olds?.parent ?? output?.parent;
-      const nextParent =
-        news.parent !== undefined
-          ? normalizeParent(news.parent)
-          : previousParent;
+      const nextParent = news.parent !== undefined ? normalizeParent(news.parent) : previousParent;
       const parentChanged =
         previousParent !== undefined &&
         nextParent !== undefined &&
@@ -626,23 +551,13 @@ export const OrganizationSecurityPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const shortName = yield* toPhysicalName(
-        id,
-        olds?.shortName,
-        output?.shortName,
-        "policy",
-      );
+      const shortName = yield* toPhysicalName(id, olds?.shortName, output?.shortName, "policy");
       const parent = yield* resolveParent(olds ?? {}, output).pipe(
-        Effect.catchTag(
-          "GCP.Compute.OrganizationSecurityPolicyParentRequired",
-          () => Effect.succeed(output?.parent ?? olds?.parent ?? ""),
+        Effect.catchTag("GCP.Compute.OrganizationSecurityPolicyParentRequired", () =>
+          Effect.succeed(output?.parent ?? olds?.parent ?? ""),
         ),
       );
-      const existing = yield* observe(
-        output?.securityPolicyId,
-        parent,
-        shortName,
-      );
+      const existing = yield* observe(output?.securityPolicyId, parent, shortName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -667,10 +582,8 @@ export const OrganizationSecurityPolicyProvider = () =>
               Stream.map((policy) => toAttrs(policy, env.project)),
               Stream.runCollect,
               Effect.map((items) => Array.from(items)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed(
-                  [] as OrganizationSecurityPolicy["Attributes"][],
-                ),
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as OrganizationSecurityPolicy["Attributes"][]),
               ),
             );
           listed.push(...chunk);
@@ -680,21 +593,12 @@ export const OrganizationSecurityPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const shortName = yield* toPhysicalName(
-        id,
-        news.shortName,
-        output?.shortName,
-        "policy",
-      );
+      const shortName = yield* toPhysicalName(id, news.shortName, output?.shortName, "policy");
       const parentId = yield* resolveParent(news, output);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
-      let current = yield* observe(
-        output?.securityPolicyId,
-        parentId,
-        shortName,
-      );
+      let current = yield* observe(output?.securityPolicyId, parentId, shortName);
 
       if (current === undefined) {
         const inserted = yield* runOp(
@@ -716,8 +620,7 @@ export const OrganizationSecurityPolicyProvider = () =>
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        const createdId =
-          inserted !== undefined ? idFromOperation(inserted) : "";
+        const createdId = inserted !== undefined ? idFromOperation(inserted) : "";
         current = yield* awaitResource(
           createdId.length > 0 ? createdId : (output?.securityPolicyId ?? ""),
           parentId,
@@ -750,20 +653,14 @@ export const OrganizationSecurityPolicyProvider = () =>
       }
       if (
         news.adaptiveProtectionConfig !== undefined &&
-        !subsetEqual(
-          current.adaptiveProtectionConfig,
-          news.adaptiveProtectionConfig,
-        )
+        !subsetEqual(current.adaptiveProtectionConfig, news.adaptiveProtectionConfig)
       ) {
         patch.adaptiveProtectionConfig = news.adaptiveProtectionConfig;
         needsPatch = true;
       }
       if (
         news.recaptchaOptionsConfig !== undefined &&
-        !subsetEqual(
-          current.recaptchaOptionsConfig,
-          news.recaptchaOptionsConfig,
-        )
+        !subsetEqual(current.recaptchaOptionsConfig, news.recaptchaOptionsConfig)
       ) {
         patch.recaptchaOptionsConfig = news.recaptchaOptionsConfig;
         needsPatch = true;
@@ -796,12 +693,7 @@ export const OrganizationSecurityPolicyProvider = () =>
 
       const nextRules = desiredRules(news, current.rules ?? []);
       if (nextRules !== undefined) {
-        yield* syncRules(
-          securityPolicyId,
-          parentId,
-          current.rules ?? [],
-          nextRules,
-        );
+        yield* syncRules(securityPolicyId, parentId, current.rules ?? [], nextRules);
         current = (yield* getById(securityPolicyId)) ?? current;
       }
 
@@ -818,24 +710,16 @@ export const OrganizationSecurityPolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const securityPolicyId = output.securityPolicyId;
       if (securityPolicyId.length === 0) return;
-      const parentId =
-        output.parent.length > 0 ? normalizeParent(output.parent) : undefined;
+      const parentId = output.parent.length > 0 ? normalizeParent(output.parent) : undefined;
       yield* compute
         .deleteOrganizationSecurityPolicies({
           securityPolicy: securityPolicyId,
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitOrg(operation, parentId).pipe(
-              Effect.flatMap((done) =>
-                failIfErrored(
-                  done,
-                  (message) =>
-                    failOp(securityPolicyId, done.name ?? "", message),
-                  { ignoreNotFound: true },
-                ),
-              ),
-            ),
+            waitOrganizationOperation(operation, parentId, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({

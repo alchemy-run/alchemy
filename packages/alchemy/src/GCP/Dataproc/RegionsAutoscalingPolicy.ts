@@ -7,15 +7,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { AutoscalingPolicyProps } from "./AutoscalingPolicy.ts";
 import {
+  collectPages,
   LIST_LOCATIONS,
   MAX_POLICY_ID_LENGTH,
   defaultWorkerConfig,
@@ -32,10 +28,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type RegionsAutoscalingPolicyProps = Omit<
-  AutoscalingPolicyProps,
-  "location"
-> & {
+export type RegionsAutoscalingPolicyProps = Omit<AutoscalingPolicyProps, "location"> & {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
@@ -109,11 +102,7 @@ export class RegionsAutoscalingPolicyNotResolved extends Data.TaggedError(
 const resourceName = (project: string, region: string, policyId: string) =>
   `${regionParent(project, region)}/autoscalingPolicies/${policyId}`;
 
-const toAttrs = (
-  policy: dataproc.AutoscalingPolicy,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (policy: dataproc.AutoscalingPolicy, project: string, region: string) => {
   const name = policy.name ?? "";
   const parsed = parseResourceName(name, "autoscalingPolicies", region);
   return {
@@ -155,24 +144,22 @@ const getByName = (name: string) =>
 
 const listRegion = (project: string, region: string) =>
   emptyOnMissing(
-    dataproc
-      .listProjectsRegionsAutoscalingPolicies({
+    collectPages(
+      dataproc.listProjectsRegionsAutoscalingPolicies.pages({
         parent: regionParent(project, region),
         pageSize: 1000,
-      })
-      .pipe(
-        Effect.map((page) =>
-          (page.policies ?? [])
-            .filter((policy) => hasAlchemyLabelMap(policy.labels))
-            .map((policy) => toAttrs(policy, project, region)),
-        ),
+      }),
+      (page) => page.policies,
+    ).pipe(
+      Effect.map((items) =>
+        items
+          .filter((policy) => hasAlchemyLabelMap(policy.labels))
+          .map((policy) => toAttrs(policy, project, region)),
       ),
+    ),
   );
 
-const policyChanged = (
-  current: dataproc.AutoscalingPolicy,
-  desired: dataproc.AutoscalingPolicy,
-) =>
+const policyChanged = (current: dataproc.AutoscalingPolicy, desired: dataproc.AutoscalingPolicy) =>
   !sameJson(current.workerConfig, desired.workerConfig) ||
   !sameJson(current.secondaryWorkerConfig, desired.secondaryWorkerConfig) ||
   (current.clusterType ?? "") !== (desired.clusterType ?? "") ||
@@ -187,26 +174,19 @@ export const RegionsAutoscalingPolicyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.policyId ?? output?.policyId;
       const nextId = news.policyId ?? previousId;
-      const previousRegion = normalizeLocation(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeLocation(olds?.region ?? output?.region, env.region);
       const nextRegion = normalizeLocation(
         news.region ?? olds?.region ?? output?.region,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousRegion !== nextRegion)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousRegion === nextRegion &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousRegion === nextRegion && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -214,10 +194,7 @@ export const RegionsAutoscalingPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeLocation(olds?.region ?? output?.region, env.region);
       const policyId = yield* toPhysicalId(
         id,
         olds?.policyId,
@@ -229,9 +206,7 @@ export const RegionsAutoscalingPolicyProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -247,10 +222,7 @@ export const RegionsAutoscalingPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeLocation(news.region ?? output?.region, env.region);
       const policyId = yield* toPhysicalId(
         id,
         news.policyId,

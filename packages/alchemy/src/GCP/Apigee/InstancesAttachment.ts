@@ -73,9 +73,7 @@ export type InstancesAttachment = Resource<
  * @resource
  * @category Apigee
  */
-export const InstancesAttachment = Resource<InstancesAttachment>(
-  "GCP.Apigee.InstancesAttachment",
-);
+export const InstancesAttachment = Resource<InstancesAttachment>("GCP.Apigee.InstancesAttachment");
 
 export class InstancesAttachmentNotResolved extends Data.TaggedError(
   "GCP.Apigee.InstancesAttachmentNotResolved",
@@ -86,15 +84,10 @@ export class InstancesAttachmentNotResolved extends Data.TaggedError(
 const instanceIdOf = (instance: string) => lastSegment(instance);
 
 const instanceName = (organization: string, instance: string) =>
-  instance.includes("/")
-    ? instance
-    : `${orgParent(organization)}/instances/${instance}`;
+  instance.includes("/") ? instance : `${orgParent(organization)}/instances/${instance}`;
 
-const resourceName = (
-  organization: string,
-  instance: string,
-  attachmentId: string,
-) => `${instanceName(organization, instance)}/attachments/${attachmentId}`;
+const resourceName = (organization: string, instance: string, attachmentId: string) =>
+  `${instanceName(organization, instance)}/attachments/${attachmentId}`;
 
 const toAttrs = (
   attachment: apigee.GoogleCloudApigeeV1InstanceAttachment,
@@ -102,9 +95,7 @@ const toAttrs = (
   instanceId: string,
 ) => {
   const raw = attachment.name ?? "";
-  const name = raw.includes("/")
-    ? raw
-    : resourceName(organization, instanceId, raw);
+  const name = raw.includes("/") ? raw : resourceName(organization, instanceId, raw);
   return {
     name,
     attachmentId: lastSegment(name),
@@ -118,7 +109,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstancesAttachments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const listByInstance = (parent: string) =>
   apigee.listOrganizationsInstancesAttachments
@@ -130,7 +121,7 @@ const listByInstance = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.attachments ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed([] as apigee.GoogleCloudApigeeV1InstanceAttachment[]),
       ),
     );
@@ -146,21 +137,13 @@ const findByEnvironment = (
       attachments.find((attachment) => attachment.environment === environment),
     ),
     Effect.map((attachment) =>
-      attachment === undefined
-        ? undefined
-        : toAttrs(attachment, organization, instanceId),
+      attachment === undefined ? undefined : toAttrs(attachment, organization, instanceId),
     ),
   );
 
 export const InstancesAttachmentProvider = () =>
   Provider.succeed(InstancesAttachment, {
-    stables: [
-      "name",
-      "attachmentId",
-      "instanceId",
-      "organization",
-      "createdAt",
-    ],
+    stables: ["name", "attachmentId", "instanceId", "organization", "createdAt"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -182,11 +165,8 @@ export const InstancesAttachmentProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
-      const instanceId = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const instanceId = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       if (instanceId.length === 0) return undefined;
       const parent = instanceName(organization, instanceId);
       if (output?.name !== undefined) {
@@ -196,12 +176,7 @@ export const InstancesAttachmentProvider = () =>
       }
       const environment = olds?.environment ?? output?.environment;
       if (environment === undefined) return undefined;
-      const found = yield* findByEnvironment(
-        parent,
-        environment,
-        organization,
-        instanceId,
-      );
+      const found = yield* findByEnvironment(parent, environment, organization, instanceId);
       return found;
     }),
 
@@ -218,9 +193,7 @@ export const InstancesAttachmentProvider = () =>
             const instanceId = lastSegment(parent);
             return listByInstance(parent).pipe(
               Effect.map((attachments) =>
-                attachments.map((attachment) =>
-                  toAttrs(attachment, env.project, instanceId),
-                ),
+                attachments.map((attachment) => toAttrs(attachment, env.project, instanceId)),
               ),
             );
           },
@@ -231,21 +204,14 @@ export const InstancesAttachmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
+      const organization = news.organization ?? output?.organization ?? env.project;
       const instanceId = instanceIdOf(news.instance);
       const parent = instanceName(organization, instanceId);
       const existingName = output?.name;
 
-      let current =
-        existingName !== undefined ? yield* getByName(existingName) : undefined;
+      let current = existingName !== undefined ? yield* getByName(existingName) : undefined;
       if (current === undefined) {
-        const found = yield* findByEnvironment(
-          parent,
-          news.environment,
-          organization,
-          instanceId,
-        );
+        const found = yield* findByEnvironment(parent, news.environment, organization, instanceId);
         if (found !== undefined) {
           current = yield* getByName(found.name);
         }
@@ -261,12 +227,7 @@ export const InstancesAttachmentProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
-        const found = yield* findByEnvironment(
-          parent,
-          news.environment,
-          organization,
-          instanceId,
-        );
+        const found = yield* findByEnvironment(parent, news.environment, organization, instanceId);
         if (found === undefined) {
           return yield* new InstancesAttachmentNotResolved({
             name: `${parent}/attachments/${news.environment}`,
@@ -281,7 +242,9 @@ export const InstancesAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstancesAttachments({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
+        );
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

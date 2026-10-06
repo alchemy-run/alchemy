@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import { Stack, type StackServices, type StackProps } from "@/Stack.ts";
 import type { State } from "@/State/State.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
 
 // Pins https://github.com/alchemy-run/alchemy/issues/1384: the Stack factory
 // attaches runtime metadata that the overloads previously omitted.

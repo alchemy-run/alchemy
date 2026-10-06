@@ -1,22 +1,22 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Evaluators need an existing evaluation metric; a missing one fails with
+// BadRequest "Request contains an invalid argument." Set
+// GCP_TEST_AIPLATFORM_EVALUATION_METRIC to a metric resource name to run
+// the lifecycle.
+const evaluationMetric = process.env.GCP_TEST_AIPLATFORM_EVALUATION_METRIC;
+const runLifecycle = !process.env.FAST && !!evaluationMetric;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsOnlineEvaluators({ name }).pipe(
@@ -39,26 +39,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsOnlineEvaluators({
-          name: `${parent}/onlineEvaluators/alchemy-missing`,
+          name: `${parent}/onlineEvaluators/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsOnlineEvaluators({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ onlineEvaluators: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.onlineEvaluators ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsOnlineEvaluators({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.onlineEvaluators ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/onlineEvaluators/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -72,8 +63,6 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete an online evaluator",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const parent = `projects/${project}/locations/us-central1`;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
@@ -91,7 +80,7 @@ test.provider.skipIf(!runLifecycle)(
             agentResource: engine.name,
             metricSources: [
               {
-                metricResourceName: `${parent}/evaluationMetrics/alchemy-missing`,
+                metricResourceName: evaluationMetric,
               },
             ],
             config: { randomSampling: { percentage: 10 } },
@@ -125,7 +114,7 @@ test.provider.skipIf(!runLifecycle)(
             agentResource: engine.name,
             metricSources: [
               {
-                metricResourceName: `${parent}/evaluationMetrics/alchemy-missing`,
+                metricResourceName: evaluationMetric,
               },
             ],
             config: { randomSampling: { percentage: 20 } },

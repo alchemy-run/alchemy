@@ -18,7 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_REDUNDANCY_TYPE = "TWO_IPS_REDUNDANCY";
 const MAX_NAME_LENGTH = 63;
@@ -145,9 +145,7 @@ export type ExternalVpnGateway = Resource<
  * @resource
  * @category Compute
  */
-export const ExternalVpnGateway = Resource<ExternalVpnGateway>(
-  "GCP.Compute.ExternalVpnGateway",
-);
+export const ExternalVpnGateway = Resource<ExternalVpnGateway>("GCP.Compute.ExternalVpnGateway");
 
 export class ExternalVpnGatewayNotResolved extends Data.TaggedError(
   "GCP.Compute.ExternalVpnGatewayNotResolved",
@@ -162,22 +160,11 @@ export class ExternalVpnGatewayPending extends Data.TaggedError(
   status: string;
 }> {}
 
-export class ExternalVpnGatewayOperationFailed extends Data.TaggedError(
-  "GCP.Compute.ExternalVpnGatewayOperationFailed",
-)<{
-  externalVpnGatewayName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const redundancyOf = (
-  value: string | undefined,
-  interfaces?: ReadonlyArray<unknown>,
-) => {
+const redundancyOf = (value: string | undefined, interfaces?: ReadonlyArray<unknown>) => {
   if (value) return value;
   const n = interfaces?.length ?? 0;
   if (n === 1) return "SINGLE_IP_INTERNALLY_REDUNDANT";
@@ -215,10 +202,7 @@ const interfaceKey = (
   }>,
 ) =>
   interfaces
-    .map(
-      (iface) =>
-        `${iface.id ?? ""}:${iface.ipAddress ?? ""}:${iface.ipv6Address ?? ""}`,
-    )
+    .map((iface) => `${iface.id ?? ""}:${iface.ipAddress ?? ""}:${iface.ipv6Address ?? ""}`)
     .sort()
     .join("|");
 
@@ -234,83 +218,17 @@ const toAttrs = (gateway: compute.ExternalVpnGateway, project: string) => ({
   creationTimestamp: gateway.creationTimestamp,
 });
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (
-  operation: compute.Operation,
-  externalVpnGatewayName: string,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new ExternalVpnGatewayOperationFailed({
-      externalVpnGatewayName,
-      operation: operation.name ?? "",
-      message: errors
-        .map((error) => error.message ?? error.code ?? "unknown")
-        .join("; "),
-    }),
-  );
-};
-
 const getByName = (project: string, externalVpnGateway: string) =>
   compute
     .getExternalVpnGateways({ project, externalVpnGateway })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  externalVpnGatewayName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* failIfOpError(operation, externalVpnGatewayName);
-        return;
-      }
-      return yield* new ExternalVpnGatewayOperationFailed({
-        externalVpnGatewayName,
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfOpError(operation, externalVpnGatewayName);
-      return;
-    }
-    const waited = yield* waitGlobalOperations(
-      { project, operation: name },
-      { times: 20 },
-    );
-    yield* failIfOpError(waited, externalVpnGatewayName);
-  });
 
 const requireGateway = (project: string, externalVpnGatewayName: string) =>
   getByName(project, externalVpnGatewayName).pipe(
     Effect.flatMap((gateway) =>
       gateway
         ? Effect.succeed(gateway)
-        : Effect.fail(
-            new ExternalVpnGatewayNotResolved({ externalVpnGatewayName }),
-          ),
+        : Effect.fail(new ExternalVpnGatewayNotResolved({ externalVpnGatewayName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "GCP.Compute.ExternalVpnGatewayNotResolved",
@@ -351,31 +269,23 @@ export const ExternalVpnGatewayProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds.externalVpnGatewayName ?? output?.externalVpnGatewayName;
+      const previousName = olds.externalVpnGatewayName ?? output?.externalVpnGatewayName;
       const nextName = news.externalVpnGatewayName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
       const previousDescription = olds.description ?? output?.description ?? "";
       const previousRedundancy = redundancyOf(
         olds.redundancyType ?? output?.redundancyType,
         olds.interfaces ?? output?.interfaces,
       );
-      const previousInterfaces = interfaceKey(
-        output?.interfaces ?? olds.interfaces ?? [],
-      );
+      const previousInterfaces = interfaceKey(output?.interfaces ?? olds.interfaces ?? []);
 
       const immutableChanged =
-        (news.description !== undefined &&
-          (news.description ?? "") !== previousDescription) ||
+        (news.description !== undefined && (news.description ?? "") !== previousDescription) ||
         (news.redundancyType !== undefined &&
-          redundancyOf(news.redundancyType, news.interfaces) !==
-            previousRedundancy) ||
-        (news.interfaces !== undefined &&
-          interfaceKey(news.interfaces) !== previousInterfaces);
+          redundancyOf(news.redundancyType, news.interfaces) !== previousRedundancy) ||
+        (news.interfaces !== undefined && interfaceKey(news.interfaces) !== previousInterfaces);
 
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -396,9 +306,7 @@ export const ExternalVpnGatewayProvider = () =>
       const existing = yield* getByName(env.project, externalVpnGatewayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -412,9 +320,7 @@ export const ExternalVpnGatewayProvider = () =>
           })
           .pipe(
             Stream.filter((gateway) =>
-              Object.keys(gateway.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(gateway.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((gateway) => toAttrs(gateway, env.project)),
             Stream.runCollect,
@@ -456,19 +362,11 @@ export const ExternalVpnGatewayProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                operation,
-                externalVpnGatewayName,
-              ).pipe(
-                Effect.flatMap(() =>
-                  requireGateway(env.project, externalVpnGatewayName),
-                ),
-              ),
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(Effect.flatMap(() => requireGateway(env.project, externalVpnGatewayName))),
             ),
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, externalVpnGatewayName),
-            ),
+            Effect.catchTag("Conflict", () => getByName(env.project, externalVpnGatewayName)),
           );
         current = created ?? undefined;
       }
@@ -484,8 +382,7 @@ export const ExternalVpnGatewayProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
-          const latest =
-            (yield* getByName(env.project, externalVpnGatewayName)) ?? resolved;
+          const latest = (yield* getByName(env.project, externalVpnGatewayName)) ?? resolved;
           yield* compute
             .setLabelsExternalVpnGateways({
               project: env.project,
@@ -495,15 +392,7 @@ export const ExternalVpnGatewayProvider = () =>
                 labelFingerprint: latest.labelFingerprint,
               },
             })
-            .pipe(
-              Effect.flatMap((operation) =>
-                waitForOperation(
-                  env.project,
-                  operation,
-                  externalVpnGatewayName,
-                ),
-              ),
-            );
+            .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         }).pipe(
           Effect.retry({
             while: (e) => e._tag === "Conflict",
@@ -511,8 +400,7 @@ export const ExternalVpnGatewayProvider = () =>
             schedule: Schedule.spaced("1 second"),
           }),
         );
-        current =
-          (yield* getByName(env.project, externalVpnGatewayName)) ?? resolved;
+        current = (yield* getByName(env.project, externalVpnGatewayName)) ?? resolved;
       }
 
       return toAttrs(current ?? resolved, env.project);
@@ -529,7 +417,9 @@ export const ExternalVpnGatewayProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, operation, output.externalVpnGatewayName),
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

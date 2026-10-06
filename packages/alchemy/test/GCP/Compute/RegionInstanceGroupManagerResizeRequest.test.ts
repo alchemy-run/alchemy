@@ -1,21 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !!process.env.GCP_TEST_MIG_RESIZE_REQUEST && !process.env.FAST;
+// Resize requests only accept accelerator (GPU) templates — a CPU template
+// fails with `Resize requests without accelerators are not supported.` GPUs
+// need quota and cost real money, so set GCP_TEST_MIG_RESIZE_REQUEST=1 (with
+// GPU quota) to opt in.
+const runLifecycle = !!process.env.GCP_TEST_MIG_RESIZE_REQUEST && !process.env.FAST;
 
 const region = "us-central1";
 
@@ -32,11 +32,7 @@ const templateProps: GCP.Compute.InstanceTemplateProps = {
   networkInterfaces: [{ network: "global/networks/default" }],
 };
 
-const waitUntilGone = (
-  project: string,
-  instanceGroupManager: string,
-  resizeRequest: string,
-) =>
+const waitUntilGone = (project: string, instanceGroupManager: string, resizeRequest: string) =>
   compute
     .getRegionInstanceGroupManagerResizeRequests({
       project,
@@ -55,12 +51,12 @@ const waitUntilGone = (
     );
 
 test.provider(
-  "probe insertRegionInstanceGroupManagerResizeRequests entitlement",
+  "insertRegionInstanceGroupManagerResizeRequests on a missing manager fails with NotFound",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertRegionInstanceGroupManagerResizeRequests({
+      const error = yield* Effect.flip(
+        compute.insertRegionInstanceGroupManagerResizeRequests({
           project,
           region,
           instanceGroupManager: "does-not-exist",
@@ -69,40 +65,9 @@ test.provider(
             description: "alchemy entitlement probe",
             resizeBy: 1,
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteRegionInstanceGroupManagerResizeRequests({
-            project,
-            region,
-            instanceGroupManager: "does-not-exist",
-            resizeRequest: "alchemy-rr-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("NotFound");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
@@ -118,24 +83,23 @@ test.provider.skipIf(!runLifecycle)(
           const template = yield* GCP.Compute.InstanceTemplate("Template", {
             ...templateProps,
           });
-          const manager = yield* GCP.Compute.RegionInstanceGroupManager(
-            "Manager",
-            {
-              region,
-              instanceTemplate: template.templateName,
-              targetSize: 0,
-            },
-          );
-          const request =
-            yield* GCP.Compute.RegionInstanceGroupManagerResizeRequest(
-              "Burst",
-              {
-                region,
-                instanceGroupManager: manager.managerName,
-                resizeBy: 1,
-                description: "queued burst",
-              },
-            );
+          const manager = yield* GCP.Compute.RegionInstanceGroupManager("Manager", {
+            region,
+            instanceTemplate: template.templateName,
+            targetSize: 0,
+            // Regional resize requests need a single-zone target shape and
+            // automatic repair off.
+            distributionPolicy: { targetShape: "ANY_SINGLE_ZONE" },
+            updatePolicy: { instanceRedistributionType: "NONE" },
+            instanceLifecyclePolicy: { defaultActionOnFailure: "DO_NOTHING" },
+          });
+          const request = yield* GCP.Compute.RegionInstanceGroupManagerResizeRequest("Burst", {
+            region,
+            instanceGroupManager: manager.managerName,
+            resizeBy: 1,
+            requestedRunDuration: { seconds: "600" },
+            description: "queued burst",
+          });
           return { template, manager, request };
         }),
       );
@@ -143,17 +107,14 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.request.requestName).toEqual(expect.any(String));
       expect(created.request.resizeBy).toEqual(1);
       expect(created.request.description).toEqual("queued burst");
-      expect(created.request.instanceGroupManager).toEqual(
-        created.manager.managerName,
-      );
+      expect(created.request.instanceGroupManager).toEqual(created.manager.managerName);
 
-      const fetched =
-        yield* compute.getRegionInstanceGroupManagerResizeRequests({
-          project: created.request.project,
-          region,
-          instanceGroupManager: created.manager.managerName,
-          resizeRequest: created.request.requestName,
-        });
+      const fetched = yield* compute.getRegionInstanceGroupManagerResizeRequests({
+        project: created.request.project,
+        region,
+        instanceGroupManager: created.manager.managerName,
+        resizeRequest: created.request.requestName,
+      });
       expect(fetched.name).toEqual(created.request.requestName);
       expect(fetched.description).toContain("[alchemy ");
 

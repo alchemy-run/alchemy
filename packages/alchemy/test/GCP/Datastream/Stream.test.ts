@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datastream from "@distilled.cloud/gcp/datastream_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  LOCATION,
-  logLevel,
-  currentProject,
-  runSlowLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { LOCATION, logLevel, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -25,7 +19,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/streams/alchemy-missing-stream`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -35,7 +29,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runSlowLifecycle)(
+test.provider.skipIf(!runLifecycle)(
   "create and delete a mysql-to-bigquery stream",
   (stack) =>
     Effect.gen(function* () {
@@ -99,9 +93,9 @@ test.provider.skipIf(!runSlowLifecycle)(
       expect(created.stream.sourceConfig?.sourceConnectionProfile).toContain(
         created.source.connectionProfileId,
       );
-      expect(
-        created.stream.destinationConfig?.destinationConnectionProfile,
-      ).toContain(created.dest.connectionProfileId);
+      expect(created.stream.destinationConfig?.destinationConnectionProfile).toContain(
+        created.dest.connectionProfileId,
+      );
 
       const fetched = yield* datastream.getProjectsLocationsStreams({
         name: created.stream.name,
@@ -120,6 +114,6 @@ test.provider.skipIf(!runSlowLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:datastream", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

@@ -1,14 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  normalizeRegion,
-  parseDescription,
-  runRegionOp,
-  sameUrlList,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,6 +10,16 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  normalizeRegion,
+  parseDescription,
+  runRegionOp,
+  sameUrlList,
+  toPhysicalName,
+} from "./internal.ts";
 
 export type RegionCompositeHealthCheckProps = {
   /**
@@ -129,14 +129,6 @@ export class RegionCompositeHealthCheckNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionCompositeHealthCheckOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionCompositeHealthCheckOperationFailed",
-)<{
-  healthCheckName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const toAttrs = (
   check: compute.CompositeHealthCheck,
   project: string,
@@ -167,11 +159,7 @@ const getByName = (project: string, region: string, name: string) =>
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const awaitResource = (
-  project: string,
-  region: string,
-  healthCheckName: string,
-) =>
+const awaitResource = (project: string, region: string, healthCheckName: string) =>
   getByName(project, region, healthCheckName).pipe(
     Effect.flatMap((check) =>
       check !== undefined
@@ -184,19 +172,11 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionCompositeHealthCheckNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionCompositeHealthCheckNotResolved",
       times: 20,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const failOp = (healthCheckName: string, operation: string, message: string) =>
-  new RegionCompositeHealthCheckOperationFailed({
-    healthCheckName,
-    operation,
-    message,
-  });
 
 export const RegionCompositeHealthCheckProvider = () =>
   Provider.succeed(RegionCompositeHealthCheck, {
@@ -214,25 +194,15 @@ export const RegionCompositeHealthCheckProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.healthCheckName ?? output?.healthCheckName;
       const nextName = news.healthCheckName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
       if (nameChanged || regionChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -246,10 +216,7 @@ export const RegionCompositeHealthCheckProvider = () =>
         output?.healthCheckName,
         "healthcheck",
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, healthCheckName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -267,20 +234,16 @@ export const RegionCompositeHealthCheckProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
-        return Array.from(
-          pages as readonly compute.CompositeHealthCheckAggregatedList[],
-        ).flatMap((page) =>
-          Object.values(page.items ?? {}).flatMap((scoped) =>
-            (scoped?.compositeHealthChecks ?? [])
-              .filter((item) => hasOwnershipMarker(item.description))
-              .map((item) => toAttrs(item, env.project)),
-          ),
+        return Array.from(pages as readonly compute.CompositeHealthCheckAggregatedList[]).flatMap(
+          (page) =>
+            Object.values(page.items ?? {}).flatMap((scoped) =>
+              (scoped?.compositeHealthChecks ?? [])
+                .filter((item) => hasOwnershipMarker(item.description))
+                .map((item) => toAttrs(item, env.project)),
+            ),
         );
       }),
 
@@ -312,7 +275,6 @@ export const RegionCompositeHealthCheckProvider = () =>
               healthSources: news.healthSources,
             },
           }),
-          (operation, message) => failOp(healthCheckName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, healthCheckName);
@@ -333,10 +295,7 @@ export const RegionCompositeHealthCheckProvider = () =>
         patch.description = desiredDescription;
         dirty = true;
       }
-      if (
-        lastSegment(current.healthDestination) !==
-        lastSegment(news.healthDestination)
-      ) {
+      if (lastSegment(current.healthDestination) !== lastSegment(news.healthDestination)) {
         patch.healthDestination = news.healthDestination;
         dirty = true;
       }
@@ -354,10 +313,8 @@ export const RegionCompositeHealthCheckProvider = () =>
             compositeHealthCheck: healthCheckName,
             body: patch,
           }),
-          (operation, message) => failOp(healthCheckName, operation, message),
         );
-        current =
-          (yield* getByName(env.project, region, healthCheckName)) ?? current;
+        current = (yield* getByName(env.project, region, healthCheckName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -374,8 +331,6 @@ export const RegionCompositeHealthCheckProvider = () =>
           region,
           compositeHealthCheck: output.healthCheckName,
         }),
-        (operation, message) =>
-          failOp(output.healthCheckName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

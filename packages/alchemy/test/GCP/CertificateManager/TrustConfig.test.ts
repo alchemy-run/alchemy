@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Self-signed RSA-2048 fixtures generated once with openssl (not at test time).
 const CERT_A = `-----BEGIN CERTIFICATE-----
@@ -96,26 +93,23 @@ test.provider(
       expect(created.description).toEqual("mtls a");
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.trustStores).toHaveLength(1);
-      expect(
-        pemOf(created.trustStores[0]?.trustAnchors?.[0]?.pemCertificate),
-      ).toEqual(pemOf(CERT_A));
+      expect(pemOf(created.trustStores[0]?.trustAnchors?.[0]?.pemCertificate)).toEqual(
+        pemOf(CERT_A),
+      );
 
-      const fetched =
-        yield* certificatemanager.getProjectsLocationsTrustConfigs({
-          name: created.name,
-        });
+      const fetched = yield* certificatemanager.getProjectsLocationsTrustConfigs({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toEqual("mtls a");
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.trustStores).toHaveLength(1);
-      expect(
-        pemOf(fetched.trustStores?.[0]?.trustAnchors?.[0]?.pemCertificate),
-      ).toEqual(pemOf(CERT_A));
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(pemOf(fetched.trustStores?.[0]?.trustAnchors?.[0]?.pemCertificate)).toEqual(
+        pemOf(CERT_A),
+      );
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -138,23 +132,18 @@ test.provider(
       expect(updated.description).toEqual("mtls b");
       expect(updated.labels).toMatchObject({ env: "prod", role: "mtls" });
       expect(updated.allowlistedCertificates).toHaveLength(1);
-      expect(pemOf(updated.allowlistedCertificates[0]?.pemCertificate)).toEqual(
-        pemOf(CERT_B),
-      );
+      expect(pemOf(updated.allowlistedCertificates[0]?.pemCertificate)).toEqual(pemOf(CERT_B));
 
-      const refetched =
-        yield* certificatemanager.getProjectsLocationsTrustConfigs({
-          name: created.name,
-        });
+      const refetched = yield* certificatemanager.getProjectsLocationsTrustConfigs({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("mtls b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("mtls");
-      expect(
-        pemOf(refetched.allowlistedCertificates?.[0]?.pemCertificate),
-      ).toEqual(pemOf(CERT_B));
-      expect(
-        pemOf(refetched.trustStores?.[0]?.trustAnchors?.[0]?.pemCertificate),
-      ).toEqual(pemOf(CERT_A));
+      expect(pemOf(refetched.allowlistedCertificates?.[0]?.pemCertificate)).toEqual(pemOf(CERT_B));
+      expect(pemOf(refetched.trustStores?.[0]?.trustAnchors?.[0]?.pemCertificate)).toEqual(
+        pemOf(CERT_A),
+      );
 
       yield* stack.destroy();
 

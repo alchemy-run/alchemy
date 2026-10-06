@@ -27,6 +27,7 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type GeneratorModelParameter = {
@@ -140,11 +141,12 @@ export type AgentsGenerator = Resource<
  * ```
  *
  * ### Updating a Generator
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Change the prompt
  * ```typescript
  * const generator = yield* GCP.Dialogflow.AgentsGenerator("Greeting", {
- *   agent: existing.agent,
- *   generatorId: existing.generatorId,
+ *   agent: agentName,
  *   displayName: "greeting",
  *   promptText: "Greet the user warmly.",
  * });
@@ -153,9 +155,7 @@ export type AgentsGenerator = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsGenerator = Resource<AgentsGenerator>(
-  "GCP.Dialogflow.AgentsGenerator",
-);
+export const AgentsGenerator = Resource<AgentsGenerator>("GCP.Dialogflow.AgentsGenerator");
 
 export class AgentsGeneratorNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsGeneratorNotResolved",
@@ -165,13 +165,10 @@ export class AgentsGeneratorNotResolved extends Data.TaggedError(
 
 const DEFAULT_PROMPT = "Say hello.";
 
-const resourceName = (agent: string, generatorId: string) =>
-  `${agent}/generators/${generatorId}`;
+const resourceName = (agent: string, generatorId: string) => `${agent}/generators/${generatorId}`;
 
 const modelParameterOf = (
-  parameter:
-    | dialogflow.GoogleCloudDialogflowCxV3GeneratorModelParameter
-    | undefined,
+  parameter: dialogflow.GoogleCloudDialogflowCxV3GeneratorModelParameter | undefined,
 ): GeneratorModelParameter | undefined => {
   if (parameter === undefined) return undefined;
   return {
@@ -183,9 +180,7 @@ const modelParameterOf = (
 };
 
 const placeholdersOf = (
-  placeholders:
-    | dialogflow.GoogleCloudDialogflowCxV3GeneratorPlaceholderList
-    | undefined,
+  placeholders: dialogflow.GoogleCloudDialogflowCxV3GeneratorPlaceholderList | undefined,
 ): GeneratorPlaceholder[] | undefined => {
   if (placeholders === undefined) return undefined;
   return placeholders.map((placeholder) => ({
@@ -232,31 +227,23 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsAgentsGenerators
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.generators ?? [])),
-      Stream.filter((generator) => hasOwnershipMarker(generator.displayName)),
-      Stream.map((generator) => toAttrs(generator, project, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsGenerators.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.generators ?? [])),
+    Stream.filter((generator) => hasOwnershipMarker(generator.displayName)),
+    Stream.map((generator) => toAttrs(generator, project, parent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  dialogflow.listProjectsLocationsAgentsGenerators
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.generators ?? [])),
-      Stream.filter((generator) => generator.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsAgentsGenerators.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.generators ?? [])),
+    Stream.filter((generator) => generator.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const AgentsGeneratorProvider = () =>
   Provider.succeed(AgentsGenerator, {
@@ -290,17 +277,9 @@ export const AgentsGeneratorProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const agent = olds?.agent
-        ? expandAgent(olds.agent, env.project, location)
-        : output?.agent;
-      const generatorId = yield* toResourceId(
-        id,
-        olds?.generatorId,
-        output?.generatorId,
-      );
-      const name =
-        output?.name ??
-        (agent !== undefined ? resourceName(agent, generatorId) : "");
+      const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
+      const generatorId = yield* toResourceId(id, olds?.generatorId, output?.generatorId);
+      const name = output?.name ?? (agent !== undefined ? resourceName(agent, generatorId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined && agent !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -311,34 +290,24 @@ export const AgentsGeneratorProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, agent);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const agents = yield* namedAgents(env.project);
-        const pages = yield* Effect.forEach(
-          agents,
-          (agent) => listAt(agent.name, env.project),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(agents, (agent) => listAt(agent.name, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const agent = expandAgent(news.agent, env.project, location);
-      const generatorId = yield* toResourceId(
-        id,
-        news.generatorId,
-        output?.generatorId,
-      );
+      const generatorId = yield* toResourceId(id, news.generatorId, output?.generatorId);
       const name = output?.name ?? resourceName(agent, generatorId);
       const ownership = yield* internalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
@@ -363,11 +332,7 @@ export const AgentsGeneratorProvider = () =>
             languageCode: news.languageCode,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(agent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
@@ -379,22 +344,13 @@ export const AgentsGeneratorProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
       const promptChanged = !sameText(current.promptText?.text, promptText);
       const modelChanged =
-        fingerprint(modelParameterOf(current.modelParameter)) !==
-        fingerprint(news.modelParameter);
+        fingerprint(modelParameterOf(current.modelParameter)) !== fingerprint(news.modelParameter);
       const placeholdersChanged =
-        fingerprint(placeholdersOf(current.placeholders)) !==
-        fingerprint(news.placeholders);
+        fingerprint(placeholdersOf(current.placeholders)) !== fingerprint(news.placeholders);
       const llmChanged =
-        fingerprint(llmSettingsOf(current.llmModelSettings)) !==
-        fingerprint(news.llmModelSettings);
+        fingerprint(llmSettingsOf(current.llmModelSettings)) !== fingerprint(news.llmModelSettings);
 
-      if (
-        displayChanged ||
-        promptChanged ||
-        modelChanged ||
-        placeholdersChanged ||
-        llmChanged
-      ) {
+      if (displayChanged || promptChanged || modelChanged || placeholdersChanged || llmChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsGenerators({
           name: currentName,
           languageCode: news.languageCode,
@@ -410,7 +366,7 @@ export const AgentsGeneratorProvider = () =>
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -419,5 +375,5 @@ export const AgentsGeneratorProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

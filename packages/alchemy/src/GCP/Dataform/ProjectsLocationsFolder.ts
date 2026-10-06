@@ -171,18 +171,13 @@ export const ProjectsLocationsFolderProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const existing = output?.name
         ? yield* getByName(output.name)
         : yield* findOwned(env.project, location, id, olds?.displayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -196,22 +191,14 @@ export const ProjectsLocationsFolderProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
       const containingFolder =
         news.containingFolder !== undefined && news.containingFolder.length > 0
           ? news.containingFolder.includes("/")
             ? news.containingFolder
-            : expandParent(
-                news.containingFolder,
-                env.project,
-                location,
-                "folders",
-              )
+            : expandParent(news.containingFolder, env.project, location, "folders")
           : undefined;
 
       let current = output?.name
@@ -228,9 +215,7 @@ export const ProjectsLocationsFolderProvider = () =>
             },
           }),
         ).pipe(
-          Effect.catchTag("Conflict", () =>
-            findOwned(env.project, location, id, news.displayName),
-          ),
+          Effect.catchTag("Conflict", () => findOwned(env.project, location, id, news.displayName)),
         );
         current = created ?? undefined;
         if (current?.name) {

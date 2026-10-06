@@ -1,5 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare";
 
 export const RollbackResults = Cloudflare.R2.Bucket("WorkflowRollbackResults", {
   forceDestroy: true,
@@ -43,15 +43,9 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
         { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" },
       );
 
-      if (
-        input.scenario === "timeout-zero" ||
-        input.scenario === "rollback-timeout-zero"
-      ) {
+      if (input.scenario === "timeout-zero" || input.scenario === "rollback-timeout-zero") {
         const protectedEffect = results
-          .put(
-            `${event.instanceId}/protected`,
-            JSON.stringify({ executed: true }),
-          )
+          .put(`${event.instanceId}/protected`, JSON.stringify({ executed: true }))
           .pipe(Effect.asVoid, Effect.orDie);
         yield* Cloudflare.Workflows.task(
           "zero-timeout",
@@ -96,13 +90,8 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
                 const previous = object
                   ? yield* object.json<{ attempt: number }>()
                   : { attempt: 0 };
-                yield* results.put(
-                  key,
-                  JSON.stringify({ attempt: previous.attempt + 1 }),
-                );
-                return yield* Effect.fail(
-                  new Error("rollback budget exhausted"),
-                );
+                yield* results.put(key, JSON.stringify({ attempt: previous.attempt + 1 }));
+                return yield* Effect.fail(new Error("rollback budget exhausted"));
               }),
           },
         );
@@ -137,8 +126,7 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
       const retried = yield* Cloudflare.Workflows.task(
         "retry-only",
         Effect.gen(function* () {
-          const { attempt, config } =
-            yield* Cloudflare.Workflows.WorkflowStepContext;
+          const { attempt, config } = yield* Cloudflare.Workflows.WorkflowStepContext;
           if (attempt === 1) return yield* Effect.fail(new Error("retry once"));
           return { attempt, config };
         }),

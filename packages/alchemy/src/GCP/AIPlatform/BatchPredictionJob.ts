@@ -12,7 +12,6 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { listLocations } from "./names.ts";
 import {
   hasAlchemyLabelKeys,
   isJobTerminal,
@@ -23,6 +22,7 @@ import {
   userLabels,
   waitForOperation,
 } from "./internal.ts";
+import { listLocations } from "./names.ts";
 import type { EncryptionSpec } from "./shared.ts";
 
 export type GcsSource = {
@@ -203,9 +203,7 @@ export type BatchPredictionJob = Resource<
  * @resource
  * @category AIPlatform
  */
-export const BatchPredictionJob = Resource<BatchPredictionJob>(
-  "GCP.AIPlatform.BatchPredictionJob",
-);
+export const BatchPredictionJob = Resource<BatchPredictionJob>("GCP.AIPlatform.BatchPredictionJob");
 
 export class BatchPredictionJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.BatchPredictionJobNotResolved",
@@ -225,10 +223,7 @@ const toId = (id: string, existing?: string) =>
     );
   });
 
-const toAttrs = (
-  job: aiplatform.GoogleCloudAiplatformV1BatchPredictionJob,
-  project: string,
-) => {
+const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1BatchPredictionJob, project: string) => {
   const name = job.name ?? "";
   const parsed = parseResourceName(name, "batchPredictionJobs");
   return {
@@ -247,9 +242,7 @@ const toAttrs = (
     createTime: job.createTime,
     startTime: job.startTime,
     endTime: job.endTime,
-    error: job.error
-      ? { code: job.error.code, message: job.error.message }
-      : undefined,
+    error: job.error ? { code: job.error.code, message: job.error.message } : undefined,
   };
 };
 
@@ -260,36 +253,20 @@ const getByName = (name: string) =>
 
 const listJobs = (project: string, region: string) => {
   const collect = (parent: string) =>
-    aiplatform.listProjectsLocationsBatchPredictionJobs
-      .pages({ parent, pageSize: 1000 })
-      .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.batchPredictionJobs ?? []),
-        ),
-        Stream.filter((job) => hasAlchemyLabelKeys(job.labels)),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    aiplatform.listProjectsLocationsBatchPredictionJobs.pages({ parent, pageSize: 100 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.batchPredictionJobs ?? [])),
+      Stream.filter((job) => hasAlchemyLabelKeys(job.labels)),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
-  return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () => fallback),
-    Effect.catchTag("Forbidden", () =>
-      fallback.pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      ),
-    ),
-  );
+  // Vertex AI has no `locations/-` wildcard; scan known locations.
+  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
-const findOwned = (
-  id: string,
-  project: string,
-  region: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, region: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
@@ -299,9 +276,7 @@ const findOwned = (
     for (const job of jobs) {
       if (yield* hasAlchemyLabels(id, tagRecord(job.labels))) return job;
     }
-    return undefined as
-      | aiplatform.GoogleCloudAiplatformV1BatchPredictionJob
-      | undefined;
+    return undefined as aiplatform.GoogleCloudAiplatformV1BatchPredictionJob | undefined;
   });
 
 const cancelAndDelete = (name: string) =>
@@ -318,28 +293,22 @@ const cancelAndDelete = (name: string) =>
           () => new BatchPredictionJobNotResolved({ name }),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.AIPlatform.BatchPredictionJobNotResolved",
+          while: (error) => error._tag === "GCP.AIPlatform.BatchPredictionJobNotResolved",
           times: 8,
           schedule: Schedule.spaced("4 seconds"),
         }),
-        Effect.catchTag(
-          "GCP.AIPlatform.BatchPredictionJobNotResolved",
-          () => Effect.void,
-        ),
+        Effect.catchTag("GCP.AIPlatform.BatchPredictionJobNotResolved", () => Effect.void),
       );
     }
-    const operation = yield* aiplatform
-      .deleteProjectsLocationsBatchPredictionJobs({ name })
-      .pipe(
-        Effect.retry({
-          while: (error) => error._tag === "Conflict",
-          times: 8,
-          schedule: Schedule.spaced("3 seconds"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-      );
+    const operation = yield* aiplatform.deleteProjectsLocationsBatchPredictionJobs({ name }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "Conflict",
+        times: 8,
+        schedule: Schedule.spaced("3 seconds"),
+      }),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+    );
     if (operation !== undefined) {
       yield* waitForOperation(operation, { notFoundOk: true });
     }
@@ -347,21 +316,12 @@ const cancelAndDelete = (name: string) =>
 
 export const BatchPredictionJobProvider = () =>
   Provider.succeed(BatchPredictionJob, {
-    stables: [
-      "name",
-      "batchPredictionJobId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "batchPredictionJobId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -374,17 +334,10 @@ export const BatchPredictionJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* findOwned(
-        id,
-        env.project,
-        env.region,
-        output?.name,
-      );
+      const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -396,12 +349,8 @@ export const BatchPredictionJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const displayName =
-        news.displayName ?? (yield* toId(id, output?.batchPredictionJobId));
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayName = news.displayName ?? (yield* toId(id, output?.batchPredictionJobId));
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -427,11 +376,7 @@ export const BatchPredictionJobProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, env.project, env.region),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)));
         current = created ?? undefined;
       }
 

@@ -37,10 +37,7 @@ export interface SimulatePrincipalPolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request: iam.SimulatePrincipalPolicyRequest,
-    ) => Effect.Effect<
-      iam.SimulatePolicyResponse,
-      iam.SimulatePrincipalPolicyError
-    >
+    ) => Effect.Effect<iam.SimulatePolicyResponse, iam.SimulatePrincipalPolicyError>
   >
 > {}
 export const SimulatePrincipalPolicy = Binding.Service<SimulatePrincipalPolicy>(

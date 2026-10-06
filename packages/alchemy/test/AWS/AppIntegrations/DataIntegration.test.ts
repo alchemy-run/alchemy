@@ -1,13 +1,13 @@
+import * as appintegrations from "@distilled.cloud/aws/appintegrations";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { DataIntegration } from "@/AWS/AppIntegrations";
 import { Key } from "@/AWS/KMS";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as appintegrations from "@distilled.cloud/aws/appintegrations";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,9 +18,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        appintegrations.getDataIntegration({
-          Identifier: "00000000-0000-0000-0000-000000000000",
-        }),
+        appintegrations.getDataIntegration({ Identifier: "00000000-0000-0000-0000-000000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -29,16 +27,9 @@ test.provider(
 
 const assertGone = (id: string) =>
   appintegrations.getDataIntegration({ Identifier: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`data integration '${id}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`data integration '${id}' still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(

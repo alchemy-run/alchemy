@@ -2,7 +2,6 @@ import * as pageShield from "@distilled.cloud/cloudflare/page-shield";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -77,13 +76,7 @@ export interface PolicyAttributes {
   value: string;
 }
 
-export type Policy = Resource<
-  TypeId,
-  PolicyProps,
-  PolicyAttributes,
-  never,
-  Providers
->;
+export type Policy = Resource<TypeId, PolicyProps, PolicyAttributes, never, Providers>;
 
 /**
  * A Page Shield policy — a Content Security Policy rule
@@ -154,9 +147,7 @@ export const PolicyProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
 
       if (output?.policyId) {
@@ -180,9 +171,7 @@ export const PolicyProvider = () =>
 
       // 1. Observe — the policyId cached on `output` is a hint, not a
       //    guarantee: a PolicyNotFound falls through to "missing".
-      const observed = output?.policyId
-        ? yield* getPolicy(zoneId, output.policyId)
-        : undefined;
+      const observed = output?.policyId ? yield* getPolicy(zoneId, output.policyId) : undefined;
 
       const desired = {
         action: news.action,
@@ -236,9 +225,7 @@ export const PolicyProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((policy) =>
-                  toAttributes(zone.id, policy),
-                ),
+                (page.result ?? []).map((policy) => toAttributes(zone.id, policy)),
               ),
             ),
             Effect.catchTag("Forbidden", () => Effect.succeed([])),
@@ -277,10 +264,7 @@ type ObservedPolicy =
   | pageShield.UpdatePolicyResponse
   | pageShield.ListPoliciesResponse["result"][number];
 
-const toAttributes = (
-  zoneId: string,
-  policy: ObservedPolicy,
-): PolicyAttributes => ({
+const toAttributes = (zoneId: string, policy: ObservedPolicy): PolicyAttributes => ({
   policyId: policy.id,
   zoneId,
   // Distilled widens generated string enums to open unions (`string & {}`).

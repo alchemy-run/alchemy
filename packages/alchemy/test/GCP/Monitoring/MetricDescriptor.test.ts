@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   monitoring.getProjectsMetricDescriptors({ name }).pipe(
@@ -47,9 +44,7 @@ test.provider(
       expect(created.unit).toEqual("1");
       expect(created.displayName).toEqual("Invoice paid amount");
       expect(created.description).toEqual("amount collected per invoice");
-      expect(created.labels.some((label) => label.key === "currency")).toEqual(
-        true,
-      );
+      expect(created.labels.some((label) => label.key === "currency")).toEqual(true);
 
       const fetched = yield* monitoring
         .getProjectsMetricDescriptors({
@@ -85,9 +80,7 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.type).toEqual(created.type);
       expect(updated.displayName).toEqual("Invoice paid (cents)");
-      expect(updated.description).toEqual(
-        "amount collected per invoice in cents",
-      );
+      expect(updated.description).toEqual("amount collected per invoice in cents");
       expect(updated.labels.map((label) => label.key).sort()).toEqual(
         ["currency", "source"].sort(),
       );

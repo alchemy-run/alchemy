@@ -1,22 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsTuningJobs({ name }).pipe(
@@ -39,26 +32,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsTuningJobs({
-          name: `${parent}/tuningJobs/alchemy-aiplatform-missing`,
+          name: `${parent}/tuningJobs/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsTuningJobs({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ tuningJobs: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.tuningJobs ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsTuningJobs({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.tuningJobs ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/tuningJobs/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,7 +52,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and cancel a tuning job",
   (stack) =>
     Effect.gen(function* () {
@@ -78,10 +62,9 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.TuningJob("Tune", {
             location: "us-central1",
-            baseModel: "gemini-2.0-flash-001",
+            baseModel: "gemini-2.5-flash",
             supervisedTuningSpec: {
-              trainingDatasetUri:
-                "gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl",
+              trainingDatasetUri: "gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl",
             },
           });
         }),

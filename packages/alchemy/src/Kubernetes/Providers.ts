@@ -8,9 +8,7 @@ import { Job, JobProvider } from "./Job.ts";
 import { LocalCluster, LocalClusterProvider } from "./LocalCluster.ts";
 import { Manifest, ManifestProvider } from "./Manifest.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Kubernetes",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Kubernetes") {}
 
 /**
  * The Kubernetes provider layer: the cluster-agnostic workload providers

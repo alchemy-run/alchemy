@@ -166,11 +166,7 @@ const listRoutes = (parent: string) =>
       pageSize: 1000,
     }),
     (page) => page.routes,
-  ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as ds.Route[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as ds.Route[])));
 
 const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
@@ -190,27 +186,20 @@ export const PrivateConnectionsRouteProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousAddress =
-        olds?.destinationAddress ?? output?.destinationAddress;
+      const previousAddress = olds?.destinationAddress ?? output?.destinationAddress;
       const nextAddress = news.destinationAddress ?? previousAddress;
       const previousPort = olds?.destinationPort ?? output?.destinationPort;
       const nextPort = news.destinationPort ?? previousPort;
       const previousDisplay = olds?.displayName ?? output?.displayName;
       const nextDisplay = news.displayName ?? previousDisplay;
       const previousLabels = fingerprint(olds?.labels ?? output?.labels);
-      const nextLabels = fingerprint(
-        news.labels ?? olds?.labels ?? output?.labels,
-      );
-      const previousParent =
-        olds?.privateConnection ?? output?.privateConnection;
+      const nextLabels = fingerprint(news.labels ?? olds?.labels ?? output?.labels);
+      const previousParent = olds?.privateConnection ?? output?.privateConnection;
       const nextParent = news.privateConnection ?? previousParent;
       return replaceOnIdentity({
         previousId: olds?.routeId ?? output?.routeId,
         nextId: news.routeId ?? olds?.routeId ?? output?.routeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -228,28 +217,20 @@ export const PrivateConnectionsRouteProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const parent = privateConnectionOf(
-        olds?.privateConnection ?? output?.privateConnection ?? "",
-        env.project,
-        location,
-      );
-      const routeId = yield* toPhysicalId(
-        id,
-        olds?.routeId,
-        output?.routeId,
-        "route",
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const parentId = olds?.privateConnection ?? output?.privateConnection;
+      // Recovering an interrupted create whose parent never resolved: no
+      // route can exist without its private connection.
+      if (typeof parentId !== "string" || parentId.length === 0) {
+        return undefined;
+      }
+      const parent = privateConnectionOf(parentId, env.project, location);
+      const routeId = yield* toPhysicalId(id, olds?.routeId, output?.routeId, "route");
       const name = output?.name ?? resourceName(parent, routeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -261,21 +242,9 @@ export const PrivateConnectionsRouteProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const parent = privateConnectionOf(
-        news.privateConnection,
-        env.project,
-        location,
-      );
-      const routeId = yield* toPhysicalId(
-        id,
-        news.routeId,
-        output?.routeId,
-        "route",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const parent = privateConnectionOf(news.privateConnection, env.project, location);
+      const routeId = yield* toPhysicalId(id, news.routeId, output?.routeId, "route");
       const name = resourceName(parent, routeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -323,11 +292,6 @@ export const PrivateConnectionsRouteProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       yield* settleOperation(operation, { notFoundOk: true });
-      yield* waitUntilGone(getByName(output.name), output.name).pipe(
-        Effect.catchTag(
-          "GCP.Datastream.ResourceStillExists",
-          () => Effect.void,
-        ),
-      );
+      yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

@@ -1,21 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = process.env.GCP_TEST_BIGQUERY_RESERVATION_GROUPS === "1";
+// Reservation groups need reservation-based fairness on the project;
+// otherwise create fails with BadRequest "Can not use Reservation Groups
+// without Reservation Based Fairness enabled on the project." Set
+// GCP_TEST_BIGQUERY_RESERVATION_GROUPS=1 on such a project.
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_BIGQUERY_RESERVATION_GROUPS === "1";
 
 const waitUntilGone = (name: string) =>
   bigqueryreservation.getProjectsLocationsReservationGroups({ name }).pipe(
@@ -42,12 +42,13 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page =
-        yield* bigqueryreservation.listProjectsLocationsReservationGroups({
-          parent: `projects/${project}/locations/us-central1`,
-          pageSize: 10,
-        });
-      expect(Array.isArray(page.reservationGroups ?? [])).toEqual(true);
+      const page = yield* bigqueryreservation.listProjectsLocationsReservationGroups({
+        parent: `projects/${project}/locations/us-central1`,
+        pageSize: 10,
+      });
+      expect(
+        (page.reservationGroups ?? []).map((item) => item.name?.split("/").pop()),
+      ).not.toContain("alchemy-bq-reservation-group-missing");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -64,27 +65,14 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const result = yield* Effect.result(
+      const error = yield* Effect.flip(
         bigqueryreservation.createProjectsLocationsReservationGroups({
           parent: `projects/${project}/locations/us-central1`,
           reservationGroupId: "alchemy-bq-rg-fairness-probe",
           body: {},
         }),
       );
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("BadRequest");
-        if (result.failure._tag === "BadRequest") {
-          expect(result.failure.message).toContain(
-            "Reservation Based Fairness",
-          );
-        }
-      } else if (result.success.name) {
-        yield* bigqueryreservation
-          .deleteProjectsLocationsReservationGroups({
-            name: result.success.name,
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      }
+      expect(error._tag).toEqual("ReservationBasedFairnessRequired");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -113,21 +101,17 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.reservationGroupId.startsWith("alch-")).toEqual(true);
       expect(created.location).toEqual("us-central1");
 
-      const fetched =
-        yield* bigqueryreservation.getProjectsLocationsReservationGroups({
-          name: created.name,
-        });
+      const fetched = yield* bigqueryreservation.getProjectsLocationsReservationGroups({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
-      const listed =
-        yield* bigqueryreservation.listProjectsLocationsReservationGroups({
-          parent: `projects/${created.project}/locations/${created.location}`,
-        });
-      expect(
-        (listed.reservationGroups ?? []).some(
-          (item) => item.name === created.name,
-        ),
-      ).toEqual(true);
+      const listed = yield* bigqueryreservation.listProjectsLocationsReservationGroups({
+        parent: `projects/${created.project}/locations/${created.location}`,
+      });
+      expect((listed.reservationGroups ?? []).some((item) => item.name === created.name)).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

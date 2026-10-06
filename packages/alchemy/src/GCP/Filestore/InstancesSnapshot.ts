@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -134,11 +129,13 @@ export type InstancesSnapshot = Resource<
  * ```
  *
  * ### Updating a Snapshot
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Description and labels
  * ```typescript
  * const snap = yield* GCP.Filestore.InstancesSnapshot("Nightly", {
  *   instance: nfs.name,
- *   snapshotId: existing.snapshotId,
  *   description: "nightly snapshot v2",
  *   labels: { env: "prod", team: "storage" },
  * });
@@ -147,18 +144,12 @@ export type InstancesSnapshot = Resource<
  * @resource
  * @category Filestore
  */
-export const InstancesSnapshot = Resource<InstancesSnapshot>(
-  "GCP.Filestore.InstancesSnapshot",
-);
+export const InstancesSnapshot = Resource<InstancesSnapshot>("GCP.Filestore.InstancesSnapshot");
 
 const resourceName = (instance: string, snapshotId: string) =>
   `${instance}/snapshots/${snapshotId}`;
 
-const parseInstanceRef = (
-  value: string,
-  fallbackProject: string,
-  fallbackLocation: string,
-) => {
+const parseInstanceRef = (value: string, fallbackProject: string, fallbackLocation: string) => {
   const trimmed = value.trim();
   if (trimmed.includes("/")) {
     const parsed = parseName(trimmed, "instances", DEFAULT_ZONE);
@@ -181,12 +172,7 @@ const parseInstanceRef = (
     project: fallbackProject,
     location,
     instanceId,
-    instanceName: expandParent(
-      instanceId,
-      fallbackProject,
-      location,
-      "instances",
-    ),
+    instanceName: expandParent(instanceId, fallbackProject, location, "instances"),
   };
 };
 
@@ -209,11 +195,7 @@ const toAttrs = (snapshot: file.Snapshot, project: string) => {
 
 const isPlaceholder = (snapshot: file.Snapshot) => {
   const name = snapshot.name ?? "";
-  return (
-    name.length === 0 ||
-    name.endsWith("/snapshots/-") ||
-    name.endsWith("/snapshots/")
-  );
+  return name.length === 0 || name.endsWith("/snapshots/-") || name.endsWith("/snapshots/");
 };
 
 const getByName = (name: string) =>
@@ -235,7 +217,6 @@ const listViaInstances = (project: string) =>
       Stream.filter((instance) => (instance.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.orElseSucceed(() => [] as file.Instance[]),
       Effect.flatMap((instances) =>
         Effect.forEach(
           instances,
@@ -273,14 +254,7 @@ const listOwned = (project: string) =>
 
 export const InstancesSnapshotProvider = () =>
   Provider.succeed(InstancesSnapshot, {
-    stables: [
-      "name",
-      "snapshotId",
-      "instance",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "snapshotId", "instance", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -293,10 +267,7 @@ export const InstancesSnapshotProvider = () =>
       const next = parseInstanceRef(
         news.instance,
         env.project,
-        news.location ??
-          olds?.location ??
-          output?.location ??
-          previous.location,
+        news.location ?? olds?.location ?? output?.location ?? previous.location,
       );
       return replaceOnIdentity({
         previousId: olds?.snapshotId ?? output?.snapshotId,
@@ -315,20 +286,12 @@ export const InstancesSnapshotProvider = () =>
         env.project,
         olds?.location ?? output?.location ?? DEFAULT_ZONE,
       );
-      const snapshotId = yield* toPhysicalId(
-        id,
-        olds?.snapshotId,
-        output?.snapshotId,
-        "snapshot",
-      );
-      const name =
-        output?.name ?? resourceName(instance.instanceName, snapshotId);
+      const snapshotId = yield* toPhysicalId(id, olds?.snapshotId, output?.snapshotId, "snapshot");
+      const name = output?.name ?? resourceName(instance.instanceName, snapshotId);
       const existing = yield* getByName(name);
       if (existing === undefined || isPlaceholder(existing)) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -336,9 +299,7 @@ export const InstancesSnapshotProvider = () =>
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project);
         return items
-          .filter(
-            (item) => !isPlaceholder(item) && hasAlchemyLabelMap(item.labels),
-          )
+          .filter((item) => !isPlaceholder(item) && hasAlchemyLabelMap(item.labels))
           .map((item) => toAttrs(item, env.project));
       }),
 
@@ -349,12 +310,7 @@ export const InstancesSnapshotProvider = () =>
         env.project,
         news.location ?? output?.location ?? DEFAULT_ZONE,
       );
-      const snapshotId = yield* toPhysicalId(
-        id,
-        news.snapshotId,
-        output?.snapshotId,
-        "snapshot",
-      );
+      const snapshotId = yield* toPhysicalId(id, news.snapshotId, output?.snapshotId, "snapshot");
       const name = resourceName(instance.instanceName, snapshotId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -364,10 +320,7 @@ export const InstancesSnapshotProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current !== undefined && isDeletingState(current.state)) {
-        yield* waitUntilGone(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        yield* waitUntilGone(getByName(current.name ?? name), current.name ?? name);
         current = undefined;
       }
 
@@ -406,8 +359,7 @@ export const InstancesSnapshotProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.description ?? "") !== (news.description ?? "") &&
-          "description",
+        (current.description ?? "") !== (news.description ?? "") && "description",
       ]);
 
       if (mask.length > 0) {

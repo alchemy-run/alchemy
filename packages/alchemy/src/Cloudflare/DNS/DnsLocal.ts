@@ -25,9 +25,7 @@ export const makeLocalDnsBinding = <Client>(options: {
     // Capture the full context so DNS HTTP ops can run with the current
     // credentials — no `host.bind`, no minted token. DNS record ops are
     // zone-scoped, so no accountId is needed.
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (zone: Zone) {
       // Deferred accessor — resolves the zoneId against the tracker at apply

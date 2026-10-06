@@ -1,21 +1,19 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import { Action } from "@/Action";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { Action } from "@/Action";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_ALLOYDB && !process.env.FAST;
+// AlloyDB clusters and instances take well over 5 minutes to provision.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   alloydb.getProjectsLocationsClustersUsers({ name }).pipe(
@@ -41,9 +39,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/clusters/alchemy-alloydb-missing/users/alchemy_alloydb_missing`,
         }),
       );
-      // Entitled accounts return NotFound. The testing SA currently gets
-      // Forbidden (AlloyDB Admin / API not granted).
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -149,5 +145,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.user.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:alloydb", "live"], timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+    timeout: 3_600_000,
+  },
 );

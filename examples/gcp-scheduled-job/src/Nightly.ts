@@ -24,7 +24,6 @@ export const Nightly = Effect.gen(function* () {
   });
 
   return yield* GCP.CloudScheduler.Job("Nightly", {
-    location: "us-central1",
     schedule: "0 2 * * *",
     timeZone: "Etc/UTC",
     description: "nightly order summary",

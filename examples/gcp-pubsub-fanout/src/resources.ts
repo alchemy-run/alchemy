@@ -30,13 +30,11 @@ export const DeadOrderEventsInbox = Effect.gen(function* () {
 
 /** The email consumer's outbox: one object per confirmation it sends. */
 export const Outbox = GCP.Storage.Bucket("Outbox", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 
 /** The analytics warehouse. */
 export const Warehouse = GCP.BigQuery.Dataset("Warehouse", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 
@@ -78,9 +76,4 @@ export const emailObjectFor = (eventId: string) => `emails/${eventId}.json`;
 
 /** Decode a pushed message's base64 JSON body. */
 export const decodeOrderEvent = (data: string | undefined) =>
-  Effect.try(
-    () =>
-      JSON.parse(
-        Buffer.from(data ?? "", "base64").toString("utf8"),
-      ) as OrderEvent,
-  );
+  Effect.try(() => JSON.parse(Buffer.from(data ?? "", "base64").toString("utf8")) as OrderEvent);

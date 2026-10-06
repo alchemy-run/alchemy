@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datastream from "@distilled.cloud/gcp/datastream_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  LOCATION,
-  logLevel,
-  currentProject,
-  runSlowLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { withNetworkSlot } from "../networkQuota.ts";
+import { LOCATION, logLevel, currentProject, runSlowLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -25,7 +20,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/privateConnections/alchemy-missing-pconn`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -85,9 +80,9 @@ test.provider.skipIf(!runSlowLifecycle)(
         }),
       );
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:datastream", "live"],
-    timeout: 120_000,
+    timeout: 900_000,
   },
 );

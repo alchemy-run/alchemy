@@ -1,29 +1,23 @@
-import * as GCP from "@/GCP";
-import type { StackServices } from "@/Stack";
-import * as Test from "@/Test/Alchemy";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import type { StackServices } from "@/Stack";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
-  providers: GCP.providers() as Layer.Layer<
-    GCP.ProviderRequirements,
-    never,
-    StackServices
-  >,
+  providers: GCP.providers() as Layer.Layer<GCP.ProviderRequirements, never, StackServices>,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const sqlInstance =
-  process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
+// Runs against an existing Cloud SQL instance (creating one takes well over
+// 5 minutes); set GCP_SQL_INSTANCE to its name.
+const sqlInstance = process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
 const runLifecycle = !!sqlInstance && !process.env.FAST;
 
 const waitUntilGone = (instance: string, backupRunId: string) =>
@@ -37,9 +31,7 @@ const waitUntilGone = (instance: string, backupRunId: string) =>
         })
         .pipe(
           Effect.as("found" as const),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (status) => status === "gone",
@@ -50,7 +42,7 @@ const waitUntilGone = (instance: string, backupRunId: string) =>
   );
 
 test.provider(
-  "getBackupRuns on a missing instance fails with Forbidden",
+  "getBackupRuns on a missing instance fails with SqlInstanceNotAuthorized",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -64,7 +56,7 @@ test.provider(
         }),
       );
       // Cloud SQL hides unknown instances behind 403 rather than 404.
-      expect(error._tag).toBe("Forbidden");
+      expect(error._tag).toBe("SqlInstanceNotAuthorized");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -72,18 +64,20 @@ test.provider(
 );
 
 test.provider(
-  "lists sql backup runs",
+  "listBackupRuns on a missing instance fails with SqlInstanceNotAuthorized",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const page = yield* sqladmin.listBackupRuns({
-        project,
-        instance: "-",
-        maxResults: 10,
-      });
-      expect(Array.isArray(page.items ?? [])).toEqual(true);
+      const error = yield* Effect.flip(
+        sqladmin.listBackupRuns({
+          project,
+          instance: "alchemy-sql-instance-does-not-exist",
+          maxResults: 10,
+        }),
+      );
+      expect(error._tag).toBe("SqlInstanceNotAuthorized");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -122,7 +116,6 @@ test.provider.skipIf(!runLifecycle)(
       expect(String(fetched.id)).toEqual(created.backupRunId);
       expect(fetched.instance).toEqual(instance);
       expect(fetched.description).toContain("alchemy-on-demand");
-      expect(fetched.description).toContain("[alchemy ");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

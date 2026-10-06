@@ -18,13 +18,7 @@ import {
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
-import {
-  lastSegment,
-  locationOf,
-  locationParent,
-  parentOf,
-  toResourceId,
-} from "./ownership.ts";
+import { lastSegment, locationOf, locationParent, parentOf, toResourceId } from "./ownership.ts";
 
 export type TensorboardsExperimentProps = {
   /**
@@ -162,38 +156,23 @@ const listParents = (project: string, location: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
     );
 
 const listAtParent = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsTensorboardsExperiments
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.tensorboardExperiments ?? []),
-      ),
-      Stream.filter((experiment) =>
-        Object.keys(experiment.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ),
-      Stream.map((experiment) => toAttrs(experiment, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsTensorboardsExperiments.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tensorboardExperiments ?? [])),
+    Stream.filter((experiment) =>
+      Object.keys(experiment.labels ?? {}).some((key) => key.startsWith("alchemy-")),
+    ),
+    Stream.map((experiment) => toAttrs(experiment, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const TensorboardsExperimentProvider = () =>
   Provider.succeed(TensorboardsExperiment, {
-    stables: [
-      "name",
-      "experimentId",
-      "parent",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "experimentId", "parent", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -214,30 +193,20 @@ export const TensorboardsExperimentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const experimentId = yield* toResourceId(
-        id,
-        olds?.experimentId,
-        output?.experimentId,
-      );
+      const experimentId = yield* toResourceId(id, olds?.experimentId, output?.experimentId);
       const name =
-        output?.name ??
-        (olds?.parent !== undefined
-          ? resourceName(olds.parent, experimentId)
-          : "");
+        output?.name ?? (olds?.parent !== undefined ? resourceName(olds.parent, experimentId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const parents = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listParents(env.project, location),
+        const parents = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listParents(env.project, location),
         )).flat();
         const pages = yield* Effect.forEach(
           parents,
@@ -249,11 +218,7 @@ export const TensorboardsExperimentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const experimentId = yield* toResourceId(
-        id,
-        news.experimentId,
-        output?.experimentId,
-      );
+      const experimentId = yield* toResourceId(id, news.experimentId, output?.experimentId);
       const name = resourceName(news.parent, experimentId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -287,27 +252,25 @@ export const TensorboardsExperimentProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || displayChanged || descriptionChanged) {
-        current =
-          yield* aiplatform.patchProjectsLocationsTensorboardsExperiments({
+        current = yield* aiplatform.patchProjectsLocationsTensorboardsExperiments({
+          name,
+          updateMask: [
+            labelsChanged ? "labels" : undefined,
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name,
-            updateMask: [
-              labelsChanged ? "labels" : undefined,
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name,
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-            },
-          });
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

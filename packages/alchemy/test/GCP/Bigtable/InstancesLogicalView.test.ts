@@ -1,31 +1,24 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Cloud Bigtable Admin API is disabled on the default testing project
-// (`Forbidden`: "Cloud Bigtable Admin API has not been used in project
-// 457525637530 before or it is disabled."). Set GCP_TEST_BIGTABLE=1 on an
-// entitled project to run the full lifecycle.
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+// Lifecycles provision a Bigtable instance; skipped with --fast.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstancesLogicalViews({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -34,7 +27,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstancesLogicalViews on a missing instance fails with Forbidden or NotFound",
+  "getProjectsInstancesLogicalViews on a missing instance fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -46,7 +39,7 @@ test.provider(
           name: `projects/${project}/instances/alchemybtmissing/logicalViews/missing`,
         }),
       );
-      expect(error._tag).toBeOneOf(["Forbidden", "NotFound"]);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -79,7 +72,7 @@ test.provider.skipIf(!runLifecycle)(
           });
           const view = yield* GCP.Bigtable.InstancesLogicalView("Active", {
             instance: instance.name,
-            query: "SELECT _key FROM `users`",
+            query: Output.interpolate`SELECT _key FROM \`${table.tableId}\``,
           });
           return { instance, table, view };
         }),
@@ -97,7 +90,6 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.name).toEqual(created.view.name);
       expect(fetched.query).toContain("users");
 
-      const updatedQuery = "SELECT _key, cf FROM `users`";
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const instance = yield* GCP.Bigtable.Instance("Data", {
@@ -120,7 +112,7 @@ test.provider.skipIf(!runLifecycle)(
           const view = yield* GCP.Bigtable.InstancesLogicalView("Active", {
             instance: instance.name,
             logicalViewId: created.view.logicalViewId,
-            query: updatedQuery,
+            query: Output.interpolate`SELECT _key, cf FROM \`${table.tableId}\``,
             deletionProtection: true,
           });
           return { instance, table, view };

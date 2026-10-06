@@ -1,35 +1,30 @@
-import * as AWS from "@/AWS";
-import { Agent, AgentAlias } from "@/AWS/Bedrock";
-import * as Test from "@/Test/Alchemy";
 import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Agent, AgentAlias } from "@/AWS/Bedrock";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Nova Micro via the us cross-region inference profile — the cheapest
 // on-demand model enabled in the testing account, supported by Bedrock Agents.
 const MODEL = "us.amazon.nova-micro-v1:0";
-const INSTRUCTION =
-  "You are a helpful assistant. Answer every question as concisely as you can.";
+const INSTRUCTION = "You are a helpful assistant. Answer every question as concisely as you can.";
 
 const findAgent = (agentId: string) =>
   bedrock.getAgent({ agentId }).pipe(
     Effect.map((r) => r.agent),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const findAlias = (agentId: string, agentAliasId: string) =>
   bedrock.getAgentAlias({ agentId, agentAliasId }).pipe(
     Effect.map((r) => r.agentAlias),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class StillExists extends Data.TaggedError("StillExists")<{

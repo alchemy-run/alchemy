@@ -16,6 +16,7 @@ import {
   parseResourceName,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type SingleClusterRouting = {
@@ -148,25 +149,17 @@ export type AppProfile = Resource<
  */
 export const AppProfile = Resource<AppProfile>("GCP.Bigtable.AppProfile");
 
-export class AppProfileNotResolved extends Data.TaggedError(
-  "GCP.Bigtable.AppProfileNotResolved",
-)<{
+export class AppProfileNotResolved extends Data.TaggedError("GCP.Bigtable.AppProfileNotResolved")<{
   name: string;
 }> {}
 
 const DEFAULT_APP_PROFILE_ID = "default";
 
-const toId = (
-  id: string,
-  appProfileId: string | undefined,
-  existing?: string,
-) => toPhysicalId(id, appProfileId, existing, MAX_APP_PROFILE_ID_LENGTH);
+const toId = (id: string, appProfileId: string | undefined, existing?: string) =>
+  toPhysicalId(id, appProfileId, existing, MAX_APP_PROFILE_ID_LENGTH);
 
 const routingOf = (profile: bigtable.AppProfile | AppProfileProps) => {
-  const single =
-    "singleClusterRouting" in profile
-      ? profile.singleClusterRouting
-      : undefined;
+  const single = "singleClusterRouting" in profile ? profile.singleClusterRouting : undefined;
   const multi =
     "multiClusterRoutingUseAny" in profile
       ? profile.multiClusterRoutingUseAny
@@ -191,9 +184,8 @@ const routingKey = (profile: bigtable.AppProfile | AppProfileProps) => {
   });
 };
 
-const isolationKey = (
-  isolation: StandardIsolation | bigtable.StandardIsolation | undefined,
-) => JSON.stringify({ priority: (isolation?.priority ?? "").toUpperCase() });
+const isolationKey = (isolation: StandardIsolation | bigtable.StandardIsolation | undefined) =>
+  JSON.stringify({ priority: (isolation?.priority ?? "").toUpperCase() });
 
 const toAttrs = (profile: bigtable.AppProfile, project: string) => {
   const name = profile.name ?? "";
@@ -201,8 +193,7 @@ const toAttrs = (profile: bigtable.AppProfile, project: string) => {
   const single = profile.singleClusterRouting
     ? {
         clusterId: profile.singleClusterRouting.clusterId ?? "",
-        allowTransactionalWrites:
-          profile.singleClusterRouting.allowTransactionalWrites === true,
+        allowTransactionalWrites: profile.singleClusterRouting.allowTransactionalWrites === true,
       }
     : undefined;
   const multi = profile.multiClusterRoutingUseAny
@@ -227,11 +218,7 @@ const toAttrs = (profile: bigtable.AppProfile, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesAppProfiles({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const toBody = (news: AppProfileProps): bigtable.AppProfile => {
   const body: bigtable.AppProfile = {
@@ -270,11 +257,8 @@ export const AppProfileProvider = () =>
           : `projects/_/instances/${news.instance}`,
       ).instanceId;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
-        (previousInstanceId !== undefined &&
-          previousInstanceId !== nextInstanceId)
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
+        (previousInstanceId !== undefined && previousInstanceId !== nextInstanceId)
       ) {
         return { action: "replace" as const };
       }
@@ -283,11 +267,7 @@ export const AppProfileProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const appProfileId = yield* toId(
-        id,
-        olds?.appProfileId,
-        output?.appProfileId,
-      );
+      const appProfileId = yield* toId(id, olds?.appProfileId, output?.appProfileId);
       const instanceRef = olds?.instance ?? output?.instance;
       const name =
         output?.name ??
@@ -305,40 +285,26 @@ export const AppProfileProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const owned = new Set(
-          (yield* listAlchemyInstances(env.project)).map(
-            (instance) => instance.name ?? "",
-          ),
+          (yield* listAlchemyInstances(env.project)).map((instance) => instance.name ?? ""),
         );
-        const page = yield* bigtable
-          .listProjectsInstancesAppProfiles({
+        const appProfiles = yield* collectPages(
+          bigtable.listProjectsInstancesAppProfiles.pages({
             parent: `projects/${env.project}/instances/-`,
             pageSize: 1000,
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({
-                appProfiles: [] as bigtable.AppProfile[],
-              }),
-            ),
-          );
-        return (page.appProfiles ?? [])
+          }),
+          (page) => page.appProfiles,
+        );
+        return appProfiles
           .filter((profile) => {
             const parsed = parseResourceName(profile.name ?? "");
-            return (
-              parsed.appProfileId !== DEFAULT_APP_PROFILE_ID &&
-              owned.has(parsed.instance)
-            );
+            return parsed.appProfileId !== DEFAULT_APP_PROFILE_ID && owned.has(parsed.instance);
           })
           .map((profile) => toAttrs(profile, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const appProfileId = yield* toId(
-        id,
-        news.appProfileId,
-        output?.appProfileId,
-      );
+      const appProfileId = yield* toId(id, news.appProfileId, output?.appProfileId);
       const parent = instanceNameOf(env.project, news.instance);
       const name = `${parent}/appProfiles/${appProfileId}`;
       const ignoreWarnings = news.ignoreWarnings ?? true;
@@ -362,13 +328,11 @@ export const AppProfileProvider = () =>
         return yield* new AppProfileNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (news.description ?? "") !== (current.description ?? "");
+      const descriptionChanged = (news.description ?? "") !== (current.description ?? "");
       const routingChanged = routingKey(news) !== routingKey(current);
       const isolationChanged =
         news.standardIsolation !== undefined &&
-        isolationKey(news.standardIsolation) !==
-          isolationKey(current.standardIsolation);
+        isolationKey(news.standardIsolation) !== isolationKey(current.standardIsolation);
 
       if (descriptionChanged || routingChanged || isolationChanged) {
         const mask = [
@@ -411,6 +375,6 @@ export const AppProfileProvider = () =>
           name: output.name,
           ignoreWarnings,
         })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });

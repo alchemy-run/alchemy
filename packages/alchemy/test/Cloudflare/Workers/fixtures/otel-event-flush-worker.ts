@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Telemetry from "@/Telemetry.ts";
 
 /**
  * Durable Object target whose events emit child spans — one HTTP fetch
@@ -23,9 +23,7 @@ export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlus
         Effect.withSpan("otel-event-flush.child"),
       ),
       ping: () =>
-        Effect.succeed("durable-object-rpc-ok").pipe(
-          Effect.withSpan("otel-event-flush.rpc"),
-        ),
+        Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
     }),
   ),
 ) {}
@@ -37,9 +35,9 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
     main: import.meta.url,
     env: {
       OTLP_EVENT_FLUSH_URL: Config.String("OTLP_EVENT_FLUSH_URL"),
-      OTLP_EVENT_FLUSH_SHUTDOWN_TIMEOUT: Config.String(
-        "OTLP_EVENT_FLUSH_SHUTDOWN_TIMEOUT",
-      ).pipe(Config.withDefault("0 millis")),
+      OTLP_EVENT_FLUSH_SHUTDOWN_TIMEOUT: Config.String("OTLP_EVENT_FLUSH_SHUTDOWN_TIMEOUT").pipe(
+        Config.withDefault("0 millis"),
+      ),
     },
   },
   Effect.gen(function* () {
@@ -52,9 +50,7 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
         }
-        const targetClient = Cloudflare.toHttpClient(
-          targetNamespace.getByName("target"),
-        );
+        const targetClient = Cloudflare.toHttpClient(targetNamespace.getByName("target"));
         const response = yield* targetClient.execute(
           HttpClientRequest.get("http://otel-event-flush-target/"),
         );
@@ -66,9 +62,9 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
       Layer.unwrap(
         Effect.gen(function* () {
           const url = yield* Config.String("OTLP_EVENT_FLUSH_URL");
-          const shutdownTimeout = yield* Config.Duration(
-            "OTLP_EVENT_FLUSH_SHUTDOWN_TIMEOUT",
-          ).pipe(Config.withDefault(Duration.zero));
+          const shutdownTimeout = yield* Config.Duration("OTLP_EVENT_FLUSH_SHUTDOWN_TIMEOUT").pipe(
+            Config.withDefault(Duration.zero),
+          );
           // Custom exporter selection is limited to the deadline regression.
           return Duration.toMillis(shutdownTimeout) === 0
             ? Telemetry.layerOtlp({

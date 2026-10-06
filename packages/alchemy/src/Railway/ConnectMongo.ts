@@ -51,9 +51,7 @@ export interface ConnectMongo extends Binding.Service<
   (mongo: Mongo) => Effect.Effect<ConnectMongoClient>
 > {}
 
-export const ConnectMongo = Binding.Service<ConnectMongo>(
-  "Railway.ConnectMongo",
-);
+export const ConnectMongo = Binding.Service<ConnectMongo>("Railway.ConnectMongo");
 
 export const connectEnvKeys = (mongo: Pick<Mongo, "LogicalId">) => {
   const id = mongo.LogicalId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
@@ -63,9 +61,7 @@ export const connectEnvKeys = (mongo: Pick<Mongo, "LogicalId">) => {
   };
 };
 
-export class MongoUrlMissing extends Data.TaggedError(
-  "Railway.MongoUrlMissing",
-)<{
+export class MongoUrlMissing extends Data.TaggedError("Railway.MongoUrlMissing")<{
   name: string;
 }> {}
 
@@ -74,18 +70,10 @@ export interface ConnectMongoClient {
    * Private (`{name}.railway.internal`) connection string. Pass this to
    * the MongoDB driver from a {@link Service}.
    */
-  connectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    MongoUrlMissing,
-    RuntimeContext
-  >;
+  connectionString: Effect.Effect<Redacted.Redacted<string>, MongoUrlMissing, RuntimeContext>;
   /**
    * Same private URI. Kept so callers matching the Postgres
    * `ConnectPostgres` shape keep working.
    */
-  directConnectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    MongoUrlMissing,
-    RuntimeContext
-  >;
+  directConnectionString: Effect.Effect<Redacted.Redacted<string>, MongoUrlMissing, RuntimeContext>;
 }

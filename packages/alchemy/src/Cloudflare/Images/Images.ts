@@ -144,7 +144,5 @@ export interface ImageTransformer {
     image: Stream.Stream<Uint8Array, E, R> | ImageTransformer,
     options?: cf.ImageDrawOptions,
   ): Effect.Effect<ImageTransformer, never, R>;
-  output(
-    options: cf.ImageOutputOptions,
-  ): Effect.Effect<ImageTransformationResult, ImagesError>;
+  output(options: cf.ImageOutputOptions): Effect.Effect<ImageTransformationResult, ImagesError>;
 }

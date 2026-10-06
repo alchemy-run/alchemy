@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionTargetHttpProxyProps = {
   /**
@@ -144,14 +140,6 @@ export class RegionTargetHttpProxyNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionTargetHttpProxyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionTargetHttpProxyOperationFailed",
-)<{
-  targetHttpProxyName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -204,20 +192,14 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const resourceTail = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
   return lastSegment(value);
 };
 
-const toUrlMapRef = (
-  project: string,
-  region: string,
-  urlMap: string,
-): string => {
+const toUrlMapRef = (project: string, region: string, urlMap: string): string => {
   if (urlMap.includes("/")) return urlMap;
   return `projects/${project}/regions/${region}/urlMaps/${urlMap}`;
 };
@@ -245,85 +227,20 @@ const getByName = (project: string, region: string, targetHttpProxy: string) =>
     .getRegionTargetHttpProxies({ project, region, targetHttpProxy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfErrored = (
-  targetHttpProxyName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionTargetHttpProxyOperationFailed({
-        targetHttpProxyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  targetHttpProxyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(targetHttpProxyName, operation);
-    }
-    const name = operationId(operation);
-    if (!name) {
-      return yield* failIfErrored(targetHttpProxyName, operation);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    return yield* failIfErrored(targetHttpProxyName, done);
-  });
-
 const immutableChanged = (
   news: RegionTargetHttpProxyProps,
   olds: RegionTargetHttpProxyProps | undefined,
   output: RegionTargetHttpProxy["Attributes"] | undefined,
 ) => {
   const previousDescription = olds?.description ?? output?.description;
-  if (
-    news.description !== undefined &&
-    news.description !== previousDescription
-  ) {
+  if (news.description !== undefined && news.description !== previousDescription) {
     return true;
   }
   const previousBind = olds?.proxyBind ?? output?.proxyBind;
   if (news.proxyBind !== undefined && news.proxyBind !== previousBind) {
     return true;
   }
-  const previousKeepAlive =
-    olds?.httpKeepAliveTimeoutSec ?? output?.httpKeepAliveTimeoutSec;
+  const previousKeepAlive = olds?.httpKeepAliveTimeoutSec ?? output?.httpKeepAliveTimeoutSec;
   if (
     news.httpKeepAliveTimeoutSec !== undefined &&
     news.httpKeepAliveTimeoutSec !== previousKeepAlive
@@ -347,27 +264,14 @@ export const RegionTargetHttpProxyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds?.targetHttpProxyName ?? output?.targetHttpProxyName;
+      const previousName = olds?.targetHttpProxyName ?? output?.targetHttpProxyName;
       const nextName = news.targetHttpProxyName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
-      if (
-        nameChanged ||
-        regionChanged ||
-        immutableChanged(news, olds, output)
-      ) {
+      if (nameChanged || regionChanged || immutableChanged(news, olds, output)) {
         return {
           action: "replace" as const,
           deleteFirst: !regionChanged,
@@ -383,15 +287,8 @@ export const RegionTargetHttpProxyProvider = () =>
         olds?.targetHttpProxyName,
         output?.targetHttpProxyName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        targetHttpProxyName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, targetHttpProxyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -407,7 +304,7 @@ export const RegionTargetHttpProxyProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.targetHttpProxies ?? [])
@@ -452,12 +349,9 @@ export const RegionTargetHttpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                region,
-                targetHttpProxyName,
-                operation,
-              ),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -479,16 +373,7 @@ export const RegionTargetHttpProxyProvider = () =>
             targetHttpProxy: targetHttpProxyName,
             body: { urlMap: desiredUrlMap },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                region,
-                targetHttpProxyName,
-                operation,
-              ),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpProxyName);
         if (current === undefined) {
           return yield* new RegionTargetHttpProxyNotResolved({
@@ -512,12 +397,9 @@ export const RegionTargetHttpProxyProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.targetHttpProxyName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

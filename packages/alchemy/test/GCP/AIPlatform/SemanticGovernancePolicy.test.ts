@@ -1,22 +1,20 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Policies govern an existing Vertex AI Agent
+// (`projects/{p}/locations/{l}/agents/{a}`), which the v1 API cannot create.
+// Set GCP_TEST_AGENT to that agent's resource name to run the lifecycle.
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_AGENT;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsSemanticGovernancePolicies({ name }).pipe(
@@ -41,7 +39,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/semanticGovernancePolicies/alchemy-sgp-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -74,14 +72,11 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.name).toContain("/semanticGovernancePolicies/");
-      expect(created.naturalLanguageConstraint).toEqual(
-        "Never share customer PII.",
-      );
+      expect(created.naturalLanguageConstraint).toEqual("Never share customer PII.");
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsSemanticGovernancePolicies({
-          name: created.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsSemanticGovernancePolicies({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toContain("alchemy-id=");
 
@@ -98,9 +93,7 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
       expect(updated.name).toEqual(created.name);
-      expect(updated.naturalLanguageConstraint).toEqual(
-        "Never share secrets or PII.",
-      );
+      expect(updated.naturalLanguageConstraint).toEqual("Never share secrets or PII.");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);

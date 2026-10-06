@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const location = "us-central1";
 
@@ -39,7 +36,7 @@ test.provider(
           name: `projects/${project}/locations/${location}/templates/alchemy-missing-template`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -49,7 +46,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
+test.provider(
   "create, update, and delete an integration template",
   (stack) =>
     Effect.gen(function* () {

@@ -6,6 +6,5 @@ import * as GCP from "alchemy/GCP";
  * named Native-mode database.
  */
 export const NotesDb = GCP.Firestore.Database("NotesDb", {
-  location: "us-central1",
   type: "FIRESTORE_NATIVE",
 });

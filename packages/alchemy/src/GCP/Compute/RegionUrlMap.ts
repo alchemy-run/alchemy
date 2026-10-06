@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionUrlMapProps = {
   /**
@@ -180,14 +176,6 @@ export class RegionUrlMapNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionUrlMapOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionUrlMapOperationFailed",
-)<{
-  urlMapName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -240,9 +228,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const toBody = (
   urlMapName: string,
@@ -285,9 +271,7 @@ const toAttrs = (urlMap: compute.UrlMap, project: string) => {
 };
 
 const isEmpty = (value: unknown): boolean =>
-  value === undefined ||
-  value === null ||
-  (Array.isArray(value) && value.length === 0);
+  value === undefined || value === null || (Array.isArray(value) && value.length === 0);
 
 const subsetEqual = (observed: unknown, desired: unknown): boolean => {
   if (desired === undefined || desired === null) return isEmpty(observed);
@@ -298,17 +282,11 @@ const subsetEqual = (observed: unknown, desired: unknown): boolean => {
     return desired.every((item, index) => subsetEqual(observed[index], item));
   }
   if (typeof desired === "object") {
-    if (
-      observed === undefined ||
-      observed === null ||
-      typeof observed !== "object"
-    ) {
+    if (observed === undefined || observed === null || typeof observed !== "object") {
       return false;
     }
     const current = observed as Record<string, unknown>;
-    for (const [key, value] of Object.entries(
-      desired as Record<string, unknown>,
-    )) {
+    for (const [key, value] of Object.entries(desired as Record<string, unknown>)) {
       if (value === undefined) continue;
       if (!subsetEqual(current[key], value)) return false;
     }
@@ -332,69 +310,9 @@ const getByName = (project: string, region: string, urlMap: string) =>
     .getRegionUrlMaps({ project, region, urlMap })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfErrored = (urlMapName: string, operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionUrlMapOperationFailed({
-        urlMapName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  urlMapName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(urlMapName, operation);
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return yield* failIfErrored(urlMapName, operation);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    return yield* failIfErrored(urlMapName, done);
-  });
-
 export const RegionUrlMapProvider = () =>
   Provider.succeed(RegionUrlMap, {
-    stables: [
-      "urlMapName",
-      "project",
-      "region",
-      "urlMapId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["urlMapName", "project", "region", "urlMapId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -402,17 +320,9 @@ export const RegionUrlMapProvider = () =>
       const previousName = olds?.urlMapName ?? output?.urlMapName;
       const nextName = news.urlMapName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
       if (nameChanged || regionChanged) {
         return { action: "replace" as const, deleteFirst: true };
@@ -422,15 +332,8 @@ export const RegionUrlMapProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const urlMapName = yield* toName(
-        id,
-        olds?.urlMapName,
-        output?.urlMapName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const urlMapName = yield* toName(id, olds?.urlMapName, output?.urlMapName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, urlMapName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -447,7 +350,7 @@ export const RegionUrlMapProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.urlMaps ?? [])
@@ -476,7 +379,9 @@ export const RegionUrlMapProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, urlMapName, operation),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -495,11 +400,7 @@ export const RegionUrlMapProvider = () =>
             urlMap: urlMapName,
             body: toBody(urlMapName, news, ownership, current.fingerprint),
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, urlMapName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, urlMapName);
         if (current === undefined) {
           return yield* new RegionUrlMapNotResolved({ urlMapName, region });
@@ -520,12 +421,9 @@ export const RegionUrlMapProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.urlMapName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

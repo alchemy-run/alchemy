@@ -1,14 +1,13 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as licensing from "@distilled.cloud/gcp/licensing_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
-  assertEntitlement,
   customerId,
   logLevel,
   missingUserId,
-  probeAccess,
+  runLifecycle,
   productId,
   skuId,
   updateSkuId,
@@ -18,8 +17,8 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider(
-  "getLicenseAssignments on a missing assignment fails with a typed tag",
+test.provider.skipIf(!runLifecycle)(
+  "getLicenseAssignments on a missing assignment fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -31,85 +30,38 @@ test.provider(
           userId: missingUserId,
         }),
       );
-      assertEntitlement(error);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:licensing", "live"], timeout: 90_000 },
 );
 
-test.provider(
-  "insertLicenseAssignments without License Manager access fails with a typed tag",
+test.provider.skipIf(runLifecycle)(
+  "insertLicenseAssignments without the licensing scope fails with InsufficientAuthenticationScopes",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* licensing
-        .insertLicenseAssignments({
+      const error = yield* Effect.flip(
+        licensing.insertLicenseAssignments({
           productId,
           skuId,
           body: { userId: missingUserId },
-        })
-        .pipe(
-          Effect.map((assignment) => ({
-            _tag: "ok" as const,
-            assignment,
-          })),
-          Effect.catchTag(
-            ["Forbidden", "NotFound", "BadRequest", "Unauthorized"],
-            (error) =>
-              Effect.succeed({
-                _tag: error._tag,
-                assignment: undefined,
-              }),
-          ),
-        );
-
-      if (result._tag === "ok") {
-        const assignment = result.assignment;
-        yield* licensing
-          .deleteLicenseAssignments({
-            productId: assignment.productId ?? productId,
-            skuId: assignment.skuId ?? skuId,
-            userId: assignment.userId ?? missingUserId,
-          })
-          .pipe(
-            Effect.catchTag(
-              [
-                "NotFound",
-                "Forbidden",
-                "BadRequest",
-                "Conflict",
-                "Unauthorized",
-              ],
-              () => Effect.void,
-            ),
-          );
-      } else {
-        assertEntitlement(result);
-      }
+        }),
+      );
+      expect(error._tag).toEqual("InsufficientAuthenticationScopes");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:licensing", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a license assignment",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const access = yield* probeAccess();
-      if (access !== "ok") {
-        assertEntitlement({ _tag: access });
-        yield* stack.destroy();
-        return;
-      }
-      if (!process.env.GOOGLE_LICENSE_USER_ID) {
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -134,9 +86,7 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(fetched.productId).toEqual(productId);
       expect(fetched.skuId).toEqual(skuId);
-      expect((fetched.userId ?? "").toLowerCase()).toEqual(
-        userId.toLowerCase(),
-      );
+      expect((fetched.userId ?? "").toLowerCase()).toEqual(userId.toLowerCase());
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

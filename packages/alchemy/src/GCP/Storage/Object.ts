@@ -1,9 +1,9 @@
+import { createHash } from "node:crypto";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { createHash } from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -113,9 +113,7 @@ export type Object = Resource<
  */
 export const Object = Resource<Object>("GCP.Storage.Object");
 
-export class ObjectContentInvalid extends Data.TaggedError(
-  "GCP.Storage.ObjectContentInvalid",
-)<{
+export class ObjectContentInvalid extends Data.TaggedError("GCP.Storage.ObjectContentInvalid")<{
   key: string;
   message: string;
 }> {}
@@ -172,9 +170,7 @@ export const inferContentType = (key: string): string | undefined => {
 const desiredContentType = (props: ObjectProps) =>
   props.contentType ??
   inferContentType(props.key) ??
-  (typeof props.content === "string"
-    ? "text/plain; charset=utf-8"
-    : "application/octet-stream");
+  (typeof props.content === "string" ? "text/plain; charset=utf-8" : "application/octet-stream");
 
 const desiredBytes = Effect.fn(function* (props: ObjectProps) {
   if ((props.content === undefined) === (props.file === undefined)) {
@@ -203,11 +199,7 @@ const publicUrl = (bucketName: string, key: string) =>
     .map(encodeURIComponent)
     .join("/")}`;
 
-const toAttrs = (
-  bucketName: string,
-  key: string,
-  object: storage.Storage_Object,
-) => ({
+const toAttrs = (bucketName: string, key: string, object: storage.Storage_Object) => ({
   bucketName,
   key,
   generation: object.generation,
@@ -224,13 +216,8 @@ const observe = (bucketName: string, key: string) =>
     .getObjects({ bucket: bucketName, object: key })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const sameMetadata = (
-  observed: Record<string, string>,
-  desired: Record<string, string>,
-) =>
-  globalThis.Object.entries(desired).every(
-    ([key, value]) => observed[key] === value,
-  );
+const sameMetadata = (observed: Record<string, string>, desired: Record<string, string>) =>
+  globalThis.Object.entries(desired).every(([key, value]) => observed[key] === value);
 
 export const ObjectProvider = () =>
   Provider.effect(
@@ -243,16 +230,14 @@ export const ObjectProvider = () =>
 
         diff: Effect.fn(function* ({ news, output }) {
           if (!isResolved(news) || output === undefined) return undefined;
-          if (
-            news.bucketName !== output.bucketName ||
-            news.key !== output.key
-          ) {
+          if (news.bucketName !== output.bucketName || news.key !== output.key) {
             return { action: "replace" as const, deleteFirst: false };
           }
           // The observed MD5 + served headers fully describe the object, so
           // a `file` edit is caught by hashing it and a re-serialized
           // `content` with identical bytes stays a no-op.
-          const md5 = yield* md5Of(yield* desiredBytes(news));
+          const bytes = yield* desiredBytes(news);
+          const md5 = yield* md5Of(bytes);
           const unchanged =
             md5 === output.md5Hash &&
             desiredContentType(news) === output.contentType &&

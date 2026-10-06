@@ -94,9 +94,7 @@ export type BucketAccessControl = Resource<
  * @resource
  * @category Storage
  */
-export const BucketAccessControl = Resource<BucketAccessControl>(
-  "GCP.Storage.BucketAccessControl",
-);
+export const BucketAccessControl = Resource<BucketAccessControl>("GCP.Storage.BucketAccessControl");
 
 export class BucketAccessControlNotResolved extends Data.TaggedError(
   "GCP.Storage.BucketAccessControlNotResolved",
@@ -125,16 +123,12 @@ const getByEntity = (bucketName: string, entity: string) =>
 const listOnBucket = (bucketName: string) =>
   storage.listBucketAccessControls({ bucket: bucketName }).pipe(
     Effect.map((page) => page.items ?? []),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as storage.BucketAccessControl[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as storage.BucketAccessControl[])),
   );
 
 const waitUntilGone = (bucketName: string, entity: string) =>
   getByEntity(bucketName, entity).pipe(
-    Effect.map((existing) =>
-      existing === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((existing) => (existing === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -143,9 +137,7 @@ const waitUntilGone = (bucketName: string, entity: string) =>
     Effect.flatMap((status): Effect.Effect<void, DeleteNotConfirmed> =>
       status === "gone"
         ? Effect.void
-        : Effect.fail(
-            new DeleteNotConfirmed({ resource: `${bucketName}/acl/${entity}` }),
-          ),
+        : Effect.fail(new DeleteNotConfirmed({ resource: `${bucketName}/acl/${entity}` })),
     ),
   );
 
@@ -185,10 +177,12 @@ export const BucketAccessControlProvider = () =>
           buckets,
           (bucket) => {
             const bucketName = bucket.name;
-            if (!bucketName) {
-              return Effect.succeed(
-                [] as Array<BucketAccessControl["Attributes"]>,
-              );
+            // Legacy ACL APIs reject uniform bucket-level access buckets.
+            if (
+              !bucketName ||
+              bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled === true
+            ) {
+              return Effect.succeed([] as Array<BucketAccessControl["Attributes"]>);
             }
             return listOnBucket(bucketName).pipe(
               Effect.map((items) =>
@@ -210,10 +204,7 @@ export const BucketAccessControlProvider = () =>
 
       let current =
         output?.entity !== undefined
-          ? yield* getByEntity(
-              output.bucketName ?? bucketName,
-              normalizeEntity(output.entity),
-            )
+          ? yield* getByEntity(output.bucketName ?? bucketName, normalizeEntity(output.entity))
           : undefined;
       if (current === undefined) {
         current = yield* getByEntity(bucketName, entity);
@@ -225,9 +216,7 @@ export const BucketAccessControlProvider = () =>
             bucket: bucketName,
             body: { entity, role },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getByEntity(bucketName, entity)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByEntity(bucketName, entity)));
         current = created ?? undefined;
       }
 

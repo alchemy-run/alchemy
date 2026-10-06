@@ -17,6 +17,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TIER = "BASIC";
@@ -66,9 +67,7 @@ export type PersistenceConfig = {
    * Period between RDB snapshots (`ONE_HOUR`, `SIX_HOURS`, `TWELVE_HOURS`,
    * `TWENTY_FOUR_HOURS`).
    */
-  rdbSnapshotPeriod?:
-    | redis.PersistenceConfigRdbSnapshotPeriodEnum
-    | (string & {});
+  rdbSnapshotPeriod?: redis.PersistenceConfigRdbSnapshotPeriodEnum | (string & {});
   /**
    * Alignment timestamp for snapshots (RFC3339). If omitted, the current
    * time is used.
@@ -160,9 +159,7 @@ export type InstanceProps = {
    * In-transit TLS mode. Immutable.
    * @default "DISABLED"
    */
-  transitEncryptionMode?:
-    | redis.InstanceTransitEncryptionModeEnum
-    | (string & {});
+  transitEncryptionMode?: redis.InstanceTransitEncryptionModeEnum | (string & {});
   /**
    * Maintenance policy. If omitted, Memorystore may perform maintenance
    * at any time.
@@ -297,7 +294,7 @@ export type Instance = Resource<
  * ```
  *
  * ### Binding from a Function
- * **Example:** ReadWriteRedis over REDIS_URL
+ * **Example:** ReadWriteRedis from a Function
  * ```typescript
  * export class Api extends GCP.Function<Api>()(
  *   "Api",
@@ -338,24 +335,13 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.Redis.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.Redis.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.Redis.InstanceNotResolved")<{
   name: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.Redis.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.Redis.InstanceNotReady")<{
   name: string;
   state: string;
-}> {}
-
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.Redis.InstanceOperationFailed",
-)<{
-  operation: string;
-  message: string;
 }> {}
 
 export class InstanceOperationPending extends Data.TaggedError(
@@ -364,9 +350,7 @@ export class InstanceOperationPending extends Data.TaggedError(
   operation: string;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.Redis.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.Redis.InstanceStillExists")<{
   name: string;
 }> {}
 
@@ -391,9 +375,7 @@ const normalizeConnectMode = (mode: string | undefined) => {
 
 const normalizeTransit = (mode: string | undefined) => {
   const value = (mode ?? DEFAULT_TRANSIT_ENCRYPTION).toUpperCase();
-  return value === "TRANSIT_ENCRYPTION_MODE_UNSPECIFIED"
-    ? DEFAULT_TRANSIT_ENCRYPTION
-    : value;
+  return value === "TRANSIT_ENCRYPTION_MODE_UNSPECIFIED" ? DEFAULT_TRANSIT_ENCRYPTION : value;
 };
 
 const normalizeReadReplicas = (mode: string | undefined) =>
@@ -421,16 +403,11 @@ const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     instanceId:
-      instancesAt >= 0 && parts[instancesAt + 1]
-        ? parts[instancesAt + 1]!
-        : lastSegment(name),
+      instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -462,13 +439,9 @@ const configsOf = (
     ),
   );
 
-const configsKey = (
-  configs: Record<string, string | undefined> | null | undefined,
-) =>
+const configsKey = (configs: Record<string, string | undefined> | null | undefined) =>
   JSON.stringify(
-    Object.fromEntries(
-      Object.entries(configsOf(configs)).sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    Object.fromEntries(Object.entries(configsOf(configs)).sort(([a], [b]) => a.localeCompare(b))),
   );
 
 const persistenceOf = (
@@ -482,9 +455,7 @@ const persistenceOf = (
   };
 };
 
-const persistenceKey = (
-  config: redis.PersistenceConfig | PersistenceConfig | undefined,
-) => {
+const persistenceKey = (config: redis.PersistenceConfig | PersistenceConfig | undefined) => {
   const value = persistenceOf(config);
   return JSON.stringify({
     persistenceMode: (value?.persistenceMode ?? "").toUpperCase(),
@@ -573,76 +544,36 @@ const getByName = (name: string) =>
     .getProjectsLocationsInstances({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  operation: redis.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new InstanceOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = redis.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<redis.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new InstanceOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error
-          ? Effect.fail(
-              new InstanceOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Redis.InstanceOperationPending",
-        ...LONG_POLL,
-      }),
-    );
-  });
+/** Wait for an operation through the shared GCP waiter. */
+const waitForOperation = (operation: redis.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      redis
+        .getProjectsLocationsOperations({ name })
+        .pipe(
+          Effect.catchTag("NotFound", (error) =>
+            options?.notFoundOk === true
+              ? Effect.succeed<redis.Operation>({ name, done: true })
+              : Effect.fail(error),
+          ),
+        ),
+    { budget: "30 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6): a concurrent create won the race. NOT_FOUND (5)
+    // is success for a delete.
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance
-        ? Effect.succeed(instance)
-        : Effect.fail(new InstanceNotResolved({ name })),
+      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.InstanceNotResolved",
@@ -676,9 +607,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.InstanceStillExists",
@@ -726,48 +655,32 @@ export const InstanceProvider = () =>
 
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const previousTier = normalizeTier(olds?.tier ?? output?.tier);
       const nextTier = normalizeTier(news.tier ?? output?.tier);
-      const previousConnect = normalizeConnectMode(
-        olds?.connectMode ?? output?.connectMode,
-      );
-      const nextConnect = normalizeConnectMode(
-        news.connectMode ?? output?.connectMode,
-      );
+      const previousConnect = normalizeConnectMode(olds?.connectMode ?? output?.connectMode);
+      const nextConnect = normalizeConnectMode(news.connectMode ?? output?.connectMode);
       const previousTransit = normalizeTransit(
         olds?.transitEncryptionMode ?? output?.transitEncryptionMode,
       );
       const nextTransit = normalizeTransit(
         news.transitEncryptionMode ?? output?.transitEncryptionMode,
       );
-      const previousNetwork =
-        olds?.authorizedNetwork ?? output?.authorizedNetwork ?? "";
+      const previousNetwork = olds?.authorizedNetwork ?? output?.authorizedNetwork ?? "";
       const nextNetwork = news.authorizedNetwork ?? previousNetwork;
-      const previousRange =
-        olds?.reservedIpRange ?? output?.reservedIpRange ?? "";
+      const previousRange = olds?.reservedIpRange ?? output?.reservedIpRange ?? "";
       const nextRange = news.reservedIpRange ?? previousRange;
       const previousZone = olds?.locationId ?? output?.locationId ?? "";
       const nextZone = news.locationId ?? previousZone;
-      const previousAlt =
-        olds?.alternativeLocationId ?? output?.alternativeLocationId ?? "";
+      const previousAlt = olds?.alternativeLocationId ?? output?.alternativeLocationId ?? "";
       const nextAlt = news.alternativeLocationId ?? previousAlt;
-      const previousCmek =
-        olds?.customerManagedKey ?? output?.customerManagedKey ?? "";
+      const previousCmek = olds?.customerManagedKey ?? output?.customerManagedKey ?? "";
       const nextCmek = news.customerManagedKey ?? previousCmek;
       const previousReplicas = normalizeReadReplicas(
         olds?.readReplicasMode ?? output?.readReplicasMode,
       );
-      const nextReplicas = normalizeReadReplicas(
-        news.readReplicasMode ?? output?.readReplicasMode,
-      );
+      const nextReplicas = normalizeReadReplicas(news.readReplicasMode ?? output?.readReplicasMode);
       const previousVersion = olds?.redisVersion ?? output?.redisVersion;
       const nextVersion = news.redisVersion;
       const downgrade =
@@ -776,9 +689,7 @@ export const InstanceProvider = () =>
         versionDecreasing(previousVersion, nextVersion);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousTier !== nextTier ||
         previousConnect !== nextConnect ||
@@ -795,27 +706,19 @@ export const InstanceProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, instanceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, instanceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -831,33 +734,23 @@ export const InstanceProvider = () =>
             Stream.filter(
               (instance) =>
                 !isPlaceholder(instance) &&
-                Object.keys(instance.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(instance.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
-            Stream.map((instance) =>
-              toAttrs(instance, env.project, env.region),
-            ),
+            Stream.map((instance) => toAttrs(instance, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, news.instanceId, output?.instanceId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, instanceId);
       const tier = normalizeTier(news.tier);
       const connectMode = normalizeConnectMode(news.connectMode);
-      const transitEncryptionMode = normalizeTransit(
-        news.transitEncryptionMode,
-      );
+      const transitEncryptionMode = normalizeTransit(news.transitEncryptionMode);
       const memorySizeGb = news.memorySizeGb ?? DEFAULT_MEMORY_SIZE_GB;
       const authEnabled = news.authEnabled === true;
       const desiredLabels = {
@@ -916,25 +809,20 @@ export const InstanceProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const memoryChanged =
-        (current.memorySizeGb ?? DEFAULT_MEMORY_SIZE_GB) !== memorySizeGb;
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const memoryChanged = (current.memorySizeGb ?? DEFAULT_MEMORY_SIZE_GB) !== memorySizeGb;
       const authChanged = (current.authEnabled === true) !== authEnabled;
       const configsChanged =
         news.redisConfigs !== undefined &&
         configsKey(current.redisConfigs) !== configsKey(news.redisConfigs);
       const persistenceChanged =
         news.persistenceConfig !== undefined &&
-        persistenceKey(current.persistenceConfig) !==
-          persistenceKey(news.persistenceConfig);
+        persistenceKey(current.persistenceConfig) !== persistenceKey(news.persistenceConfig);
       const maintenanceChanged =
         news.maintenancePolicy !== undefined &&
-        maintenanceKey(current.maintenancePolicy) !==
-          maintenanceKey(news.maintenancePolicy);
+        maintenanceKey(current.maintenancePolicy) !== maintenanceKey(news.maintenancePolicy);
       const replicaChanged =
-        news.replicaCount !== undefined &&
-        (current.replicaCount ?? 0) !== news.replicaCount;
+        news.replicaCount !== undefined && (current.replicaCount ?? 0) !== news.replicaCount;
       const secondaryChanged =
         news.secondaryIpRange !== undefined &&
         (current.secondaryIpRange ?? "") !== news.secondaryIpRange;
@@ -994,8 +882,7 @@ export const InstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* getByName(output.name).pipe(
         Effect.filterOrFail(
-          (instance) =>
-            instance === undefined || (instance.state ?? "") !== "CREATING",
+          (instance) => instance === undefined || (instance.state ?? "") !== "CREATING",
           () => new InstanceOperationPending({ operation: output.name }),
         ),
         Effect.retry({
@@ -1003,16 +890,14 @@ export const InstanceProvider = () =>
           ...LONG_POLL,
         }),
       );
-      const operation = yield* redis
-        .deleteProjectsLocationsInstances({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 24,
-            schedule: Schedule.spaced("8 seconds"),
-          }),
-        );
+      const operation = yield* redis.deleteProjectsLocationsInstances({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 24,
+          schedule: Schedule.spaced("8 seconds"),
+        }),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -1,21 +1,18 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent } from "./parent.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   dialogflow.getProjectsLocationsAgentsEnvironmentsExperiments({ name }).pipe(
@@ -37,13 +34,13 @@ test.provider(
 
       const error = yield* Effect.flip(
         dialogflow.getProjectsLocationsAgentsEnvironmentsExperiments({
-          name: `projects/${project}/locations/us-central1/agents/alchemy-missing/environments/alchemy-missing/experiments/alchemy-missing`,
+          name: `projects/${project}/locations/global/agents/alchemy-missing/environments/alchemy-missing/experiments/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 90_000,
@@ -72,35 +69,31 @@ test.provider.skipIf(!runLifecycle)(
               displayName: "treatment",
               description: control.versionId,
             });
-            const environment = yield* GCP.Dialogflow.AgentsEnvironment(
-              "Prod",
-              {
-                agent: agent.name ?? "",
-                displayName: "prod",
-                versionConfigs: [{ version: control.name }],
-              },
-            );
-            const experiment =
-              yield* GCP.Dialogflow.AgentsEnvironmentsExperiment("Ab", {
-                environment: environment.name,
-                displayName: "checkout-ab",
-                description: "ab test",
-                definition: {
-                  versionVariants: {
-                    variants: [
-                      {
-                        version: control.name,
-                        trafficAllocation: 0.5,
-                        isControlGroup: true,
-                      },
-                      {
-                        version: treatment.name,
-                        trafficAllocation: 0.5,
-                      },
-                    ],
-                  },
+            const environment = yield* GCP.Dialogflow.AgentsEnvironment("Prod", {
+              agent: agent.name ?? "",
+              displayName: "prod",
+              versionConfigs: [{ version: control.name }],
+            });
+            const experiment = yield* GCP.Dialogflow.AgentsEnvironmentsExperiment("Ab", {
+              environment: environment.name,
+              displayName: "checkout-ab",
+              description: "ab test",
+              definition: {
+                versionVariants: {
+                  variants: [
+                    {
+                      version: control.name,
+                      trafficAllocation: 0.5,
+                      isControlGroup: true,
+                    },
+                    {
+                      version: treatment.name,
+                      trafficAllocation: 0.5,
+                    },
+                  ],
                 },
-              });
+              },
+            });
             return { control, treatment, environment, experiment };
           }),
         );
@@ -109,10 +102,9 @@ test.provider.skipIf(!runLifecycle)(
         expect(created.experiment.displayName).toEqual("checkout-ab");
         expect(created.experiment.description).toEqual("ab test");
 
-        const fetched =
-          yield* dialogflow.getProjectsLocationsAgentsEnvironmentsExperiments({
-            name: created.experiment.name,
-          });
+        const fetched = yield* dialogflow.getProjectsLocationsAgentsEnvironmentsExperiments({
+          name: created.experiment.name,
+        });
         expect(fetched.name).toEqual(created.experiment.name);
         expect(fetched.description).toContain("[alchemy ");
 
@@ -130,37 +122,33 @@ test.provider.skipIf(!runLifecycle)(
               displayName: "treatment",
               description: control.versionId,
             });
-            const environment = yield* GCP.Dialogflow.AgentsEnvironment(
-              "Prod",
-              {
-                agent: agent.name ?? "",
-                environmentId: created.environment.environmentId,
-                displayName: "prod",
-                versionConfigs: [{ version: control.name }],
-              },
-            );
-            const experiment =
-              yield* GCP.Dialogflow.AgentsEnvironmentsExperiment("Ab", {
-                environment: environment.name,
-                experimentId: created.experiment.experimentId,
-                displayName: "checkout-ab-v2",
-                description: "ab test v2",
-                definition: {
-                  versionVariants: {
-                    variants: [
-                      {
-                        version: control.name,
-                        trafficAllocation: 0.5,
-                        isControlGroup: true,
-                      },
-                      {
-                        version: treatment.name,
-                        trafficAllocation: 0.5,
-                      },
-                    ],
-                  },
+            const environment = yield* GCP.Dialogflow.AgentsEnvironment("Prod", {
+              agent: agent.name ?? "",
+              environmentId: created.environment.environmentId,
+              displayName: "prod",
+              versionConfigs: [{ version: control.name }],
+            });
+            const experiment = yield* GCP.Dialogflow.AgentsEnvironmentsExperiment("Ab", {
+              environment: environment.name,
+              experimentId: created.experiment.experimentId,
+              displayName: "checkout-ab-v2",
+              description: "ab test v2",
+              definition: {
+                versionVariants: {
+                  variants: [
+                    {
+                      version: control.name,
+                      trafficAllocation: 0.5,
+                      isControlGroup: true,
+                    },
+                    {
+                      version: treatment.name,
+                      trafficAllocation: 0.5,
+                    },
+                  ],
                 },
-              });
+              },
+            });
             return { control, treatment, environment, experiment };
           }),
         );
@@ -173,7 +161,7 @@ test.provider.skipIf(!runLifecycle)(
         const gone = yield* waitUntilGone(created.experiment.name);
         expect(gone).toEqual("gone");
       }).pipe(Effect.ensuring(deleteAgent(agent.name ?? "")));
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 120_000,

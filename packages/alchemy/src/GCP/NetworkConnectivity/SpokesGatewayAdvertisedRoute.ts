@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   NetworkConnectivityNotResolved,
@@ -65,11 +60,13 @@ export type SpokesGatewayAdvertisedRouteProps = {
    */
   recipient?: GatewayAdvertisedRouteRecipient;
   /**
-   * Human-readable description.
+   * Human-readable description. Immutable — changing it replaces the
+   * route (GCP rejects `description` in PATCH).
    */
   description?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Immutable — changing them replaces the route.
    */
   labels?: Record<string, string>;
 };
@@ -117,9 +114,9 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * A route a Network Connectivity Center gateway spoke advertises to a
  * hub (or other recipient).
  *
- * Changing `parent`, `gatewayAdvertisedRouteId`, or `ipRange` replaces
- * the route. Description, labels, `priority`, and `recipient` update in
- * place.
+ * Changing `parent`, `gatewayAdvertisedRouteId`, `ipRange`, `labels`, or
+ * `description` replaces the route (GCP does not allow updating labels or
+ * the description). `priority` and `recipient` update in place.
  *
  * ### Creating a GatewayAdvertisedRoute
  * **Example:** Advertise a CIDR to the hub
@@ -145,18 +142,17 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * ```
  *
  * ### Updating a GatewayAdvertisedRoute
- * **Example:** Description, labels, and priority
+ * **Example:** Description and priority
  * ```typescript
  * const route = yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute(
  *   "OnPrem",
  *   {
- *     parent: existing.parent,
- *     gatewayAdvertisedRouteId: existing.gatewayAdvertisedRouteId,
- *     ipRange: existing.ipRange!,
+ *     parent: spoke.name,
+ *     ipRange: "192.168.0.0/16",
  *     priority: 200,
  *     recipient: "ADVERTISE_TO_HUB",
  *     description: "on-prem v2",
- *     labels: { env: "prod", role: "gw" },
+ *     labels: { env: "prod" },
  *   },
  * );
  * ```
@@ -164,10 +160,9 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * @resource
  * @category NetworkConnectivity
  */
-export const SpokesGatewayAdvertisedRoute =
-  Resource<SpokesGatewayAdvertisedRoute>(
-    "GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute",
-  );
+export const SpokesGatewayAdvertisedRoute = Resource<SpokesGatewayAdvertisedRoute>(
+  "GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute",
+);
 
 const resourceNameOf = (parent: string, gatewayAdvertisedRouteId: string) =>
   `${parent}/gatewayAdvertisedRoutes/${gatewayAdvertisedRouteId}`;
@@ -220,21 +215,35 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.gatewayAdvertisedRouteId ?? output?.gatewayAdvertisedRouteId;
+      const previousId = olds?.gatewayAdvertisedRouteId ?? output?.gatewayAdvertisedRouteId;
       const nextId = news.gatewayAdvertisedRouteId
         ? rfc1035(news.gatewayAdvertisedRouteId, "gateway-advertised-route")
         : previousId;
       const previousParent = olds?.parent ?? output?.parent;
       const previousRange = olds?.ipRange ?? output?.ipRange;
-      if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousParent !== undefined && previousParent !== news.parent) ||
-        (previousRange !== undefined && previousRange !== news.ipRange)
-      ) {
-        return { action: "replace" as const };
+      const previousLabels = olds?.labels ?? output?.labels;
+      const previousDescription = olds?.description ?? output?.description;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
+      const parentChanged = previousParent !== undefined && previousParent !== news.parent;
+      const rangeChanged = previousRange !== undefined && previousRange !== news.ipRange;
+      // `labels` is not mutable on GatewayAdvertisedRoute (PATCH rejects the
+      // path), so a labels change replaces the route.
+      const labels = diffLabels(toLabels(previousLabels), toLabels(news.labels));
+      const labelsChanged =
+        previousLabels !== undefined && (labels.upsert.length > 0 || labels.removed.length > 0);
+      // `description` is not mutable either.
+      const descriptionChanged =
+        (olds !== undefined || output !== undefined) &&
+        (previousDescription ?? "") !== (news.description ?? "");
+      if (idChanged || parentChanged || rangeChanged || labelsChanged || descriptionChanged) {
+        return {
+          action: "replace" as const,
+          // A route with a pinned id, or the same CIDR on the same spoke,
+          // collides with the old route; delete it first.
+          deleteFirst:
+            !parentChanged &&
+            (!rangeChanged || (news.gatewayAdvertisedRouteId !== undefined && !idChanged)),
+        };
       }
       return undefined;
     }),
@@ -250,16 +259,12 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       const parent = olds?.parent ?? output?.parent;
       const name =
         output?.name ??
-        (parent !== undefined
-          ? resourceNameOf(parent, gatewayAdvertisedRouteId)
-          : undefined);
+        (parent !== undefined ? resourceNameOf(parent, gatewayAdvertisedRouteId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -276,12 +281,10 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
           spokes.filter((spoke) => spoke.name),
           (spoke) =>
             collectPages(
-              networkconnectivity.listProjectsLocationsSpokesGatewayAdvertisedRoutes.pages(
-                {
-                  parent: spoke.name!,
-                  pageSize: 1000,
-                },
-              ),
+              networkconnectivity.listProjectsLocationsSpokesGatewayAdvertisedRoutes.pages({
+                parent: spoke.name!,
+                pageSize: 1000,
+              }),
               (page) => page.gatewayAdvertisedRoutes,
             ),
           { concurrency: 4 },
@@ -340,42 +343,29 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
         return yield* new NetworkConnectivityNotResolved({ name });
       }
 
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const priorityChanged =
-        (current.priority ?? DEFAULT_PRIORITY) !== priority;
-      const recipientChanged =
-        (current.recipient ?? "") !== (news.recipient ?? "");
+      // Labels and description are create-only; `diff` replaces the route
+      // when they change.
+      const priorityChanged = (current.priority ?? DEFAULT_PRIORITY) !== priority;
+      const recipientChanged = (current.recipient ?? "") !== (news.recipient ?? "");
       const updateMask = changedFields([
-        ["labels", labelsChanged],
-        ["description", descriptionChanged],
         ["priority", priorityChanged],
         ["recipient", recipientChanged],
       ]);
 
       if (updateMask.length > 0) {
         const operation =
-          yield* networkconnectivity.patchProjectsLocationsSpokesGatewayAdvertisedRoutes(
-            {
+          yield* networkconnectivity.patchProjectsLocationsSpokesGatewayAdvertisedRoutes({
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                priority,
-                recipient: news.recipient,
-              },
+              description: news.description,
+              priority,
+              recipient: news.recipient,
             },
-          );
+          });
         yield* waitForOperation(operation);
-        current = yield* waitUntilReady(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

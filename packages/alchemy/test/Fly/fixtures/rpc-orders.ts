@@ -1,5 +1,5 @@
-import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
+import * as Fly from "@/Fly";
 import RpcUsers from "./rpc-users.ts";
 
 export const ORDERS = [
@@ -24,9 +24,7 @@ export default class RpcOrders extends Fly.Service<RpcOrders>()(
     return {
       listOrders: () =>
         Effect.forEach(ORDERS, (order) =>
-          users
-            .getUser(order.userId)
-            .pipe(Effect.map((user) => ({ ...order, user }))),
+          users.getUser(order.userId).pipe(Effect.map((user) => ({ ...order, user }))),
         ),
     };
   }),

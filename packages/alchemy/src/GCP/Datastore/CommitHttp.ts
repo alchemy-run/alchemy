@@ -1,6 +1,6 @@
 import * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import * as Layer from "effect/Layer";
-import { makeIndexeHttpBinding } from "./BindingHttp.ts";
+import { makeDatastoreHttpBinding } from "./BindingHttp.ts";
 import { Commit } from "./Commit.ts";
 
 /**
@@ -11,9 +11,9 @@ import { Commit } from "./Commit.ts";
  */
 export const CommitHttp = Layer.effect(
   Commit,
-  makeIndexeHttpBinding({
+  makeDatastoreHttpBinding({
     tag: "GCP.Datastore.Commit",
-    iam: { role: "roles/datastore.user" },
+    iam: { role: "roles/datastore.user", scopeByCondition: true },
     operation: datastore.commitProjects,
   }),
 );

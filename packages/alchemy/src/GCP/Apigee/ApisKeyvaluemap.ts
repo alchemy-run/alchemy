@@ -8,12 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  resolveOrgId,
-  toPhysicalId,
-} from "./operations.ts";
+import { lastSegment, orgParent, resolveOrgId, toPhysicalId } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 255;
 const OWNERSHIP_KEY = "__alchemy";
@@ -83,9 +78,7 @@ export type ApisKeyvaluemap = Resource<
  * @resource
  * @category Apigee
  */
-export const ApisKeyvaluemap = Resource<ApisKeyvaluemap>(
-  "GCP.Apigee.ApisKeyvaluemap",
-);
+export const ApisKeyvaluemap = Resource<ApisKeyvaluemap>("GCP.Apigee.ApisKeyvaluemap");
 
 export class ApisKeyvaluemapNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApisKeyvaluemapNotResolved",
@@ -115,21 +108,18 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApisKeyvaluemaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsApisKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_KEY}`,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
-const ownershipValue = (labels: Record<string, string>) =>
-  JSON.stringify(labels);
+const ownershipValue = (labels: Record<string, string>) => JSON.stringify(labels);
 
-const parseOwnershipValue = (
-  value: string | undefined,
-): Record<string, string> => {
+const parseOwnershipValue = (value: string | undefined): Record<string, string> => {
   if (value === undefined || value.length === 0) return {};
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -174,9 +164,7 @@ export const ApisKeyvaluemapProvider = () =>
       const previousApi = olds?.api ? lastSegment(olds.api) : output?.apiId;
       const previousOrg = olds?.organizationId ?? output?.organizationId;
       if (
-        (previousId !== undefined &&
-          news.mapId !== undefined &&
-          news.mapId !== previousId) ||
+        (previousId !== undefined && news.mapId !== undefined && news.mapId !== previousId) ||
         (previousApi !== undefined && lastSegment(news.api) !== previousApi) ||
         (previousOrg !== undefined &&
           news.organizationId !== undefined &&
@@ -190,17 +178,10 @@ export const ApisKeyvaluemapProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        olds?.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const apiId = lastSegment(olds?.api ?? output?.apiId ?? "");
       if (apiId.length === 0) return undefined;
-      const mapId = yield* toPhysicalId(
-        id,
-        olds?.mapId,
-        output?.mapId,
-        MAX_NAME_LENGTH,
-      );
+      const mapId = yield* toPhysicalId(id, olds?.mapId, output?.mapId, MAX_NAME_LENGTH);
       const name = output?.name ?? resourceName(organizationId, apiId, mapId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -220,17 +201,13 @@ export const ApisKeyvaluemapProvider = () =>
             includeMetaData: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ proxies: [] }),
             ),
           );
         const owned = [];
         for (const proxy of page.proxies ?? []) {
-          if (
-            !Object.keys(proxy.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
-            )
-          ) {
+          if (!Object.keys(proxy.labels ?? {}).some((key) => key.startsWith("alchemy-"))) {
             continue;
           }
           const apiId = lastSegment(proxy.name ?? "");
@@ -242,9 +219,7 @@ export const ApisKeyvaluemapProvider = () =>
           if (map === undefined) continue;
           const entry = yield* getOwnershipEntry(candidate);
           if (entry === undefined) continue;
-          owned.push(
-            toAttrs(map, env.project, organizationId, apiId, candidate),
-          );
+          owned.push(toAttrs(map, env.project, organizationId, apiId, candidate));
         }
         return owned;
       }),
@@ -252,16 +227,9 @@ export const ApisKeyvaluemapProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        news.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        news.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const apiId = lastSegment(news.api);
-      const mapId = yield* toPhysicalId(
-        id,
-        news.mapId,
-        output?.mapId,
-        MAX_NAME_LENGTH,
-      );
+      const mapId = yield* toPhysicalId(id, news.mapId, output?.mapId, MAX_NAME_LENGTH);
       const name = resourceName(organizationId, apiId, mapId);
       const labels = yield* createInternalLabels(id);
 
@@ -304,6 +272,6 @@ export const ApisKeyvaluemapProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApisKeyvaluemaps({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

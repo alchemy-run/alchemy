@@ -13,8 +13,8 @@ export const GetWorkstationClusterHttp = Layer.effect(
   GetWorkstationCluster,
   makeClusterHttpBinding({
     tag: "GCP.Workstations.GetWorkstationCluster",
-    // No narrower predefined role contains workstations.workstationClusters.get.
-    iam: { role: "roles/workstations.workstationCreator" },
+    // Clusters have no IAM policy of their own: read-only on the project.
+    iam: { role: "roles/workstations.viewer" },
     operation: workstations.getProjectsLocationsWorkstationClusters,
   }),
 );

@@ -7,11 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_STATE = "RUNNING" as const;
@@ -79,10 +74,8 @@ export type QueueProps = {
    */
   stackdriverLoggingConfig?: QueueStackdriverLoggingConfig;
   /**
-   * Queue-level HTTP target overrides for HTTP tasks. Cloud Tasks queues
-   * have no labels field — Alchemy ownership (`x-alchemy-stack` /
-   * `x-alchemy-stage` / `x-alchemy-id`) is stored as HTTP header
-   * overrides so `list` / `pnpm nuke:gcp` can find owned queues.
+   * Queue-level HTTP target overrides for HTTP tasks. If omitted, the
+   * queue's current overrides are left unchanged.
    */
   httpTarget?: QueueHttpTarget;
   /**
@@ -118,9 +111,7 @@ export type Queue = Resource<
     rateLimits: QueueRateLimits | undefined;
     /** Logging config currently on the queue. */
     stackdriverLoggingConfig: QueueStackdriverLoggingConfig | undefined;
-    /**
-     * HTTP target overrides with Alchemy ownership headers stripped.
-     */
+    /** Queue-level HTTP target overrides. */
     httpTarget: QueueHttpTarget | undefined;
     /** App Engine routing override, if any. */
     appEngineRoutingOverride: QueueAppEngineRouting | undefined;
@@ -134,10 +125,10 @@ export type Queue = Resource<
 /**
  * A Google Cloud Tasks queue.
  *
- * Cloud Tasks queues have no labels. Alchemy stamps ownership into
- * `httpTarget.headerOverrides` as `x-alchemy-*` headers so `list` and
- * `pnpm nuke:gcp` can identify owned queues. HTTP tasks dispatched from
- * the queue receive those headers.
+ * Cloud Tasks queues have no labels, so Alchemy identifies its queues by
+ * the generated `queueId`: `read` reports a queue with an explicit
+ * `queueId` as unowned (adopt it with `--adopt`), and nuke cannot
+ * discover queues.
  *
  * Changing `queueId` or `location` replaces the queue. Deleted queue
  * names are tombstoned for up to 3 days — CreateQueue may appear to
@@ -178,9 +169,7 @@ export type Queue = Resource<
  */
 export const Queue = Resource<Queue>("GCP.CloudTasks.Queue");
 
-export class QueueNotResolved extends Data.TaggedError(
-  "GCP.CloudTasks.QueueNotResolved",
-)<{
+export class QueueNotResolved extends Data.TaggedError("GCP.CloudTasks.QueueNotResolved")<{
   name: string;
 }> {}
 
@@ -208,11 +197,7 @@ const resourceName = (project: string, location: string, queueId: string) =>
 const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-const toQueueId = (
-  id: string,
-  queueId: string | undefined,
-  existing?: string,
-) =>
+const toQueueId = (id: string, queueId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (queueId !== undefined) return queueId;
     if (existing !== undefined) return existing;
@@ -225,83 +210,6 @@ const toQueueId = (
     return named.replace(/-+$/g, "").slice(0, MAX_QUEUE_ID_LENGTH);
   });
 
-const OWNERSHIP_HEADER_PREFIX = "x-alchemy-";
-
-const isOwnershipHeader = (key: string | undefined) =>
-  (key ?? "").toLowerCase().startsWith(OWNERSHIP_HEADER_PREFIX);
-
-const labelToHeaderKey = (key: string) =>
-  key.startsWith("alchemy-") ? `x-${key}` : key;
-
-const headerToLabelKey = (key: string) => {
-  const lower = key.toLowerCase();
-  return lower.startsWith(OWNERSHIP_HEADER_PREFIX)
-    ? `alchemy-${lower.slice(OWNERSHIP_HEADER_PREFIX.length)}`
-    : lower;
-};
-
-const ownershipHeaders = (
-  internal: Record<string, string>,
-): cloudtasks.HeaderOverride[] =>
-  [alchemyLabelKeys.stack, alchemyLabelKeys.stage, alchemyLabelKeys.id].map(
-    (key) => ({
-      header: {
-        key: labelToHeaderKey(key),
-        value: internal[key] ?? "",
-      },
-    }),
-  );
-
-const observedOwnershipLabels = (
-  headers: cloudtasks.HeaderOverrideList | undefined,
-): Record<string, string> => {
-  const labels: Record<string, string> = {};
-  for (const item of headers ?? []) {
-    const key = item.header?.key;
-    const value = item.header?.value;
-    if (key && value && isOwnershipHeader(key)) {
-      labels[headerToLabelKey(key)] = value;
-    }
-  }
-  return labels;
-};
-
-const hasOwnershipHeaders = (
-  headers: cloudtasks.HeaderOverrideList | undefined,
-) => (headers ?? []).some((item) => isOwnershipHeader(item.header?.key));
-
-const stripOwnershipHeaders = (
-  target: cloudtasks.HttpTarget | undefined,
-): cloudtasks.HttpTarget | undefined => {
-  if (target === undefined) return undefined;
-  const headerOverrides = (target.headerOverrides ?? []).filter(
-    (item) => !isOwnershipHeader(item.header?.key),
-  );
-  const next: cloudtasks.HttpTarget = { ...target };
-  if (headerOverrides.length > 0) {
-    next.headerOverrides = headerOverrides;
-  } else {
-    delete next.headerOverrides;
-  }
-  const keys = Object.keys(next).filter(
-    (key) => next[key as keyof cloudtasks.HttpTarget] !== undefined,
-  );
-  return keys.length > 0 ? next : undefined;
-};
-
-const withOwnershipHeaders = (
-  target: cloudtasks.HttpTarget | undefined,
-  internal: Record<string, string>,
-): cloudtasks.HttpTarget => {
-  const user = (target?.headerOverrides ?? []).filter(
-    (item) => !isOwnershipHeader(item.header?.key),
-  );
-  return {
-    ...target,
-    headerOverrides: [...user, ...ownershipHeaders(internal)],
-  };
-};
-
 const sortHeaderOverrides = (
   headers: cloudtasks.HeaderOverrideList | undefined,
 ): cloudtasks.HeaderOverrideList =>
@@ -312,9 +220,7 @@ const sortHeaderOverrides = (
         value: item.header?.value,
       },
     }))
-    .sort((left, right) =>
-      (left.header?.key ?? "").localeCompare(right.header?.key ?? ""),
-    );
+    .sort((left, right) => (left.header?.key ?? "").localeCompare(right.header?.key ?? ""));
 
 const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, current) => {
@@ -380,10 +286,7 @@ const toUserRateLimits = (
   return Object.keys(next).length > 0 ? next : undefined;
 };
 
-const toAttrs = (
-  queue: cloudtasks.Queue,
-  project: string,
-): Queue["Attributes"] => {
+const toAttrs = (queue: cloudtasks.Queue, project: string): Queue["Attributes"] => {
   const name = queue.name ?? "";
   const parsed = parseName(name);
   return {
@@ -395,7 +298,7 @@ const toAttrs = (
     retryConfig: queue.retryConfig,
     rateLimits: toUserRateLimits(queue.rateLimits),
     stackdriverLoggingConfig: queue.stackdriverLoggingConfig,
-    httpTarget: stripOwnershipHeaders(queue.httpTarget),
+    httpTarget: queue.httpTarget,
     appEngineRoutingOverride: queue.appEngineRoutingOverride,
     purgeTime: queue.purgeTime,
   };
@@ -406,35 +309,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsQueues({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listQueuesAt = (parent: string, project: string) =>
-  Effect.gen(function* () {
-    const found: ReturnType<typeof toAttrs>[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* cloudtasks.listProjectsLocationsQueues({
-        parent,
-        pageSize: 9800,
-        pageToken,
-      });
-      for (const queue of response.queues ?? []) {
-        if (hasOwnershipHeaders(queue.httpTarget?.headerOverrides)) {
-          found.push(toAttrs(queue, project));
-        }
-      }
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-    ),
-  );
-
-const sameHttpTarget = (
-  left: cloudtasks.HttpTarget,
-  right: cloudtasks.HttpTarget | undefined,
-) => {
+const sameHttpTarget = (left: cloudtasks.HttpTarget, right: cloudtasks.HttpTarget | undefined) => {
   const normalize = (target: cloudtasks.HttpTarget | undefined) => {
     if (target === undefined) return undefined;
     return {
@@ -454,19 +329,10 @@ export const QueueProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.queueId ?? output?.queueId;
       const nextId = news.queueId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       if (idChanged || previousLocation !== nextLocation) {
         return { action: "replace" as const };
       }
@@ -476,79 +342,22 @@ export const QueueProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const queueId = yield* toQueueId(id, olds?.queueId, output?.queueId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, queueId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const labels = observedOwnershipLabels(
-        existing.httpTarget?.headerOverrides,
-      );
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      const generated = yield* toQueueId(id, undefined);
+      return attrs.queueId === generated ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        // Scan the stack region plus the pre-`GCP.Region` default.
-        const fallbackLocations = [...new Set(["us-central1", env.region])];
-        const fallback = fallbackLocations.map((location) =>
-          locationParent(env.project, location),
-        );
-        const found: ReturnType<typeof toAttrs>[] = [];
-        let pageToken: string | undefined;
-        for (let page = 0; page < 10; page++) {
-          const response = yield* cloudtasks
-            .listProjectsLocations({
-              name: `projects/${env.project}`,
-              pageSize: 100,
-              pageToken,
-            })
-            .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed({
-                  locations: fallbackLocations.map(
-                    (location, index) =>
-                      ({
-                        name: fallback[index],
-                        locationId: location,
-                      }) satisfies cloudtasks.Location,
-                  ),
-                  nextPageToken: undefined,
-                }),
-              ),
-            );
-          const parents = (response.locations ?? [])
-            .map((item) => item.name)
-            .filter((name): name is string => !!name);
-          const pages = yield* Effect.forEach(
-            parents.length > 0 ? parents : fallback,
-            (parent) => listQueuesAt(parent, env.project),
-            { concurrency: 4 },
-          );
-          for (const queues of pages) {
-            found.push(...queues);
-          }
-          pageToken = response.nextPageToken;
-          if (pageToken === undefined || pageToken === "") break;
-        }
-        return found;
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const queueId = yield* toQueueId(id, news.queueId, output?.queueId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, queueId);
       const parent = locationParent(env.project, location);
-      const internal = yield* createInternalLabels(id);
-      const desiredHttpTarget = withOwnershipHeaders(news.httpTarget, internal);
+      const desiredHttpTarget = news.httpTarget;
       const desiredState = news.state ?? DEFAULT_STATE;
 
       let current = yield* getByName(name);
@@ -605,19 +414,11 @@ export const QueueProvider = () =>
         desiredRateLimits !== undefined &&
         overlayChanged(desiredRateLimits, toUserRateLimits(current.rateLimits))
       ) {
-        patchBody.rateLimits = toRateLimits(
-          desiredRateLimits,
-          current.rateLimits,
-        );
+        patchBody.rateLimits = toRateLimits(desiredRateLimits, current.rateLimits);
         mask.push("rateLimits");
       }
 
-      if (
-        overlayChanged(
-          news.stackdriverLoggingConfig,
-          current.stackdriverLoggingConfig,
-        )
-      ) {
+      if (overlayChanged(news.stackdriverLoggingConfig, current.stackdriverLoggingConfig)) {
         patchBody.stackdriverLoggingConfig = {
           ...current.stackdriverLoggingConfig,
           ...news.stackdriverLoggingConfig,
@@ -625,17 +426,15 @@ export const QueueProvider = () =>
         mask.push("stackdriverLoggingConfig");
       }
 
-      if (!sameHttpTarget(desiredHttpTarget, current.httpTarget)) {
+      if (
+        desiredHttpTarget !== undefined &&
+        !sameHttpTarget(desiredHttpTarget, current.httpTarget)
+      ) {
         patchBody.httpTarget = desiredHttpTarget;
         mask.push("httpTarget");
       }
 
-      if (
-        overlayChanged(
-          news.appEngineRoutingOverride,
-          current.appEngineRoutingOverride,
-        )
-      ) {
+      if (overlayChanged(news.appEngineRoutingOverride, current.appEngineRoutingOverride)) {
         patchBody.appEngineRoutingOverride = {
           ...current.appEngineRoutingOverride,
           ...news.appEngineRoutingOverride,

@@ -129,10 +129,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -140,24 +138,15 @@ const parseName = (name: string, defaultLocation: string) => {
   const namespacesAt = parts.lastIndexOf("namespaces");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const namespace =
-    namespacesAt >= 0 ? parts.slice(0, namespacesAt + 2).join("/") : "";
+  const namespace = namespacesAt >= 0 ? parts.slice(0, namespacesAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     namespace,
-    namespaceId:
-      namespacesAt >= 0 && parts[namespacesAt + 1]
-        ? parts[namespacesAt + 1]!
-        : "",
+    namespaceId: namespacesAt >= 0 && parts[namespacesAt + 1] ? parts[namespacesAt + 1]! : "",
     serviceId:
-      servicesAt >= 0 && parts[servicesAt + 1]
-        ? parts[servicesAt + 1]!
-        : lastSegment(name),
+      servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -188,8 +177,7 @@ const resolveParent = (
   };
 };
 
-const resourceName = (parent: string, serviceId: string) =>
-  `${parent}/services/${serviceId}`;
+const resourceName = (parent: string, serviceId: string) => `${parent}/services/${serviceId}`;
 
 const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -208,17 +196,10 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
       lowercase: true,
     });
     const named = /^[a-z]/.test(generated) ? generated : `s${generated}`;
-    return named
-      .replace(/-+$/g, "")
-      .slice(0, MAX_SERVICE_ID_LENGTH)
-      .replace(/-+$/g, "");
+    return named.replace(/-+$/g, "").slice(0, MAX_SERVICE_ID_LENGTH).replace(/-+$/g, "");
   });
 
-const toAttrs = (
-  service: servicedirectory.Service,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (service: servicedirectory.Service, project: string, region: string) => {
   const name = service.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -238,41 +219,34 @@ const getByName = (name: string) =>
     .getProjectsLocationsNamespacesServices({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const hasAlchemyAnnotation = (
-  annotations: Record<string, string | undefined> | null | undefined,
-) => Object.keys(annotations ?? {}).some((key) => key.startsWith("alchemy-"));
+const hasAlchemyAnnotation = (annotations: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(annotations ?? {}).some((key) => key.startsWith("alchemy-"));
 
 const listServicesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
     const found: ReturnType<typeof toAttrs>[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response =
-        yield* servicedirectory.listProjectsLocationsNamespacesServices({
-          parent,
-          pageSize: 1000,
-          pageToken,
-        });
+    do {
+      const response = yield* servicedirectory.listProjectsLocationsNamespacesServices({
+        parent,
+        pageSize: 1000,
+        pageToken,
+      });
       for (const service of response.services ?? []) {
         if (hasAlchemyAnnotation(service.annotations)) {
           found.push(toAttrs(service, project, region));
         }
       }
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
-  }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as ReturnType<typeof toAttrs>[])));
 
 const listNamespaceNamesAt = (parent: string) =>
   Effect.gen(function* () {
     const found: string[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response = yield* servicedirectory.listProjectsLocationsNamespaces({
         parent,
         pageSize: 1000,
@@ -282,54 +256,30 @@ const listNamespaceNamesAt = (parent: string) =>
         if (namespace.name) found.push(namespace.name);
       }
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
-  }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as string[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as string[])));
 
 export const ServiceProvider = () =>
   Provider.succeed(Service, {
-    stables: [
-      "name",
-      "serviceId",
-      "namespace",
-      "namespaceId",
-      "project",
-      "location",
-      "uid",
-    ],
+    stables: ["name", "serviceId", "namespace", "namespaceId", "project", "location", "uid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.serviceId ?? output?.serviceId;
       const nextId = news.serviceId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
       const previousParent = output?.namespace ?? olds?.namespace;
-      const previousParentId = previousParent
-        ? lastSegment(previousParent)
-        : undefined;
+      const previousParentId = previousParent ? lastSegment(previousParent) : undefined;
       const nextParentId = lastSegment(news.namespace);
-      const parentChanged =
-        previousParentId !== undefined && previousParentId !== nextParentId;
+      const parentChanged = previousParentId !== undefined && previousParentId !== nextParentId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = news.namespace.includes("/")
         ? parseName(
-            news.namespace.includes("/services/")
-              ? news.namespace
-              : `${news.namespace}/services/_`,
+            news.namespace.includes("/services/") ? news.namespace : `${news.namespace}/services/_`,
             env.region,
           ).location
         : normalizeLocation(news.location ?? output?.location, env.region);
@@ -372,7 +322,7 @@ export const ServiceProvider = () =>
         const fallback = [locationParent(env.project, env.region)];
         const found: ReturnType<typeof toAttrs>[] = [];
         let pageToken: string | undefined;
-        for (let page = 0; page < 10; page++) {
+        do {
           const response = yield* servicedirectory
             .listProjectsLocations({
               name: `projects/${env.project}`,
@@ -380,7 +330,7 @@ export const ServiceProvider = () =>
               pageToken,
             })
             .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed({
                   locations: [
                     {
@@ -410,8 +360,7 @@ export const ServiceProvider = () =>
             found.push(...services);
           }
           pageToken = response.nextPageToken;
-          if (pageToken === undefined || pageToken === "") break;
-        }
+        } while (pageToken !== undefined && pageToken !== "");
         return found;
       }),
 
@@ -450,35 +399,29 @@ export const ServiceProvider = () =>
       }
 
       const observedAnnotations = tagRecord(current.annotations);
-      const { upsert, removed } = diffLabels(
-        observedAnnotations,
-        desiredAnnotations,
-      );
+      const { upsert, removed } = diffLabels(observedAnnotations, desiredAnnotations);
       if (upsert.length > 0 || removed.length > 0) {
-        current =
-          yield* servicedirectory.patchProjectsLocationsNamespacesServices({
+        current = yield* servicedirectory.patchProjectsLocationsNamespacesServices({
+          name,
+          updateMask: "annotations",
+          body: {
             name,
-            updateMask: "annotations",
-            body: {
-              name,
-              annotations: desiredAnnotations,
-            },
-          });
+            annotations: desiredAnnotations,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* servicedirectory
-        .deleteProjectsLocationsNamespacesServices({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("1 second"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* servicedirectory.deleteProjectsLocationsNamespacesServices({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("1 second"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

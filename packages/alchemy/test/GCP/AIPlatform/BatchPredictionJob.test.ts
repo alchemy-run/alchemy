@@ -1,22 +1,16 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsBatchPredictionJobs({ name }).pipe(
@@ -39,26 +33,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsBatchPredictionJobs({
-          name: `${parent}/batchPredictionJobs/alchemy-aiplatform-missing`,
+          name: `${parent}/batchPredictionJobs/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsBatchPredictionJobs({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ batchPredictionJobs: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.batchPredictionJobs ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsBatchPredictionJobs({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.batchPredictionJobs ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/batchPredictionJobs/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,7 +53,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and delete a batch prediction job",
   (stack) =>
     Effect.gen(function* () {
@@ -78,10 +63,14 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const bucket = yield* GCP.Storage.Bucket("BatchOut", {
+            location: "US-CENTRAL1",
+            forceDestroy: true,
+          });
           return yield* GCP.AIPlatform.BatchPredictionJob("Nightly", {
             location: "us-central1",
             displayName: "alchemy-batch",
-            model: `${parent}/publishers/google/models/gemini-2.0-flash-001`,
+            model: `${parent}/publishers/google/models/gemini-2.5-flash`,
             inputConfig: {
               instancesFormat: "jsonl",
               gcsSource: {
@@ -91,7 +80,7 @@ test.provider.skipIf(!runLifecycle)(
             outputConfig: {
               predictionsFormat: "jsonl",
               gcsDestination: {
-                outputUriPrefix: `gs://${project}-aiplatform-batch/out/`,
+                outputUriPrefix: Output.interpolate`gs://${bucket.bucketName}/out/`,
               },
             },
             labels: { env: "test" },
@@ -102,11 +91,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.name).toContain("/batchPredictionJobs/");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* aiplatform.getProjectsLocationsBatchPredictionJobs(
-        {
-          name: created.name,
-        },
-      );
+      const fetched = yield* aiplatform.getProjectsLocationsBatchPredictionJobs({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       yield* stack.destroy();

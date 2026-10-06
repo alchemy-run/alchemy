@@ -22,11 +22,7 @@ import {
   toResourceId,
   updateMaskOf,
 } from "./ownership.ts";
-import type {
-  AuthConfigVisibility,
-  CredentialType,
-  DecryptedCredential,
-} from "./shared.ts";
+import type { AuthConfigVisibility, CredentialType, DecryptedCredential } from "./shared.ts";
 import { credentialBody } from "./shared.ts";
 
 export type AuthConfigProps = {
@@ -55,7 +51,7 @@ export type AuthConfigProps = {
    */
   description?: string;
   /**
-   * Credential type.
+   * Credential type applied to `decryptedCredential` when it omits one.
    * @default "USERNAME_AND_PASSWORD"
    */
   credentialType?: CredentialType;
@@ -144,11 +140,8 @@ export class AuthConfigNotResolved extends Data.TaggedError(
 const DEFAULT_CREDENTIAL_TYPE: CredentialType = "USERNAME_AND_PASSWORD";
 const DEFAULT_VISIBILITY: AuthConfigVisibility = "PRIVATE";
 
-const resourceName = (
-  project: string,
-  location: string,
-  authConfigId: string,
-) => `${locationParent(project, location)}/authConfigs/${authConfigId}`;
+const resourceName = (project: string, location: string, authConfigId: string) =>
+  `${locationParent(project, location)}/authConfigs/${authConfigId}`;
 
 const toAttrs = (
   config: integrations.GoogleCloudIntegrationsV1alphaAuthConfig,
@@ -164,7 +157,7 @@ const toAttrs = (
     project,
     displayName: config.displayName,
     description: parsed.text,
-    credentialType: config.credentialType,
+    credentialType: config.credentialType ?? config.decryptedCredential?.credentialType,
     certificateId: config.certificateId,
     visibility: config.visibility,
     state: config.state,
@@ -178,38 +171,26 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsAuthConfigs({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
-  integrations.listProjectsLocationsAuthConfigs
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
-      Stream.filter((config) => hasOwnershipMarker(config.description)),
-      Stream.map((config) => toAttrs(config, project, region)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  integrations.listProjectsLocationsAuthConfigs.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
+    Stream.filter((config) => hasOwnershipMarker(config.description)),
+    Stream.map((config) => toAttrs(config, project, region)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (parent: string, id: string) =>
-  integrations.listProjectsLocationsAuthConfigs
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
-      Stream.filterEffect((config) => ownedByAlchemy(id, config.description)),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-    );
+  integrations.listProjectsLocationsAuthConfigs.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
+    Stream.filterEffect((config) => ownedByAlchemy(id, config.description)),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const AuthConfigProvider = () =>
   Provider.succeed(AuthConfig, {
@@ -219,10 +200,7 @@ export const AuthConfigProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(
-        news.location,
-        previousLocation ?? env.region,
-      );
+      const nextLocation = normalizeLocation(news.location, previousLocation ?? env.region);
       if (
         previousLocation !== undefined &&
         normalizeLocation(previousLocation, env.region) !== nextLocation
@@ -242,58 +220,36 @@ export const AuthConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const authConfigId = yield* toResourceId(
-        id,
-        olds?.authConfigId,
-        output?.authConfigId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, authConfigId);
+      const authConfigId = yield* toResourceId(id, olds?.authConfigId, output?.authConfigId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, authConfigId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
         existing = yield* findOwned(locationParent(env.project, location), id);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-          env.region,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
-      const authConfigId = yield* toResourceId(
-        id,
-        news.authConfigId,
-        output?.authConfigId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, authConfigId);
+      const authConfigId = yield* toResourceId(id, news.authConfigId, output?.authConfigId);
+      const name = output?.name ?? resourceName(env.project, location, authConfigId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? authConfigId;
       const credentialType = news.credentialType ?? DEFAULT_CREDENTIAL_TYPE;
       const visibility = news.visibility ?? DEFAULT_VISIBILITY;
-      const decryptedCredential = credentialBody(news.decryptedCredential);
+      const decryptedCredential = credentialBody(news.decryptedCredential, credentialType);
 
       let current = yield* getByName(output?.name ?? name);
       if (current === undefined) {
@@ -307,7 +263,6 @@ export const AuthConfigProvider = () =>
             body: {
               displayName,
               description,
-              credentialType,
               decryptedCredential,
               certificateId: news.certificateId,
               visibility,
@@ -324,18 +279,13 @@ export const AuthConfigProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
-      const typeChanged = !sameText(current.credentialType, credentialType);
       const visibilityChanged = !sameText(current.visibility, visibility);
-      const certificateChanged = !sameText(
-        current.certificateId,
-        news.certificateId,
-      );
+      const certificateChanged = !sameText(current.certificateId, news.certificateId);
       const credentialChanged = news.decryptedCredential !== undefined;
 
       if (
         displayChanged ||
         descriptionChanged ||
-        typeChanged ||
         visibilityChanged ||
         certificateChanged ||
         credentialChanged
@@ -345,7 +295,6 @@ export const AuthConfigProvider = () =>
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             descriptionChanged ? "description" : undefined,
-            typeChanged ? "credential_type" : undefined,
             visibilityChanged ? "visibility" : undefined,
             certificateChanged ? "certificate_id" : undefined,
             credentialChanged ? "decrypted_credential" : undefined,
@@ -354,7 +303,6 @@ export const AuthConfigProvider = () =>
             name: currentName,
             displayName,
             description,
-            credentialType,
             decryptedCredential,
             certificateId: news.certificateId,
             visibility,

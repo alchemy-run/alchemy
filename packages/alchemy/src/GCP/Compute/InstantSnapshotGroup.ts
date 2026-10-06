@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,20 +9,12 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
-const LIST_ZONES = [
-  "us-central1-a",
-  "us-central1-b",
-  "us-central1-c",
-  "us-central1-f",
-];
+const LIST_ZONES = ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"];
 
 export type InstantSnapshotGroupProps = {
   /**
@@ -112,14 +103,6 @@ export class InstantSnapshotGroupNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class InstantSnapshotGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstantSnapshotGroupOperationFailed",
-)<{
-  instantSnapshotGroupName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class InstantSnapshotGroupNotReady extends Data.TaggedError(
   "GCP.Compute.InstantSnapshotGroupNotReady",
 )<{
@@ -147,8 +130,7 @@ const lastSegment = (value: string | undefined): string | undefined => {
   return parts[parts.length - 1] || value;
 };
 
-const zoneOf = (value: string | undefined): string =>
-  lastSegment(value) ?? DEFAULT_ZONE;
+const zoneOf = (value: string | undefined): string => lastSegment(value) ?? DEFAULT_ZONE;
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -225,74 +207,12 @@ const toAttrs = (
   };
 };
 
-const getByName = (
-  project: string,
-  zone: string,
-  instantSnapshotGroup: string,
-) =>
+const getByName = (project: string, zone: string, instantSnapshotGroup: string) =>
   compute
     .getInstantSnapshotGroups({ project, zone, instantSnapshotGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  instantSnapshotGroupName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new InstantSnapshotGroupOperationFailed({
-        instantSnapshotGroupName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  zone: string,
-  instantSnapshotGroupName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    let current = operation;
-    if (current.status !== "DONE" && operationName) {
-      current = yield* waitZoneOperations(
-        {
-          project,
-          zone,
-          operation: operationName,
-        },
-        { times: 20 },
-      );
-    }
-    return yield* failIfErrored(instantSnapshotGroupName, current);
-  });
-
-const waitReady = (
-  project: string,
-  zone: string,
-  instantSnapshotGroupName: string,
-) =>
+const waitReady = (project: string, zone: string, instantSnapshotGroupName: string) =>
   getByName(project, zone, instantSnapshotGroupName).pipe(
     Effect.flatMap((group) =>
       group?.status === "FAILED" || group?.status === "INVALID"
@@ -314,18 +234,13 @@ const waitReady = (
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InstantSnapshotGroupNotReady",
+      while: (error) => error._tag === "GCP.Compute.InstantSnapshotGroupNotReady",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const waitGone = (
-  project: string,
-  zone: string,
-  instantSnapshotGroupName: string,
-) =>
+const waitGone = (project: string, zone: string, instantSnapshotGroupName: string) =>
   getByName(project, zone, instantSnapshotGroupName).pipe(
     Effect.flatMap((group) =>
       group === undefined
@@ -338,8 +253,7 @@ const waitGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InstantSnapshotGroupStillExists",
+      while: (error) => error._tag === "GCP.Compute.InstantSnapshotGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -359,8 +273,7 @@ export const InstantSnapshotGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.instantSnapshotGroupName ?? output?.instantSnapshotGroupName;
+      const previousName = olds?.instantSnapshotGroupName ?? output?.instantSnapshotGroupName;
       const nextName = news.instantSnapshotGroupName;
       const previousZone = zoneOf(olds?.zone ?? output?.zone);
       const nextZone = zoneOf(news.zone ?? output?.zone);
@@ -369,9 +282,7 @@ export const InstantSnapshotGroupProvider = () =>
       );
       const nextSource = lastSegment(news.sourceConsistencyGroup);
       if (
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         previousZone !== nextZone ||
         (nextSource && previousSource && previousSource !== nextSource)
       ) {
@@ -395,11 +306,7 @@ export const InstantSnapshotGroupProvider = () =>
         output?.instantSnapshotGroupName,
       );
       const zone = zoneOf(olds?.zone ?? output?.zone);
-      const existing = yield* getByName(
-        env.project,
-        zone,
-        instantSnapshotGroupName,
-      );
+      const existing = yield* getByName(env.project, zone, instantSnapshotGroupName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -422,15 +329,12 @@ export const InstantSnapshotGroupProvider = () =>
               .pipe(
                 Stream.filter((group) => {
                   const { labels } = parseDescription(group.description);
-                  return Object.keys(labels).some((key) =>
-                    key.startsWith("alchemy-"),
-                  );
+                  return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
                 }),
                 Stream.map((group) => toAttrs(group, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () => Effect.succeed([])),
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
               ),
           { concurrency: 4 },
         );
@@ -448,11 +352,7 @@ export const InstantSnapshotGroupProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const description = encodeDescription(ownership, news.description);
 
-      let current = yield* getByName(
-        env.project,
-        zone,
-        instantSnapshotGroupName,
-      );
+      let current = yield* getByName(env.project, zone, instantSnapshotGroupName);
       if (current?.status === "DELETING") {
         yield* waitGone(env.project, zone, instantSnapshotGroupName);
         current = undefined;
@@ -472,12 +372,9 @@ export const InstantSnapshotGroupProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                zone,
-                instantSnapshotGroupName,
-                operation,
-              ),
+              waitZoneOperation(env.project, zone, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -516,12 +413,9 @@ export const InstantSnapshotGroupProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          zone,
-          output.instantSnapshotGroupName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitZoneOperation(env.project, zone, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
       yield* waitGone(env.project, zone, output.instantSnapshotGroupName);
     }),

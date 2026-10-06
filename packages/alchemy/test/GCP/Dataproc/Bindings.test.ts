@@ -1,60 +1,121 @@
-import { Action } from "@/Action";
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import * as Core from "@/Test/Core";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { CAPACITY_REGION } from "../zones.ts";
+import DataprocBindingsHost, { Jobs } from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "DataprocBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+// Cluster create + delete takes ~8 minutes (observed 475s).
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
-const runLifecycle = !!process.env.GCP_TEST_DATAPROC && !process.env.FAST;
+let baseUrl: string;
+let hostAccount: string;
+let clusterName: string;
+let clusterResource: string;
+let project: string;
 
-test.provider.skipIf(!runLifecycle)(
-  "GetCluster and SubmitJob invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+const rolesOf = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArray<string> }>) =>
+  bindings
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
+    .map((binding) => binding.role)
+    .sort();
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const cluster = yield* GCP.Dataproc.Cluster("Jobs", {
-            region: "us-central1",
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* cluster.name;
-              const getCluster = yield* GCP.Dataproc.GetCluster(cluster);
-              const submitJob = yield* GCP.Dataproc.SubmitJob(cluster);
-              return Effect.fn(function* () {
-                const live = yield* getCluster();
-                const job = yield* submitJob({
-                  body: {
-                    job: {
-                      placement: { clusterName: live.clusterName },
-                      pigJob: { queryList: { queries: ["DUMP;"] } },
-                    },
-                  },
-                });
-                return { live, job };
-              });
-            }),
-          );
-          return { cluster, probe: yield* Probe({}) };
-        }),
+const projectRoles = Effect.gen(function* () {
+  const policy = yield* crm.getIamPolicyProjects({
+    resource: `projects/${project}`,
+    body: { options: { requestedPolicyVersion: 3 } },
+  });
+  return rolesOf(policy.bindings ?? []);
+});
+
+describe.skipIf(!dockerAvailable || !runLifecycle)(
+  "Dataproc Bindings",
+  {
+    tags: ["provider:gcp", "provider:gcp:dataproc", "provider:gcp:run", "live"],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* DataprocBindingsHost;
+            const cluster = yield* Jobs;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              clusterName: cluster.clusterName,
+              name: cluster.name,
+              project: cluster.project,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        clusterName = out.clusterName;
+        clusterResource = out.name;
+        project = out.project;
+      }),
+      { timeout: 1_800_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 1_200_000 });
+
+    describe("GetCluster", () => {
+      test.provider(
+        "reads the cluster as the host's service account, granted on the cluster only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const cluster = yield* expectProbe<dataproc.Cluster>(baseUrl, "getCluster");
+            expect(cluster.clusterName).toEqual(clusterName);
+            expect(cluster.status?.state).toEqual("RUNNING");
+
+            const policy = yield* dataproc.getIamPolicyProjectsRegionsClusters({
+              resource: clusterResource,
+            });
+            expect(rolesOf(policy.bindings ?? [])).toEqual(["roles/dataproc.viewer"]);
+            expect(yield* projectRoles).not.toContain("roles/dataproc.viewer");
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      expect(out.probe.live.clusterName).toEqual(out.cluster.clusterName);
-      expect(out.probe.job.placement?.clusterName).toEqual(
-        out.cluster.clusterName,
+    describe("SubmitJob", () => {
+      test.provider(
+        "submits a job to the cluster as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const job = yield* expectProbe<dataproc.Job>(baseUrl, "submitJob");
+            expect(job.placement?.clusterName).toEqual(clusterName);
+            expect(job.reference?.jobId).toEqual(expect.any(String));
+
+            const live = yield* dataproc.getProjectsRegionsJobs({
+              projectId: project,
+              region: CAPACITY_REGION,
+              jobId: job.reference!.jobId!,
+            });
+            expect(live.placement?.clusterName).toEqual(clusterName);
+            expect(live.pigJob?.queryList?.queries).toEqual(["DUMP;"]);
+
+            // dataproc.jobs.create is checked on the project.
+            expect(yield* projectRoles).toEqual(["roles/dataproc.editor"]);
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 120_000 },
+    });
+  },
 );

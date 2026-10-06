@@ -9,7 +9,6 @@ export const database = Effect.gen(function* () {
   // (Cloud Run's `/cloudsql` socket, IAM-gated) and the Data API used for
   // migrations.
   const instance = yield* GCP.SQL.Instance("Postgres", {
-    region: "us-central1",
     databaseVersion: "POSTGRES_17",
     edition: "ENTERPRISE",
     tier: "db-f1-micro",
@@ -32,10 +31,9 @@ export const database = Effect.gen(function* () {
     deletionPolicy: "ABANDON",
   });
   // The Data API only accepts regional secrets in the instance's region.
-  const passwordSecret = yield* GCP.SecretManager.LocationsSecret(
-    "AppPassword",
-    { location: "us-central1" },
-  );
+  const passwordSecret = yield* GCP.SecretManager.LocationsSecret("AppPassword", {
+    location: instance.region,
+  });
 
   // drizzle-kit regenerates ./migrations whenever src/schema.ts changes.
   const schema = yield* Drizzle.Schema("Schema", {

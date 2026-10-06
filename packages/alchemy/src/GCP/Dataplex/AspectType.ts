@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -32,11 +27,9 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type AspectTypeMetadataTemplate =
-  dataplex.GoogleCloudDataplexV1AspectTypeMetadataTemplate;
+export type AspectTypeMetadataTemplate = dataplex.GoogleCloudDataplexV1AspectTypeMetadataTemplate;
 
-export type AspectTypeAuthorization =
-  dataplex.GoogleCloudDataplexV1AspectTypeAuthorization;
+export type AspectTypeAuthorization = dataplex.GoogleCloudDataplexV1AspectTypeAuthorization;
 
 export type AspectTypeProps = {
   /**
@@ -154,16 +147,10 @@ export type AspectType = Resource<
  */
 export const AspectType = Resource<AspectType>("GCP.Dataplex.AspectType");
 
-const resourceName = (
-  project: string,
-  location: string,
-  aspectTypeId: string,
-) => `projects/${project}/locations/${location}/aspectTypes/${aspectTypeId}`;
+const resourceName = (project: string, location: string, aspectTypeId: string) =>
+  `projects/${project}/locations/${location}/aspectTypes/${aspectTypeId}`;
 
-const toAttrs = (
-  aspectType: dataplex.GoogleCloudDataplexV1AspectType,
-  project: string,
-) => {
+const toAttrs = (aspectType: dataplex.GoogleCloudDataplexV1AspectType, project: string) => {
   const name = aspectType.name ?? "";
   const parsed = parseName(name, "aspectTypes");
   return {
@@ -199,25 +186,15 @@ const listTypes = (project: string, region: string) => {
       }),
       (page) => page.aspectTypes,
     ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
+      Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
   return listAtLocation(project, region, collect);
 };
 
 export const AspectTypeProvider = () =>
   Provider.succeed(AspectType, {
-    stables: [
-      "name",
-      "aspectTypeId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "aspectTypeId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -225,19 +202,14 @@ export const AspectTypeProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.aspectTypeId ?? output?.aspectTypeId,
         nextId: news.aspectTypeId ?? olds?.aspectTypeId ?? output?.aspectTypeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
           fingerprint(news.dataClassification ?? olds?.dataClassification) !==
-            fingerprint(
-              olds?.dataClassification ?? output?.dataClassification,
-            ) ||
+            fingerprint(olds?.dataClassification ?? output?.dataClassification) ||
           fingerprint(news.authorization ?? olds?.authorization) !==
             fingerprint(olds?.authorization ?? output?.authorization),
       });
@@ -251,18 +223,12 @@ export const AspectTypeProvider = () =>
         output?.aspectTypeId,
         "aspecttype",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, aspectTypeId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, aspectTypeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -280,10 +246,7 @@ export const AspectTypeProvider = () =>
         output?.aspectTypeId,
         "aspecttype",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, aspectTypeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -320,20 +283,12 @@ export const AspectTypeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const templateChanged =
-        fingerprint(current.metadataTemplate) !==
-        fingerprint(news.metadataTemplate);
+        fingerprint(current.metadataTemplate) !== fingerprint(news.metadataTemplate);
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        displayNameChanged ||
-        templateChanged
-      ) {
+      if (labelsChanged || descriptionChanged || displayNameChanged || templateChanged) {
         const operation = yield* retryQuota(
           dataplex.patchProjectsLocationsAspectTypes({
             name: current.name ?? name,
@@ -356,10 +311,7 @@ export const AspectTypeProvider = () =>
           }),
         );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

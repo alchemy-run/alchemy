@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_TYPE = "hyperdisk-balanced";
@@ -157,38 +157,22 @@ export type StoragePool = Resource<
  */
 export const StoragePool = Resource<StoragePool>("GCP.Compute.StoragePool");
 
-export class StoragePoolNotResolved extends Data.TaggedError(
-  "GCP.Compute.StoragePoolNotResolved",
-)<{
+export class StoragePoolNotResolved extends Data.TaggedError("GCP.Compute.StoragePoolNotResolved")<{
   storagePoolName: string;
   zone: string;
 }> {}
 
-export class StoragePoolOperationFailed extends Data.TaggedError(
-  "GCP.Compute.StoragePoolOperationFailed",
-)<{
-  storagePoolName: string;
-  operation: string;
-  message: string;
-}> {}
-
-export class StoragePoolNotReady extends Data.TaggedError(
-  "GCP.Compute.StoragePoolNotReady",
-)<{
+export class StoragePoolNotReady extends Data.TaggedError("GCP.Compute.StoragePoolNotReady")<{
   storagePoolName: string;
   status: string;
 }> {}
 
-export class StoragePoolFailed extends Data.TaggedError(
-  "GCP.Compute.StoragePoolFailed",
-)<{
+export class StoragePoolFailed extends Data.TaggedError("GCP.Compute.StoragePoolFailed")<{
   storagePoolName: string;
   status: string;
 }> {}
 
-export class StoragePoolStillExists extends Data.TaggedError(
-  "GCP.Compute.StoragePoolStillExists",
-)<{
+export class StoragePoolStillExists extends Data.TaggedError("GCP.Compute.StoragePoolStillExists")<{
   storagePoolName: string;
   status: string;
 }> {}
@@ -200,8 +184,7 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeZone = (zone: string | undefined) =>
-  lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
+const normalizeZone = (zone: string | undefined) => lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
 
 const asString = (value: number | string | undefined): string | undefined => {
   if (value === undefined) return undefined;
@@ -221,20 +204,13 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `s${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `s${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const poolTypeUrl = (project: string, zone: string, type: string) =>
-  type.includes("/")
-    ? type
-    : `projects/${project}/zones/${zone}/storagePoolTypes/${type}`;
+  type.includes("/") ? type : `projects/${project}/zones/${zone}/storagePoolTypes/${type}`;
 
-const toAttrs = (
-  pool: compute.StoragePool,
-  project: string,
-): StoragePool["Attributes"] => ({
+const toAttrs = (pool: compute.StoragePool, project: string): StoragePool["Attributes"] => ({
   storagePoolName: pool.name ?? pool.id ?? "",
   storagePoolId: pool.id,
   project,
@@ -257,90 +233,7 @@ const getByName = (project: string, zone: string, storagePool: string) =>
     .getStoragePools({ project, zone, storagePool })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.message ?? item.code ?? "unknown")
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const failIfErrored = (
-  storagePoolName: string,
-  operation: compute.Operation,
-) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  if (
-    codes.includes("alreadyExists") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    text.includes("already exists")
-  ) {
-    return Effect.void;
-  }
-  if (
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400) ||
-    operation.status !== "DONE"
-  ) {
-    return Effect.fail(
-      new StoragePoolOperationFailed({
-        storagePoolName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const waitZoneOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-  storagePoolName: string,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName.length === 0) {
-      yield* failIfErrored(storagePoolName, operation);
-      return operation;
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations(
-        { project, zone, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    yield* failIfErrored(storagePoolName, current);
-    return current;
-  });
-
-const waitPoolReady = (
-  project: string,
-  zone: string,
-  storagePoolName: string,
-) =>
+const waitPoolReady = (project: string, zone: string, storagePoolName: string) =>
   getByName(project, zone, storagePoolName).pipe(
     Effect.flatMap((pool) =>
       pool?.state === "FAILED"
@@ -353,8 +246,7 @@ const waitPoolReady = (
         : Effect.succeed(pool),
     ),
     Effect.filterOrFail(
-      (pool): pool is compute.StoragePool =>
-        pool !== undefined && pool.state === "READY",
+      (pool): pool is compute.StoragePool => pool !== undefined && pool.state === "READY",
       (pool) =>
         new StoragePoolNotReady({
           storagePoolName,
@@ -405,23 +297,18 @@ export const StoragePoolProvider = () =>
       const previousName = olds?.storagePoolName ?? output?.storagePoolName;
       const nextName = news.storagePoolName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousZone = normalizeZone(olds?.zone ?? output?.zone);
       const nextZone = normalizeZone(news.zone ?? output?.zone);
       const previousType =
-        lastSegment(olds?.storagePoolType) ||
-        lastSegment(output?.storagePoolType) ||
-        DEFAULT_TYPE;
+        lastSegment(olds?.storagePoolType) || lastSegment(output?.storagePoolType) || DEFAULT_TYPE;
       const nextType = lastSegment(news.storagePoolType) || DEFAULT_TYPE;
       const previousCapacityType =
         olds?.capacityProvisioningType ?? output?.capacityProvisioningType;
       const nextCapacityType = news.capacityProvisioningType;
       const previousPerfType =
-        olds?.performanceProvisioningType ??
-        output?.performanceProvisioningType;
+        olds?.performanceProvisioningType ?? output?.performanceProvisioningType;
       const nextPerfType = news.performanceProvisioningType;
 
       const typeChanged = previousType !== nextType;
@@ -444,9 +331,7 @@ export const StoragePoolProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            nextName === previousName &&
-            previousZone === nextZone,
+            previousName !== undefined && nextName === previousName && previousZone === nextZone,
         };
       }
       return undefined;
@@ -454,18 +339,12 @@ export const StoragePoolProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const storagePoolName = yield* toName(
-        id,
-        olds?.storagePoolName,
-        output?.storagePoolName,
-      );
+      const storagePoolName = yield* toName(id, olds?.storagePoolName, output?.storagePoolName);
       const zone = normalizeZone(olds?.zone ?? output?.zone);
       const existing = yield* getByName(env.project, zone, storagePoolName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -483,9 +362,7 @@ export const StoragePoolProvider = () =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.storagePools ?? [])
               .filter((pool) =>
-                Object.keys(pool.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(pool.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((pool) => toAttrs(pool, env.project)),
           ),
@@ -494,11 +371,7 @@ export const StoragePoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const storagePoolName = yield* toName(
-        id,
-        news.storagePoolName,
-        output?.storagePoolName,
-      );
+      const storagePoolName = yield* toName(id, news.storagePoolName, output?.storagePoolName);
       const zone = normalizeZone(news.zone ?? output?.zone);
       const storagePoolType = lastSegment(news.storagePoolType) || DEFAULT_TYPE;
       const desiredLabels = {
@@ -534,12 +407,9 @@ export const StoragePoolProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitZoneOperation(
-            env.project,
-            zone,
-            inserted,
-            storagePoolName,
-          );
+          yield* waitZoneOperation(env.project, zone, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitPoolReady(env.project, zone, storagePoolName);
       }
@@ -564,16 +434,12 @@ export const StoragePoolProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const capacityChanged =
-        capacity !== undefined &&
-        capacity !== (current.poolProvisionedCapacityGb ?? "");
-      const iopsChanged =
-        iops !== undefined && iops !== (current.poolProvisionedIops ?? "");
+        capacity !== undefined && capacity !== (current.poolProvisionedCapacityGb ?? "");
+      const iopsChanged = iops !== undefined && iops !== (current.poolProvisionedIops ?? "");
       const throughputChanged =
-        throughput !== undefined &&
-        throughput !== (current.poolProvisionedThroughput ?? "");
+        throughput !== undefined && throughput !== (current.poolProvisionedThroughput ?? "");
       const labelsChanged = upsert.length > 0 || removed.length > 0;
 
       if (
@@ -605,7 +471,7 @@ export const StoragePoolProvider = () =>
             labelFingerprint: current.labelFingerprint,
           },
         });
-        yield* waitZoneOperation(env.project, zone, patched, storagePoolName);
+        yield* waitZoneOperation(env.project, zone, patched);
         current =
           (yield* getByName(env.project, zone, storagePoolName)) ??
           (yield* waitPoolReady(env.project, zone, storagePoolName));
@@ -640,19 +506,9 @@ export const StoragePoolProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitZoneOperation(
-          project,
-          zone,
-          deleted,
-          output.storagePoolName,
-        ).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof StoragePoolOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitZoneOperation(project, zone, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitPoolGone(project, zone, output.storagePoolName);
     }),

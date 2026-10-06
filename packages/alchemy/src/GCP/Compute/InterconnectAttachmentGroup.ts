@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,18 +9,15 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_SLA = "NO_SLA";
 
-export type InterconnectAttachmentGroupIntent =
-  compute.InterconnectAttachmentGroupIntent;
+export type InterconnectAttachmentGroupIntent = compute.InterconnectAttachmentGroupIntent;
 export type InterconnectAttachmentGroupAttachmentMap =
   compute.InterconnectAttachmentGroupAttachmentMap;
 
@@ -76,9 +72,7 @@ export type InterconnectAttachmentGroup = Resource<
     /** Effective SLA reported by GCP. */
     configured: compute.InterconnectAttachmentGroupConfigured | undefined;
     /** Logical structure of member attachments. */
-    logicalStructure:
-      | compute.InterconnectAttachmentGroupLogicalStructure
-      | undefined;
+    logicalStructure: compute.InterconnectAttachmentGroupLogicalStructure | undefined;
     /** Optimistic-locking etag. */
     etag: string | undefined;
     /** Server-assigned numeric id. */
@@ -127,23 +121,14 @@ export type InterconnectAttachmentGroup = Resource<
  * @resource
  * @category Compute
  */
-export const InterconnectAttachmentGroup =
-  Resource<InterconnectAttachmentGroup>(
-    "GCP.Compute.InterconnectAttachmentGroup",
-  );
+export const InterconnectAttachmentGroup = Resource<InterconnectAttachmentGroup>(
+  "GCP.Compute.InterconnectAttachmentGroup",
+);
 
 export class InterconnectAttachmentGroupNotResolved extends Data.TaggedError(
   "GCP.Compute.InterconnectAttachmentGroupNotResolved",
 )<{
   interconnectAttachmentGroupName: string;
-}> {}
-
-export class InterconnectAttachmentGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InterconnectAttachmentGroupOperationFailed",
-)<{
-  interconnectAttachmentGroupName: string;
-  operation: string;
-  message: string;
 }> {}
 
 export class InterconnectAttachmentGroupStillExists extends Data.TaggedError(
@@ -213,16 +198,12 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const slaOf = (intent: InterconnectAttachmentGroupIntent | undefined) =>
   (intent?.availabilitySla ?? DEFAULT_SLA).toUpperCase();
 
-const membersKey = (
-  members: InterconnectAttachmentGroupAttachmentMap | undefined,
-) =>
+const membersKey = (members: InterconnectAttachmentGroupAttachmentMap | undefined) =>
   Object.entries(members ?? {})
     .map(([key, value]) => `${key}:${lastSegment(value?.attachment)}`)
     .sort()
@@ -250,53 +231,6 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  interconnectAttachmentGroupName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new InterconnectAttachmentGroupOperationFailed({
-        interconnectAttachmentGroupName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, interconnectAttachmentGroup: string) =>
   compute
     .getInterconnectAttachmentGroups({
@@ -305,42 +239,7 @@ const getByName = (project: string, interconnectAttachmentGroup: string) =>
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  interconnectAttachmentGroupName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new InterconnectAttachmentGroupOperationFailed({
-        interconnectAttachmentGroupName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(interconnectAttachmentGroupName, current, options);
-    return current;
-  });
-
-const awaitResource = (
-  project: string,
-  interconnectAttachmentGroupName: string,
-) =>
+const awaitResource = (project: string, interconnectAttachmentGroupName: string) =>
   getByName(project, interconnectAttachmentGroupName).pipe(
     Effect.flatMap((group) =>
       group !== undefined
@@ -352,17 +251,13 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectAttachmentGroupNotResolved",
+      while: (error) => error._tag === "GCP.Compute.InterconnectAttachmentGroupNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  interconnectAttachmentGroupName: string,
-) =>
+const waitUntilGone = (project: string, interconnectAttachmentGroupName: string) =>
   getByName(project, interconnectAttachmentGroupName).pipe(
     Effect.flatMap((group) =>
       group === undefined
@@ -374,15 +269,11 @@ const waitUntilGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectAttachmentGroupStillExists",
+      while: (error) => error._tag === "GCP.Compute.InterconnectAttachmentGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.InterconnectAttachmentGroupStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.InterconnectAttachmentGroupStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -393,12 +284,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(
-        project,
-        operation,
-        interconnectAttachmentGroupName,
-        options,
-      ),
+      waitGlobalOperation(project, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -420,14 +308,9 @@ export const InterconnectAttachmentGroupProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousName =
-        olds?.interconnectAttachmentGroupName ??
-        output?.interconnectAttachmentGroupName;
+        olds?.interconnectAttachmentGroupName ?? output?.interconnectAttachmentGroupName;
       const nextName = news.interconnectAttachmentGroupName ?? previousName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -440,10 +323,7 @@ export const InterconnectAttachmentGroupProvider = () =>
         olds?.interconnectAttachmentGroupName,
         output?.interconnectAttachmentGroupName,
       );
-      const existing = yield* getByName(
-        env.project,
-        interconnectAttachmentGroupName,
-      );
+      const existing = yield* getByName(env.project, interconnectAttachmentGroupName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -464,7 +344,7 @@ export const InterconnectAttachmentGroupProvider = () =>
             Stream.map((group) => toAttrs(group, env.project)),
             Stream.runCollect,
             Effect.map((items) => Array.from(items)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as InterconnectAttachmentGroup["Attributes"][]),
             ),
           );
@@ -483,10 +363,7 @@ export const InterconnectAttachmentGroupProvider = () =>
         availabilitySla: slaOf(news.intent ?? output?.intent),
       };
 
-      let current = yield* getByName(
-        env.project,
-        interconnectAttachmentGroupName,
-      );
+      let current = yield* getByName(env.project, interconnectAttachmentGroupName);
 
       if (current === undefined) {
         yield* compute
@@ -502,38 +379,25 @@ export const InterconnectAttachmentGroupProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                operation,
-                interconnectAttachmentGroupName,
-                { ignoreAlreadyExists: true },
-              ),
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
-        current = yield* awaitResource(
-          env.project,
-          interconnectAttachmentGroupName,
-        );
+        current = yield* awaitResource(env.project, interconnectAttachmentGroupName);
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const intentChanged = slaOf(current.intent) !== slaOf(intent);
       const membersChanged =
         news.attachments !== undefined &&
         membersKey(current.attachments) !== membersKey(news.attachments);
       const groupChanged =
         news.interconnectGroup !== undefined &&
-        lastSegment(current.interconnectGroup) !==
-          lastSegment(news.interconnectGroup);
+        lastSegment(current.interconnectGroup) !== lastSegment(news.interconnectGroup);
 
-      if (
-        descriptionChanged ||
-        intentChanged ||
-        membersChanged ||
-        groupChanged
-      ) {
+      if (descriptionChanged || intentChanged || membersChanged || groupChanged) {
         yield* runOp(
           env.project,
           interconnectAttachmentGroupName,
@@ -545,18 +409,12 @@ export const InterconnectAttachmentGroupProvider = () =>
               etag: current.etag,
               description: desiredDescription,
               intent,
-              attachments:
-                news.attachments !== undefined
-                  ? news.attachments
-                  : current.attachments,
-              interconnectGroup:
-                news.interconnectGroup ?? current.interconnectGroup,
+              attachments: news.attachments !== undefined ? news.attachments : current.attachments,
+              interconnectGroup: news.interconnectGroup ?? current.interconnectGroup,
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, interconnectAttachmentGroupName)) ??
-          current;
+        current = (yield* getByName(env.project, interconnectAttachmentGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -573,12 +431,9 @@ export const InterconnectAttachmentGroupProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              operation,
-              output.interconnectAttachmentGroupName,
-              { ignoreNotFound: true },
-            ),
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

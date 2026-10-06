@@ -35,20 +35,22 @@ This example has no dead-letter topic: a job that keeps failing is retried until
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 From the repository root:
 
 ```sh
 pnpm install
 cd examples/gcp-pubsub-worker
-pnpm deploy --profile alchemy-testing
+pnpm deploy --profile <name>
 ```
 
-Deploying builds both container images locally, so Docker must be running. Set `GOOGLE_PROJECT_ID` and credentials as in the [GCP setup](https://alchemy.run/gcp/setup/).
+Deploying builds both container images locally, so Docker must be running.
 
 ## Live test
 
 ```sh
-ALCHEMY_PROFILE=alchemy-testing bun test test/integ.test.ts
+ALCHEMY_PROFILE=<name> bun test test/integ.test.ts
 ```
 
 The test deploys the stack, submits several jobs, polls `GET /jobs/:id` until every job is done, checks each result against the Firestore document out of band, then destroys the stack and checks the topic, subscription, worker pool, and database are gone.
@@ -56,5 +58,5 @@ The test deploys the stack, submits several jobs, polls `GET /jobs/:id` until ev
 ## Destroy
 
 ```sh
-pnpm destroy --profile alchemy-testing
+pnpm destroy --profile <name>
 ```

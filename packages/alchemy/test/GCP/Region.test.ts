@@ -1,38 +1,29 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Region from "@distilled.cloud/gcp/Region";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import { fromCredentials, GcpEnvironment } from "@/GCP/Environment";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
+import { fromCredentials, GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: GCP.providers().pipe(Layer.provideMerge(GCP.Region("us-east4"))),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test(
   "regional endpoint routing",
   Effect.sync(() => {
     const base = "https://secretmanager.googleapis.com/";
     expect(
-      Region.endpointFor(
-        base,
-        "v1/projects/p/locations/us-east1/secrets/s",
-        "required",
-      ),
+      Region.endpointFor(base, "v1/projects/p/locations/us-east1/secrets/s", "required"),
     ).toEqual("https://secretmanager.us-east1.rep.googleapis.com/");
-    expect(
-      Region.endpointFor(base, "v1/projects/p/secrets/s", "required"),
-    ).toEqual(base);
+    expect(Region.endpointFor(base, "v1/projects/p/secrets/s", "required")).toEqual(base);
     expect(
       Region.endpointFor(
         "https://run.googleapis.com/",
@@ -62,24 +53,18 @@ const credentialWithRegion = (region: string | undefined) =>
   );
 
 const resolvedRegion = (layer: Layer.Layer<GcpEnvironment>) =>
-  GcpEnvironment.use((env) => Effect.map(env, (e) => e.region)).pipe(
-    Effect.provide(layer),
-  );
+  GcpEnvironment.use((env) => Effect.map(env, (e) => e.region)).pipe(Effect.provide(layer));
 
 test(
   "the credential's region is the default; GCP.Region overrides it",
   Effect.gen(function* () {
     expect(
       yield* resolvedRegion(
-        fromCredentials().pipe(
-          Layer.provide(credentialWithRegion("asia-east1")),
-        ),
+        fromCredentials().pipe(Layer.provide(credentialWithRegion("asia-east1"))),
       ),
     ).toEqual("asia-east1");
     expect(
-      yield* resolvedRegion(
-        fromCredentials().pipe(Layer.provide(credentialWithRegion(undefined))),
-      ),
+      yield* resolvedRegion(fromCredentials().pipe(Layer.provide(credentialWithRegion(undefined)))),
     ).toEqual("us-central1");
     expect(
       yield* resolvedRegion(
@@ -104,10 +89,7 @@ test.provider(
           // No `location`: placed in the scope's default region.
           const queue = yield* GCP.CloudTasks.Queue("RegionQueue", {});
           // A regional secret, also in the default region.
-          const secret = yield* GCP.SecretManager.LocationsSecret(
-            "RegionalSecret",
-            {},
-          );
+          const secret = yield* GCP.SecretManager.LocationsSecret("RegionalSecret", {});
           return { queue: queue.name, secret: secret.name };
         }),
       );
@@ -125,12 +107,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:cloudtasks",
-      "provider:gcp:secretmanager",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:cloudtasks", "provider:gcp:secretmanager", "live"],
     timeout: 240_000,
   },
 );
@@ -144,10 +121,7 @@ withoutOverride.test.provider(
       yield* stack.destroy();
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* GCP.CloudTasks.Queue(
-            "CredentialsRegionQueue",
-            {},
-          );
+          const queue = yield* GCP.CloudTasks.Queue("CredentialsRegionQueue", {});
           return { queue: queue.name, region: yield* GCP.currentRegion };
         }),
       );

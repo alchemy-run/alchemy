@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as translate from "@distilled.cloud/gcp/translate_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentParent } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -31,7 +31,7 @@ test.provider(
           name: `${parent}/adaptiveMtDatasets/alchemy-missing-dataset`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -42,35 +42,7 @@ test.provider(
   "create, update, and delete an Adaptive MT dataset",
   (stack) =>
     Effect.gen(function* () {
-      const parent = yield* currentParent;
       yield* stack.destroy();
-
-      const probe = yield* translate
-        .listProjectsLocationsAdaptiveMtDatasets({
-          parent,
-          pageSize: 1,
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (probe.tag === "Forbidden") {
-        expect(probe.tag).toEqual("Forbidden");
-        yield* stack.destroy();
-        return;
-      }
-      expect(["ok", "NotFound"]).toContain(probe.tag);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -88,9 +60,7 @@ test.provider(
       expect(created.location).toEqual(location);
       expect(created.sourceLanguageCode).toEqual("en");
       expect(created.targetLanguageCode).toEqual("es");
-      expect(
-        created.displayName === "enes" || created.displayName === undefined,
-      ).toEqual(true);
+      expect(created.displayName).toEqual("enes");
 
       const fetched = yield* translate.getProjectsLocationsAdaptiveMtDatasets({
         name: created.name,
@@ -98,7 +68,7 @@ test.provider(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.sourceLanguageCode).toEqual("en");
       expect(fetched.targetLanguageCode).toEqual("es");
-      expect(fetched.displayName).toMatch(/^alc_/);
+      expect(fetched.displayName).toEqual("enes");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

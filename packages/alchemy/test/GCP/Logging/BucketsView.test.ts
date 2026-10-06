@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getProjectsLocationsBucketsViews({ name }).pipe(
@@ -51,9 +48,7 @@ test.provider(
       expect(created.view.bucket).toEqual(created.bucket.name);
       expect(created.view.project).toEqual(project);
       expect(created.view.location).toEqual("global");
-      expect(created.view.name).toEqual(
-        `${created.bucket.name}/views/${created.view.viewId}`,
-      );
+      expect(created.view.name).toEqual(`${created.bucket.name}/views/${created.view.viewId}`);
       expect(created.view.filter).toEqual('LOG_ID("stdout")');
       expect(created.view.description).toEqual("stdout only");
 
@@ -114,15 +109,12 @@ test.provider(
       );
 
       expect(replaced.view.viewId).not.toEqual(created.view.viewId);
-      expect(replaced.view.name).toEqual(
-        `${created.bucket.name}/views/${replaced.view.viewId}`,
-      );
+      expect(replaced.view.name).toEqual(`${created.bucket.name}/views/${replaced.view.viewId}`);
       expect(replaced.view.description).toEqual("replaced view");
 
-      const fetchedReplacement =
-        yield* logging.getProjectsLocationsBucketsViews({
-          name: replaced.view.name,
-        });
+      const fetchedReplacement = yield* logging.getProjectsLocationsBucketsViews({
+        name: replaced.view.name,
+      });
       expect(fetchedReplacement.name).toEqual(replaced.view.name);
 
       const previousGone = yield* waitUntilGone(created.view.name);

@@ -1,18 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 
@@ -59,55 +57,23 @@ test.provider(
 );
 
 test.provider(
-  "probe insertRegionCompositeHealthChecks entitlement",
+  "insertRegionCompositeHealthChecks with a missing health source fails with NotFound",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertRegionCompositeHealthChecks({
+      const error = yield* Effect.flip(
+        compute.insertRegionCompositeHealthChecks({
           project,
           region,
           body: {
             name: "alchemy-chc-probe",
             description: "alchemy entitlement probe",
             healthDestination: `projects/${project}/regions/${region}/forwardingRules/does-not-exist`,
-            healthSources: [
-              `projects/${project}/regions/${region}/healthSources/does-not-exist`,
-            ],
+            healthSources: [`projects/${project}/regions/${region}/healthSources/does-not-exist`],
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteRegionCompositeHealthChecks({
-            project,
-            region,
-            compositeHealthCheck: "alchemy-chc-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("NotFound");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
@@ -116,17 +82,15 @@ test.provider(
   "create, update, and delete a regional composite health check",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("IlbSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.54.0.0/24",
+            ipCidrRange: "172.20.1.0/24",
           });
           const check = yield* GCP.Compute.RegionHealthCheck("Probe", {
             region,
@@ -134,47 +98,40 @@ test.provider(
             type: "TCP",
             tcpHealthCheck: { port: 80 },
           });
-          const backend = yield* GCP.Compute.RegionBackendService(
-            "IlbBackend",
-            {
-              region,
-              protocol: "TCP",
-              loadBalancingScheme: "INTERNAL",
-              network: network.selfLink.as<string>(),
-              healthChecks: [check.selfLink.as<string>()],
-              description: "ilb backend",
-            },
-          );
+          const backend = yield* GCP.Compute.RegionBackendService("IlbBackend", {
+            region,
+            protocol: "TCP",
+            loadBalancingScheme: "INTERNAL",
+            network: defaultNetworkSelfLink(project),
+            healthChecks: [check.selfLink.as<string>()],
+            description: "ilb backend",
+          });
           const rule = yield* GCP.Compute.ForwardingRule("IlbRule", {
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: backend.selfLink.as<string>(),
-            network: network.selfLink.as<string>(),
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink.as<string>(),
             ipProtocol: "TCP",
             allPorts: true,
           });
-          const policy = yield* GCP.Compute.RegionHealthAggregationPolicy(
-            "Agg",
-            { region, description: "backend rollup" },
-          );
+          const policy = yield* GCP.Compute.RegionHealthAggregationPolicy("Agg", {
+            region,
+            description: "backend rollup",
+          });
           const source = yield* GCP.Compute.RegionHealthSource("Src", {
             region,
             sources: [backend.selfLink.as<string>()],
             healthAggregationPolicy: policy.selfLink.as<string>(),
             description: "ilb source",
           });
-          const composite = yield* GCP.Compute.RegionCompositeHealthCheck(
-            "Comp",
-            {
-              region,
-              healthDestination: rule.selfLink.as<string>(),
-              healthSources: [source.selfLink.as<string>()],
-              description: "and backends",
-            },
-          );
+          const composite = yield* GCP.Compute.RegionCompositeHealthCheck("Comp", {
+            region,
+            healthDestination: rule.selfLink.as<string>(),
+            healthSources: [source.selfLink.as<string>()],
+            description: "and backends",
+          });
           return {
-            network,
             subnet,
             check,
             backend,
@@ -202,15 +159,11 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("IlbSubnet", {
             subnetworkName: created.subnet.subnetworkName,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.54.0.0/24",
+            ipCidrRange: "172.20.1.0/24",
           });
           const check = yield* GCP.Compute.RegionHealthCheck("Probe", {
             healthCheckName: created.check.healthCheckName,
@@ -219,36 +172,30 @@ test.provider(
             type: "TCP",
             tcpHealthCheck: { port: 80 },
           });
-          const backend = yield* GCP.Compute.RegionBackendService(
-            "IlbBackend",
-            {
-              name: created.backend.name,
-              region,
-              protocol: "TCP",
-              loadBalancingScheme: "INTERNAL",
-              network: network.selfLink.as<string>(),
-              healthChecks: [check.selfLink.as<string>()],
-              description: "ilb backend",
-            },
-          );
+          const backend = yield* GCP.Compute.RegionBackendService("IlbBackend", {
+            name: created.backend.name,
+            region,
+            protocol: "TCP",
+            loadBalancingScheme: "INTERNAL",
+            network: defaultNetworkSelfLink(project),
+            healthChecks: [check.selfLink.as<string>()],
+            description: "ilb backend",
+          });
           const rule = yield* GCP.Compute.ForwardingRule("IlbRule", {
             forwardingRuleName: created.rule.forwardingRuleName,
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: backend.selfLink.as<string>(),
-            network: network.selfLink.as<string>(),
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink.as<string>(),
             ipProtocol: "TCP",
             allPorts: true,
           });
-          const policy = yield* GCP.Compute.RegionHealthAggregationPolicy(
-            "Agg",
-            {
-              policyName: created.policy.policyName,
-              region,
-              description: "backend rollup",
-            },
-          );
+          const policy = yield* GCP.Compute.RegionHealthAggregationPolicy("Agg", {
+            policyName: created.policy.policyName,
+            region,
+            description: "backend rollup",
+          });
           const source = yield* GCP.Compute.RegionHealthSource("Src", {
             sourceName: created.source.sourceName,
             region,
@@ -266,9 +213,7 @@ test.provider(
         }),
       );
 
-      expect(updated.healthCheckName).toEqual(
-        created.composite.healthCheckName,
-      );
+      expect(updated.healthCheckName).toEqual(created.composite.healthCheckName);
       expect(updated.description).toEqual("updated composite");
 
       yield* stack.destroy();

@@ -131,14 +131,9 @@ const expandVersion = (packageName: string, version: string) => {
   return `${packageName}/versions/${next}`;
 };
 
-const resourceNameOf = (packageName: string, tagId: string) =>
-  `${packageName}/tags/${tagId}`;
+const resourceNameOf = (packageName: string, tagId: string) => `${packageName}/tags/${tagId}`;
 
-const toAttrs = (
-  tag: artifactregistry.Tag,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (tag: artifactregistry.Tag, project: string, region: string) => {
   const name = tag.name ?? "";
   const parsed = parseName(name, "tags", region);
   const pkg = parsed.parent;
@@ -154,43 +149,25 @@ const toAttrs = (
   };
 };
 
-const getByName = missingGet(
-  artifactregistry.getProjectsLocationsRepositoriesPackagesTags,
-);
+const getByName = missingGet(artifactregistry.getProjectsLocationsRepositoriesPackagesTags);
 
-const getRepository = missingGet(
-  artifactregistry.getProjectsLocationsRepositories,
-);
+const getRepository = missingGet(artifactregistry.getProjectsLocationsRepositories);
 
 export const RepositoriesPackagesTagProvider = () =>
   Provider.succeed(RepositoriesPackagesTag, {
-    stables: [
-      "name",
-      "tagId",
-      "package",
-      "packageId",
-      "repository",
-      "project",
-      "location",
-    ],
+    stables: ["name", "tagId", "package", "packageId", "repository", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.tagId ?? output?.tagId;
       const nextId = news.tagId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
-        news.location ??
-          locationFromRepository(news.repository, previousLocation),
+        news.location ?? locationFromRepository(news.repository, previousLocation),
         env.region,
       );
-      const previousPackage = lastSegment(
-        olds?.packageId ?? output?.packageId ?? "",
-      );
+      const previousPackage = lastSegment(olds?.packageId ?? output?.packageId ?? "");
       const nextPackage = lastSegment(news.packageId);
       return replaceOnIdentity({
         previousId,
@@ -201,8 +178,7 @@ export const RepositoriesPackagesTagProvider = () =>
         nextParent: nextPackage,
         extra:
           lastSegment(olds?.repository ?? output?.repository ?? "") !==
-            lastSegment(news.repository) &&
-          (olds?.repository ?? output?.repository) !== undefined,
+            lastSegment(news.repository) && (olds?.repository ?? output?.repository) !== undefined,
       });
     }),
 
@@ -211,10 +187,7 @@ export const RepositoriesPackagesTagProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          locationFromRepository(
-            olds?.repository ?? output?.repository,
-            env.region,
-          ),
+          locationFromRepository(olds?.repository ?? output?.repository, env.region),
         env.region,
       );
       const repository = expandRepository(
@@ -222,10 +195,7 @@ export const RepositoriesPackagesTagProvider = () =>
         env.project,
         location,
       );
-      const packageName = expandPackage(
-        repository,
-        olds?.packageId ?? output?.packageId ?? "",
-      );
+      const packageName = expandPackage(repository, olds?.packageId ?? output?.packageId ?? "");
       const tagId = yield* toPhysicalId(id, olds?.tagId, output?.tagId, "tag");
       const name = output?.name ?? resourceNameOf(packageName, tagId);
       const existing = yield* getByName(name);
@@ -247,16 +217,10 @@ export const RepositoriesPackagesTagProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromRepository(news.repository, env.region),
+        news.location ?? output?.location ?? locationFromRepository(news.repository, env.region),
         env.region,
       );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
+      const repository = expandRepository(news.repository, env.project, location);
       const packageName = expandPackage(repository, news.packageId);
       const tagId = yield* toPhysicalId(id, news.tagId, output?.tagId, "tag");
       const name = resourceNameOf(packageName, tagId);
@@ -283,17 +247,14 @@ export const RepositoriesPackagesTagProvider = () =>
 
       const observed = current.name ?? name;
       if (!sameText(current.version, version)) {
-        current =
-          yield* artifactregistry.patchProjectsLocationsRepositoriesPackagesTags(
-            {
-              name: observed,
-              updateMask: "version",
-              body: {
-                name: observed,
-                version,
-              },
-            },
-          );
+        current = yield* artifactregistry.patchProjectsLocationsRepositoriesPackagesTags({
+          name: observed,
+          updateMask: "version",
+          body: {
+            name: observed,
+            version,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);

@@ -74,9 +74,7 @@ export interface PreparedStatement extends Resource<
  *
  * @resource
  */
-export const PreparedStatement = Resource<PreparedStatement>(
-  "AWS.Athena.PreparedStatement",
-);
+export const PreparedStatement = Resource<PreparedStatement>("AWS.Athena.PreparedStatement");
 
 const toAttributes = (ps: athena.PreparedStatement) => ({
   statementName: ps.StatementName!,
@@ -107,9 +105,8 @@ export const PreparedStatementProvider = () =>
           })
           .pipe(
             Effect.map((res) => res.PreparedStatement),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "WorkGroupNotFound"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["ResourceNotFoundException", "WorkGroupNotFound"], () =>
+              Effect.succeed(undefined),
             ),
           );
 
@@ -117,31 +114,22 @@ export const PreparedStatementProvider = () =>
         stables: ["statementName", "workGroup"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? { queryStatement: "" })) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? { queryStatement: "" })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds?.workGroup ?? "primary") !== (news.workGroup ?? "primary")
-          ) {
+          if ((olds?.workGroup ?? "primary") !== (news.workGroup ?? "primary")) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const workGroup = output?.workGroup ?? olds?.workGroup ?? "primary";
-          const name =
-            output?.statementName ??
-            (yield* toName(id, olds ?? { queryStatement: "" }));
+          const name = output?.statementName ?? (yield* toName(id, olds ?? { queryStatement: "" }));
           const ps = yield* getOne(workGroup, name);
           return ps ? toAttributes(ps) : undefined;
         }),
         list: () =>
           Effect.gen(function* () {
-            const wgPages = yield* athena.listWorkGroups
-              .pages({})
-              .pipe(Stream.runCollect);
+            const wgPages = yield* athena.listWorkGroups.pages({}).pipe(Stream.runCollect);
             const workGroups = Array.from(wgPages)
               .flatMap((page) => page.WorkGroups ?? [])
               .flatMap((wg) => (wg.Name ? [wg.Name] : []));
@@ -186,8 +174,7 @@ export const PreparedStatementProvider = () =>
             });
           } else if (
             ps.QueryStatement !== news.queryStatement ||
-            (news.description !== undefined &&
-              ps.Description !== news.description)
+            (news.description !== undefined && ps.Description !== news.description)
           ) {
             // Sync — statement text and description are updatable in place.
             yield* athena.updatePreparedStatement({

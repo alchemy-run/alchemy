@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 export type InstanceGroupManagerNamedPort = {
   /** RFC1035 name for this port mapping (e.g. `"http"`). */
@@ -38,8 +34,7 @@ export type InstanceGroupManagerAutoHealingPolicy = {
   initialDelaySec?: number;
 };
 
-export type InstanceGroupManagerUpdatePolicy =
-  compute.InstanceGroupManagerUpdatePolicy;
+export type InstanceGroupManagerUpdatePolicy = compute.InstanceGroupManagerUpdatePolicy;
 
 export type InstanceGroupManagerProps = {
   /**
@@ -94,6 +89,12 @@ export type InstanceGroupManagerProps = {
    * observed pools unchanged.
    */
   targetPools?: string[];
+  /**
+   * Repair / failure policy for managed VMs (e.g.
+   * `{ defaultActionOnFailure: "DO_NOTHING" }`, which resize requests
+   * require). Omit to leave the observed policy unchanged.
+   */
+  instanceLifecyclePolicy?: compute.InstanceGroupManagerInstanceLifecyclePolicy;
 };
 
 export type InstanceGroupManager = Resource<
@@ -175,15 +176,6 @@ export class InstanceGroupManagerNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class InstanceGroupManagerOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstanceGroupManagerOperationFailed",
-)<{
-  operation: string;
-  zone: string;
-  message: string;
-  codes: readonly string[];
-}> {}
-
 export class InstanceGroupManagerStillExists extends Data.TaggedError(
   "GCP.Compute.InstanceGroupManagerStillExists",
 )<{
@@ -231,10 +223,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
 const toBaseInstanceName = (managerName: string, explicit?: string) =>
   rfc1035Name(explicit ?? managerName, MAX_BASE_NAME_LENGTH);
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-) => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>) => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
   const trimmed = user?.trim();
   return trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
@@ -266,14 +255,10 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const toTemplateUrl = (project: string, template: string) =>
-  template.includes("/")
-    ? template
-    : `projects/${project}/global/instanceTemplates/${template}`;
+  template.includes("/") ? template : `projects/${project}/global/instanceTemplates/${template}`;
 
 const toHealthCheckUrl = (project: string, healthCheck: string) =>
   healthCheck.includes("/")
@@ -329,9 +314,7 @@ const toHealing = (
   }));
 
 const fromApiHealing = (
-  policies:
-    | readonly compute.InstanceGroupManagerAutoHealingPolicy[]
-    | undefined,
+  policies: readonly compute.InstanceGroupManagerAutoHealingPolicy[] | undefined,
 ): InstanceGroupManagerAutoHealingPolicy[] =>
   (policies ?? [])
     .filter(
@@ -344,25 +327,17 @@ const fromApiHealing = (
     }));
 
 const sameHealing = (
-  left:
-    | readonly { healthCheck?: string; initialDelaySec?: number }[]
-    | undefined,
-  right:
-    | readonly { healthCheck?: string; initialDelaySec?: number }[]
-    | undefined,
+  left: readonly { healthCheck?: string; initialDelaySec?: number }[] | undefined,
+  right: readonly { healthCheck?: string; initialDelaySec?: number }[] | undefined,
 ) => {
-  const canon = (
-    policies: readonly { healthCheck?: string; initialDelaySec?: number }[],
-  ) =>
+  const canon = (policies: readonly { healthCheck?: string; initialDelaySec?: number }[]) =>
     [...policies]
       .map((policy) => ({
         healthCheck: lastSegment(policy.healthCheck ?? ""),
         initialDelaySec: policy.initialDelaySec ?? 0,
       }))
       .sort((a, b) => a.healthCheck.localeCompare(b.healthCheck));
-  return (
-    JSON.stringify(canon(left ?? [])) === JSON.stringify(canon(right ?? []))
-  );
+  return JSON.stringify(canon(left ?? [])) === JSON.stringify(canon(right ?? []));
 };
 
 const sameUpdatePolicy = (
@@ -389,88 +364,7 @@ const toAttrs = (manager: compute.InstanceGroupManager, project: string) => {
   };
 };
 
-const alreadyExists = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).some(
-    (error) =>
-      error.code === "alreadyExists" ||
-      error.code === "RESOURCE_ALREADY_EXISTS",
-  );
-
-const isGoneCode = (code: string | undefined) =>
-  code === "notFound" ||
-  code === "RESOURCE_NOT_FOUND" ||
-  code === "RESOURCE_NOT_FOUND_BY_NAME";
-
-const waitZonal = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) {
-      return yield* new InstanceGroupManagerOperationFailed({
-        operation: "",
-        zone,
-        message: "Compute operation returned no name",
-        codes: [],
-      });
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations(
-        { project, zone, operation: name },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations(
-        { project, zone, operation: name },
-        { times: 8 },
-      ).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-    const errors = current.error?.errors ?? [];
-    if (alreadyExists(current) || current.httpErrorStatusCode === 409) {
-      return current;
-    }
-    if (
-      errors.length > 0 ||
-      current.status !== "DONE" ||
-      current.httpErrorStatusCode
-    ) {
-      return yield* new InstanceGroupManagerOperationFailed({
-        operation: name,
-        zone,
-        message:
-          errors
-            .map((error) => error.message ?? "")
-            .filter(Boolean)
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-        codes: errors.map((error) => error.code ?? ""),
-      });
-    }
-    return current;
-  });
-
-const getByName = (
-  project: string,
-  zone: string,
-  instanceGroupManager: string,
-) =>
+const getByName = (project: string, zone: string, instanceGroupManager: string) =>
   compute
     .getInstanceGroupManagers({ project, zone, instanceGroupManager })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -480,13 +374,10 @@ const waitGone = (project: string, zone: string, managerName: string) =>
     Effect.flatMap((manager) =>
       manager === undefined
         ? Effect.void
-        : Effect.fail(
-            new InstanceGroupManagerStillExists({ managerName, zone }),
-          ),
+        : Effect.fail(new InstanceGroupManagerStillExists({ managerName, zone })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InstanceGroupManagerStillExists",
+      while: (error) => error._tag === "GCP.Compute.InstanceGroupManagerStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -496,20 +387,15 @@ const waitPresent = (project: string, zone: string, managerName: string) =>
   getByName(project, zone, managerName).pipe(
     Effect.flatMap((manager) =>
       manager === undefined
-        ? Effect.fail(
-            new InstanceGroupManagerNotResolved({ managerName, zone }),
-          )
+        ? Effect.fail(new InstanceGroupManagerNotResolved({ managerName, zone }))
         : Effect.succeed(manager),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InstanceGroupManagerNotResolved",
+      while: (error) => error._tag === "GCP.Compute.InstanceGroupManagerNotResolved",
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.InstanceGroupManagerNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.Compute.InstanceGroupManagerNotResolved", () => Effect.succeed(undefined)),
   );
 
 const runOp = <E, R>(
@@ -518,7 +404,11 @@ const runOp = <E, R>(
   start: Effect.Effect<compute.Operation, E, R>,
 ) =>
   start.pipe(
-    Effect.flatMap((operation) => waitZonal(project, zone, operation)),
+    Effect.flatMap((operation) =>
+      waitZoneOperation(project, zone, operation, {
+        ignore: ["RESOURCE_ALREADY_EXISTS"],
+      }),
+    ),
   );
 
 const syncNamedPorts = (
@@ -578,15 +468,10 @@ export const InstanceGroupManagerProvider = () =>
       const previousBase = olds?.baseInstanceName ?? output?.baseInstanceName;
       const nextBase =
         news.baseInstanceName !== undefined
-          ? toBaseInstanceName(
-              nextName ?? news.baseInstanceName,
-              news.baseInstanceName,
-            )
+          ? toBaseInstanceName(nextName ?? news.baseInstanceName, news.baseInstanceName)
           : previousBase;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const zoneChanged = previousZone.length > 0 && previousZone !== nextZone;
       const baseChanged =
         previousBase !== undefined &&
@@ -607,11 +492,7 @@ export const InstanceGroupManagerProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const managerName = yield* toName(
-        id,
-        olds?.managerName,
-        output?.managerName,
-      );
+      const managerName = yield* toName(id, olds?.managerName, output?.managerName);
       const zone = lastSegment(olds?.zone ?? output?.zone ?? DEFAULT_ZONE);
       const existing = yield* getByName(env.project, zone, managerName);
       if (existing === undefined) return undefined;
@@ -629,7 +510,7 @@ export const InstanceGroupManagerProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
             if (!scope.startsWith("zones/")) return [];
@@ -642,16 +523,9 @@ export const InstanceGroupManagerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const managerName = yield* toName(
-        id,
-        news.managerName,
-        output?.managerName,
-      );
+      const managerName = yield* toName(id, news.managerName, output?.managerName);
       const zone = lastSegment(news.zone ?? output?.zone ?? DEFAULT_ZONE);
-      const instanceTemplate = toTemplateUrl(
-        env.project,
-        news.instanceTemplate,
-      );
+      const instanceTemplate = toTemplateUrl(env.project, news.instanceTemplate);
       const targetSize = news.targetSize ?? DEFAULT_TARGET_SIZE;
       const baseInstanceName = toBaseInstanceName(
         managerName,
@@ -682,10 +556,9 @@ export const InstanceGroupManagerProvider = () =>
               updatePolicy: news.updatePolicy,
               targetPools:
                 news.targetPools !== undefined
-                  ? news.targetPools.map((pool) =>
-                      toTargetPoolUrl(env.project, zone, pool),
-                    )
+                  ? news.targetPools.map((pool) => toTargetPoolUrl(env.project, zone, pool))
                   : undefined,
+              instanceLifecyclePolicy: news.instanceLifecyclePolicy,
             },
           })
           .pipe(
@@ -693,7 +566,9 @@ export const InstanceGroupManagerProvider = () =>
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
-                : waitZonal(env.project, zone, operation).pipe(Effect.asVoid),
+                : waitZoneOperation(env.project, zone, operation, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }).pipe(Effect.asVoid),
             ),
           );
         current = yield* waitPresent(env.project, zone, managerName);
@@ -719,20 +594,13 @@ export const InstanceGroupManagerProvider = () =>
         patch.targetSize = targetSize;
         dirty = true;
       }
-      if (
-        lastSegment(current.instanceTemplate) !== lastSegment(instanceTemplate)
-      ) {
+      if (lastSegment(current.instanceTemplate) !== lastSegment(instanceTemplate)) {
         patch.instanceTemplate = instanceTemplate;
         dirty = true;
       }
       if (news.autoHealingPolicies !== undefined) {
         const desiredHealing = toHealing(env.project, news.autoHealingPolicies);
-        if (
-          !sameHealing(
-            fromApiHealing(current.autoHealingPolicies),
-            desiredHealing,
-          )
-        ) {
+        if (!sameHealing(fromApiHealing(current.autoHealingPolicies), desiredHealing)) {
           patch.autoHealingPolicies = desiredHealing;
           dirty = true;
         }
@@ -752,6 +620,19 @@ export const InstanceGroupManagerProvider = () =>
           patch.targetPools = desiredPools;
           dirty = true;
         }
+      }
+      const observedLifecycle: Record<string, unknown> = {
+        ...current.instanceLifecyclePolicy,
+      };
+      if (
+        news.instanceLifecyclePolicy !== undefined &&
+        Object.entries(news.instanceLifecyclePolicy).some(
+          ([key, value]) =>
+            JSON.stringify(observedLifecycle[key] ?? null) !== JSON.stringify(value ?? null),
+        )
+      ) {
+        patch.instanceLifecyclePolicy = news.instanceLifecyclePolicy;
+        dirty = true;
       }
 
       if (dirty) {
@@ -775,12 +656,7 @@ export const InstanceGroupManagerProvider = () =>
       }
 
       if (!samePorts(fromApiPorts(current.namedPorts), namedPorts)) {
-        yield* syncNamedPorts(
-          env.project,
-          zone,
-          current.instanceGroup,
-          namedPorts,
-        );
+        yield* syncNamedPorts(env.project, zone, current.instanceGroup, namedPorts);
         current = (yield* getByName(env.project, zone, managerName)) ?? current;
       }
 
@@ -804,16 +680,9 @@ export const InstanceGroupManagerProvider = () =>
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void
-              : waitZonal(output.project, output.zone, operation).pipe(
-                  Effect.asVoid,
-                ),
-          ),
-          Effect.catchIf(
-            (error) =>
-              error._tag ===
-                "GCP.Compute.InstanceGroupManagerOperationFailed" &&
-              error.codes.some(isGoneCode),
-            () => Effect.void,
+              : waitZoneOperation(output.project, output.zone, operation, {
+                  ignore: ["RESOURCE_NOT_FOUND"],
+                }).pipe(Effect.asVoid),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
         );

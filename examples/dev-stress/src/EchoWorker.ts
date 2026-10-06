@@ -82,10 +82,7 @@ export default class EchoWorker extends Cloudflare.Worker<EchoWorker>()(
         }
 
         if (url.pathname.startsWith("/sandbox")) {
-          return yield* sandbox
-            .getByName("stress")
-            .fetch(request)
-            .pipe(Effect.orDie);
+          return yield* sandbox.getByName("stress").fetch(request).pipe(Effect.orDie);
         }
 
         // <<ECHO_ROUTES>>

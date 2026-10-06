@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type CrossSiteNetworkProps = {
   /**
@@ -80,22 +76,12 @@ export type CrossSiteNetwork = Resource<
  * @resource
  * @category Compute
  */
-export const CrossSiteNetwork = Resource<CrossSiteNetwork>(
-  "GCP.Compute.CrossSiteNetwork",
-);
+export const CrossSiteNetwork = Resource<CrossSiteNetwork>("GCP.Compute.CrossSiteNetwork");
 
 export class CrossSiteNetworkNotResolved extends Data.TaggedError(
   "GCP.Compute.CrossSiteNetworkNotResolved",
 )<{
   crossSiteNetworkName: string;
-}> {}
-
-export class CrossSiteNetworkOperationFailed extends Data.TaggedError(
-  "GCP.Compute.CrossSiteNetworkOperationFailed",
-)<{
-  crossSiteNetworkName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -176,68 +162,6 @@ const getByName = (project: string, crossSiteNetwork: string) =>
     .getCrossSiteNetworks({ project, crossSiteNetwork })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  crossSiteNetworkName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new CrossSiteNetworkOperationFailed({
-        crossSiteNetworkName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  crossSiteNetworkName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: current.name,
-      });
-    }
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* compute
-        .getGlobalOperations({
-          project,
-          operation: current.name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    return yield* failIfErrored(crossSiteNetworkName, current);
-  });
-
 const awaitResource = (project: string, crossSiteNetworkName: string) =>
   getByName(project, crossSiteNetworkName).pipe(
     Effect.repeat({
@@ -259,14 +183,9 @@ export const CrossSiteNetworkProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.crossSiteNetworkName ?? output?.crossSiteNetworkName;
+      const previousName = olds?.crossSiteNetworkName ?? output?.crossSiteNetworkName;
       const nextName = news.crossSiteNetworkName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -294,9 +213,7 @@ export const CrossSiteNetworkProvider = () =>
           .pipe(
             Stream.filter((network) => {
               const { labels } = parseDescription(network.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((network) => toAttrs(network, env.project)),
             Stream.runCollect,
@@ -327,7 +244,9 @@ export const CrossSiteNetworkProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, crossSiteNetworkName, operation),
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -351,11 +270,7 @@ export const CrossSiteNetworkProvider = () =>
               description,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, crossSiteNetworkName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, crossSiteNetworkName);
         if (current === undefined) {
           return yield* new CrossSiteNetworkNotResolved({
@@ -383,11 +298,9 @@ export const CrossSiteNetworkProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          output.crossSiteNetworkName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitGlobalOperation(env.project, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

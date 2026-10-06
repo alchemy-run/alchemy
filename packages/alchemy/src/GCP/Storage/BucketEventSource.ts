@@ -2,10 +2,7 @@ import type * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
-import type {
-  TopicEventSourceProps,
-  TopicMessage,
-} from "../PubSub/TopicEventSource.ts";
+import type { TopicEventSourceProps, TopicMessage } from "../PubSub/TopicEventSource.ts";
 import type { Bucket } from "./Bucket.ts";
 
 /** Cloud Storage object event types delivered through Pub/Sub. */
@@ -34,10 +31,7 @@ export interface BucketEvent {
   metadata: storage.Storage_Object;
 }
 
-export interface BucketEventSourceProps extends Omit<
-  TopicEventSourceProps,
-  "filter"
-> {
+export interface BucketEventSourceProps extends Omit<TopicEventSourceProps, "filter"> {
   /**
    * Event types to deliver. Filtered by the bucket notification, so other
    * events never reach the host.
@@ -149,9 +143,7 @@ export function consumeBucketEvents<Req = never, ResourceReq = never>(
   // Accept the resource or the Effect that declares it, like bindings do.
   const resolved = Effect.isEffect(bucket) ? bucket : Effect.succeed(bucket);
   return resolved.pipe(
-    Effect.flatMap((value) =>
-      BucketEventSource.use((source) => source(value, props, process)),
-    ),
+    Effect.flatMap((value) => BucketEventSource.use((source) => source(value, props, process))),
   );
 }
 
@@ -176,9 +168,7 @@ export const toBucketEvent = ({ message }: TopicMessage) =>
     let metadata: storage.Storage_Object = {};
     try {
       if (message.data) {
-        metadata = JSON.parse(
-          decodeBase64Utf8(message.data),
-        ) as storage.Storage_Object;
+        metadata = JSON.parse(decodeBase64Utf8(message.data)) as storage.Storage_Object;
       }
     } catch {
       metadata = {};
@@ -187,8 +177,7 @@ export const toBucketEvent = ({ message }: TopicMessage) =>
       eventType: (attributes.eventType ?? "OBJECT_FINALIZE") as BucketEventType,
       bucket: attributes.bucketId ?? metadata.bucket ?? "",
       object: attributes.objectId ?? metadata.name ?? "",
-      generation:
-        attributes.objectGeneration ?? String(metadata.generation ?? ""),
+      generation: attributes.objectGeneration ?? String(metadata.generation ?? ""),
       eventTime: attributes.eventTime ?? message.publishTime ?? "",
       metadata,
     };

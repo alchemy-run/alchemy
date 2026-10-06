@@ -9,7 +9,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   createOwnership,
   encodeDescription,
@@ -20,6 +19,7 @@ import {
   parseLoggingName,
   toLinkId,
 } from "./internal.ts";
+import { waitForDeleteOperation } from "./operations.ts";
 
 export type LocationsBucketsLinkProps = {
   /**
@@ -108,14 +108,12 @@ export class LocationsBucketsLinkFailed extends Data.TaggedError(
   state: string | undefined;
 }> {}
 
-const resourceName = (bucketName: string, linkId: string) =>
-  `${bucketName}/links/${linkId}`;
+const resourceName = (bucketName: string, linkId: string) => `${bucketName}/links/${linkId}`;
 
 const isDeleted = (link: logging.Link | undefined): link is undefined =>
   link === undefined || link.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
 const toAttrs = (link: logging.Link, bucketName: string) => {
   const parsed = parseLoggingName(link.name ?? "");
@@ -155,8 +153,7 @@ const waitUntilActive = (name: string) =>
     return link;
   }).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.LocationsBucketsLinkNotResolved",
+      while: (error) => error._tag === "GCP.Logging.LocationsBucketsLinkNotResolved",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -170,12 +167,9 @@ export const LocationsBucketsLinkProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.linkId ?? output?.linkId;
       const idChanged =
-        previousId !== undefined &&
-        news.linkId !== undefined &&
-        news.linkId !== previousId;
+        previousId !== undefined && news.linkId !== undefined && news.linkId !== previousId;
       const previousBucket = olds?.bucketName ?? output?.bucketName;
-      const bucketChanged =
-        previousBucket !== undefined && news.bucketName !== previousBucket;
+      const bucketChanged = previousBucket !== undefined && news.bucketName !== previousBucket;
       const previousDescription = olds?.description ?? output?.description;
       const descriptionChanged =
         news.description !== undefined &&
@@ -223,16 +217,11 @@ export const LocationsBucketsLinkProvider = () =>
             })
             .pipe(
               Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
-              Stream.filter(
-                (link) =>
-                  !isDeleted(link) && hasOwnershipMarker(link.description),
-              ),
+              Stream.filter((link) => !isDeleted(link) && hasOwnershipMarker(link.description)),
               Stream.map((link) => toAttrs(link, bucket.name ?? "")),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed([] as ReturnType<typeof toAttrs>[])),
             );
           links.push(...listed);
         }
@@ -247,10 +236,7 @@ export const LocationsBucketsLinkProvider = () =>
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        current.lifecycleState === "DELETE_REQUESTED"
-      ) {
+      if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
         current = undefined;
       }
 
@@ -262,9 +248,7 @@ export const LocationsBucketsLinkProvider = () =>
             body: { description: desiredDescription },
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<logging.Operation>({ done: true }),
-            ),
+            Effect.catchTag("Conflict", () => Effect.succeed<logging.Operation>({ done: true })),
             Effect.asVoid,
           );
         current = yield* waitUntilActive(name);
@@ -284,31 +268,17 @@ export const LocationsBucketsLinkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output.lifecycleState === "DELETE_REQUESTED") return;
       yield* logging.deleteLocationsBucketsLinks({ name: output.name }).pipe(
-        Effect.flatMap((operation) =>
-          waitForOperation(operation, { notFoundOk: true }).pipe(
-            Effect.catchTag(
-              [
-                "GCP.Logging.OperationPending",
-                "GCP.Logging.OperationFailed",
-                "NotFound",
-              ],
-              () => Effect.void,
-            ),
-          ),
-        ),
+        Effect.flatMap((operation) => waitForDeleteOperation(operation)),
         Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
       );
       yield* getByName(output.name).pipe(
         Effect.flatMap((link) =>
           isDeleted(link)
             ? Effect.void
-            : Effect.fail(
-                new LocationsBucketsLinkNotResolved({ name: output.name }),
-              ),
+            : Effect.fail(new LocationsBucketsLinkNotResolved({ name: output.name })),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.Logging.LocationsBucketsLinkNotResolved",
+          while: (error) => error._tag === "GCP.Logging.LocationsBucketsLinkNotResolved",
           times: 10,
           schedule: Schedule.spaced("3 seconds"),
         }),

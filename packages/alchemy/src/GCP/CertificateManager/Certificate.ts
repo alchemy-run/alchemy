@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_LOCATION = "global";
 const DEFAULT_SCOPE = "DEFAULT";
@@ -25,11 +26,7 @@ const MAX_NAME_LENGTH = 63;
 
 export type CertificateType = "SELF_MANAGED" | "MANAGED" | "MANAGED_IDENTITY";
 
-export type CertificateScope =
-  | "DEFAULT"
-  | "EDGE_CACHE"
-  | "ALL_REGIONS"
-  | "CLIENT_AUTH";
+export type CertificateScope = "DEFAULT" | "EDGE_CACHE" | "ALL_REGIONS" | "CLIENT_AUTH";
 
 export type CertificateSelfManaged = {
   /** PEM-encoded certificate chain. Leaf first, then intermediates. Input-only. */
@@ -239,27 +236,12 @@ export type Certificate = Resource<
  * @resource
  * @category CertificateManager
  */
-export const Certificate = Resource<Certificate>(
-  "GCP.CertificateManager.Certificate",
-);
+export const Certificate = Resource<Certificate>("GCP.CertificateManager.Certificate");
 
 export class CertificateNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateNotResolved",
 )<{
   name: string;
-}> {}
-
-export class CertificateOperationFailed extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CertificateOperationPending extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class CertificateStillExists extends Data.TaggedError(
@@ -296,11 +278,8 @@ const normalizeScope = (scope: string | undefined) => {
   return value === "SCOPE_UNSPECIFIED" || value === "" ? DEFAULT_SCOPE : value;
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  certificateId: string,
-) => `projects/${project}/locations/${location}/certificates/${certificateId}`;
+const resourceName = (project: string, location: string, certificateId: string) =>
+  `projects/${project}/locations/${location}/certificates/${certificateId}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -308,12 +287,9 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     certificateId:
       certificatesAt >= 0 && parts[certificatesAt + 1]
         ? parts[certificatesAt + 1]!
@@ -325,11 +301,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (certificateId !== undefined) return certificateId;
     if (existing !== undefined) return existing;
@@ -385,24 +357,18 @@ const typeOf = (
   return fallback;
 };
 
-const typeFromCert = (
-  cert: certificatemanager.Certificate,
-): CertificateType => {
+const typeFromCert = (cert: certificatemanager.Certificate): CertificateType => {
   if (cert.managedIdentity !== undefined) return "MANAGED_IDENTITY";
   if (cert.managed !== undefined) return "MANAGED";
   return "SELF_MANAGED";
 };
 
-const normalizePem = (pem: string | undefined): string =>
-  (pem ?? "").replace(/\s+/g, "");
+const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\s+/g, "");
 
 const sameList = (left?: readonly string[], right?: readonly string[]) =>
   [...(left ?? [])].sort().join("\0") === [...(right ?? [])].sort().join("\0");
 
-const pemDiffers = (
-  next: CertificateSelfManaged,
-  previous: CertificateSelfManaged,
-) => {
+const pemDiffers = (next: CertificateSelfManaged, previous: CertificateSelfManaged) => {
   if (
     next.pemCertificate !== undefined &&
     normalizePem(next.pemCertificate) !== normalizePem(previous.pemCertificate)
@@ -453,113 +419,13 @@ const getByName = (name: string) =>
     .getProjectsLocationsCertificates({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: certificatemanager.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const waitForOperation = (
-  operation: certificatemanager.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isAlreadyExists(operation.error)) {
-        if (
-          options?.notFoundOk === true &&
-          (operation.error.code === 5 ||
-            (operation.error.message ?? "").toUpperCase().includes("NOT_FOUND"))
-        ) {
-          return operation;
-        }
-        return yield* new CertificateOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CertificateOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = certificatemanager.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved: Effect.Effect<
-      certificatemanager.Operation,
-      certificatemanager.GetProjectsLocationsOperationsError,
-      certificatemanager.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<certificatemanager.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      certificatemanager.Operation,
-      | CertificateOperationFailed
-      | CertificateOperationPending
-      | certificatemanager.GetProjectsLocationsOperationsError,
-      certificatemanager.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new CertificateOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => {
-          const error = current.error;
-          const ignoreNotFound =
-            options?.notFoundOk === true &&
-            (error?.code === 5 ||
-              (error?.message ?? "").toUpperCase().includes("NOT_FOUND"));
-          return !error || isAlreadyExists(error) || ignoreNotFound;
-        },
-        (current) =>
-          new CertificateOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.CertificateManager.CertificateOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert
-        ? Effect.succeed(cert)
-        : Effect.fail(new CertificateNotResolved({ name })),
+      cert ? Effect.succeed(cert) : Effect.fail(new CertificateNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateNotResolved",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -568,13 +434,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert === undefined
-        ? Effect.void
-        : Effect.fail(new CertificateStillExists({ name })),
+      cert === undefined ? Effect.void : Effect.fail(new CertificateStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateStillExists",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -589,15 +452,12 @@ const listOwnedCertificates = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.certificates ?? [])),
       Stream.filter((cert) =>
-        Object.keys(cert.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(cert.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((cert) => toAttrs(cert, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateBody = (
@@ -652,9 +512,7 @@ const immutableChanged = (
           : undefined),
       managedIdentity:
         olds?.managedIdentity ??
-        (output?.managedIdentity
-          ? { identity: output.managedIdentity }
-          : undefined),
+        (output?.managedIdentity ? { identity: output.managedIdentity } : undefined),
       pemCertificate: olds?.pemCertificate ?? output?.pemCertificate,
       selfManaged: olds?.selfManaged,
     },
@@ -668,26 +526,19 @@ const immutableChanged = (
   if (previousScope !== nextScope) return true;
 
   if (nextType === "MANAGED") {
-    const previousDomains =
-      olds?.managed?.domains ?? output?.managedDomains ?? [];
-    if (
-      news.managed?.domains !== undefined &&
-      !sameList(news.managed.domains, previousDomains)
-    ) {
+    const previousDomains = olds?.managed?.domains ?? output?.managedDomains ?? [];
+    if (news.managed?.domains !== undefined && !sameList(news.managed.domains, previousDomains)) {
       return true;
     }
     const previousAuths =
-      olds?.managed?.dnsAuthorizations ??
-      output?.managedDnsAuthorizations ??
-      [];
+      olds?.managed?.dnsAuthorizations ?? output?.managedDnsAuthorizations ?? [];
     if (
       news.managed?.dnsAuthorizations !== undefined &&
       !sameList(news.managed.dnsAuthorizations, previousAuths)
     ) {
       return true;
     }
-    const previousIssuance =
-      olds?.managed?.issuanceConfig ?? output?.issuanceConfig ?? "";
+    const previousIssuance = olds?.managed?.issuanceConfig ?? output?.issuanceConfig ?? "";
     if (
       news.managed?.issuanceConfig !== undefined &&
       news.managed.issuanceConfig !== previousIssuance
@@ -698,8 +549,7 @@ const immutableChanged = (
   }
 
   if (nextType === "MANAGED_IDENTITY") {
-    const previousIdentity =
-      olds?.managedIdentity?.identity ?? output?.managedIdentity ?? "";
+    const previousIdentity = olds?.managedIdentity?.identity ?? output?.managedIdentity ?? "";
     if (
       news.managedIdentity?.identity !== undefined &&
       news.managedIdentity.identity !== previousIdentity
@@ -730,32 +580,18 @@ const immutableChanged = (
 
 export const CertificateProvider = () =>
   Provider.succeed(Certificate, {
-    stables: [
-      "name",
-      "certificateId",
-      "project",
-      "location",
-      "type",
-      "scope",
-      "createTime",
-    ],
+    stables: ["name", "certificateId", "project", "location", "type", "scope", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
       const previousId = olds?.certificateId ?? output?.certificateId;
       const nextId = news.certificateId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         immutableChanged(news, olds, output);
 
@@ -763,28 +599,19 @@ export const CertificateProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const certificateId = yield* toId(
-        id,
-        olds?.certificateId,
-        output?.certificateId,
-      );
+      const certificateId = yield* toId(id, olds?.certificateId, output?.certificateId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, certificateId);
+      const name = output?.name ?? resourceName(env.project, location, certificateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -795,11 +622,7 @@ export const CertificateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const certificateId = yield* toId(
-        id,
-        news.certificateId,
-        output?.certificateId,
-      );
+      const certificateId = yield* toId(id, news.certificateId, output?.certificateId);
       const location = normalizeLocation(news.location ?? output?.location);
       const type = typeOf(news, output?.type);
       const scope = normalizeScope(news.scope ?? output?.scope);
@@ -839,8 +662,7 @@ export const CertificateProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
@@ -848,16 +670,15 @@ export const CertificateProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* certificatemanager.patchProjectsLocationsCertificates({
+        const operation = yield* certificatemanager.patchProjectsLocationsCertificates({
+          name,
+          updateMask: updateMask.join(","),
+          body: {
             name,
-            updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

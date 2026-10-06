@@ -27,9 +27,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type PrivateConnectionState =
-  | ds.PrivateConnectionStateEnum
-  | (string & {});
+export type PrivateConnectionState = ds.PrivateConnectionStateEnum | (string & {});
 export type VpcPeeringConfig = ds.VpcPeeringConfig;
 export type PscInterfaceConfig = ds.PscInterfaceConfig;
 type DatastreamError = ds.Datastream_Error;
@@ -147,22 +145,13 @@ export type PrivateConnection = Resource<
  * @resource
  * @category Datastream
  */
-export const PrivateConnection = Resource<PrivateConnection>(
-  "GCP.Datastream.PrivateConnection",
-);
+export const PrivateConnection = Resource<PrivateConnection>("GCP.Datastream.PrivateConnection");
 
-const resourceName = (
-  project: string,
-  location: string,
-  privateConnectionId: string,
-) =>
+const resourceName = (project: string, location: string, privateConnectionId: string) =>
   `${locationParent(project, location)}/privateConnections/${privateConnectionId}`;
 
 const peeringOf = (
-  value:
-    | PrivateConnectionProps["vpcPeeringConfig"]
-    | VpcPeeringConfig
-    | undefined,
+  value: PrivateConnectionProps["vpcPeeringConfig"] | VpcPeeringConfig | undefined,
   project: string,
 ) =>
   value?.vpc === undefined && value?.subnet === undefined
@@ -172,10 +161,8 @@ const peeringOf = (
         subnet: value?.subnet,
       };
 
-const kindOf = (value: {
-  vpcPeeringConfig?: unknown;
-  pscInterfaceConfig?: unknown;
-}) => (value.vpcPeeringConfig ? "vpc" : value.pscInterfaceConfig ? "psc" : "");
+const kindOf = (value: { vpcPeeringConfig?: unknown; pscInterfaceConfig?: unknown }) =>
+  value.vpcPeeringConfig ? "vpc" : value.pscInterfaceConfig ? "psc" : "";
 
 export const toPrivateConnectionAttrs = (
   item: ds.PrivateConnection,
@@ -222,54 +209,34 @@ export const listPrivateConnections = (project: string, region: string) =>
 
 const listOwned = (project: string, region: string) =>
   listPrivateConnections(project, region).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelMap(item.labels)),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))),
   );
 
 export const PrivateConnectionProvider = () =>
   Provider.succeed(PrivateConnection, {
-    stables: [
-      "name",
-      "privateConnectionId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "privateConnectionId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousKind = kindOf({
         vpcPeeringConfig: olds?.vpcPeeringConfig ?? output?.vpcPeeringConfig,
-        pscInterfaceConfig:
-          olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig,
+        pscInterfaceConfig: olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig,
       });
       const nextKind = kindOf(news) || previousKind;
-      const previousPeering = fingerprint(
-        olds?.vpcPeeringConfig ?? output?.vpcPeeringConfig,
-      );
+      const previousPeering = fingerprint(olds?.vpcPeeringConfig ?? output?.vpcPeeringConfig);
       const nextPeering = fingerprint(news.vpcPeeringConfig);
-      const previousPsc = fingerprint(
-        olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig,
-      );
+      const previousPsc = fingerprint(olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig);
       const nextPsc = fingerprint(news.pscInterfaceConfig);
       const previousDisplay = olds?.displayName ?? output?.displayName;
       const nextDisplay = news.displayName ?? previousDisplay;
       const previousLabels = fingerprint(olds?.labels ?? output?.labels);
-      const nextLabels = fingerprint(
-        news.labels ?? olds?.labels ?? output?.labels,
-      );
+      const nextLabels = fingerprint(news.labels ?? olds?.labels ?? output?.labels);
       return replaceOnIdentity({
         previousId: olds?.privateConnectionId ?? output?.privateConnectionId,
         nextId:
-          news.privateConnectionId ??
-          olds?.privateConnectionId ??
-          output?.privateConnectionId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.privateConnectionId ?? olds?.privateConnectionId ?? output?.privateConnectionId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -277,10 +244,8 @@ export const PrivateConnectionProvider = () =>
         extra:
           (olds !== undefined || output !== undefined) &&
           (previousKind !== nextKind ||
-            (news.vpcPeeringConfig !== undefined &&
-              previousPeering !== nextPeering) ||
-            (news.pscInterfaceConfig !== undefined &&
-              previousPsc !== nextPsc) ||
+            (news.vpcPeeringConfig !== undefined && previousPeering !== nextPeering) ||
+            (news.pscInterfaceConfig !== undefined && previousPsc !== nextPsc) ||
             previousDisplay !== nextDisplay ||
             previousLabels !== nextLabels),
       });
@@ -294,28 +259,19 @@ export const PrivateConnectionProvider = () =>
         output?.privateConnectionId,
         "pconn",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, privateConnectionId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, privateConnectionId);
       const existing = yield* getPrivateConnectionByName(name);
       if (existing === undefined) return undefined;
       const attrs = toPrivateConnectionAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item) =>
-          toPrivateConnectionAttrs(item, env.project, env.region),
-        );
+        return items.map((item) => toPrivateConnectionAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -326,10 +282,7 @@ export const PrivateConnectionProvider = () =>
         output?.privateConnectionId,
         "pconn",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, privateConnectionId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -355,14 +308,9 @@ export const PrivateConnectionProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        yield* settleOperation(created, {
-          times: 10,
-          interval: "8 seconds",
-        });
-        current = yield* waitUntilExists(
-          getPrivateConnectionByName(name),
-          name,
-        );
+        // VPC peering takes 5-10 minutes.
+        yield* settleOperation(created);
+        current = yield* waitUntilExists(getPrivateConnectionByName(name), name);
       }
 
       if (current === undefined) {
@@ -386,20 +334,10 @@ export const PrivateConnectionProvider = () =>
           }),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
-      yield* settleOperation(operation, {
-        notFoundOk: true,
-        times: 10,
-        interval: "8 seconds",
+      yield* settleOperation(operation, { notFoundOk: true });
+      yield* waitUntilGone(getPrivateConnectionByName(output.name), output.name, {
+        times: 8,
+        interval: "4 seconds",
       });
-      yield* waitUntilGone(
-        getPrivateConnectionByName(output.name),
-        output.name,
-        { times: 8, interval: "4 seconds" },
-      ).pipe(
-        Effect.catchTag(
-          "GCP.Datastream.ResourceStillExists",
-          () => Effect.void,
-        ),
-      );
     }),
   });

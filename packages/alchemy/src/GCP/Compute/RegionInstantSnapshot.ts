@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,7 +17,9 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { OperationFailed } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionInstantSnapshotProps = {
   /**
@@ -127,13 +128,6 @@ export class RegionInstantSnapshotNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionInstantSnapshotOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionInstantSnapshotOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
 export class RegionInstantSnapshotNotReady extends Data.TaggedError(
   "GCP.Compute.RegionInstantSnapshotNotReady",
 )<{
@@ -214,89 +208,7 @@ const getByName = (project: string, region: string, instantSnapshot: string) =>
     .getRegionInstantSnapshots({ project, region, instantSnapshot })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationMessage = (operation: compute.Operation): string => {
-  const errors = operation.error?.errors ?? [];
-  return (
-    errors.map((item) => item.message ?? item.code ?? "unknown").join("; ") ||
-    operation.httpErrorMessage ||
-    operation.statusMessage ||
-    "operation failed"
-  );
-};
-
-const operationCodes = (operation: compute.Operation): string[] =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.code)
-    .filter((code): code is string => code !== undefined);
-
-const isAlreadyExists = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_ALREADY_EXISTS" || code === "ALREADY_EXISTS",
-  );
-
-const isNotFound = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_NOT_FOUND" || code === "NOT_FOUND",
-  ) || /not found/i.test(operationMessage(operation));
-
-const waitOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  options?: { times?: number },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      if (isAlreadyExists(operation) || isNotFound(operation)) {
-        return operation;
-      }
-      if (
-        (operation.error?.errors?.length ?? 0) > 0 ||
-        (operation.httpErrorStatusCode !== undefined &&
-          operation.httpErrorStatusCode >= 400)
-      ) {
-        return yield* new RegionInstantSnapshotOperationFailed({
-          operation: operation.name ?? "",
-          message: operationMessage(operation),
-        });
-      }
-      return operation;
-    }
-
-    const operationName = lastSegment(operation.name);
-    if (operationName === undefined) {
-      return yield* new RegionInstantSnapshotOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const current = yield* waitRegionOperations(
-      { project, region, operation: operationName },
-      { times: options?.times ?? 12 },
-    );
-
-    if (isAlreadyExists(current) || isNotFound(current)) {
-      return current;
-    }
-    if (
-      (current.error?.errors?.length ?? 0) > 0 ||
-      (current.httpErrorStatusCode !== undefined &&
-        current.httpErrorStatusCode >= 400)
-    ) {
-      return yield* new RegionInstantSnapshotOperationFailed({
-        operation: operationName,
-        message: operationMessage(current),
-      });
-    }
-    return current;
-  });
-
-const waitReady = (
-  project: string,
-  region: string,
-  instantSnapshotName: string,
-) =>
+const waitReady = (project: string, region: string, instantSnapshotName: string) =>
   getByName(project, region, instantSnapshotName).pipe(
     Effect.flatMap((snapshot) =>
       snapshot?.status === "FAILED"
@@ -318,18 +230,13 @@ const waitReady = (
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionInstantSnapshotNotReady",
+      while: (error) => error._tag === "GCP.Compute.RegionInstantSnapshotNotReady",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
-const waitGone = (
-  project: string,
-  region: string,
-  instantSnapshotName: string,
-) =>
+const waitGone = (project: string, region: string, instantSnapshotName: string) =>
   getByName(project, region, instantSnapshotName).pipe(
     Effect.flatMap((snapshot) =>
       snapshot === undefined
@@ -365,33 +272,19 @@ export const RegionInstantSnapshotProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousName =
-        olds?.instantSnapshotName ?? output?.instantSnapshotName;
+      const previousName = olds?.instantSnapshotName ?? output?.instantSnapshotName;
       const nextName = news.instantSnapshotName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
-      const previousSource = canonicalizeSource(
-        olds?.sourceDisk ?? output?.sourceDisk,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
+      const previousSource = canonicalizeSource(olds?.sourceDisk ?? output?.sourceDisk);
       const nextSource = canonicalizeSource(news.sourceDisk);
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
 
       const replace =
         previousRegion !== nextRegion ||
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
-        (nextSource.length > 0 &&
-          previousSource.length > 0 &&
-          previousSource !== nextSource) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
+        (nextSource.length > 0 && previousSource.length > 0 && previousSource !== nextSource) ||
         previousDescription !== nextDescription;
 
       if (!replace) return undefined;
@@ -412,20 +305,11 @@ export const RegionInstantSnapshotProvider = () =>
         olds?.instantSnapshotName,
         output?.instantSnapshotName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        instantSnapshotName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, instantSnapshotName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -438,15 +322,13 @@ export const RegionInstantSnapshotProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.instantSnapshots ?? [])
               .filter((snapshot) => (snapshot.region ?? "").length > 0)
               .filter((snapshot) =>
-                Object.keys(snapshot.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(snapshot.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((snapshot) => toAttrs(snapshot, env.project)),
           ),
@@ -473,7 +355,13 @@ export const RegionInstantSnapshotProvider = () =>
       }
 
       if (current === undefined) {
-        const inserted = yield* compute
+        // A replacement snapshots the same disk again; Compute rejects a
+        // second instant snapshot within 30s of the previous one.
+        // "The previous instant snapshot is too recent" — one instant snapshot
+        // per disk every 30 seconds.
+        const tooRecent = (error: { readonly _tag: string }) =>
+          error instanceof OperationFailed && error.reason === "UNSUPPORTED_OPERATION";
+        yield* compute
           .insertRegionInstantSnapshots({
             project: env.project,
             region,
@@ -484,14 +372,21 @@ export const RegionInstantSnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (inserted !== undefined) {
-          yield* waitOperation(env.project, region, inserted, {
-            times: 12,
-          }).pipe(
-            Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.flatMap((inserted) =>
+              inserted === undefined
+                ? Effect.void
+                : waitRegionOperation(env.project, region, inserted, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }),
+            ),
+            Effect.retry({
+              while: tooRecent,
+              times: 3,
+              schedule: Schedule.spaced("30 seconds"),
+            }),
           );
-        }
         current = yield* waitReady(env.project, region, instantSnapshotName);
       }
 
@@ -525,7 +420,7 @@ export const RegionInstantSnapshotProvider = () =>
             labelFingerprint: current.labelFingerprint,
           },
         });
-        yield* waitOperation(env.project, region, labeled);
+        yield* waitRegionOperation(env.project, region, labeled);
         current = yield* getByName(env.project, region, instantSnapshotName);
       }
 
@@ -557,15 +452,9 @@ export const RegionInstantSnapshotProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitOperation(output.project, region, deleted).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof RegionInstantSnapshotOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-          Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-        );
+        yield* waitRegionOperation(output.project, region, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitGone(output.project, region, output.instantSnapshotName);
     }),

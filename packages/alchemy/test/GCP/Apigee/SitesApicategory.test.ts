@@ -1,30 +1,28 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const siteId = process.env.GCP_TEST_APIGEE_SITE ?? "";
 
-const runLifecycle =
-  !!process.env.GCP_TEST_APIGEE && !!siteId && !process.env.FAST;
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG && !!siteId;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsSitesApicategories({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -33,7 +31,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsSitesApicategories on a missing category fails with NotFound or Forbidden",
+  "getOrganizationsSitesApicategories on a missing category fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -45,7 +43,7 @@ test.provider(
           name: `organizations/${project}/sites/alchemy-missing-site/apicategories/alchemy-missing-category`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -81,14 +79,12 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.data?.id).toEqual(created.categoryId);
-      expect(fetched.data?.name).toContain("alchemy-id=");
-      expect(fetched.data?.name).toContain("Payments");
+      expect(fetched.data?.name).toEqual("Payments");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Apigee.SitesApicategory("Payments", {
             siteId,
-            categoryId: created.categoryId,
             name: "Billing",
           });
         }),
@@ -100,8 +96,7 @@ test.provider.skipIf(!runLifecycle)(
       const fetchedUpdate = yield* apigee.getOrganizationsSitesApicategories({
         name: updated.name,
       });
-      expect(fetchedUpdate.data?.name).toContain("Billing");
-      expect(fetchedUpdate.data?.name).toContain("alchemy-id=");
+      expect(fetchedUpdate.data?.name).toEqual("Billing");
 
       yield* stack.destroy();
 

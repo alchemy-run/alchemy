@@ -42,9 +42,7 @@ export interface InvokeServiceClient {
  * Minting the ID token, reaching the service, or decoding its response
  * failed. Non-2xx responses are not errors — inspect `status`.
  */
-export class InvokeServiceError extends Data.TaggedError(
-  "GCP.Run.InvokeServiceError",
-)<{
+export class InvokeServiceError extends Data.TaggedError("GCP.Run.InvokeServiceError")<{
   message: string;
   cause?: unknown;
 }> {}
@@ -102,6 +100,4 @@ export interface InvokeService extends Binding.Service<
   (service: Service) => Effect.Effect<InvokeServiceClient>
 > {}
 
-export const InvokeService = Binding.Service<InvokeService>(
-  "GCP.Run.InvokeService",
-);
+export const InvokeService = Binding.Service<InvokeService>("GCP.Run.InvokeService");

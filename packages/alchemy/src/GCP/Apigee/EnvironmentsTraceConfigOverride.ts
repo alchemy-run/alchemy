@@ -22,9 +22,7 @@ export type TraceSamplingConfig = {
   /**
    * Sampler. `OFF` is the default; `PROBABILITY` uses `samplingRate`.
    */
-  sampler?:
-    | apigee.GoogleCloudApigeeV1TraceSamplingConfigSamplerEnum
-    | (string & {});
+  sampler?: apigee.GoogleCloudApigeeV1TraceSamplingConfigSamplerEnum | (string & {});
   /**
    * Sampling rate when using `PROBABILITY`. Must be `> 0` and `<= 0.5`.
    */
@@ -95,10 +93,9 @@ export type EnvironmentsTraceConfigOverride = Resource<
  * @resource
  * @category Apigee
  */
-export const EnvironmentsTraceConfigOverride =
-  Resource<EnvironmentsTraceConfigOverride>(
-    "GCP.Apigee.EnvironmentsTraceConfigOverride",
-  );
+export const EnvironmentsTraceConfigOverride = Resource<EnvironmentsTraceConfigOverride>(
+  "GCP.Apigee.EnvironmentsTraceConfigOverride",
+);
 
 export class EnvironmentsTraceConfigOverrideNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsTraceConfigOverrideNotResolved",
@@ -136,34 +133,23 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  missingToUndefined(
-    apigee.getOrganizationsEnvironmentsTraceConfigOverrides({ name }),
-  );
+  missingToUndefined(apigee.getOrganizationsEnvironmentsTraceConfigOverrides({ name }));
 
 const listOverrides = (parent: string) =>
-  apigee.listOrganizationsEnvironmentsTraceConfigOverrides
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.traceConfigOverrides ?? []),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as apigee.GoogleCloudApigeeV1TraceConfigOverride[]),
-      ),
-    );
+  apigee.listOrganizationsEnvironmentsTraceConfigOverrides.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.traceConfigOverrides ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+      Effect.succeed([] as apigee.GoogleCloudApigeeV1TraceConfigOverride[]),
+    ),
+  );
 
 const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
 export const EnvironmentsTraceConfigOverrideProvider = () =>
   Provider.succeed(EnvironmentsTraceConfigOverride, {
-    stables: [
-      "name",
-      "traceConfigOverrideId",
-      "organizationId",
-      "environmentId",
-    ],
+    stables: ["name", "traceConfigOverrideId", "organizationId", "environmentId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -172,8 +158,7 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -189,20 +174,14 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
       if (output?.name) {
         const existing = yield* getByName(output.name);
         if (existing === undefined) return undefined;
         return toAttrs(existing, organizationId, environmentId);
       }
-      const listed = yield* listOverrides(
-        traceConfigParent(organizationId, environmentId),
-      );
-      const match = listed.find(
-        (item) => item.apiProxy === (olds?.apiProxy ?? ""),
-      );
+      const listed = yield* listOverrides(traceConfigParent(organizationId, environmentId));
+      const match = listed.find((item) => item.apiProxy === (olds?.apiProxy ?? ""));
       if (match === undefined) return undefined;
       return toAttrs(match, organizationId, environmentId);
     }),
@@ -216,9 +195,7 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
             traceConfigParent(item.organizationId, item.environmentId),
           );
           for (const override of listed) {
-            found.push(
-              toAttrs(override, item.organizationId, item.environmentId),
-            );
+            found.push(toAttrs(override, item.organizationId, item.environmentId));
           }
         }
         return found;
@@ -230,8 +207,7 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
       const environmentId = environmentIdOf(news.environment);
       const parent = traceConfigParent(organizationId, environmentId);
 
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
       if (current === undefined) {
         const listed = yield* listOverrides(parent);
         current = listed.find((item) => item.apiProxy === news.apiProxy);
@@ -249,9 +225,7 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               listOverrides(parent).pipe(
-                Effect.map((items) =>
-                  items.find((item) => item.apiProxy === news.apiProxy),
-                ),
+                Effect.map((items) => items.find((item) => item.apiProxy === news.apiProxy)),
               ),
             ),
           );
@@ -266,23 +240,21 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
 
       const proxyChanged = !sameText(current.apiProxy, news.apiProxy);
       const samplingChanged =
-        jsonOf(samplingOf(current.samplingConfig)) !==
-        jsonOf(news.samplingConfig);
+        jsonOf(samplingOf(current.samplingConfig)) !== jsonOf(news.samplingConfig);
       if (proxyChanged || samplingChanged) {
-        current =
-          yield* apigee.patchOrganizationsEnvironmentsTraceConfigOverrides({
-            name: current.name,
-            updateMask: [
-              proxyChanged ? "api_proxy" : undefined,
-              samplingChanged ? "sampling_config" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              apiProxy: news.apiProxy,
-              samplingConfig: news.samplingConfig,
-            },
-          });
+        current = yield* apigee.patchOrganizationsEnvironmentsTraceConfigOverrides({
+          name: current.name,
+          updateMask: [
+            proxyChanged ? "api_proxy" : undefined,
+            samplingChanged ? "sampling_config" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            apiProxy: news.apiProxy,
+            samplingConfig: news.samplingConfig,
+          },
+        });
       }
 
       return toAttrs(current, organizationId, environmentId);
@@ -293,6 +265,6 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
         .deleteOrganizationsEnvironmentsTraceConfigOverrides({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

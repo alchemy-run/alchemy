@@ -1,89 +1,84 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import { Action } from "@/Action";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as connectors from "@distilled.cloud/gcp/connectors_v2";
-import { expect } from "alchemy-test";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import ConnectorsBindingsHost, { Account, ENTITY_TYPE_PARENT } from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "ConnectorsBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+let baseUrl: string;
+let hostAccount: string;
+let entityName: string;
 
-test.provider.skipIf(!!process.env.FAST)(
-  "GetEntity round-trip",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const entityTypeParent =
-        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
-        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
-
-      yield* stack.destroy();
-
-      const probe = yield* connectors
-        .createProjectsLocationsConnectionsEntityTypesEntities({
-          parent: entityTypeParent,
-          body: { fields: { Name: "Alchemy Binding Probe" } },
-        })
-        .pipe(
-          Effect.map((entity) => ({ _tag: "ok" as const, entity })),
-          Effect.catchTag(["Forbidden", "NotFound", "BadRequest"], (error) =>
-            Effect.succeed({
-              _tag: error._tag,
-              entity: undefined,
-            }),
-          ),
-        );
-
-      if (probe._tag !== "ok") {
-        expect(["Forbidden", "NotFound", "BadRequest"]).toContain(probe._tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      if (probe.entity.name) {
-        yield* connectors
-          .deleteProjectsLocationsConnectionsEntityTypesEntities({
-            name: probe.entity.name,
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      }
-
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const account = yield* GCP.Connectors.ConnectionsEntityTypesEntity(
-            "Account",
-            {
-              parent: entityTypeParent,
-              fields: { Name: "Alchemy Binding" },
-            },
-          );
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              const getEntity = yield* GCP.Connectors.GetEntity(account);
-              return Effect.fn(function* () {
-                const live = yield* getEntity();
-                return { name: live.name, fields: live.fields };
-              });
-            }),
-          );
-          return yield* Probe({});
-        }),
-      );
-
-      expect(out.name).toContain("/entities/");
-      expect(out.fields).toMatchObject({ Name: "Alchemy Binding" });
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+// Entities live in an existing Integration Connectors connection; set
+// GCP_TEST_CONNECTORS_PARENT to its `…/entityTypes/{type}` to run this.
+describe.skipIf(!dockerAvailable || ENTITY_TYPE_PARENT.length === 0)(
+  "Connectors Bindings",
   {
-    tags: ["provider:gcp", "provider:gcp:connectors", "live"],
-    timeout: 90_000,
+    tags: ["provider:gcp", "provider:gcp:connectors", "provider:gcp:run", "live"],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* ConnectorsBindingsHost;
+            const entity = yield* Account;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              entity: entity.name,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        entityName = out.entity;
+      }),
+      { timeout: 900_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    describe("GetEntity", () => {
+      test.provider(
+        "reads the entity as the host's service account, granted on the project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const entity = yield* expectProbe<connectors.Entity>(baseUrl, "getEntity");
+            const live = yield* connectors.getProjectsLocationsConnectionsEntityTypesEntities({
+              name: entityName,
+            });
+            expect(entity.name).toEqual(entityName);
+            expect(entity.fields).toMatchObject({ Name: "Alchemy Binding" });
+            expect(entity.fields).toEqual(live.fields);
+
+            // Connectors has no resource-level IAM for entities.
+            const { project } = yield* GcpEnvironment.current;
+            const policy = yield* crm.getIamPolicyProjects({
+              resource: `projects/${project}`,
+              body: { options: { requestedPolicyVersion: 3 } },
+            });
+            const roles = (policy.bindings ?? [])
+              .filter((binding) =>
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
+              )
+              .map((binding) => binding.role);
+            expect(roles).toEqual(["roles/connectors.invoker"]);
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:connectors", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
   },
 );

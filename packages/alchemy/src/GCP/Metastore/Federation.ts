@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_HIVE_VERSION,
@@ -146,8 +141,8 @@ export type Federation = Resource<
  * ### Updating a Federation
  * **Example:** Labels and backends
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const federation = yield* GCP.Metastore.Federation("Lakehouse", {
- *   federationId: existing.federationId,
  *   version: "3.1.2",
  *   backendMetastores: {
  *     "1": {
@@ -164,11 +159,8 @@ export type Federation = Resource<
  */
 export const Federation = Resource<Federation>("GCP.Metastore.Federation");
 
-const resourceName = (
-  project: string,
-  location: string,
-  federationId: string,
-) => `${locationParent(project, location)}/federations/${federationId}`;
+const resourceName = (project: string, location: string, federationId: string) =>
+  `${locationParent(project, location)}/federations/${federationId}`;
 
 const toBackends = (
   value: Record<string, metastore.BackendMetastore | undefined> | undefined,
@@ -197,11 +189,7 @@ const desiredBackends = (
   };
 };
 
-const toAttrs = (
-  item: metastore.Federation,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: metastore.Federation, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "federations", region);
   return {
@@ -229,7 +217,7 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
-  listAtLocation(project, region, (parent) =>
+  listAtLocation(project, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsFederations.pages({
         parent,
@@ -242,32 +230,17 @@ const listOwned = (project: string, region: string) =>
 
 export const FederationProvider = () =>
   Provider.succeed(Federation, {
-    stables: [
-      "name",
-      "federationId",
-      "project",
-      "location",
-      "version",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "federationId", "project", "location", "version", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousVersion = olds?.version ?? output?.version;
-      const nextVersion =
-        news.version ??
-        olds?.version ??
-        output?.version ??
-        DEFAULT_HIVE_VERSION;
+      const nextVersion = news.version ?? olds?.version ?? output?.version ?? DEFAULT_HIVE_VERSION;
       return replaceOnIdentity({
         previousId: olds?.federationId ?? output?.federationId,
         nextId: news.federationId ?? olds?.federationId ?? output?.federationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -284,18 +257,12 @@ export const FederationProvider = () =>
         output?.federationId,
         "federation",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, federationId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, federationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -313,10 +280,7 @@ export const FederationProvider = () =>
         output?.federationId,
         "federation",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, federationId);
       const version = news.version ?? output?.version ?? DEFAULT_HIVE_VERSION;
       const backends = desiredBackends(env.project, news.backendMetastores);
@@ -340,7 +304,12 @@ export const FederationProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
         current = yield* waitUntilReady(
@@ -359,12 +328,8 @@ export const FederationProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const backendsChanged =
-        fingerprint(toBackends(current.backendMetastores)) !==
-        fingerprint(backends);
-      const mask = fieldMask([
-        labelsChanged && "labels",
-        backendsChanged && "backendMetastores",
-      ]);
+        fingerprint(toBackends(current.backendMetastores)) !== fingerprint(backends);
+      const mask = fieldMask([labelsChanged && "labels", backendsChanged && "backendMetastores"]);
 
       if (mask.length > 0) {
         const operation = yield* metastore.patchProjectsLocationsFederations({
@@ -403,7 +368,12 @@ export const FederationProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

@@ -27,6 +27,7 @@ import {
   projectOf,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type ToolFunctionSpec = {
@@ -170,8 +171,7 @@ const DEFAULT_FUNCTION_SPEC: ToolFunctionSpec = {
   },
 };
 
-const resourceName = (agent: string, toolId: string) =>
-  `${agent}/tools/${toolId}`;
+const resourceName = (agent: string, toolId: string) => `${agent}/tools/${toolId}`;
 
 const specKind = (props: {
   openApiSpec?: unknown;
@@ -210,9 +210,7 @@ const toAttrs = (
     displayName: parseOwnership(tool.displayName).text,
     description: parseOwnership(tool.description).text,
     functionSpec: functionSpecOf(tool.functionSpec),
-    openApiSpec: tool.openApiSpec
-      ? { textSchema: tool.openApiSpec.textSchema }
-      : undefined,
+    openApiSpec: tool.openApiSpec ? { textSchema: tool.openApiSpec.textSchema } : undefined,
     dataStoreSpec: tool.dataStoreSpec
       ? { dataStoreConnections: tool.dataStoreSpec.dataStoreConnections }
       : undefined,
@@ -228,35 +226,25 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsAgentsTools
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.tools ?? [])),
-      Stream.filter(
-        (tool) =>
-          hasOwnershipMarker(tool.displayName) ||
-          hasOwnershipMarker(tool.description),
-      ),
-      Stream.map((tool) => toAttrs(tool, project, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsTools.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tools ?? [])),
+    Stream.filter(
+      (tool) => hasOwnershipMarker(tool.displayName) || hasOwnershipMarker(tool.description),
+    ),
+    Stream.map((tool) => toAttrs(tool, project, parent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  dialogflow.listProjectsLocationsAgentsTools
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.tools ?? [])),
-      Stream.filter((tool) => tool.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsAgentsTools.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tools ?? [])),
+    Stream.filter((tool) => tool.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const toBody = (
   news: AgentsToolProps,
@@ -267,10 +255,7 @@ const toBody = (
   return {
     displayName,
     description,
-    functionSpec:
-      kind === "function"
-        ? (news.functionSpec ?? DEFAULT_FUNCTION_SPEC)
-        : undefined,
+    functionSpec: kind === "function" ? (news.functionSpec ?? DEFAULT_FUNCTION_SPEC) : undefined,
     openApiSpec: kind === "openapi" ? news.openApiSpec : undefined,
     dataStoreSpec: kind === "datastore" ? news.dataStoreSpec : undefined,
   };
@@ -287,11 +272,7 @@ export const AgentsToolProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.toolId ?? output?.toolId;
-      if (
-        previousId !== undefined &&
-        news.toolId !== undefined &&
-        news.toolId !== previousId
-      ) {
+      if (previousId !== undefined && news.toolId !== undefined && news.toolId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousKind = specKind(olds ?? output ?? {});
@@ -305,13 +286,9 @@ export const AgentsToolProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const agent = olds?.agent
-        ? expandAgent(olds.agent, env.project, location)
-        : output?.agent;
+      const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
       const toolId = yield* toResourceId(id, olds?.toolId, output?.toolId);
-      const name =
-        output?.name ??
-        (agent !== undefined ? resourceName(agent, toolId) : "");
+      const name = output?.name ?? (agent !== undefined ? resourceName(agent, toolId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined && agent !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -331,19 +308,15 @@ export const AgentsToolProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const agents = yield* namedAgents(env.project);
-        const pages = yield* Effect.forEach(
-          agents,
-          (agent) => listAt(agent.name, env.project),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(agents, (agent) => listAt(agent.name, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const agent = expandAgent(news.agent, env.project, location);
       const toolId = yield* toResourceId(id, news.toolId, output?.toolId);
       const name = output?.name ?? resourceName(agent, toolId);
@@ -363,11 +336,7 @@ export const AgentsToolProvider = () =>
             parent: agent,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(agent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
@@ -379,10 +348,8 @@ export const AgentsToolProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
       const descriptionChanged = (current.description ?? "") !== description;
       const functionChanged =
-        fingerprint(functionSpecOf(current.functionSpec)) !==
-        fingerprint(body.functionSpec);
-      const openApiChanged =
-        fingerprint(current.openApiSpec) !== fingerprint(body.openApiSpec);
+        fingerprint(functionSpecOf(current.functionSpec)) !== fingerprint(body.functionSpec);
+      const openApiChanged = fingerprint(current.openApiSpec) !== fingerprint(body.openApiSpec);
       const dataStoreChanged =
         fingerprint(current.dataStoreSpec) !== fingerprint(body.dataStoreSpec);
 
@@ -400,16 +367,14 @@ export const AgentsToolProvider = () =>
             descriptionChanged ? "description" : undefined,
             functionChanged && body.functionSpec ? "function_spec" : undefined,
             openApiChanged && body.openApiSpec ? "open_api_spec" : undefined,
-            dataStoreChanged && body.dataStoreSpec
-              ? "data_store_spec"
-              : undefined,
+            dataStoreChanged && body.dataStoreSpec ? "data_store_spec" : undefined,
           ),
           body: { ...body, name: currentName },
         });
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -418,5 +383,5 @@ export const AgentsToolProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

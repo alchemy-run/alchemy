@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 import type {
   TargetTcpProxyLoadBalancingScheme,
   TargetTcpProxyProxyHeader,
@@ -146,14 +142,6 @@ export class RegionTargetTcpProxyNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionTargetTcpProxyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionTargetTcpProxyOperationFailed",
-)<{
-  targetTcpProxyName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class RegionTargetTcpProxyStillExists extends Data.TaggedError(
   "GCP.Compute.RegionTargetTcpProxyStillExists",
 )<{
@@ -215,11 +203,7 @@ const parseDescription = (
 
 const resourceTail = (value: string | undefined): string => lastSegment(value);
 
-const toBackendServiceRef = (
-  project: string,
-  region: string,
-  service: string,
-): string => {
+const toBackendServiceRef = (project: string, region: string, service: string): string => {
   if (service.includes("/")) return service;
   return `projects/${project}/regions/${region}/backendServices/${service}`;
 };
@@ -247,11 +231,7 @@ const getByName = (project: string, region: string, targetTcpProxy: string) =>
     .getRegionTargetTcpProxies({ project, region, targetTcpProxy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  targetTcpProxyName: string,
-) =>
+const waitUntilGone = (project: string, region: string, targetTcpProxyName: string) =>
   getByName(project, region, targetTcpProxyName).pipe(
     Effect.flatMap((proxy) =>
       proxy === undefined
@@ -264,73 +244,11 @@ const waitUntilGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionTargetTcpProxyStillExists",
+      while: (error) => error._tag === "GCP.Compute.RegionTargetTcpProxyStillExists",
       times: 18,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfErrored = (
-  targetTcpProxyName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionTargetTcpProxyOperationFailed({
-        targetTcpProxyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  targetTcpProxyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(targetTcpProxyName, operation);
-    }
-    const name = operationId(operation);
-    if (!name) {
-      return yield* failIfErrored(targetTcpProxyName, operation);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    return yield* failIfErrored(targetTcpProxyName, done);
-  });
 
 const immutableChanged = (
   news: RegionTargetTcpProxyProps,
@@ -341,21 +259,15 @@ const immutableChanged = (
   if ((news.description ?? "") !== previousDescription) return true;
   const previousService = resourceTail(olds?.service ?? output?.service);
   const nextService = resourceTail(news.service);
-  if (
-    previousService.length > 0 &&
-    nextService.length > 0 &&
-    previousService !== nextService
-  ) {
+  if (previousService.length > 0 && nextService.length > 0 && previousService !== nextService) {
     return true;
   }
-  const previousHeader =
-    olds?.proxyHeader ?? output?.proxyHeader ?? DEFAULT_PROXY_HEADER;
+  const previousHeader = olds?.proxyHeader ?? output?.proxyHeader ?? DEFAULT_PROXY_HEADER;
   const nextHeader = news.proxyHeader ?? DEFAULT_PROXY_HEADER;
   if (previousHeader !== nextHeader) return true;
   const previousBind = olds?.proxyBind ?? output?.proxyBind ?? false;
   if ((news.proxyBind ?? false) !== previousBind) return true;
-  const previousScheme =
-    olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? "";
+  const previousScheme = olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? "";
   if ((news.loadBalancingScheme ?? "") !== previousScheme) return true;
   return false;
 };
@@ -376,22 +288,11 @@ export const RegionTargetTcpProxyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previous = olds?.targetTcpProxyName ?? output?.targetTcpProxyName;
       const next = news.targetTcpProxyName ?? previous;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
-      const nameChanged =
-        previous !== undefined && next !== undefined && previous !== next;
-      if (
-        nameChanged ||
-        regionChanged ||
-        immutableChanged(news, olds, output)
-      ) {
+      const nameChanged = previous !== undefined && next !== undefined && previous !== next;
+      if (nameChanged || regionChanged || immutableChanged(news, olds, output)) {
         return {
           action: "replace" as const,
           deleteFirst: !regionChanged,
@@ -407,15 +308,8 @@ export const RegionTargetTcpProxyProvider = () =>
         olds?.targetTcpProxyName,
         output?.targetTcpProxyName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        targetTcpProxyName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, targetTcpProxyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -431,16 +325,14 @@ export const RegionTargetTcpProxyProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.targetTcpProxies ?? [])
               .filter((proxy) => (proxy.region ?? "").length > 0)
               .filter((proxy) => {
                 const { labels } = parseDescription(proxy.description);
-                return Object.keys(labels).some((key) =>
-                  key.startsWith("alchemy-"),
-                );
+                return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
               })
               .map((proxy) => toAttrs(proxy, env.project)),
           ),
@@ -457,11 +349,7 @@ export const RegionTargetTcpProxyProvider = () =>
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
-      const desiredService = toBackendServiceRef(
-        env.project,
-        region,
-        news.service,
-      );
+      const desiredService = toBackendServiceRef(env.project, region, news.service);
       const desiredHeader = news.proxyHeader ?? DEFAULT_PROXY_HEADER;
       const desiredBind = news.proxyBind ?? false;
       const desiredScheme = news.loadBalancingScheme ?? "";
@@ -487,7 +375,9 @@ export const RegionTargetTcpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, targetTcpProxyName, operation),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -501,9 +391,7 @@ export const RegionTargetTcpProxyProvider = () =>
             targetTcpProxy: targetTcpProxyName,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, targetTcpProxyName, operation),
-            ),
+            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             Effect.catchTag("NotFound", () => Effect.void),
           );
 
@@ -513,22 +401,12 @@ export const RegionTargetTcpProxyProvider = () =>
       // observed backend (or other immutable fields) drifted, delete then
       // insert so update-as-well-as-replace converges.
       if (current !== undefined) {
-        const serviceChanged =
-          resourceTail(current.service) !== resourceTail(desiredService);
-        const headerChanged =
-          (current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredHeader;
-        const descriptionChanged =
-          (current.description ?? "") !== desiredDescription;
+        const serviceChanged = resourceTail(current.service) !== resourceTail(desiredService);
+        const headerChanged = (current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredHeader;
+        const descriptionChanged = (current.description ?? "") !== desiredDescription;
         const bindChanged = (current.proxyBind === true) !== desiredBind;
-        const schemeChanged =
-          (current.loadBalancingScheme ?? "") !== desiredScheme;
-        if (
-          serviceChanged ||
-          headerChanged ||
-          descriptionChanged ||
-          bindChanged ||
-          schemeChanged
-        ) {
+        const schemeChanged = (current.loadBalancingScheme ?? "") !== desiredScheme;
+        if (serviceChanged || headerChanged || descriptionChanged || bindChanged || schemeChanged) {
           yield* deleteProxy();
           yield* waitUntilGone(env.project, region, targetTcpProxyName);
           current = undefined;
@@ -561,12 +439,9 @@ export const RegionTargetTcpProxyProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.targetTcpProxyName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
       yield* waitUntilGone(env.project, region, output.targetTcpProxyName);
     }),

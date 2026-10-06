@@ -112,11 +112,14 @@ export type ClientCertificate = {
   passphrase?: string;
 };
 
-export const credentialBody = (credential: DecryptedCredential | undefined) =>
+export const credentialBody = (
+  credential: DecryptedCredential | undefined,
+  defaultType?: CredentialType,
+) =>
   credential === undefined
     ? undefined
     : {
-        credentialType: credential.credentialType,
+        credentialType: credential.credentialType ?? defaultType,
         usernameAndPassword: credential.usernameAndPassword,
         authToken: credential.authToken,
         jwt: credential.jwt,

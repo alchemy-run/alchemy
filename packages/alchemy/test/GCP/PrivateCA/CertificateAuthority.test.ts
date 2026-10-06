@@ -1,28 +1,22 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
   privateca.getProjectsLocationsCaPoolsCertificateAuthorities({ name }).pipe(
     Effect.map((ca) =>
-      (ca.state ?? "").toUpperCase() === "DELETED"
-        ? ("gone" as const)
-        : ("found" as const),
+      (ca.state ?? "").toUpperCase() === "DELETED" ? ("gone" as const) : ("found" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -47,19 +41,20 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page =
-        yield* privateca.listProjectsLocationsCaPoolsCertificateAuthorities({
-          parent: `projects/${project}/locations/${location}/caPools/-`,
-          pageSize: 10,
-        });
-      expect(Array.isArray(page.certificateAuthorities ?? [])).toEqual(true);
+      const page = yield* privateca.listProjectsLocationsCaPoolsCertificateAuthorities({
+        parent: `projects/${project}/locations/${location}/caPools/-`,
+        pageSize: 10,
+      });
+      expect((page.certificateAuthorities ?? []).map((authority) => authority.name)).not.toContain(
+        `projects/${project}/locations/${location}/caPools/alchemy-capool-missing/certificateAuthorities/alchemy-ca-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:privateca", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a certificate authority",
   (stack) =>
     Effect.gen(function* () {
@@ -109,10 +104,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.state).toEqual("STAGED");
 
-      const fetched =
-        yield* privateca.getProjectsLocationsCaPoolsCertificateAuthorities({
-          name: created.name,
-        });
+      const fetched = yield* privateca.getProjectsLocationsCaPoolsCertificateAuthorities({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.type).toEqual("SELF_SIGNED");
       expect(fetched.state).toEqual("STAGED");
@@ -160,10 +154,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.labels).toMatchObject({ env: "prod", role: "ca" });
       expect(updated.state).toEqual("STAGED");
 
-      const refetched =
-        yield* privateca.getProjectsLocationsCaPoolsCertificateAuthorities({
-          name: created.name,
-        });
+      const refetched = yield* privateca.getProjectsLocationsCaPoolsCertificateAuthorities({
+        name: created.name,
+      });
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("ca");
 

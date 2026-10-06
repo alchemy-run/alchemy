@@ -8,13 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  organizationFromName,
-  sameJson,
-  toResourceId,
-} from "./names.ts";
+import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 
 const MAX_NAME_LENGTH = 59;
 const ALCHEMY_ID_PREFIX = "alc-";
@@ -134,10 +128,9 @@ export type SecurityMonitoringCondition = Resource<
  * @resource
  * @category Apigee
  */
-export const SecurityMonitoringCondition =
-  Resource<SecurityMonitoringCondition>(
-    "GCP.Apigee.SecurityMonitoringCondition",
-  );
+export const SecurityMonitoringCondition = Resource<SecurityMonitoringCondition>(
+  "GCP.Apigee.SecurityMonitoringCondition",
+);
 
 export class SecurityMonitoringConditionNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityMonitoringConditionNotResolved",
@@ -148,31 +141,20 @@ export class SecurityMonitoringConditionNotResolved extends Data.TaggedError(
 const resourceName = (organization: string, conditionId: string) =>
   `${orgParent(organization)}/securityMonitoringConditions/${conditionId}`;
 
-const conditionIdOf = (
-  condition: apigee.GoogleCloudApigeeV1SecurityMonitoringCondition,
-) => lastSegment(condition.name ?? "");
+const conditionIdOf = (condition: apigee.GoogleCloudApigeeV1SecurityMonitoringCondition) =>
+  lastSegment(condition.name ?? "");
 
-const toConditionId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const toConditionId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
-    const generated = yield* toResourceId(
-      id,
-      undefined,
-      undefined,
-      MAX_NAME_LENGTH,
-    );
+    const generated = yield* toResourceId(id, undefined, undefined, MAX_NAME_LENGTH);
     return generated.startsWith(ALCHEMY_ID_PREFIX)
       ? generated
       : `${ALCHEMY_ID_PREFIX}${generated}`.slice(0, 63);
   });
 
-const isAlchemyId = (conditionId: string) =>
-  conditionId.startsWith(ALCHEMY_ID_PREFIX);
+const isAlchemyId = (conditionId: string) => conditionId.startsWith(ALCHEMY_ID_PREFIX);
 
 const includeOf = (
   include:
@@ -213,7 +195,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityMonitoringConditions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const toBody = (
   news: SecurityMonitoringConditionProps,
@@ -233,18 +215,12 @@ const toBody = (
 
 export const SecurityMonitoringConditionProvider = () =>
   Provider.succeed(SecurityMonitoringCondition, {
-    stables: [
-      "name",
-      "securityMonitoringConditionId",
-      "organization",
-      "createTime",
-    ],
+    stables: ["name", "securityMonitoringConditionId", "organization", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId =
-        olds?.securityMonitoringConditionId ??
-        output?.securityMonitoringConditionId;
+        olds?.securityMonitoringConditionId ?? output?.securityMonitoringConditionId;
       const previousOrg = olds?.organization ?? output?.organization;
       if (
         (previousId !== undefined &&
@@ -261,23 +237,19 @@ export const SecurityMonitoringConditionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const securityMonitoringConditionId = yield* toConditionId(
         id,
         olds?.securityMonitoringConditionId,
         output?.securityMonitoringConditionId,
       );
-      const name =
-        output?.name ??
-        resourceName(organization, securityMonitoringConditionId);
+      const name = output?.name ?? resourceName(organization, securityMonitoringConditionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization);
       return isAlchemyId(attrs.securityMonitoringConditionId) ||
         (olds?.securityMonitoringConditionId !== undefined &&
-          olds.securityMonitoringConditionId ===
-            attrs.securityMonitoringConditionId)
+          olds.securityMonitoringConditionId === attrs.securityMonitoringConditionId)
         ? attrs
         : Unowned(attrs);
     }),
@@ -291,14 +263,12 @@ export const SecurityMonitoringConditionProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.securityMonitoringConditions ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.securityMonitoringConditions ?? [])),
             Stream.filter((condition) => isAlchemyId(conditionIdOf(condition))),
             Stream.map((condition) => toAttrs(condition, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as SecurityMonitoringCondition["Attributes"][]),
             ),
           );
@@ -306,8 +276,7 @@ export const SecurityMonitoringConditionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
+      const organization = news.organization ?? output?.organization ?? env.project;
       const securityMonitoringConditionId = yield* toConditionId(
         id,
         news.securityMonitoringConditionId,
@@ -336,13 +305,9 @@ export const SecurityMonitoringConditionProvider = () =>
       const observedIncludeAll = current.includeAllResources !== undefined;
       const profileChanged = (current.profile ?? "") !== news.profile;
       const scopeChanged = (current.scope ?? "") !== (news.scope ?? "");
-      const gatewayChanged =
-        (current.apiHubGateway ?? "") !== (news.apiHubGateway ?? "");
+      const gatewayChanged = (current.apiHubGateway ?? "") !== (news.apiHubGateway ?? "");
       const includeAllChanged = desiredIncludeAll !== observedIncludeAll;
-      const includeChanged = !sameJson(
-        includeOf(current.include),
-        news.include ?? [],
-      );
+      const includeChanged = !sameJson(includeOf(current.include), news.include ?? []);
       const typeChanged =
         (current.riskAssessmentType ?? "") !==
         (news.riskAssessmentType ?? current.riskAssessmentType ?? "");
@@ -372,6 +337,6 @@ export const SecurityMonitoringConditionProvider = () =>
         .deleteOrganizationsSecurityMonitoringConditions({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

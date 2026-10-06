@@ -1,12 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  parseDescription,
-  runGlobalOp,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +10,14 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  parseDescription,
+  runGlobalOp,
+  toPhysicalName,
+} from "./internal.ts";
 
 export type PublicAdvertisedPrefixPdpScope =
   | compute.PublicAdvertisedPrefixPdpScopeEnum
@@ -143,14 +143,6 @@ export class PublicAdvertisedPrefixNotResolved extends Data.TaggedError(
   prefixName: string;
 }> {}
 
-export class PublicAdvertisedPrefixOperationFailed extends Data.TaggedError(
-  "GCP.Compute.PublicAdvertisedPrefixOperationFailed",
-)<{
-  prefixName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const toAttrs = (
   prefix: compute.PublicAdvertisedPrefix,
   project: string,
@@ -189,47 +181,29 @@ const awaitResource = (project: string, prefixName: string) =>
         : Effect.fail(new PublicAdvertisedPrefixNotResolved({ prefixName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.PublicAdvertisedPrefixNotResolved",
+      while: (error) => error._tag === "GCP.Compute.PublicAdvertisedPrefixNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const failOp = (prefixName: string, operation: string, message: string) =>
-  new PublicAdvertisedPrefixOperationFailed({
-    prefixName,
-    operation,
-    message,
-  });
-
 export const PublicAdvertisedPrefixProvider = () =>
   Provider.succeed(PublicAdvertisedPrefix, {
-    stables: [
-      "prefixName",
-      "project",
-      "ipCidrRange",
-      "prefixId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["prefixName", "project", "ipCidrRange", "prefixId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousName = olds?.prefixName ?? output?.prefixName;
       const nextName = news.prefixName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const cidrChanged =
         (olds?.ipCidrRange ?? output?.ipCidrRange) !== undefined &&
         news.ipCidrRange !== (olds?.ipCidrRange ?? output?.ipCidrRange);
       const dnsChanged =
         news.dnsVerificationIp !== undefined &&
         (olds?.dnsVerificationIp ?? output?.dnsVerificationIp) !== undefined &&
-        news.dnsVerificationIp !==
-          (olds?.dnsVerificationIp ?? output?.dnsVerificationIp);
+        news.dnsVerificationIp !== (olds?.dnsVerificationIp ?? output?.dnsVerificationIp);
       const scopeChanged =
         news.pdpScope !== undefined &&
         (olds?.pdpScope ?? output?.pdpScope) !== undefined &&
@@ -237,8 +211,7 @@ export const PublicAdvertisedPrefixProvider = () =>
       if (nameChanged || cidrChanged || dnsChanged || scopeChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -246,12 +219,7 @@ export const PublicAdvertisedPrefixProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const prefixName = yield* toPhysicalName(
-        id,
-        olds?.prefixName,
-        output?.prefixName,
-        "prefix",
-      );
+      const prefixName = yield* toPhysicalName(id, olds?.prefixName, output?.prefixName, "prefix");
       const existing = yield* getByName(env.project, prefixName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -273,7 +241,7 @@ export const PublicAdvertisedPrefixProvider = () =>
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as PublicAdvertisedPrefix["Attributes"][]),
             ),
           );
@@ -281,12 +249,7 @@ export const PublicAdvertisedPrefixProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const prefixName = yield* toPhysicalName(
-        id,
-        news.prefixName,
-        output?.prefixName,
-        "prefix",
-      );
+      const prefixName = yield* toPhysicalName(id, news.prefixName, output?.prefixName, "prefix");
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -306,7 +269,6 @@ export const PublicAdvertisedPrefixProvider = () =>
               ipv6AccessType: news.ipv6AccessType,
             },
           }),
-          (operation, message) => failOp(prefixName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, prefixName);
@@ -327,7 +289,6 @@ export const PublicAdvertisedPrefixProvider = () =>
               fingerprint: current.fingerprint,
             },
           }),
-          (operation, message) => failOp(prefixName, operation, message),
         );
         current = (yield* getByName(env.project, prefixName)) ?? current;
       }
@@ -343,7 +304,6 @@ export const PublicAdvertisedPrefixProvider = () =>
           project: env.project,
           publicAdvertisedPrefix: output.prefixName,
         }),
-        (operation, message) => failOp(output.prefixName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

@@ -5,11 +5,8 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
-import {
-  alchemyLabelKeys,
-  hasAlchemyLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 export const PAGE_SIZE = 1000;
@@ -24,19 +21,6 @@ export class ResourceStillExists extends Data.TaggedError(
   "GCP.ArtifactRegistry.ResourceStillExists",
 )<{
   name: string;
-}> {}
-
-export class OperationFailed extends Data.TaggedError(
-  "GCP.ArtifactRegistry.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class OperationPending extends Data.TaggedError(
-  "GCP.ArtifactRegistry.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -60,31 +44,19 @@ export const rfc1035 = (name: string, fallback = "artifact"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -92,21 +64,14 @@ export const parseName = (
   };
 };
 
-export const expandRepository = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const expandRepository = (value: string, project: string, location: string) => {
   const next = value.replace(/\/+$/, "");
   if (next.includes("/repositories/")) return next;
   if (next.includes("/")) return next;
   return `projects/${project}/locations/${location}/repositories/${next}`;
 };
 
-export const locationFromRepository = (
-  repository: string | undefined,
-  fallback: string,
-) => {
+export const locationFromRepository = (repository: string | undefined, fallback: string) => {
   if (repository === undefined || !repository.includes("/locations/")) {
     return fallback;
   }
@@ -136,26 +101,21 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(value ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(value ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sortedStrings = (values: readonly string[] | undefined) =>
   [...(values ?? [])].slice().sort();
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -169,8 +129,7 @@ export const replaceOnIdentity = (input: {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
     (input.nextParent ?? "") !== "" &&
-    lastSegment(input.previousParent ?? "") !==
-      lastSegment(input.nextParent ?? "");
+    lastSegment(input.previousParent ?? "") !== lastSegment(input.nextParent ?? "");
   const replace =
     (input.extra ?? false) ||
     parentChanged ||
@@ -228,9 +187,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -238,100 +195,10 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     return yield* hasAlchemyLabels(id, labels);
   });
 
-const alreadyExists = (error: artifactregistry.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: artifactregistry.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: artifactregistry.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const waitForOperation = (
-  operation: artifactregistry.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new OperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new OperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = artifactregistry.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<artifactregistry.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new OperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new OperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.ArtifactRegistry.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
-export const waitUntilExists = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilExists = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -340,15 +207,10 @@ export const waitUntilExists = <A, E, R>(
     }),
   );
 
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,
@@ -359,12 +221,7 @@ export const waitUntilGone = <A, E, R>(
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -373,8 +230,7 @@ export const collectPages = <
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
@@ -396,11 +252,7 @@ export const listAlchemyRepositories = (project: string) =>
       pageSize: PAGE_SIZE,
     }),
     (page) => page.repositories,
-  ).pipe(
-    Effect.map((repos) =>
-      repos.filter((repo) => hasAlchemyLabelMap(repo.labels)),
-    ),
-  );
+  ).pipe(Effect.map((repos) => repos.filter((repo) => hasAlchemyLabelMap(repo.labels))));
 
 export const listPackages = (parent: string) =>
   parent.length === 0
@@ -455,8 +307,41 @@ export const missingGet =
       ? Effect.succeed(undefined)
       : effect({ name }).pipe(
           Effect.catchIf(
-            (error): error is E & { readonly _tag: "NotFound" } =>
-              error._tag === "NotFound",
+            (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
             () => Effect.succeed(undefined),
           ),
         );
+
+/** Repository and package operations finish within a few minutes. */
+const OPERATION_BUDGET = "10 minutes";
+
+/**
+ * Wait for a long-running operation. ALREADY_EXISTS (code 6) means a
+ * concurrent create won the race; reconcile observes the resource next.
+ */
+export const waitForOperation = (operation: LongRunningOperation) =>
+  waitForLongRunning(
+    operation,
+    (name) => artifactregistry.getProjectsLocationsOperations({ name }),
+    {
+      budget: OPERATION_BUDGET,
+    },
+  ).pipe(
+    Effect.catchIf(
+      (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
+      () => Effect.succeed(operation),
+    ),
+  );
+
+/**
+ * Wait for a delete operation. A vanished operation or NOT_FOUND (code 5)
+ * means the resource is already gone.
+ */
+export const waitForDeleteOperation = (operation: LongRunningOperation) =>
+  waitForOperation(operation).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
+      () => Effect.succeed(operation),
+    ),
+  );

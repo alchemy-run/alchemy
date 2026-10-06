@@ -25,9 +25,7 @@ export default class Orders extends Fly.Service<Orders>()(
     return {
       list: () =>
         Effect.forEach(ORDERS, (order) =>
-          users
-            .get(order.userId)
-            .pipe(Effect.map((user) => ({ ...order, user }))),
+          users.get(order.userId).pipe(Effect.map((user) => ({ ...order, user }))),
         ),
     };
   }),

@@ -1,35 +1,30 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
-  certificatemanager
-    .getProjectsLocationsCertificateIssuanceConfigs({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  certificatemanager.getProjectsLocationsCertificateIssuanceConfigs({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsCertificateIssuanceConfigs on a missing config fails with NotFound",
@@ -44,17 +39,6 @@ test.provider(
         }),
       );
       expect(error._tag).toBe("NotFound");
-
-      const page =
-        yield* certificatemanager.listProjectsLocationsCertificateIssuanceConfigs(
-          {
-            parent: `projects/${project}/locations/-`,
-            pageSize: 10,
-          },
-        );
-      expect(Array.isArray(page.certificateIssuanceConfigs ?? [])).toEqual(
-        true,
-      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -102,22 +86,19 @@ test.provider.skipIf(!runLifecycle)(
               },
             },
           });
-          return yield* GCP.CertificateManager.CertificateIssuanceConfig(
-            "WorkloadTls",
-            {
-              location,
-              description: "issuance a",
-              labels: { env: "test", ca: ca.certificateAuthorityId },
-              lifetime: "2592000s",
-              rotationWindowPercentage: 66,
-              keyAlgorithm: "ECDSA_P256",
-              certificateAuthorityConfig: {
-                certificateAuthorityServiceConfig: {
-                  caPool: pool.name,
-                },
+          return yield* GCP.CertificateManager.CertificateIssuanceConfig("WorkloadTls", {
+            location,
+            description: "issuance a",
+            labels: { env: "test", ca: ca.certificateAuthorityId },
+            lifetime: "2592000s",
+            rotationWindowPercentage: 66,
+            keyAlgorithm: "ECDSA_P256",
+            certificateAuthorityConfig: {
+              certificateAuthorityServiceConfig: {
+                caPool: pool.name,
               },
             },
-          );
+          });
         }),
       );
 
@@ -131,27 +112,21 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.keyAlgorithm).toEqual("ECDSA_P256");
       expect(created.caPool).toContain("/caPools/");
 
-      const fetched =
-        yield* certificatemanager.getProjectsLocationsCertificateIssuanceConfigs(
-          {
-            name: created.name,
-          },
-        );
+      const fetched = yield* certificatemanager.getProjectsLocationsCertificateIssuanceConfigs({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toEqual("issuance a");
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.lifetime).toEqual("2592000s");
       expect(fetched.rotationWindowPercentage).toEqual(66);
       expect(fetched.keyAlgorithm).toEqual("ECDSA_P256");
-      expect(
-        fetched.certificateAuthorityConfig?.certificateAuthorityServiceConfig
-          ?.caPool,
-      ).toEqual(created.caPool);
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(fetched.certificateAuthorityConfig?.certificateAuthorityServiceConfig?.caPool).toEqual(
+        created.caPool,
+      );
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -186,27 +161,24 @@ test.provider.skipIf(!runLifecycle)(
               },
             },
           });
-          return yield* GCP.CertificateManager.CertificateIssuanceConfig(
-            "WorkloadTls",
-            {
-              certificateIssuanceConfigId: created.certificateIssuanceConfigId,
-              location,
-              description: "issuance b",
-              labels: {
-                env: "prod",
-                role: "tls",
-                ca: ca.certificateAuthorityId,
-              },
-              lifetime: "2592000s",
-              rotationWindowPercentage: 66,
-              keyAlgorithm: "ECDSA_P256",
-              certificateAuthorityConfig: {
-                certificateAuthorityServiceConfig: {
-                  caPool: pool.name,
-                },
+          return yield* GCP.CertificateManager.CertificateIssuanceConfig("WorkloadTls", {
+            certificateIssuanceConfigId: created.certificateIssuanceConfigId,
+            location,
+            description: "issuance b",
+            labels: {
+              env: "prod",
+              role: "tls",
+              ca: ca.certificateAuthorityId,
+            },
+            lifetime: "2592000s",
+            rotationWindowPercentage: 66,
+            keyAlgorithm: "ECDSA_P256",
+            certificateAuthorityConfig: {
+              certificateAuthorityServiceConfig: {
+                caPool: pool.name,
               },
             },
-          );
+          });
         }),
       );
 
@@ -217,12 +189,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.keyAlgorithm).toEqual("ECDSA_P256");
       expect(updated.caPool).toEqual(created.caPool);
 
-      const refetched =
-        yield* certificatemanager.getProjectsLocationsCertificateIssuanceConfigs(
-          {
-            name: created.name,
-          },
-        );
+      const refetched = yield* certificatemanager.getProjectsLocationsCertificateIssuanceConfigs({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("issuance b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("tls");

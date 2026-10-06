@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_PROTOCOL = "HTTP";
 const DEFAULT_SCHEME = "INTERNAL_MANAGED";
@@ -280,15 +280,6 @@ export class RegionBackendServiceNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionBackendServiceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionBackendServiceOperationFailed",
-)<{
-  operation: string | undefined;
-  region: string;
-  status: string | undefined;
-  errors: ReadonlyArray<{ code?: string; message?: string }> | undefined;
-}> {}
-
 export class RegionBackendServiceStillExists extends Data.TaggedError(
   "GCP.Compute.RegionBackendServiceStillExists",
 )<{
@@ -333,14 +324,9 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
   });
 
 const toNetworkUrl = (project: string, network: string) =>
-  network.includes("/")
-    ? network
-    : `projects/${project}/global/networks/${network}`;
+  network.includes("/") ? network : `projects/${project}/global/networks/${network}`;
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-): string => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>): string => {
   const packed = Object.entries(labels)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}=${value}`)
@@ -416,8 +402,7 @@ const toAttrs = (service: compute.BackendService, project: string) => {
     affinityCookieTtlSec: service.affinityCookieTtlSec,
     healthChecks: [...(service.healthChecks ?? [])],
     backends: (service.backends ?? []).map(toBackend),
-    connectionDrainingTimeoutSec:
-      service.connectionDraining?.drainingTimeoutSec,
+    connectionDrainingTimeoutSec: service.connectionDraining?.drainingTimeoutSec,
     compressionMode: service.compressionMode,
     customRequestHeaders: [...(service.customRequestHeaders ?? [])],
     customResponseHeaders: [...(service.customResponseHeaders ?? [])],
@@ -432,9 +417,7 @@ const toAttrs = (service: compute.BackendService, project: string) => {
 const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
 const backendKey = (backend: RegionBackendServiceBackend) =>
   JSON.stringify({
@@ -462,100 +445,6 @@ const sameLogConfig = (
   (left?.enable ?? false) === (right?.enable ?? false) &&
   (left?.sampleRate === undefined || left.sampleRate === right?.sampleRate);
 
-const operationErrors = (operation: compute.Operation) =>
-  operation.error?.errors?.map((error) => ({
-    code: error.code,
-    message: error.message,
-  }));
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((error) =>
-    (error.code ?? "").toUpperCase(),
-  );
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? "")
-    .join("; ")
-    .toLowerCase();
-
-const alreadyExists = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const message = operationText(operation);
-  return (
-    codes.includes("ALREADYEXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    message.includes("already exists") ||
-    operation.httpErrorStatusCode === 409
-  );
-};
-
-const isGoneCode = (code: string | undefined) => {
-  const normalized = (code ?? "").toUpperCase();
-  return (
-    normalized === "NOTFOUND" ||
-    normalized === "RESOURCE_NOT_FOUND" ||
-    normalized === "RESOURCE_NOT_FOUND_BY_NAME"
-  );
-};
-
-const isFailedOperation = (operation: compute.Operation): boolean =>
-  (operation.error?.errors?.length ?? 0) > 0 ||
-  (operation.httpErrorStatusCode !== undefined &&
-    operation.httpErrorStatusCode >= 400);
-
-const failOperation = (operation: compute.Operation, region: string) =>
-  new RegionBackendServiceOperationFailed({
-    operation: operation.name,
-    region,
-    status: operation.status,
-    errors: operationErrors(operation),
-  });
-
-const waitRegional = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) {
-      if (operation.status === "DONE" && !isFailedOperation(operation)) {
-        return operation;
-      }
-      return yield* failOperation(operation, region);
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: name,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: name,
-      });
-    }
-    if (alreadyExists(current) || operationCodes(current).some(isGoneCode)) {
-      return current;
-    }
-    if (current.status !== "DONE" || isFailedOperation(current)) {
-      return yield* failOperation(current, region);
-    }
-    return current;
-  });
-
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionBackendServices({ project, region, backendService: name })
@@ -569,14 +458,11 @@ const waitPresent = (project: string, region: string, name: string) =>
         : Effect.succeed(service),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionBackendServiceNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionBackendServiceNotResolved",
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.succeed(undefined)),
   );
 
 const waitGone = (project: string, region: string, name: string) =>
@@ -587,8 +473,7 @@ const waitGone = (project: string, region: string, name: string) =>
         : Effect.fail(new RegionBackendServiceStillExists({ name, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionBackendServiceStillExists",
+      while: (error) => error._tag === "GCP.Compute.RegionBackendServiceStillExists",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -611,32 +496,18 @@ export const RegionBackendServiceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.name ?? output?.name;
       const nextName = news.name ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       const nameChanged =
-        news.name !== undefined &&
-        previousName !== undefined &&
-        news.name !== previousName;
+        news.name !== undefined && previousName !== undefined && news.name !== previousName;
       const regionChanged = previousRegion !== nextRegion;
       const previousScheme =
-        olds?.loadBalancingScheme ??
-        output?.loadBalancingScheme ??
-        DEFAULT_SCHEME;
+        olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? DEFAULT_SCHEME;
       const nextScheme = news.loadBalancingScheme ?? DEFAULT_SCHEME;
       const schemeChanged = previousScheme !== nextScheme;
-      const previousNetwork = lastSegment(
-        olds?.network ?? output?.network,
-      ).toLowerCase();
+      const previousNetwork = lastSegment(olds?.network ?? output?.network).toLowerCase();
       const nextNetwork =
-        news.network !== undefined
-          ? lastSegment(news.network).toLowerCase()
-          : previousNetwork;
+        news.network !== undefined ? lastSegment(news.network).toLowerCase() : previousNetwork;
       const networkChanged = previousNetwork !== nextNetwork;
       if (!nameChanged && !regionChanged && !schemeChanged && !networkChanged) {
         return undefined;
@@ -654,17 +525,12 @@ export const RegionBackendServiceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const name = yield* toName(id, olds?.name, output?.name);
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -676,14 +542,13 @@ export const RegionBackendServiceProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.backendServices ?? [])
               .filter(
                 (service) =>
-                  (service.region ?? "").length > 0 &&
-                  hasOwnershipMarker(service.description),
+                  (service.region ?? "").length > 0 && hasOwnershipMarker(service.description),
               )
               .map((service) => toAttrs(service, env.project)),
           ),
@@ -698,10 +563,7 @@ export const RegionBackendServiceProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const desiredDescription = encodeDescription(
-        news.description,
-        desiredLabels,
-      );
+      const desiredDescription = encodeDescription(news.description, desiredLabels);
       const protocol = news.protocol ?? DEFAULT_PROTOCOL;
       const loadBalancingScheme = news.loadBalancingScheme ?? DEFAULT_SCHEME;
       const timeoutSec = news.timeoutSec ?? DEFAULT_TIMEOUT_SEC;
@@ -717,9 +579,7 @@ export const RegionBackendServiceProvider = () =>
         failover: backend.failover,
       }));
       const network =
-        news.network !== undefined
-          ? toNetworkUrl(env.project, news.network)
-          : undefined;
+        news.network !== undefined ? toNetworkUrl(env.project, news.network) : undefined;
 
       let current = yield* getByName(env.project, region, name);
 
@@ -738,12 +598,8 @@ export const RegionBackendServiceProvider = () =>
               enableCDN,
               sessionAffinity: news.sessionAffinity,
               affinityCookieTtlSec: news.affinityCookieTtlSec,
-              healthChecks:
-                (news.healthChecks?.length ?? 0) > 0
-                  ? news.healthChecks
-                  : undefined,
-              backends:
-                desiredBackends.length > 0 ? desiredBackends : undefined,
+              healthChecks: (news.healthChecks?.length ?? 0) > 0 ? news.healthChecks : undefined,
+              backends: desiredBackends.length > 0 ? desiredBackends : undefined,
               connectionDraining:
                 news.connectionDrainingTimeoutSec !== undefined
                   ? {
@@ -769,9 +625,9 @@ export const RegionBackendServiceProvider = () =>
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
-                : waitRegional(env.project, region, operation).pipe(
-                    Effect.asVoid,
-                  ),
+                : waitRegionOperation(env.project, region, operation, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }).pipe(Effect.asVoid),
             ),
           );
         current = yield* waitPresent(env.project, region, name);
@@ -781,51 +637,31 @@ export const RegionBackendServiceProvider = () =>
         return yield* new RegionBackendServiceNotResolved({ name, region });
       }
 
-      const timeoutChanged =
-        (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
-      const protocolChanged =
-        (current.protocol ?? DEFAULT_PROTOCOL) !== protocol;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
+      const protocolChanged = (current.protocol ?? DEFAULT_PROTOCOL) !== protocol;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const enableCDNChanged = (current.enableCDN === true) !== enableCDN;
       const sessionAffinityChanged =
-        (current.sessionAffinity ?? "NONE") !==
-        (news.sessionAffinity ?? "NONE");
+        (current.sessionAffinity ?? "NONE") !== (news.sessionAffinity ?? "NONE");
       const affinityCookieChanged =
         news.affinityCookieTtlSec !== undefined &&
         current.affinityCookieTtlSec !== news.affinityCookieTtlSec;
-      const portNameChanged =
-        news.portName !== undefined && current.portName !== news.portName;
-      const healthChecksChanged = !sameStringList(
-        current.healthChecks,
-        news.healthChecks,
-      );
-      const backendsChanged = !sameBackends(
-        (current.backends ?? []).map(toBackend),
-        news.backends,
-      );
+      const portNameChanged = news.portName !== undefined && current.portName !== news.portName;
+      const healthChecksChanged = !sameStringList(current.healthChecks, news.healthChecks);
+      const backendsChanged = !sameBackends((current.backends ?? []).map(toBackend), news.backends);
       const drainingChanged =
         news.connectionDrainingTimeoutSec !== undefined &&
-        current.connectionDraining?.drainingTimeoutSec !==
-          news.connectionDrainingTimeoutSec;
+        current.connectionDraining?.drainingTimeoutSec !== news.connectionDrainingTimeoutSec;
       const compressionChanged =
-        news.compressionMode !== undefined &&
-        current.compressionMode !== news.compressionMode;
+        news.compressionMode !== undefined && current.compressionMode !== news.compressionMode;
       const requestHeadersChanged =
         news.customRequestHeaders !== undefined &&
-        !sameStringList(
-          current.customRequestHeaders,
-          news.customRequestHeaders,
-        );
+        !sameStringList(current.customRequestHeaders, news.customRequestHeaders);
       const responseHeadersChanged =
         news.customResponseHeaders !== undefined &&
-        !sameStringList(
-          current.customResponseHeaders,
-          news.customResponseHeaders,
-        );
+        !sameStringList(current.customResponseHeaders, news.customResponseHeaders);
       const logConfigChanged =
-        news.logConfig !== undefined &&
-        !sameLogConfig(news.logConfig, current.logConfig);
+        news.logConfig !== undefined && !sameLogConfig(news.logConfig, current.logConfig);
       const localityChanged =
         news.localityLbPolicy !== undefined &&
         (current.localityLbPolicy ?? "") !== news.localityLbPolicy;
@@ -886,9 +722,7 @@ export const RegionBackendServiceProvider = () =>
             body: patch,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitRegional(env.project, region, operation),
-            ),
+            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 5,
@@ -913,22 +747,23 @@ export const RegionBackendServiceProvider = () =>
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void
-              : waitRegional(output.project, output.region, operation).pipe(
-                  Effect.asVoid,
-                ),
-          ),
-          Effect.catchIf(
-            (error) =>
-              error._tag ===
-                "GCP.Compute.RegionBackendServiceOperationFailed" &&
-              (error.errors ?? []).some((item) => isGoneCode(item.code)),
-            () => Effect.void,
+              : waitRegionOperation(output.project, output.region, operation, {
+                  ignore: ["RESOURCE_NOT_FOUND"],
+                }).pipe(Effect.asVoid),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 5,
             schedule: Schedule.spaced("1 second"),
+          }),
+          // Compute rejects the delete while another operation is still in
+          // flight on the backend (e.g. packet-mirroring teardown of the
+          // forwarding rule that fronted it).
+          Effect.retry({
+            while: (error) => error._tag === "ResourceNotReady",
+            times: 20,
+            schedule: Schedule.spaced("10 seconds"),
           }),
         );
       yield* waitGone(output.project, output.region, output.name);

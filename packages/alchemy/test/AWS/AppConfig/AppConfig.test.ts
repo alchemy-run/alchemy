@@ -1,23 +1,19 @@
-import * as AWS from "@/AWS";
-import * as AppConfig from "@/AWS/AppConfig";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as appconfig from "@distilled.cloud/aws/appconfig";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import * as AppConfig from "@/AWS/AppConfig";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getApp = (applicationId: string) =>
   appconfig
     .getApplication({ ApplicationId: applicationId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const waitUntilAppGone = (applicationId: string) =>
   getApp(applicationId).pipe(
@@ -68,8 +64,7 @@ test.provider(
               applicationId: app.applicationId.as<string>(),
               applicationArn: app.applicationArn.as<string>(),
               environmentId: env.environmentId.as<string>(),
-              configurationProfileId:
-                profile.configurationProfileId.as<string>(),
+              configurationProfileId: profile.configurationProfileId.as<string>(),
               versionNumber: version.versionNumber.as<number>(),
               strategyId: strategy.deploymentStrategyId.as<string>(),
             };
@@ -98,9 +93,7 @@ test.provider(
         ConfigurationProfileId: created.configurationProfileId,
         VersionNumber: created.versionNumber,
       });
-      const content = yield* Stream.mkString(
-        Stream.decodeText(version.Content!),
-      );
+      const content = yield* Stream.mkString(Stream.decodeText(version.Content!));
       expect(JSON.parse(content)).toEqual({ featureX: true });
 
       // Update the description in place — the application id is stable.
@@ -141,19 +134,14 @@ test.provider(
             const extension = yield* AppConfig.Extension("Ext", {
               description,
               actions: {
-                ON_DEPLOYMENT_COMPLETE: [
-                  { name: "notify-bus", uri: defaultBusArn },
-                ],
+                ON_DEPLOYMENT_COMPLETE: [{ name: "notify-bus", uri: defaultBusArn }],
               },
               tags: { team: "platform" },
             });
-            const association = yield* AppConfig.ExtensionAssociation(
-              "ExtAssoc",
-              {
-                extensionIdentifier: extension.extensionId,
-                resourceIdentifier: app.applicationArn,
-              },
-            );
+            const association = yield* AppConfig.ExtensionAssociation("ExtAssoc", {
+              extensionIdentifier: extension.extensionId,
+              resourceIdentifier: app.applicationArn,
+            });
             return {
               extensionId: extension.extensionId.as<string>(),
               extensionArn: extension.extensionArn.as<string>(),
@@ -173,9 +161,7 @@ test.provider(
         ExtensionIdentifier: created.extensionId,
       });
       expect(extension.Description).toBe("v1 hook");
-      expect(extension.Actions?.ON_DEPLOYMENT_COMPLETE?.[0]?.Name).toBe(
-        "notify-bus",
-      );
+      expect(extension.Actions?.ON_DEPLOYMENT_COMPLETE?.[0]?.Name).toBe("notify-bus");
       const tags = yield* appconfig.listTagsForResource({
         ResourceArn: created.extensionArn,
       });
@@ -202,9 +188,7 @@ test.provider(
       const goneExtension = yield* appconfig
         .getExtension({ ExtensionIdentifier: created.extensionId })
         .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (e): boolean => e === undefined,
@@ -216,11 +200,7 @@ test.provider(
         .getExtensionAssociation({
           ExtensionAssociationId: created.associationId,
         })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       expect(goneAssociation).toBeUndefined();
     }),
   {

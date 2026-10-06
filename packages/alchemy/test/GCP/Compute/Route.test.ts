@@ -1,17 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, routeName: string) =>
   compute.getRoutes({ project, route: routeName }).pipe(
@@ -32,17 +30,14 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const route = yield* GCP.Compute.Route("Internet", {
             destRange: "192.0.2.0/24",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             nextHopGateway: "default-internet-gateway",
             description: "test-net egress",
             tags: ["alchemy-test"],
           });
-          return { network, route };
+          return { route };
         }),
       );
 
@@ -51,12 +46,8 @@ test.provider(
       expect(created.route.priority).toEqual(1000);
       expect(created.route.description).toEqual("test-net egress");
       expect(created.route.tags).toEqual(["alchemy-test"]);
-      expect(created.route.network).toContain(
-        `networks/${created.network.networkName}`,
-      );
-      expect(created.route.nextHopGateway).toContain(
-        "default-internet-gateway",
-      );
+      expect(created.route.network).toContain(`networks/${DEFAULT_NETWORK}`);
+      expect(created.route.nextHopGateway).toContain("default-internet-gateway");
 
       const fetched = yield* compute.getRoutes({
         project: created.route.project,
@@ -70,19 +61,15 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const route = yield* GCP.Compute.Route("Internet", {
             routeName: created.route.routeName,
             destRange: "198.51.100.0/24",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             nextHopGateway: "default-internet-gateway",
             description: "updated test-net",
             priority: 900,
           });
-          return { network, route };
+          return { route };
         }),
       );
 
@@ -102,10 +89,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.route.project,
-        created.route.routeName,
-      );
+      const gone = yield* waitUntilGone(created.route.project, created.route.routeName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 120_000 },

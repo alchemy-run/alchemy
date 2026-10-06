@@ -162,11 +162,7 @@ export const RegionalEndpoint = Resource<RegionalEndpoint>(
   "GCP.NetworkConnectivity.RegionalEndpoint",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  regionalEndpointId: string,
-) =>
+const resourceName = (project: string, location: string, regionalEndpointId: string) =>
   `projects/${project}/locations/${location}/regionalEndpoints/${regionalEndpointId}`;
 
 const identityKey = (props: {
@@ -234,10 +230,7 @@ export const RegionalEndpointProvider = () =>
       const nextId = news.regionalEndpointId
         ? rfc1035(news.regionalEndpointId, "regional-endpoint", MAX_ID_LENGTH)
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -257,9 +250,7 @@ export const RegionalEndpointProvider = () =>
         address: news.address,
       });
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousKey !== nextKey
       ) {
@@ -277,18 +268,12 @@ export const RegionalEndpointProvider = () =>
         "regional-endpoint",
         MAX_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, regionalEndpointId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, regionalEndpointId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -315,19 +300,14 @@ export const RegionalEndpointProvider = () =>
         "regional-endpoint",
         MAX_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, regionalEndpointId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const network =
-        news.network !== undefined
-          ? toNetworkResource(env.project, news.network)
-          : undefined;
+        news.network !== undefined ? toNetworkResource(env.project, news.network) : undefined;
       const subnetwork =
         news.subnetwork !== undefined
           ? toSubnetworkResource(env.project, location, news.subnetwork)
@@ -359,12 +339,7 @@ export const RegionalEndpointProvider = () =>
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         if (created !== undefined) {
-          yield* waitForOperation(created, { times: 10 }).pipe(
-            Effect.catchTag(
-              "GCP.NetworkConnectivity.OperationPending",
-              () => Effect.void,
-            ),
-          );
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilPresent(getByName(name), name);
       }
@@ -383,8 +358,7 @@ export const RegionalEndpointProvider = () =>
           () => new NetworkConnectivityNotResolved({ name }),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.NetworkConnectivity.NotResolved",
+          while: (error) => error._tag === "GCP.NetworkConnectivity.NotResolved",
           times: 10,
           schedule: Schedule.spaced("4 seconds"),
         }),

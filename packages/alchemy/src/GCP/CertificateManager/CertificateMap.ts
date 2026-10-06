@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_LOCATION = "global";
 const MAX_NAME_LENGTH = 63;
@@ -135,27 +136,12 @@ export type CertificateMap = Resource<
  * @resource
  * @category CertificateManager
  */
-export const CertificateMap = Resource<CertificateMap>(
-  "GCP.CertificateManager.CertificateMap",
-);
+export const CertificateMap = Resource<CertificateMap>("GCP.CertificateManager.CertificateMap");
 
 export class CertificateMapNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapNotResolved",
 )<{
   name: string;
-}> {}
-
-export class CertificateMapOperationFailed extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateMapOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CertificateMapOperationPending extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateMapOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class CertificateMapStillExists extends Data.TaggedError(
@@ -187,11 +173,7 @@ const rfc1035 = (name: string): string => {
 const normalizeLocation = (location: string | undefined) =>
   lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
 
-const resourceName = (
-  project: string,
-  location: string,
-  certificateMapId: string,
-) =>
+const resourceName = (project: string, location: string, certificateMapId: string) =>
   `projects/${project}/locations/${location}/certificateMaps/${certificateMapId}`;
 
 const parseName = (name: string) => {
@@ -200,14 +182,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    certificateMapId:
-      mapsAt >= 0 && parts[mapsAt + 1] ? parts[mapsAt + 1]! : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    certificateMapId: mapsAt >= 0 && parts[mapsAt + 1] ? parts[mapsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -215,11 +193,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateMapId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateMapId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (certificateMapId !== undefined) return certificateMapId;
     if (existing !== undefined) return existing;
@@ -265,114 +239,13 @@ const getByName = (name: string) =>
     .getProjectsLocationsCertificateMaps({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: certificatemanager.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const waitForOperation = (
-  operation: certificatemanager.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isAlreadyExists(operation.error)) {
-        if (
-          options?.notFoundOk === true &&
-          (operation.error.code === 5 ||
-            (operation.error.message ?? "").toUpperCase().includes("NOT_FOUND"))
-        ) {
-          return operation;
-        }
-        return yield* new CertificateMapOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CertificateMapOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = certificatemanager.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved: Effect.Effect<
-      certificatemanager.Operation,
-      certificatemanager.GetProjectsLocationsOperationsError,
-      certificatemanager.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<certificatemanager.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      certificatemanager.Operation,
-      | CertificateMapOperationFailed
-      | CertificateMapOperationPending
-      | certificatemanager.GetProjectsLocationsOperationsError,
-      certificatemanager.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new CertificateMapOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => {
-          const error = current.error;
-          const ignoreNotFound =
-            options?.notFoundOk === true &&
-            (error?.code === 5 ||
-              (error?.message ?? "").toUpperCase().includes("NOT_FOUND"));
-          return !error || isAlreadyExists(error) || ignoreNotFound;
-        },
-        (current) =>
-          new CertificateMapOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag ===
-          "GCP.CertificateManager.CertificateMapOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map
-        ? Effect.succeed(map)
-        : Effect.fail(new CertificateMapNotResolved({ name })),
+      map ? Effect.succeed(map) : Effect.fail(new CertificateMapNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateMapNotResolved",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateMapNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -381,13 +254,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map === undefined
-        ? Effect.void
-        : Effect.fail(new CertificateMapStillExists({ name })),
+      map === undefined ? Effect.void : Effect.fail(new CertificateMapStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.CertificateMapStillExists",
+      while: (error) => error._tag === "GCP.CertificateManager.CertificateMapStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -408,7 +278,6 @@ const listOwnedMaps = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const CertificateMapProvider = () =>
@@ -420,17 +289,11 @@ export const CertificateMapProvider = () =>
 
       const previousId = olds?.certificateMapId ?? output?.certificateMapId;
       const nextId = news.certificateMapId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation;
 
       if (!replace) return undefined;
@@ -441,20 +304,13 @@ export const CertificateMapProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const certificateMapId = yield* toId(
-        id,
-        olds?.certificateMapId,
-        output?.certificateMapId,
-      );
+      const certificateMapId = yield* toId(id, olds?.certificateMapId, output?.certificateMapId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, certificateMapId);
+      const name = output?.name ?? resourceName(env.project, location, certificateMapId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -465,11 +321,7 @@ export const CertificateMapProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const certificateMapId = yield* toId(
-        id,
-        news.certificateMapId,
-        output?.certificateMapId,
-      );
+      const certificateMapId = yield* toId(id, news.certificateMapId, output?.certificateMapId);
       const location = normalizeLocation(news.location ?? output?.location);
       const name = resourceName(env.project, location, certificateMapId);
       const desiredLabels = {
@@ -510,8 +362,7 @@ export const CertificateMapProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
@@ -519,16 +370,15 @@ export const CertificateMapProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* certificatemanager.patchProjectsLocationsCertificateMaps({
+        const operation = yield* certificatemanager.patchProjectsLocationsCertificateMaps({
+          name,
+          updateMask: updateMask.join(","),
+          body: {
             name,
-            updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

@@ -1,23 +1,26 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as cloudbilling from "@distilled.cloud/gcp/cloudbilling_v1";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { GcpEnvironment } from "@/GCP/Environment";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
+// Billing-account-scoped: set GOOGLE_BILLING_ACCOUNT when the credentials
+// administer the billing account (the testing service account does not).
+const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT?.trim().replace(
+  /^billingAccounts\//,
+  "",
 );
+const account = billingAccountId ?? "";
 
-// Billing-account saved queries return BadRequest ("Billing account is
-// not supported") on this testing project. Set GCP_TEST_BILLING_SAVED_QUERY=1
-// on an entitled billing account to run the lifecycle.
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+// Billing-account saved queries are rejected ("Billing account is not
+// supported") unless the billing account is enabled for them. Set
+// GCP_TEST_BILLING_SAVED_QUERY=1 on an entitled billing account.
 const entitled = process.env.GCP_TEST_BILLING_SAVED_QUERY === "1";
 
 const waitUntilGone = (name: string) =>
@@ -31,136 +34,40 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const billingAccountId = () =>
-  Effect.gen(function* () {
-    const { project } = yield* GcpEnvironment.current;
-
-    return yield* cloudbilling
-      .getBillingInfoProjects({ name: `projects/${project}` })
-      .pipe(
-        Effect.map(
-          (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
-        ),
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
-      );
-  });
-
-test.provider(
+test.provider.skipIf(!billingAccountId)(
   "getBillingAccountsLocationsSavedQueries on a missing query fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const account = (yield* billingAccountId()) || "000000-000000-000000";
       const error = yield* Effect.flip(
         logging.getBillingAccountsLocationsSavedQueries({
           name: `billingAccounts/${account}/locations/global/savedQueries/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(entitled)(
-  "createBillingAccountsLocationsSavedQueries is rejected when the billing account is not supported",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const account = (yield* billingAccountId()) || "000000-000000-000000";
-      const error = yield* Effect.flip(
-        logging.createBillingAccountsLocationsSavedQueries({
-          parent: `billingAccounts/${account}/locations/global`,
-          savedQueryId: "alchemy-probe",
-          body: {
-            displayName: "probe",
-            visibility: "PRIVATE",
-            loggingQuery: { filter: "severity>=ERROR" },
-          },
-        }),
-      );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (error._tag === "BadRequest") {
-        expect(error.message).toContain("Billing account is not supported");
-      }
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
-);
-
-test.provider.skipIf(!entitled)(
+test.provider.skipIf(!billingAccountId || !entitled)(
   "create, update, replace, and delete a billing saved query",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const account = yield* billingAccountId();
-      if (account.length === 0) {
-        const error = yield* Effect.flip(
-          logging.createBillingAccountsLocationsSavedQueries({
-            parent: "billingAccounts/000000-000000-000000/locations/global",
-            savedQueryId: "alchemy-probe",
-            body: {
-              displayName: "probe",
-              visibility: "PRIVATE",
-              loggingQuery: { filter: "severity>=ERROR" },
-            },
-          }),
-        );
-        expect(["NotFound", "Forbidden"]).toContain(error._tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      const access = yield* logging
-        .listBillingAccountsLocationsSavedQueries({
-          parent: `billingAccounts/${account}/locations/-`,
-          pageSize: 1,
-        })
-        .pipe(
-          Effect.as("ok" as const),
-          Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-            Effect.succeed(error._tag),
-          ),
-        );
-      if (access !== "ok") {
-        expect(["Forbidden", "NotFound"]).toContain(access);
-        yield* stack.destroy();
-        return;
-      }
-
-      const createdOrDenied = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* GCP.Logging.BillingSavedQuery("Errors", {
-              billingAccountId: account,
-              displayName: "billing errors",
-              loggingQuery: { filter: "severity>=ERROR" },
-              description: "error query",
-            });
-          }),
-        )
-        .pipe(
-          Effect.map((value) => ({ _tag: "created" as const, value })),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              _tag: "BadRequest" as const,
-              message: error.message ?? "",
-            }),
-          ),
-        );
-      if (createdOrDenied._tag === "BadRequest") {
-        expect(createdOrDenied.message).toContain(
-          "Billing account is not supported",
-        );
-        yield* stack.destroy();
-        return;
-      }
-      const created = createdOrDenied.value;
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Logging.BillingSavedQuery("Errors", {
+            billingAccountId: account,
+            displayName: "billing errors",
+            loggingQuery: { filter: "severity>=ERROR" },
+            description: "error query",
+          });
+        }),
+      );
 
       expect(created.savedQueryId).toEqual(expect.any(String));
       expect(created.location).toEqual("global");

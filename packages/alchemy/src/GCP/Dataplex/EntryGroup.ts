@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -120,8 +115,9 @@ export type EntryGroup = Resource<
  * ### Updating an Entry Group
  * **Example:** Description and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const group = yield* GCP.Dataplex.EntryGroup("Catalog", {
- *   entryGroupId: existing.entryGroupId,
+ *   entryGroupId: "app-catalog",
  *   description: "catalog v2",
  *   labels: { env: "prod", team: "data" },
  * });
@@ -132,16 +128,10 @@ export type EntryGroup = Resource<
  */
 export const EntryGroup = Resource<EntryGroup>("GCP.Dataplex.EntryGroup");
 
-const resourceName = (
-  project: string,
-  location: string,
-  entryGroupId: string,
-) => `projects/${project}/locations/${location}/entryGroups/${entryGroupId}`;
+const resourceName = (project: string, location: string, entryGroupId: string) =>
+  `projects/${project}/locations/${location}/entryGroups/${entryGroupId}`;
 
-const toAttrs = (
-  group: dataplex.GoogleCloudDataplexV1EntryGroup,
-  project: string,
-) => {
+const toAttrs = (group: dataplex.GoogleCloudDataplexV1EntryGroup, project: string) => {
   const name = group.name ?? "";
   const parsed = parseName(name, "entryGroups");
   return {
@@ -173,11 +163,7 @@ const listGroups = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.entryGroups,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect);
 };
 
@@ -194,10 +180,7 @@ export const EntryGroupProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.entryGroupId ?? output?.entryGroupId,
         nextId: news.entryGroupId ?? olds?.entryGroupId ?? output?.entryGroupId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -213,18 +196,12 @@ export const EntryGroupProvider = () =>
         output?.entryGroupId,
         "entrygroup",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, entryGroupId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, entryGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -242,10 +219,7 @@ export const EntryGroupProvider = () =>
         output?.entryGroupId,
         "entrygroup",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, entryGroupId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -282,10 +256,8 @@ export const EntryGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
 
       if (labelsChanged || descriptionChanged || displayNameChanged) {
         const operation = yield* retryQuota(
@@ -308,10 +280,7 @@ export const EntryGroupProvider = () =>
           }),
         );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
@@ -324,8 +293,7 @@ export const EntryGroupProvider = () =>
         })
         .pipe(
           Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "TooManyRequests",
+            while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),

@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  backupName,
   clusterIdOf,
   clusterNameOf,
   instanceIdOf,
@@ -20,6 +19,7 @@ import {
   tableNameOf,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 const DEFAULT_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -151,22 +151,16 @@ export const InstancesClustersBackup = Resource<InstancesClustersBackup>(
   "GCP.Bigtable.InstancesClustersBackup",
 );
 
-export class BackupNotResolved extends Data.TaggedError(
-  "GCP.Bigtable.BackupNotResolved",
-)<{
+export class BackupNotResolved extends Data.TaggedError("GCP.Bigtable.BackupNotResolved")<{
   name: string;
 }> {}
 
-export class BackupNotReady extends Data.TaggedError(
-  "GCP.Bigtable.BackupNotReady",
-)<{
+export class BackupNotReady extends Data.TaggedError("GCP.Bigtable.BackupNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class BackupStillExists extends Data.TaggedError(
-  "GCP.Bigtable.BackupStillExists",
-)<{
+export class BackupStillExists extends Data.TaggedError("GCP.Bigtable.BackupStillExists")<{
   name: string;
 }> {}
 
@@ -208,11 +202,7 @@ const toAttrs = (backup: bigtable.Backup, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesClustersBackups({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" || state === "STATE_UNSPECIFIED" || state === undefined;
@@ -220,9 +210,7 @@ const isBusy = (state: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup
-        ? Effect.succeed(backup)
-        : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.BackupNotResolved",
@@ -257,9 +245,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined
-        ? Effect.void
-        : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.BackupStillExists",
@@ -302,14 +288,10 @@ export const InstancesClustersBackupProvider = () =>
           ? news.sourceTable
           : `projects/_/instances/_/tables/${news.sourceTable}`,
       ).tableId;
-      const previousType = normalizeType(
-        olds?.backupType ?? output?.backupType,
-      );
+      const previousType = normalizeType(olds?.backupType ?? output?.backupType);
       const nextType = normalizeType(news.backupType ?? output?.backupType);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance) ||
         (previousCluster.length > 0 && previousCluster !== nextCluster) ||
         (previousTable.length > 0 && previousTable !== nextTable) ||
@@ -350,17 +332,13 @@ export const InstancesClustersBackupProvider = () =>
         const pages = yield* Effect.forEach(
           instances,
           (instance) =>
-            bigtable
-              .listProjectsInstancesClustersBackups({
+            collectPages(
+              bigtable.listProjectsInstancesClustersBackups.pages({
                 parent: `${instance.name}/clusters/-`,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.backups ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.Backup[]),
-                ),
-              ),
+              }),
+              (page) => page.backups,
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as bigtable.Backup[]))),
           { concurrency: 4 },
         );
         return pages.flat().map((backup) => toAttrs(backup, env.project));
@@ -371,11 +349,7 @@ export const InstancesClustersBackupProvider = () =>
       const backupId = yield* toId(id, news.backupId, output?.backupId);
       const parent = clusterNameOf(env.project, news.instance, news.cluster);
       const name = `${parent}/backups/${backupId}`;
-      const sourceTable = tableNameOf(
-        env.project,
-        news.instance,
-        news.sourceTable,
-      );
+      const sourceTable = tableNameOf(env.project, news.instance, news.sourceTable);
       const expireTime = news.expireTime ?? (yield* defaultExpireTime());
 
       let current = yield* getByName(output?.name ?? name);
@@ -405,10 +379,7 @@ export const InstancesClustersBackupProvider = () =>
 
       const mask: string[] = [];
       const patchBody: bigtable.Backup = {};
-      if (
-        news.expireTime !== undefined &&
-        (current.expireTime ?? "") !== news.expireTime
-      ) {
+      if (news.expireTime !== undefined && (current.expireTime ?? "") !== news.expireTime) {
         patchBody.expireTime = news.expireTime;
         mask.push("expire_time");
       }
@@ -432,16 +403,14 @@ export const InstancesClustersBackupProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* bigtable
-        .deleteProjectsInstancesClustersBackups({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-        );
+      yield* bigtable.deleteProjectsInstancesClustersBackups({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+      );
       yield* waitUntilGone(output.name);
     }),
   });

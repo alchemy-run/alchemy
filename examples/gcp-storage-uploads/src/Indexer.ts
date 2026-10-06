@@ -1,23 +1,13 @@
 import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import {
-  documentFor,
-  Files,
-  UPLOADS_PREFIX,
-  Uploads,
-  type FileRecord,
-} from "./resources.ts";
+import * as Stream from "effect/Stream";
+import { documentFor, Files, UPLOADS_PREFIX, Uploads, type FileRecord } from "./resources.ts";
 
 const sha256Hex = (bytes: Uint8Array) =>
-  Effect.promise(() =>
-    crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>),
-  ).pipe(
+  Effect.promise(() => crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>)).pipe(
     Effect.map((digest) =>
-      Array.from(new Uint8Array(digest), (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join(""),
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
     ),
   );
 
@@ -37,7 +27,6 @@ export default class Indexer extends GCP.Function<Indexer>()(
   "Indexer",
   {
     main: import.meta.url,
-    location: "us-central1",
   },
   Effect.gen(function* () {
     const bucket = yield* Uploads;
@@ -71,9 +60,7 @@ export default class Indexer extends GCP.Function<Indexer>()(
                 generation: event.generation,
                 size: object.body.byteLength,
                 contentType:
-                  object.contentType ??
-                  event.metadata.contentType ??
-                  "application/octet-stream",
+                  object.contentType ?? event.metadata.contentType ?? "application/octet-stream",
                 sha256: yield* sha256Hex(object.body),
                 indexedAt: new Date(),
               };

@@ -21,7 +21,6 @@ export default class Quotes extends GCP.Function<Quotes>()(
   "Quotes",
   {
     main: import.meta.url,
-    location: "us-central1",
   },
   Effect.gen(function* () {
     return {
@@ -39,10 +38,7 @@ export default class Quotes extends GCP.Function<Quotes>()(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }),
     };
   }),

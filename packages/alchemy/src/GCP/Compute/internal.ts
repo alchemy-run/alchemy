@@ -1,13 +1,13 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  waitGlobalOperations,
-  waitGlobalOrganizationOperations,
-  waitRegionOperations,
-} from "./operations.ts";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { alchemyLabelKeys } from "../Labels.ts";
+import {
+  waitGlobalOperation,
+  waitOrganizationOperation,
+  waitRegionOperation,
+} from "./operations.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
@@ -17,10 +17,8 @@ export const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? value;
 };
 
-export const normalizeRegion = (
-  region: string | undefined,
-  defaultRegion: string,
-) => lastSegment(region ?? defaultRegion).toLowerCase();
+export const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 export const rfc1035 = (name: string, fallback: string): string => {
   let next = name
@@ -86,220 +84,75 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
-export const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+export const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 export const sameUrlList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  sameJson(
-    sorted((left ?? []).map(lastSegment)),
-    sorted((right ?? []).map(lastSegment)),
-  );
+) => sameJson(sorted((left ?? []).map(lastSegment)), sorted((right ?? []).map(lastSegment)));
 
-export const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
+export interface RunOperationOptions {
+  /** Treat `RESOURCE_ALREADY_EXISTS` as success (idempotent insert). */
+  ignoreAlreadyExists?: boolean;
+  /** Treat `RESOURCE_NOT_FOUND` as success (idempotent delete). */
+  ignoreNotFound?: boolean;
+}
 
-export const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) =>
-    (item.code ?? "").toUpperCase(),
-  );
+export const ignoredCodes = (options: RunOperationOptions | undefined) => [
+  ...(options?.ignoreAlreadyExists === true ? ["RESOURCE_ALREADY_EXISTS"] : []),
+  ...(options?.ignoreNotFound === true ? ["RESOURCE_NOT_FOUND"] : []),
+];
 
-export const isAlreadyExists = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  return (
-    codes.includes("ALREADY_EXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADYEXISTS") ||
-    operation.httpErrorStatusCode === 409 ||
-    text.includes("already exists")
-  );
-};
-
-export const isNotFoundOperation = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  return (
-    operation.httpErrorStatusCode === 404 ||
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    codes.includes("NOTFOUND") ||
-    text.includes("not found")
-  );
-};
-
-export const failIfErrored = <E>(
-  operation: compute.Operation,
-  fail: (message: string) => E,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.succeed(operation);
-  }
-  if (options?.ignoreNotFound === true && isNotFoundOperation(operation)) {
-    return Effect.succeed(operation);
-  }
-  const errors = operation.error?.errors ?? [];
-  const httpFailed =
-    operation.httpErrorStatusCode !== undefined &&
-    operation.httpErrorStatusCode >= 400;
-  if (errors.length === 0 && !httpFailed) {
-    return Effect.succeed(operation);
-  }
-  return Effect.fail(fail(operationMessage(operation)));
-};
-
-export const waitRegion = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  options?: { times?: number },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") return operation;
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) return operation;
-    return yield* waitRegionOperations(
-      { project, region, operation: name },
-      { times: options?.times ?? 30 },
-    );
-  });
-
-export const waitGlobal = (
-  project: string,
-  operation: compute.Operation,
-  options?: { times?: number },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") return operation;
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) return operation;
-    return yield* waitGlobalOperations(
-      { project, operation: name },
-      { times: options?.times ?? 12 },
-    );
-  });
-
-export const waitOrg = (
-  operation: compute.Operation,
-  parentId: string | undefined,
-  options?: { times?: number },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") return operation;
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) return operation;
-    return yield* waitGlobalOrganizationOperations(
-      { operation: name, parentId },
-      { times: options?.times ?? 12 },
-    ).pipe(
-      Effect.retry({
-        while: (error) => error._tag === "NotFound",
-        times: 5,
-        schedule: Schedule.exponential("250 millis"),
-      }),
-    );
-  });
-
-export const runRegionOp = <
-  E extends { readonly _tag: string },
-  R,
-  F extends { readonly _tag: string },
->(
-  project: string,
-  region: string,
+/**
+ * Start a Compute operation and wait for it. The insert/delete call itself
+ * is retried while another operation holds the resource (`Conflict`).
+ */
+const runOp = <E extends { readonly _tag: string }, R, E2, R2>(
   start: Effect.Effect<compute.Operation, E, R>,
-  fail: (operation: string, message: string) => F,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
+  wait: (operation: compute.Operation) => Effect.Effect<compute.Operation, E2, R2>,
 ) =>
   start.pipe(
-    Effect.flatMap((operation) =>
-      waitRegion(project, region, operation).pipe(
-        Effect.flatMap((done) =>
-          failIfErrored(
-            done,
-            (message) => fail(done.name ?? operation.name ?? "", message),
-            options,
-          ),
-        ),
-      ),
-    ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
       times: 5,
       schedule: Schedule.spaced("1 second"),
     }),
+    Effect.flatMap(wait),
   );
 
-export const runGlobalOp = <
-  E extends { readonly _tag: string },
-  R,
-  F extends { readonly _tag: string },
->(
+export const runRegionOp = <E extends { readonly _tag: string }, R>(
   project: string,
+  region: string,
   start: Effect.Effect<compute.Operation, E, R>,
-  fail: (operation: string, message: string) => F,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
+  options?: RunOperationOptions,
 ) =>
-  start.pipe(
-    Effect.flatMap((operation) =>
-      waitGlobal(project, operation).pipe(
-        Effect.flatMap((done) =>
-          failIfErrored(
-            done,
-            (message) => fail(done.name ?? operation.name ?? "", message),
-            options,
-          ),
-        ),
-      ),
-    ),
-    Effect.retry({
-      while: (error) => error._tag === "Conflict",
-      times: 5,
-      schedule: Schedule.spaced("1 second"),
+  runOp(start, (operation) =>
+    waitRegionOperation(project, region, operation, {
+      ignore: ignoredCodes(options),
     }),
   );
 
-export const runOrgOp = <
-  E extends { readonly _tag: string },
-  R,
-  F extends { readonly _tag: string },
->(
+export const runGlobalOp = <E extends { readonly _tag: string }, R>(
+  project: string,
+  start: Effect.Effect<compute.Operation, E, R>,
+  options?: RunOperationOptions,
+) =>
+  runOp(start, (operation) =>
+    waitGlobalOperation(project, operation, { ignore: ignoredCodes(options) }),
+  );
+
+export const runOrgOp = <E extends { readonly _tag: string }, R>(
   parentId: string,
   start: Effect.Effect<compute.Operation, E, R>,
-  fail: (operation: string, message: string) => F,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
+  options?: RunOperationOptions,
 ) =>
-  start.pipe(
-    Effect.flatMap((operation) =>
-      waitOrg(operation, parentId).pipe(
-        Effect.flatMap((done) =>
-          failIfErrored(
-            done,
-            (message) => fail(done.name ?? operation.name ?? "", message),
-            options,
-          ),
-        ),
-      ),
-    ),
-    Effect.retry({
-      while: (error) => error._tag === "Conflict",
-      times: 5,
-      schedule: Schedule.spaced("1 second"),
+  runOp(start, (operation) =>
+    waitOrganizationOperation(operation, parentId, {
+      ignore: ignoredCodes(options),
     }),
   );

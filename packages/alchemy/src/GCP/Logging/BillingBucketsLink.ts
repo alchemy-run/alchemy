@@ -21,8 +21,8 @@ import {
   parseDescription,
   resolveBillingAccountId,
   toLinkId,
-  waitForBillingOperation,
 } from "./internal.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 export type BillingBucketsLinkProps = {
   /**
@@ -123,9 +123,7 @@ export type BillingBucketsLink = Resource<
  * @resource
  * @category Logging
  */
-export const BillingBucketsLink = Resource<BillingBucketsLink>(
-  "GCP.Logging.BillingBucketsLink",
-);
+export const BillingBucketsLink = Resource<BillingBucketsLink>("GCP.Logging.BillingBucketsLink");
 
 export class BillingBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketsLinkNotResolved",
@@ -157,8 +155,7 @@ const parseLinkName = (name: string) => {
 const isDeleted = (link: logging.Link | undefined): link is undefined =>
   link === undefined || link.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
 const toAttrs = (
   link: logging.Link,
@@ -174,10 +171,7 @@ const toAttrs = (
   const resolvedBucket = parsedName?.bucketId ?? bucketId;
   return {
     name:
-      link.name ??
-      (linkId
-        ? resourceName(account, resolvedLocation, resolvedBucket, linkId)
-        : ""),
+      link.name ?? (linkId ? resourceName(account, resolvedLocation, resolvedBucket, linkId) : ""),
     linkId,
     bucketId: resolvedBucket,
     billingAccountId: account,
@@ -209,8 +203,7 @@ const waitUntilActive = (name: string) =>
     return link;
   }).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.BillingBucketsLinkNotResolved",
+      while: (error) => error._tag === "GCP.Logging.BillingBucketsLinkNotResolved",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -219,13 +212,10 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link)
-        ? Effect.void
-        : Effect.fail(new BillingBucketsLinkNotResolved({ name })),
+      isDeleted(link) ? Effect.void : Effect.fail(new BillingBucketsLinkNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.BillingBucketsLinkNotResolved",
+      while: (error) => error._tag === "GCP.Logging.BillingBucketsLinkNotResolved",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -233,37 +223,25 @@ const waitUntilDeleted = (name: string) =>
 
 export const BillingBucketsLinkProvider = () =>
   Provider.succeed(BillingBucketsLink, {
-    stables: [
-      "name",
-      "linkId",
-      "bucketId",
-      "billingAccountId",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "linkId", "bucketId", "billingAccountId", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.linkId ?? output?.linkId;
       const idChanged =
-        previousId !== undefined &&
-        news.linkId !== undefined &&
-        news.linkId !== previousId;
+        previousId !== undefined && news.linkId !== undefined && news.linkId !== previousId;
       const previousBucket = olds?.bucketId ?? output?.bucketId;
-      const bucketChanged =
-        previousBucket !== undefined && news.bucketId !== previousBucket;
+      const bucketChanged = previousBucket !== undefined && news.bucketId !== previousBucket;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
         news.location !== previousLocation;
-      const previousAccount =
-        olds?.billingAccountId ?? output?.billingAccountId;
+      const previousAccount = olds?.billingAccountId ?? output?.billingAccountId;
       const accountChanged =
         previousAccount !== undefined &&
         news.billingAccountId !== undefined &&
-        billingAccountIdOf(news.billingAccountId) !==
-          billingAccountIdOf(previousAccount);
+        billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !bucketChanged && !locationChanged && !accountChanged) {
         return undefined;
       }
@@ -278,9 +256,7 @@ export const BillingBucketsLinkProvider = () =>
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
       const bucketId = olds?.bucketId ?? output?.bucketId ?? "";
       const linkId = yield* toLinkId(id, olds?.linkId, output?.linkId);
-      const name =
-        output?.name ??
-        resourceName(billingAccountId, location, bucketId, linkId);
+      const name = output?.name ?? resourceName(billingAccountId, location, bucketId, linkId);
       const existing = yield* getByName(name);
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, billingAccountId, location, bucketId);
@@ -291,9 +267,7 @@ export const BillingBucketsLinkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const billingAccountId = yield* lookupProjectBillingAccountId(
-          env.project,
-        );
+        const billingAccountId = yield* lookupProjectBillingAccountId(env.project);
         if (billingAccountId === undefined) return [];
         const buckets = yield* logging.listBillingAccountsLocationsBuckets
           .pages({
@@ -304,9 +278,7 @@ export const BillingBucketsLinkProvider = () =>
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as logging.LogBucket[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as logging.LogBucket[])),
           );
         const listed: BillingBucketsLink["Attributes"][] = [];
         for (const bucket of buckets) {
@@ -315,21 +287,13 @@ export const BillingBucketsLinkProvider = () =>
             .pages({ parent: bucket.name, pageSize: 1000 })
             .pipe(
               Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
-              Stream.filter(
-                (link) =>
-                  !isDeleted(link) && hasOwnershipMarker(link.description),
-              ),
+              Stream.filter((link) => !isDeleted(link) && hasOwnershipMarker(link.description)),
               Stream.map((link) =>
-                toAttrs(
-                  link,
-                  billingAccountId,
-                  DEFAULT_LOCATION,
-                  lastSegment(bucket.name ?? ""),
-                ),
+                toAttrs(link, billingAccountId, DEFAULT_LOCATION, lastSegment(bucket.name ?? "")),
               ),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed([] as BillingBucketsLink["Attributes"][]),
               ),
             );
@@ -361,12 +325,10 @@ export const BillingBucketsLinkProvider = () =>
             body: { description: desiredDescription },
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<logging.Operation>({ done: true }),
-            ),
+            Effect.catchTag("Conflict", () => Effect.succeed<logging.Operation>({ done: true })),
           );
         if (operation.done !== true || operation.name) {
-          yield* waitForBillingOperation(operation);
+          yield* waitForOperation(operation);
         }
         current = yield* waitUntilActive(name);
       } else if (isPending(current.lifecycleState)) {
@@ -384,13 +346,9 @@ export const BillingBucketsLinkProvider = () =>
       if (output.lifecycleState === "DELETE_REQUESTED") return;
       const operation = yield* logging
         .deleteBillingAccountsLocationsBucketsLinks({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed<logging.Operation>({ done: true }),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed<logging.Operation>({ done: true })));
       if (operation.done !== true || operation.name) {
-        yield* waitForBillingOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilDeleted(output.name);
     }),

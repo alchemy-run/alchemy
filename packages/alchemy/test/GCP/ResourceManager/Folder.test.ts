@@ -1,33 +1,26 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 // Live create returns Forbidden: Permission 'resourcemanager.folders.create'
 // denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'.
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_RESOURCE_MANAGER === "1";
+// Set GOOGLE_ORGANIZATION_ID when the credentials can create folders there.
+const runLifecycle = !!process.env.GOOGLE_ORGANIZATION_ID;
 
 const waitUntilGone = (name: string) =>
   resourcemanager.getFolders({ name }).pipe(
     Effect.map((folder) =>
-      folder.state === "DELETE_REQUESTED"
-        ? ("gone" as const)
-        : ("found" as const),
+      folder.state === "DELETE_REQUESTED" ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -54,7 +47,7 @@ test.provider(
           name: "folders/999999999999",
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("FolderNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -64,28 +57,24 @@ test.provider(
   },
 );
 
-test.provider.skipIf(process.env.GCP_TEST_RESOURCE_MANAGER === "1")(
-  "createFolders without folder IAM fails with a typed tag",
+test.provider.skipIf(runLifecycle)(
+  "createFolders without folder IAM fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const parent = yield* resolveParent.pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
       const error = yield* Effect.flip(
         resourcemanager.createFolders({
           body: {
             parent: parent ?? "organizations/0",
-            displayName: "az-probe-folder",
+            displayName: "probe-folder",
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest", "Conflict"]).toContain(
-        error._tag,
-      );
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -110,7 +99,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.name).toMatch(/^folders\//);
-      expect(created.displayName).toMatch(/^az-/);
+      expect(created.displayName).toEqual("platform");
       expect(created.parent).toMatch(/^(organizations|folders)\//);
       expect(created.state).toEqual("ACTIVE");
 
@@ -130,13 +119,13 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.displayName).toEqual("az-platform-prod");
+      expect(updated.displayName).toEqual("platform-prod");
       expect(updated.createTime).toEqual(created.createTime);
 
       const fetchedUpdate = yield* resourcemanager.getFolders({
         name: updated.name,
       });
-      expect(fetchedUpdate.displayName).toEqual("az-platform-prod");
+      expect(fetchedUpdate.displayName).toEqual("platform-prod");
 
       yield* stack.destroy();
 

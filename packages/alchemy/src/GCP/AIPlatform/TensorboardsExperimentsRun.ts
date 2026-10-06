@@ -18,13 +18,7 @@ import {
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
-import {
-  lastSegment,
-  locationOf,
-  locationParent,
-  parentOf,
-  toResourceId,
-} from "./ownership.ts";
+import { lastSegment, locationOf, locationParent, parentOf, toResourceId } from "./ownership.ts";
 
 export type TensorboardsExperimentsRunProps = {
   /**
@@ -114,13 +108,9 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const resourceName = (parent: string, runId: string) =>
-  `${parent}/runs/${runId}`;
+const resourceName = (parent: string, runId: string) => `${parent}/runs/${runId}`;
 
-const toAttrs = (
-  run: aiplatform.GoogleCloudAiplatformV1TensorboardRun,
-  project: string,
-) => {
+const toAttrs = (run: aiplatform.GoogleCloudAiplatformV1TensorboardRun, project: string) => {
   const name = run.name ?? "";
   return {
     name,
@@ -156,38 +146,27 @@ const listTensorboards = (project: string, location: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
     );
 
 const listExperiments = (parent: string) =>
-  aiplatform.listProjectsLocationsTensorboardsExperiments
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.tensorboardExperiments ?? []),
-      ),
-      Stream.map((experiment) => experiment.name ?? ""),
-      Stream.filter((name) => name.length > 0),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
-    );
+  aiplatform.listProjectsLocationsTensorboardsExperiments.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tensorboardExperiments ?? [])),
+    Stream.map((experiment) => experiment.name ?? ""),
+    Stream.filter((name) => name.length > 0),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+  );
 
 const listAtParent = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsTensorboardsExperimentsRuns
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.tensorboardRuns ?? [])),
-      Stream.filter((run) =>
-        Object.keys(run.labels ?? {}).some((key) => key.startsWith("alchemy-")),
-      ),
-      Stream.map((run) => toAttrs(run, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsTensorboardsExperimentsRuns.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tensorboardRuns ?? [])),
+    Stream.filter((run) => Object.keys(run.labels ?? {}).some((key) => key.startsWith("alchemy-"))),
+    Stream.map((run) => toAttrs(run, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const TensorboardsExperimentsRunProvider = () =>
   Provider.succeed(TensorboardsExperimentsRun, {
@@ -200,11 +179,7 @@ export const TensorboardsExperimentsRunProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.runId ?? output?.runId;
-      if (
-        previousId !== undefined &&
-        news.runId !== undefined &&
-        news.runId !== previousId
-      ) {
+      if (previousId !== undefined && news.runId !== undefined && news.runId !== previousId) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -214,22 +189,18 @@ export const TensorboardsExperimentsRunProvider = () =>
       const env = yield* GcpEnvironment.current;
       const runId = yield* toResourceId(id, olds?.runId, output?.runId);
       const name =
-        output?.name ??
-        (olds?.parent !== undefined ? resourceName(olds.parent, runId) : "");
+        output?.name ?? (olds?.parent !== undefined ? resourceName(olds.parent, runId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const boards = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listTensorboards(env.project, location),
+        const boards = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listTensorboards(env.project, location),
         )).flat();
         const experiments = (yield* Effect.forEach(boards, listExperiments, {
           concurrency: 4,
@@ -277,27 +248,25 @@ export const TensorboardsExperimentsRunProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || displayChanged || descriptionChanged) {
-        current =
-          yield* aiplatform.patchProjectsLocationsTensorboardsExperimentsRuns({
+        current = yield* aiplatform.patchProjectsLocationsTensorboardsExperimentsRuns({
+          name,
+          updateMask: [
+            labelsChanged ? "labels" : undefined,
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name,
-            updateMask: [
-              labelsChanged ? "labels" : undefined,
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name,
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-            },
-          });
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -10,15 +12,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
-import {
-  encodeOwnershipLine,
-  hasOwnershipMarker,
-  lastSegment,
-  locationOf,
-  locationParent,
-  ownedByAlchemy,
-  parseOwnership,
-} from "./ownership.ts";
+import { lastSegment, locationOf, locationParent } from "./ownership.ts";
 
 export type StudyMetricSpec = {
   /** Metric id. Must be unique among metrics. */
@@ -47,11 +41,7 @@ export type StudyParameterSpec = {
   /** Categorical feasible values. */
   categoricalValueSpec?: { values?: string[]; defaultValue?: string };
   /** Scaling. Leave unset for categorical parameters. */
-  scaleType?:
-    | "UNIT_LINEAR_SCALE"
-    | "UNIT_LOG_SCALE"
-    | "UNIT_REVERSE_LOG_SCALE"
-    | (string & {});
+  scaleType?: "UNIT_LINEAR_SCALE" | "UNIT_LOG_SCALE" | "UNIT_REVERSE_LOG_SCALE" | (string & {});
 };
 
 export type StudySpec = {
@@ -60,16 +50,9 @@ export type StudySpec = {
   /** Parameters to tune. */
   parameters: StudyParameterSpec[];
   /** Search algorithm. */
-  algorithm?:
-    | "ALGORITHM_UNSPECIFIED"
-    | "GRID_SEARCH"
-    | "RANDOM_SEARCH"
-    | (string & {});
+  algorithm?: "ALGORITHM_UNSPECIFIED" | "GRID_SEARCH" | "RANDOM_SEARCH" | (string & {});
   /** Which measurement to use when a trial reports several. */
-  measurementSelectionType?:
-    | "LAST_MEASUREMENT"
-    | "BEST_MEASUREMENT"
-    | (string & {});
+  measurementSelectionType?: "LAST_MEASUREMENT" | "BEST_MEASUREMENT" | (string & {});
 };
 
 export type StudyProps = {
@@ -79,9 +62,11 @@ export type StudyProps = {
    */
   location?: string;
   /**
-   * User-facing display name. Vertex AI Studies have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
-   * from attributes. Display name is the lookup key.
+   * User-facing display name: letters, digits, and underscores, starting
+   * with a letter. Vertex AI Studies have no labels field, so Alchemy
+   * appends an `_alchemy_{hash}` ownership suffix (stripped from
+   * attributes). Display name is the lookup key.
+   * @default "study"
    */
   displayName?: string;
   /**
@@ -120,8 +105,8 @@ export type Study = Resource<
 /**
  * A Vertex AI Vizier Study for hyperparameter search.
  *
- * Studies have no labels field and no update RPC — Alchemy stamps
- * ownership into the display name. Location and study spec are immutable.
+ * Studies have no labels field and no update RPC — Alchemy stamps an
+ * ownership hash onto the display name. Location and study spec are immutable.
  *
  * ### Creating a Study
  * **Example:** Maximize accuracy over a double parameter
@@ -145,15 +130,11 @@ export type Study = Resource<
  */
 export const Study = Resource<Study>("GCP.AIPlatform.Study");
 
-export class StudyNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.StudyNotResolved",
-)<{
+export class StudyNotResolved extends Data.TaggedError("GCP.AIPlatform.StudyNotResolved")<{
   name: string;
 }> {}
 
-const toStudySpec = (
-  spec: StudySpec,
-): aiplatform.GoogleCloudAiplatformV1StudySpec => ({
+const toStudySpec = (spec: StudySpec): aiplatform.GoogleCloudAiplatformV1StudySpec => ({
   metrics: spec.metrics.map((metric) => ({
     metricId: metric.metricId,
     goal: metric.goal,
@@ -178,12 +159,43 @@ const specKey = (spec: StudySpec) =>
     measurementSelectionType: spec.measurementSelectionType ?? "",
   });
 
-const toAttrs = (
-  study: aiplatform.GoogleCloudAiplatformV1Study,
-  project: string,
-) => {
+/**
+ * Study display names allow only `[A-Za-z0-9_]`, so ownership is a
+ * `_alchemy_{hash}` suffix over the stack, stage, and logical id rather
+ * than the bracketed marker other Vertex AI resources use.
+ */
+const OWNER_SEPARATOR = "_alchemy_";
+const DEFAULT_DISPLAY_NAME = "study";
+
+const ownerSuffix = (id: string) =>
+  createInternalLabels(id).pipe(
+    Effect.flatMap((labels) =>
+      Effect.sync(
+        () =>
+          OWNER_SEPARATOR +
+          createHash("sha256").update(JSON.stringify(labels)).digest("hex").slice(0, 20),
+      ),
+    ),
+  );
+
+const encodeDisplayName = (suffix: string, displayName: string | undefined) =>
+  `${displayName ?? DEFAULT_DISPLAY_NAME}${suffix}`;
+
+const parseDisplayName = (displayName: string | undefined) => {
+  const at = displayName?.lastIndexOf(OWNER_SEPARATOR) ?? -1;
+  return displayName !== undefined && at > 0 ? displayName.slice(0, at) : displayName;
+};
+
+/** Whether a study's display name carries an Alchemy ownership suffix. */
+export const hasStudyOwnership = (displayName: string | undefined) =>
+  (displayName?.lastIndexOf(OWNER_SEPARATOR) ?? -1) > 0;
+
+const ownedByAlchemy = (id: string, displayName: string | undefined) =>
+  ownerSuffix(id).pipe(Effect.map((suffix) => displayName?.endsWith(suffix) === true));
+
+const toAttrs = (study: aiplatform.GoogleCloudAiplatformV1Study, project: string) => {
   const name = study.name ?? "";
-  const parsed = parseOwnership(study.displayName);
+  const parsed = { text: parseDisplayName(study.displayName) };
   return {
     name,
     studyId: lastSegment(name),
@@ -204,23 +216,26 @@ const getByName = (name: string) =>
         .getProjectsLocationsStudies({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+// `lookupProjectsLocationsStudies` answers a missing display name with a
+// 500 ("There was an issue when sending 'LookupStudyRequest'"), so scan
+// the listing instead.
 const lookupByDisplayName = (parent: string, displayName: string) =>
-  aiplatform
-    .lookupProjectsLocationsStudies({
-      parent,
-      body: { displayName },
-    })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  aiplatform.listProjectsLocationsStudies.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.studies ?? [])),
+    Stream.filter((study) => study.displayName === displayName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const listAt = (parent: string, project: string) =>
   aiplatform.listProjectsLocationsStudies.pages({ parent, pageSize: 100 }).pipe(
     Stream.flatMap((page) => Stream.fromIterable(page.studies ?? [])),
-    Stream.filter((study) => hasOwnershipMarker(study.displayName)),
+    Stream.filter((study) => hasStudyOwnership(study.displayName)),
     Stream.map((study) => toAttrs(study, project)),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const StudyProvider = () =>
@@ -247,20 +262,15 @@ export const StudyProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing !== undefined) {
         const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.displayName))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
       }
       const location = olds?.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
-      const ownership = yield* createInternalLabels(id);
-      const displayName = encodeOwnershipLine(ownership, olds?.displayName);
+      const displayName = encodeDisplayName(yield* ownerSuffix(id), olds?.displayName);
       const lookedUp = yield* lookupByDisplayName(parent, displayName);
       if (lookedUp === undefined) return undefined;
       const attrs = toAttrs(lookedUp, env.project);
-      return (yield* ownedByAlchemy(id, lookedUp.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, lookedUp.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -275,8 +285,7 @@ export const StudyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = news.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
-      const ownership = yield* createInternalLabels(id);
-      const displayName = encodeOwnershipLine(ownership, news.displayName);
+      const displayName = encodeDisplayName(yield* ownerSuffix(id), news.displayName);
       const studySpec = toStudySpec(news.studySpec);
 
       let current = yield* getByName(output?.name ?? "");
@@ -293,11 +302,7 @@ export const StudyProvider = () =>
               studySpec,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              lookupByDisplayName(parent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => lookupByDisplayName(parent, displayName)));
         current = created ?? undefined;
       }
 

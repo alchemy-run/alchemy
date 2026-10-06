@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -10,16 +11,14 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { listLocations } from "./names.ts";
 import {
-  encodeOwnership,
   hasAlchemyLabelKeys,
-  hasOwnershipMarker,
   parseOwnership,
   parseResourceName,
   resourceNameFromOperation,
   waitForOperation,
 } from "./internal.ts";
+import { listLocations } from "./names.ts";
 
 export type DatasetsDatasetVersionProps = {
   /**
@@ -90,8 +89,9 @@ export type DatasetsDatasetVersion = Resource<
  * ### Updating a Dataset Version
  * **Example:** Rename the snapshot
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const version = yield* GCP.AIPlatform.DatasetsDatasetVersion("V1", {
- *   dataset: existing.dataset,
+ *   dataset: dataset.name,
  *   displayName: "v1-final",
  * });
  * ```
@@ -134,15 +134,39 @@ const parseVersionName = (name: string) => {
 const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : aiplatform.getDatasetsDatasetVersions({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-      );
+    : aiplatform
+        .getDatasetsDatasetVersions({ name })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toAttrs = (
-  version: aiplatform.GoogleCloudAiplatformV1DatasetVersion,
-  project: string,
-) => {
+/**
+ * Dataset versions carry ownership only in their display name, which
+ * Vertex AI caps at 128 characters — too short for the full
+ * `[alchemy stack=… stage=… id=…]` marker of long stack names. Stamp a
+ * fixed-width hash of the ownership labels instead.
+ */
+const ownerTag = (id: string) =>
+  createInternalLabels(id).pipe(
+    Effect.flatMap((labels) =>
+      Effect.sync(
+        () =>
+          `[alchemy #${createHash("sha256")
+            .update(JSON.stringify(labels))
+            .digest("hex")
+            .slice(0, 16)}]`,
+      ),
+    ),
+  );
+
+const encodeDisplayName = (tag: string, displayName: string | undefined) =>
+  displayName ? `${tag} ${displayName}` : tag;
+
+const ownedByAlchemy = (id: string, displayName: string | undefined) =>
+  Effect.gen(function* () {
+    if (displayName?.startsWith(yield* ownerTag(id))) return true;
+    return yield* hasAlchemyLabels(id, parseOwnership(displayName).labels);
+  });
+
+const toAttrs = (version: aiplatform.GoogleCloudAiplatformV1DatasetVersion, project: string) => {
   const name = version.name ?? "";
   const parsed = parseVersionName(name);
   const ownership = parseOwnership(version.displayName);
@@ -169,7 +193,6 @@ const listVersions = (dataset: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const listDatasets = (project: string, region: string) =>
@@ -189,7 +212,6 @@ const listDatasetsAt = (parent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, dataset: string, hinted?: string) =>
@@ -200,12 +222,9 @@ const findOwned = (id: string, dataset: string, hinted?: string) =>
     }
     const versions = yield* listVersions(dataset);
     for (const version of versions) {
-      const { labels } = parseOwnership(version.displayName);
-      if (yield* hasAlchemyLabels(id, labels)) return version;
+      if (yield* ownedByAlchemy(id, version.displayName)) return version;
     }
-    return undefined as
-      | aiplatform.GoogleCloudAiplatformV1DatasetVersion
-      | undefined;
+    return undefined as aiplatform.GoogleCloudAiplatformV1DatasetVersion | undefined;
   });
 
 const waitUntilExists = (name: string) =>
@@ -216,8 +235,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new DatasetsDatasetVersionNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.DatasetsDatasetVersionNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.DatasetsDatasetVersionNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -231,8 +249,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new DatasetsDatasetVersionStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.DatasetsDatasetVersionStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.DatasetsDatasetVersionStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -240,14 +257,7 @@ const waitUntilGone = (name: string) =>
 
 export const DatasetsDatasetVersionProvider = () =>
   Provider.succeed(DatasetsDatasetVersion, {
-    stables: [
-      "name",
-      "datasetVersionId",
-      "dataset",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "datasetVersionId", "dataset", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -269,8 +279,7 @@ export const DatasetsDatasetVersionProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const { labels } = parseOwnership(existing.displayName);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -282,7 +291,7 @@ export const DatasetsDatasetVersionProvider = () =>
           if (dataset.name === undefined) continue;
           const page = yield* listVersions(dataset.name);
           for (const version of page) {
-            if (hasOwnershipMarker(version.displayName)) {
+            if (version.displayName?.startsWith("[alchemy ")) {
               versions.push(toAttrs(version, env.project));
             }
           }
@@ -292,8 +301,7 @@ export const DatasetsDatasetVersionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const ownership = yield* createInternalLabels(id);
-      const desiredDisplayName = encodeOwnership(ownership, news.displayName);
+      const desiredDisplayName = encodeDisplayName(yield* ownerTag(id), news.displayName);
 
       let current = yield* findOwned(id, news.dataset, output?.name);
 
@@ -305,13 +313,9 @@ export const DatasetsDatasetVersionProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          const done = yield* waitForOperation(created, {
-            times: 10,
-            space: "8 seconds",
-          });
+          const done = yield* waitForOperation(created);
           const createdName =
-            resourceNameFromOperation(done) ??
-            (yield* findOwned(id, news.dataset))?.name;
+            resourceNameFromOperation(done) ?? (yield* findOwned(id, news.dataset))?.name;
           if (createdName !== undefined && createdName.length > 0) {
             current = yield* waitUntilExists(createdName);
           }
@@ -329,12 +333,11 @@ export const DatasetsDatasetVersionProvider = () =>
 
       const name = current.name ?? "";
       if ((current.displayName ?? "") !== desiredDisplayName) {
-        current =
-          yield* aiplatform.patchProjectsLocationsDatasetsDatasetVersions({
-            name,
-            updateMask: "display_name",
-            body: { name, displayName: desiredDisplayName },
-          });
+        current = yield* aiplatform.patchProjectsLocationsDatasetsDatasetVersions({
+          name,
+          updateMask: "display_name",
+          body: { name, displayName: desiredDisplayName },
+        });
       }
 
       return toAttrs(current, env.project);

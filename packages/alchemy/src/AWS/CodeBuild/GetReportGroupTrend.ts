@@ -25,10 +25,7 @@ export interface GetReportGroupTrend extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.GetReportGroupTrendInput, "reportGroupArn">,
-    ) => Effect.Effect<
-      SVC.GetReportGroupTrendOutput,
-      SVC.GetReportGroupTrendError
-    >
+    ) => Effect.Effect<SVC.GetReportGroupTrendOutput, SVC.GetReportGroupTrendError>
   >
 > {}
 export const GetReportGroupTrend = Binding.Service<GetReportGroupTrend>(

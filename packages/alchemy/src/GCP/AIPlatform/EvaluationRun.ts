@@ -11,7 +11,6 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   hasAlchemyLabelMap,
   normalizeLocation,
@@ -19,6 +18,7 @@ import {
   toPhysicalRfc1035,
   userLabels,
 } from "./helpers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -53,10 +53,7 @@ export type EvaluationRunProps = {
   /**
    * Candidate-to-inference config map. Immutable.
    */
-  inferenceConfigs?: Record<
-    string,
-    aiplatform.GoogleCloudAiplatformV1EvaluationRunInferenceConfig
-  >;
+  inferenceConfigs?: Record<string, aiplatform.GoogleCloudAiplatformV1EvaluationRunInferenceConfig>;
   /**
    * Metrics, rubric, and output configuration. Immutable.
    */
@@ -78,28 +75,17 @@ export type EvaluationRun = Resource<
     /** Display name. */
     displayName: string | undefined;
     /** Run state. */
-    state:
-      | aiplatform.GoogleCloudAiplatformV1EvaluationRunStateEnum
-      | (string & {})
-      | undefined;
+    state: aiplatform.GoogleCloudAiplatformV1EvaluationRunStateEnum | (string & {}) | undefined;
     /** Data source. */
-    dataSource:
-      | aiplatform.GoogleCloudAiplatformV1EvaluationRunDataSource
-      | undefined;
+    dataSource: aiplatform.GoogleCloudAiplatformV1EvaluationRunDataSource | undefined;
     /** Inference configs. */
-    inferenceConfigs:
-      | aiplatform.GoogleCloudAiplatformV1EvaluationRunInferenceConfigMap
-      | undefined;
+    inferenceConfigs: aiplatform.GoogleCloudAiplatformV1EvaluationRunInferenceConfigMap | undefined;
     /** Evaluation config. */
-    evaluationConfig:
-      | aiplatform.GoogleCloudAiplatformV1EvaluationRunEvaluationConfig
-      | undefined;
+    evaluationConfig: aiplatform.GoogleCloudAiplatformV1EvaluationRunEvaluationConfig | undefined;
     /** Snapshot evaluation set. */
     evaluationSetSnapshot: string | undefined;
     /** Results when the run succeeded. */
-    evaluationResults:
-      | aiplatform.GoogleCloudAiplatformV1EvaluationResults
-      | undefined;
+    evaluationResults: aiplatform.GoogleCloudAiplatformV1EvaluationResults | undefined;
     /** Caller metadata. */
     metadata: unknown;
     /** User labels (Alchemy ownership labels stripped). */
@@ -143,9 +129,7 @@ export type EvaluationRun = Resource<
  * @resource
  * @category AIPlatform
  */
-export const EvaluationRun = Resource<EvaluationRun>(
-  "GCP.AIPlatform.EvaluationRun",
-);
+export const EvaluationRun = Resource<EvaluationRun>("GCP.AIPlatform.EvaluationRun");
 
 export class EvaluationRunNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationRunNotResolved",
@@ -162,10 +146,7 @@ export class EvaluationRunStillExists extends Data.TaggedError(
 const resourceName = (project: string, location: string, runId: string) =>
   `projects/${project}/locations/${location}/evaluationRuns/${runId}`;
 
-const toAttrs = (
-  run: aiplatform.GoogleCloudAiplatformV1EvaluationRun,
-  project: string,
-) => {
+const toAttrs = (run: aiplatform.GoogleCloudAiplatformV1EvaluationRun, project: string) => {
   const name = run.name ?? "";
   const parsed = parseResourceName(name, "evaluationRuns");
   return {
@@ -205,7 +186,6 @@ const listOwned = (project: string, location = "-") =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, project: string, location?: string) =>
@@ -222,13 +202,10 @@ const findOwned = (id: string, project: string, location?: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((run) =>
-      run === undefined
-        ? Effect.void
-        : Effect.fail(new EvaluationRunStillExists({ name })),
+      run === undefined ? Effect.void : Effect.fail(new EvaluationRunStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.EvaluationRunStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.EvaluationRunStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -243,20 +220,12 @@ export const EvaluationRunProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.evaluationRunId ?? output?.evaluationRunId;
       const nextId = news.evaluationRunId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const previousDisplay = olds?.displayName ?? output?.displayName ?? "";
       const nextDisplay = news.displayName ?? previousDisplay;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (news.displayName !== undefined && nextDisplay !== previousDisplay);
       if (!replace) return undefined;
@@ -265,22 +234,13 @@ export const EvaluationRunProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const runId = olds?.evaluationRunId ?? output?.evaluationRunId;
-      const name =
-        output?.name ??
-        (runId ? resourceName(env.project, location, runId) : undefined);
-      const existing = name
-        ? yield* getByName(name)
-        : yield* findOwned(id, env.project, location);
+      const name = output?.name ?? (runId ? resourceName(env.project, location, runId) : undefined);
+      const existing = name ? yield* getByName(name) : yield* findOwned(id, env.project, location);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -292,25 +252,17 @@ export const EvaluationRunProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const runId = news.evaluationRunId ?? output?.evaluationRunId;
-      const name =
-        output?.name ??
-        (runId ? resourceName(env.project, location, runId) : undefined);
+      const name = output?.name ?? (runId ? resourceName(env.project, location, runId) : undefined);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const displayName =
-        news.displayName ??
-        (yield* toPhysicalRfc1035(id, undefined, undefined, MAX_NAME_LENGTH));
+        news.displayName ?? (yield* toPhysicalRfc1035(id, undefined, undefined, MAX_NAME_LENGTH));
 
-      let current = name
-        ? yield* getByName(name)
-        : yield* findOwned(id, env.project, location);
+      let current = name ? yield* getByName(name) : yield* findOwned(id, env.project, location);
 
       if (current === undefined) {
         current = yield* aiplatform
@@ -325,11 +277,7 @@ export const EvaluationRunProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, env.project, location),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, location)));
       }
 
       if (current === undefined) {
@@ -342,13 +290,16 @@ export const EvaluationRunProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // A running evaluation blocks the delete with BadRequest "There are
+      // other operations running on the EvaluationRun" until it finishes
+      // (cancel is unimplemented: HTTP 501).
       const operation = yield* aiplatform
         .deleteProjectsLocationsEvaluationRuns({ name: output.name })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
+            while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
+            times: 24,
             schedule: Schedule.spaced("5 seconds"),
           }),
         );

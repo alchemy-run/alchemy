@@ -37,12 +37,7 @@ export const transactionalIdArnGlob = (clusterArn: string) =>
  * (plus the cluster's `topic/` ARN namespace when `topicScoped` is set —
  * topic-management actions authorize against topic ARNs).
  */
-export const makeKafkaClusterHttpBinding = <
-  I extends { ClusterArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeKafkaClusterHttpBinding = <I extends { ClusterArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Kafka.ListTopics`. */
   tag: string;
   /** The distilled operation; `ClusterArn` is injected from the cluster. */

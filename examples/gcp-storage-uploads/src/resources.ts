@@ -9,7 +9,6 @@ export const UPLOADS_PREFIX = "uploads/";
  * data with it.
  */
 export const Uploads = GCP.Storage.Bucket("Uploads", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 
@@ -18,7 +17,6 @@ export const Uploads = GCP.Storage.Bucket("Uploads", {
  * indexer once the object has landed.
  */
 export const Files = GCP.Firestore.Database("Files", {
-  location: "us-central1",
   type: "FIRESTORE_NATIVE",
 });
 
@@ -26,8 +24,7 @@ export const Files = GCP.Firestore.Database("Files", {
  * File names double as Firestore document ids and object-name suffixes,
  * so keep them to a URL- and id-safe alphabet.
  */
-export const isValidName = (name: string) =>
-  /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name);
+export const isValidName = (name: string) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name);
 
 export const objectFor = (name: string) => `${UPLOADS_PREFIX}${name}`;
 

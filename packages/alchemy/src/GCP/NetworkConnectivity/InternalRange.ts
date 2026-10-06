@@ -18,20 +18,15 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./internal.ts";
 
 const DEFAULT_LOCATION = "global";
-const DEFAULT_USAGE =
-  "FOR_VPC" satisfies networkconnectivity.InternalRangeUsageEnum;
-const DEFAULT_PEERING =
-  "FOR_SELF" satisfies networkconnectivity.InternalRangePeeringEnum;
+const DEFAULT_USAGE = "FOR_VPC" satisfies networkconnectivity.InternalRangeUsageEnum;
+const DEFAULT_PEERING = "FOR_SELF" satisfies networkconnectivity.InternalRangePeeringEnum;
 const MAX_NAME_LENGTH = 63;
 
-export type InternalRangeUsage =
-  | networkconnectivity.InternalRangeUsageEnum
-  | (string & {});
-export type InternalRangePeering =
-  | networkconnectivity.InternalRangePeeringEnum
-  | (string & {});
+export type InternalRangeUsage = networkconnectivity.InternalRangeUsageEnum | (string & {});
+export type InternalRangePeering = networkconnectivity.InternalRangePeeringEnum | (string & {});
 export type InternalRangeOverlap =
   | networkconnectivity.InternalRangeOverlapsItemEnum
   | (string & {});
@@ -286,9 +281,7 @@ export type InternalRange = Resource<
  * @resource
  * @category NetworkConnectivity
  */
-export const InternalRange = Resource<InternalRange>(
-  "GCP.NetworkConnectivity.InternalRange",
-);
+export const InternalRange = Resource<InternalRange>("GCP.NetworkConnectivity.InternalRange");
 
 export class InternalRangeNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.InternalRangeNotResolved",
@@ -301,19 +294,6 @@ export class InternalRangeRangeMissing extends Data.TaggedError(
 )<{
   name: string;
   message: string;
-}> {}
-
-export class InternalRangeOperationFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.InternalRangeOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class InternalRangeOperationPending extends Data.TaggedError(
-  "GCP.NetworkConnectivity.InternalRangeOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class InternalRangeStillExists extends Data.TaggedError(
@@ -345,16 +325,13 @@ const rfc1035 = (name: string): string => {
 const normalizeLocation = (location: string | undefined) =>
   lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
 
-const normalizeUsage = (usage: string | undefined) =>
-  (usage ?? DEFAULT_USAGE).toUpperCase();
+const normalizeUsage = (usage: string | undefined) => (usage ?? DEFAULT_USAGE).toUpperCase();
 
 const normalizePeering = (peering: string | undefined) =>
   (peering ?? DEFAULT_PEERING).toUpperCase();
 
 const networkNameOf = (network: string | undefined) =>
-  network === undefined || network.length === 0
-    ? undefined
-    : lastSegment(network);
+  network === undefined || network.length === 0 ? undefined : lastSegment(network);
 
 const toNetworkResource = (project: string, network: string) => {
   const trimmed = network.trim();
@@ -362,15 +339,10 @@ const toNetworkResource = (project: string, network: string) => {
   return `projects/${project}/global/networks/${trimmed}`;
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  internalRangeId: string,
-) =>
+const resourceName = (project: string, location: string, internalRangeId: string) =>
   `projects/${project}/locations/${location}/internalRanges/${internalRangeId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -378,16 +350,11 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     internalRangeId:
-      rangesAt >= 0 && parts[rangesAt + 1]
-        ? parts[rangesAt + 1]!
-        : lastSegment(name),
+      rangesAt >= 0 && parts[rangesAt + 1] ? parts[rangesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -395,11 +362,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  internalRangeId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, internalRangeId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (internalRangeId !== undefined) return internalRangeId;
     if (existing !== undefined) return existing;
@@ -476,105 +439,13 @@ const getByName = (name: string) =>
     .getProjectsLocationsInternalRanges({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-const waitForOperation = (
-  operation: networkconnectivity.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new InternalRangeOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new InternalRangeOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = networkconnectivity.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies networkconnectivity.GoogleLongrunningOperation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new InternalRangeOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new InternalRangeOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag ===
-          "GCP.NetworkConnectivity.InternalRangeOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((range) =>
-      range
-        ? Effect.succeed(range)
-        : Effect.fail(new InternalRangeNotResolved({ name })),
+      range ? Effect.succeed(range) : Effect.fail(new InternalRangeNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.InternalRangeNotResolved",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.InternalRangeNotResolved",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -583,13 +454,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((range) =>
-      range === undefined
-        ? Effect.void
-        : Effect.fail(new InternalRangeStillExists({ name })),
+      range === undefined ? Effect.void : Effect.fail(new InternalRangeStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.InternalRangeStillExists",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.InternalRangeStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -604,15 +472,12 @@ const listOwnedInternalRanges = (parent: string, project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.internalRanges ?? [])),
       Stream.filter((range) =>
-        Object.keys(range.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(range.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((range) => toAttrs(range, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const sameList = (left?: readonly string[], right?: readonly string[]) =>
@@ -630,8 +495,7 @@ const sameMigration = (
   left: InternalRangeMigration | undefined,
   right: InternalRangeMigration | undefined,
 ) =>
-  (left?.source ?? "") === (right?.source ?? "") &&
-  (left?.target ?? "") === (right?.target ?? "");
+  (left?.source ?? "") === (right?.source ?? "") && (left?.target ?? "") === (right?.target ?? "");
 
 const toCreateBody = (
   news: InternalRangeProps,
@@ -655,31 +519,17 @@ const toCreateBody = (
 
 export const InternalRangeProvider = () =>
   Provider.succeed(InternalRange, {
-    stables: [
-      "name",
-      "internalRangeId",
-      "project",
-      "location",
-      "networkName",
-      "createTime",
-    ],
+    stables: ["name", "internalRangeId", "project", "location", "networkName", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
       const previousId = olds?.internalRangeId ?? output?.internalRangeId;
       const nextId = news.internalRangeId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const locationChanged = previousLocation !== nextLocation;
 
       const previousNetwork = networkNameOf(
@@ -692,17 +542,11 @@ export const InternalRangeProvider = () =>
         previousNetwork !== nextNetwork;
 
       const previousUsage = normalizeUsage(olds?.usage ?? output?.usage);
-      const nextUsage = normalizeUsage(
-        news.usage ?? olds?.usage ?? output?.usage,
-      );
+      const nextUsage = normalizeUsage(news.usage ?? olds?.usage ?? output?.usage);
       const usageChanged = previousUsage !== nextUsage;
 
-      const previousPeering = normalizePeering(
-        olds?.peering ?? output?.peering,
-      );
-      const nextPeering = normalizePeering(
-        news.peering ?? olds?.peering ?? output?.peering,
-      );
+      const previousPeering = normalizePeering(olds?.peering ?? output?.peering);
+      const nextPeering = normalizePeering(news.peering ?? olds?.peering ?? output?.peering);
       const peeringChanged = previousPeering !== nextPeering;
 
       const previousImmutable = olds?.immutable ?? output?.immutable ?? false;
@@ -728,52 +572,32 @@ export const InternalRangeProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          !idChanged &&
-          !locationChanged &&
-          previousId !== undefined &&
-          nextId === previousId,
+          !idChanged && !locationChanged && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const internalRangeId = yield* toId(
-        id,
-        olds?.internalRangeId,
-        output?.internalRangeId,
-      );
+      const internalRangeId = yield* toId(id, olds?.internalRangeId, output?.internalRangeId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, internalRangeId);
+      const name = output?.name ?? resourceName(env.project, location, internalRangeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const aggregated = yield* listOwnedInternalRanges(
-          parentOf(env.project, "-"),
-          env.project,
-        );
+        const aggregated = yield* listOwnedInternalRanges(parentOf(env.project, "-"), env.project);
         if (aggregated.length > 0) return aggregated;
-        return yield* listOwnedInternalRanges(
-          parentOf(env.project, DEFAULT_LOCATION),
-          env.project,
-        );
+        return yield* listOwnedInternalRanges(parentOf(env.project, DEFAULT_LOCATION), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const internalRangeId = yield* toId(
-        id,
-        news.internalRangeId,
-        output?.internalRangeId,
-      );
+      const internalRangeId = yield* toId(id, news.internalRangeId, output?.internalRangeId);
       const location = normalizeLocation(news.location ?? output?.location);
       const name = resourceName(env.project, location, internalRangeId);
       const desiredLabels = {
@@ -787,8 +611,7 @@ export const InternalRangeProvider = () =>
         if (news.ipCidrRange === undefined && news.prefixLength === undefined) {
           return yield* new InternalRangeRangeMissing({
             name,
-            message:
-              "InternalRange requires ipCidrRange or prefixLength on create",
+            message: "InternalRange requires ipCidrRange or prefixLength on create",
           });
         }
         const created = yield* networkconnectivity
@@ -818,14 +641,11 @@ export const InternalRangeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const cidrChanged =
-        news.ipCidrRange !== undefined &&
-        (current.ipCidrRange ?? "") !== news.ipCidrRange;
+        news.ipCidrRange !== undefined && (current.ipCidrRange ?? "") !== news.ipCidrRange;
       const prefixChanged =
-        news.prefixLength !== undefined &&
-        current.prefixLength !== news.prefixLength;
+        news.prefixLength !== undefined && current.prefixLength !== news.prefixLength;
       const targetChanged =
         news.targetCidrRange !== undefined &&
         !sameList(news.targetCidrRange, current.targetCidrRange);
@@ -833,8 +653,7 @@ export const InternalRangeProvider = () =>
         news.excludeCidrRanges !== undefined &&
         !sameList(news.excludeCidrRanges, current.excludeCidrRanges);
       const overlapsChanged =
-        news.overlaps !== undefined &&
-        !sameList(news.overlaps, current.overlaps);
+        news.overlaps !== undefined && !sameList(news.overlaps, current.overlaps);
       const allocationChanged =
         news.allocationOptions !== undefined &&
         !sameAllocation(news.allocationOptions, current.allocationOptions);
@@ -861,22 +680,21 @@ export const InternalRangeProvider = () =>
           !locked && allocationChanged ? "allocationOptions" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networkconnectivity.patchProjectsLocationsInternalRanges({
+        const operation = yield* networkconnectivity.patchProjectsLocationsInternalRanges({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              ipCidrRange: news.ipCidrRange,
-              prefixLength: news.prefixLength,
-              targetCidrRange: news.targetCidrRange,
-              excludeCidrRanges: news.excludeCidrRanges,
-              overlaps: news.overlaps,
-              allocationOptions: news.allocationOptions,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            ipCidrRange: news.ipCidrRange,
+            prefixLength: news.prefixLength,
+            targetCidrRange: news.targetCidrRange,
+            excludeCidrRanges: news.excludeCidrRanges,
+            overlaps: news.overlaps,
+            allocationOptions: news.allocationOptions,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);
       }

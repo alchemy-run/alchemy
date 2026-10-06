@@ -8,11 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TYPE = "FIRESTORE_NATIVE";
@@ -20,11 +16,8 @@ const DEFAULT_EDITION = "STANDARD";
 const DEFAULT_DELETE_PROTECTION = "DELETE_PROTECTION_DISABLED";
 const DEFAULT_APP_ENGINE = "DISABLED";
 const MAX_DATABASE_ID_LENGTH = 63;
-const OWNERSHIP_DOCUMENT = "_alchemy/ownership";
 
-export type DatabaseType =
-  | firestore.GoogleFirestoreAdminV1DatabaseTypeEnum
-  | (string & {});
+export type DatabaseType = firestore.GoogleFirestoreAdminV1DatabaseTypeEnum | (string & {});
 export type DatabaseEdition =
   | firestore.GoogleFirestoreAdminV1DatabaseDatabaseEditionEnum
   | (string & {});
@@ -186,9 +179,9 @@ export type Database = Resource<
 /**
  * A Cloud Firestore database.
  *
- * Firestore databases have no labels field, so Alchemy stamps ownership
- * into a `_alchemy/ownership` document for `list` / `pnpm nuke:gcp`.
- * Changing `databaseId`, `location`, `databaseEdition`, CMEK, or
+ * Firestore databases have no labels field and Alchemy writes no data
+ * into them: `read` reports a database it finds without prior state as
+ * unowned (adopt it with `--adopt`). Changing `databaseId`, `location`, `databaseEdition`, CMEK, or
  * Realtime Updates mode replaces the database.
  *
  * Create, update, and delete are long-running operations — provisioning
@@ -227,28 +220,11 @@ export type Database = Resource<
  */
 export const Database = Resource<Database>("GCP.Firestore.Database");
 
-export class DatabaseNotResolved extends Data.TaggedError(
-  "GCP.Firestore.DatabaseNotResolved",
-)<{
+export class DatabaseNotResolved extends Data.TaggedError("GCP.Firestore.DatabaseNotResolved")<{
   name: string;
 }> {}
 
-export class DatabaseOperationFailed extends Data.TaggedError(
-  "GCP.Firestore.DatabaseOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DatabaseOperationPending extends Data.TaggedError(
-  "GCP.Firestore.DatabaseOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class DatabaseStillExists extends Data.TaggedError(
-  "GCP.Firestore.DatabaseStillExists",
-)<{
+export class DatabaseStillExists extends Data.TaggedError("GCP.Firestore.DatabaseStillExists")<{
   name: string;
 }> {}
 
@@ -266,11 +242,9 @@ const normalizeEnum = (value: string | undefined, fallback: string) => {
   return next.endsWith("_UNSPECIFIED") ? fallback : next;
 };
 
-const normalizeType = (value: string | undefined) =>
-  normalizeEnum(value, DEFAULT_TYPE);
+const normalizeType = (value: string | undefined) => normalizeEnum(value, DEFAULT_TYPE);
 
-const normalizeEdition = (value: string | undefined) =>
-  normalizeEnum(value, DEFAULT_EDITION);
+const normalizeEdition = (value: string | undefined) => normalizeEnum(value, DEFAULT_EDITION);
 
 const resourceName = (project: string, databaseId: string) =>
   `projects/${project}/databases/${databaseId}`;
@@ -280,23 +254,13 @@ const parseName = (name: string) => {
   const databasesAt = parts.lastIndexOf("databases");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     databaseId:
-      databasesAt >= 0 && parts[databasesAt + 1]
-        ? parts[databasesAt + 1]!
-        : lastSegment(name),
+      databasesAt >= 0 && parts[databasesAt + 1] ? parts[databasesAt + 1]! : lastSegment(name),
   };
 };
 
-const ownershipName = (databaseName: string) =>
-  `${databaseName}/documents/${OWNERSHIP_DOCUMENT}`;
-
-const toDatabaseId = (
-  id: string,
-  databaseId: string | undefined,
-  existing?: string,
-) =>
+const toDatabaseId = (id: string, databaseId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (databaseId !== undefined) return databaseId;
     if (existing !== undefined) return existing;
@@ -346,185 +310,37 @@ const toAttrs = (
   };
 };
 
-const labelsFromFields = (
-  fields: firestore.ValueMap | undefined,
-): Record<string, string> => {
-  const labels: Record<string, string> = {};
-  const stack = fields?.alchemy_stack?.stringValue;
-  const stage = fields?.alchemy_stage?.stringValue;
-  const id = fields?.alchemy_id?.stringValue;
-  if (stack) labels[alchemyLabelKeys.stack] = stack;
-  if (stage) labels[alchemyLabelKeys.stage] = stage;
-  if (id) labels[alchemyLabelKeys.id] = id;
-  return labels;
-};
-
-const fieldsFromLabels = (
-  labels: Record<string, string>,
-): firestore.ValueMap => ({
-  alchemy_stack: { stringValue: labels[alchemyLabelKeys.stack] ?? "" },
-  alchemy_stage: { stringValue: labels[alchemyLabelKeys.stage] ?? "" },
-  alchemy_id: { stringValue: labels[alchemyLabelKeys.id] ?? "" },
-});
-
-const getOwnershipLabels = (databaseName: string) =>
-  firestore
-    .getProjectsDatabasesDocuments({
-      name: ownershipName(databaseName),
-    })
-    .pipe(
-      Effect.map((document) => labelsFromFields(document.fields)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed<Record<string, string>>({}),
-      ),
-    );
-
-const sameOwnership = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) =>
-  left[alchemyLabelKeys.stack] === right[alchemyLabelKeys.stack] &&
-  left[alchemyLabelKeys.stage] === right[alchemyLabelKeys.stage] &&
-  left[alchemyLabelKeys.id] === right[alchemyLabelKeys.id];
-
-const stampOwnership = (databaseName: string, labels: Record<string, string>) =>
-  firestore
-    .patchProjectsDatabasesDocuments({
-      name: ownershipName(databaseName),
-      body: { fields: fieldsFromLabels(labels) },
-    })
-    .pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "NotFound" ||
-          error._tag === "Conflict" ||
-          error._tag === "BadRequest",
-        times: 8,
-        schedule: Schedule.spaced("3 seconds"),
-      }),
-    );
-
 const getByName = (name: string) =>
   firestore.getProjectsDatabases({ name }).pipe(
-    Effect.map((database) =>
-      database.deleteTime !== undefined ? undefined : database,
-    ),
+    Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const isAlreadyExists = (error: firestore.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").includes("ALREADY_EXISTS") ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: firestore.Status | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
+/**
+ * Wait for a Firestore admin operation; named databases provision in tens
+ * of seconds to a few minutes. With `alreadyExistsOk`, ALREADY_EXISTS
+ * (code 6) counts as success (create race).
+ */
 const waitForOperation = (
   operation: firestore.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-): Effect.Effect<
-  firestore.GoogleLongrunningOperation,
-  | DatabaseOperationFailed
-  | DatabaseOperationPending
-  | firestore.GetProjectsDatabasesOperationsError,
-  firestore.GcpOpContext
-> =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          isAlreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new DatabaseOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new DatabaseOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = firestore.getProjectsDatabasesOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies firestore.GoogleLongrunningOperation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    const poll: Effect.Effect<
-      firestore.GoogleLongrunningOperation,
-      | DatabaseOperationFailed
-      | DatabaseOperationPending
-      | firestore.GetProjectsDatabasesOperationsError,
-      firestore.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DatabaseOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        if (!status) {
-          return Effect.succeed(current);
-        }
-        if (options?.alreadyExistsOk === true && isAlreadyExists(status)) {
-          return Effect.succeed(current);
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new DatabaseOperationFailed({
-            operation: name,
-            message: status.message ?? "operation failed",
-          }),
-        );
-      }),
-    );
-
-    return yield* poll.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Firestore.DatabaseOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
+  options?: { alreadyExistsOk?: boolean },
+) =>
+  waitForGcpOperation(operation, (name) => firestore.getProjectsDatabasesOperations({ name }), {
+    budget: "10 minutes",
+  }).pipe(
+    Effect.catchIf(
+      (error) =>
+        options?.alreadyExistsOk === true &&
+        error._tag === "GCP.OperationFailed" &&
+        error.code === 6,
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (database): database is firestore.GoogleFirestoreAdminV1Database =>
-        database !== undefined,
+      (database): database is firestore.GoogleFirestoreAdminV1Database => database !== undefined,
       () => new DatabaseNotResolved({ name }),
     ),
     Effect.retry({
@@ -559,10 +375,7 @@ const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-const enumChanged = (
-  desired: string | undefined,
-  observed: string | undefined,
-) => {
+const enumChanged = (desired: string | undefined, observed: string | undefined) => {
   if (desired === undefined) return false;
   return normalizeEnum(observed, desired) !== normalizeEnum(desired, desired);
 };
@@ -586,22 +399,11 @@ export const DatabaseProvider = () =>
 
       const previousId = olds?.databaseId ?? output?.databaseId;
       const nextId = news.databaseId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousEdition = normalizeEdition(
-        olds?.databaseEdition ?? output?.databaseEdition,
-      );
-      const nextEdition = normalizeEdition(
-        news.databaseEdition ?? output?.databaseEdition,
-      );
-      const previousKms =
-        olds?.cmekConfig?.kmsKeyName ?? output?.kmsKeyName ?? "";
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousEdition = normalizeEdition(olds?.databaseEdition ?? output?.databaseEdition);
+      const nextEdition = normalizeEdition(news.databaseEdition ?? output?.databaseEdition);
+      const previousKms = olds?.cmekConfig?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.cmekConfig?.kmsKeyName ?? previousKms;
       const previousRealtime = (
         olds?.realtimeUpdatesMode ??
@@ -615,87 +417,37 @@ export const DatabaseProvider = () =>
       ).toUpperCase();
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousEdition !== nextEdition ||
         previousKms !== nextKms ||
-        (news.realtimeUpdatesMode !== undefined &&
-          previousRealtime !== nextRealtime);
+        (news.realtimeUpdatesMode !== undefined && previousRealtime !== nextRealtime);
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
-        deleteFirst:
-          previousId !== undefined &&
-          nextId !== undefined &&
-          nextId === previousId,
+        deleteFirst: previousId !== undefined && nextId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const databaseId = yield* toDatabaseId(
-        id,
-        olds?.databaseId,
-        output?.databaseId,
-      );
+      const databaseId = yield* toDatabaseId(id, olds?.databaseId, output?.databaseId);
       const name = output?.name ?? resourceName(env.project, databaseId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const labels = yield* getOwnershipLabels(name);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const page = yield* firestore.listProjectsDatabases({
-          parent: `projects/${env.project}`,
-        });
-        const databases = (page.databases ?? []).filter(
-          (
-            database,
-          ): database is firestore.GoogleFirestoreAdminV1Database & {
-            name: string;
-          } => database.deleteTime === undefined && database.name !== undefined,
-        );
-        const owned = yield* Effect.forEach(
-          databases,
-          (database) =>
-            getOwnershipLabels(database.name).pipe(
-              Effect.map((labels) =>
-                Object.keys(labels).some((key) => key.startsWith("alchemy-"))
-                  ? toAttrs(database, env.project)
-                  : undefined,
-              ),
-            ),
-          { concurrency: 8 },
-        );
-        return owned.filter(
-          (database): database is Database["Attributes"] =>
-            database !== undefined,
-        );
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const databaseId = yield* toDatabaseId(
-        id,
-        news.databaseId,
-        output?.databaseId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const databaseId = yield* toDatabaseId(id, news.databaseId, output?.databaseId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const type = normalizeType(news.type);
       const name = resourceName(env.project, databaseId);
-      const desiredProtection =
-        news.deleteProtectionState ?? DEFAULT_DELETE_PROTECTION;
-      const desiredLabels = yield* createInternalLabels(id);
+      const desiredProtection = news.deleteProtectionState ?? DEFAULT_DELETE_PROTECTION;
 
       let current = yield* getByName(name);
 
@@ -712,13 +464,11 @@ export const DatabaseProvider = () =>
                 : undefined,
               concurrencyMode: news.concurrencyMode,
               pointInTimeRecoveryEnablement: news.pointInTimeRecoveryEnablement,
-              appEngineIntegrationMode:
-                news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
+              appEngineIntegrationMode: news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
               deleteProtectionState: desiredProtection,
               realtimeUpdatesMode: news.realtimeUpdatesMode,
               firestoreDataAccessMode: news.firestoreDataAccessMode,
-              mongodbCompatibleDataAccessMode:
-                news.mongodbCompatibleDataAccessMode,
+              mongodbCompatibleDataAccessMode: news.mongodbCompatibleDataAccessMode,
               cmekConfig: news.cmekConfig?.kmsKeyName
                 ? { kmsKeyName: news.cmekConfig.kmsKeyName }
                 : undefined,
@@ -746,22 +496,11 @@ export const DatabaseProvider = () =>
         patchBody.concurrencyMode = news.concurrencyMode;
         mask.push("concurrencyMode");
       }
-      if (
-        enumChanged(
-          news.pointInTimeRecoveryEnablement,
-          current.pointInTimeRecoveryEnablement,
-        )
-      ) {
-        patchBody.pointInTimeRecoveryEnablement =
-          news.pointInTimeRecoveryEnablement;
+      if (enumChanged(news.pointInTimeRecoveryEnablement, current.pointInTimeRecoveryEnablement)) {
+        patchBody.pointInTimeRecoveryEnablement = news.pointInTimeRecoveryEnablement;
         mask.push("pointInTimeRecoveryEnablement");
       }
-      if (
-        enumChanged(
-          news.appEngineIntegrationMode,
-          current.appEngineIntegrationMode,
-        )
-      ) {
+      if (enumChanged(news.appEngineIntegrationMode, current.appEngineIntegrationMode)) {
         patchBody.appEngineIntegrationMode = news.appEngineIntegrationMode;
         mask.push("appEngineIntegrationMode");
       }
@@ -769,23 +508,14 @@ export const DatabaseProvider = () =>
         patchBody.deleteProtectionState = desiredProtection;
         mask.push("deleteProtectionState");
       }
-      if (
-        enumChanged(
-          news.firestoreDataAccessMode,
-          current.firestoreDataAccessMode,
-        )
-      ) {
+      if (enumChanged(news.firestoreDataAccessMode, current.firestoreDataAccessMode)) {
         patchBody.firestoreDataAccessMode = news.firestoreDataAccessMode;
         mask.push("firestoreDataAccessMode");
       }
       if (
-        enumChanged(
-          news.mongodbCompatibleDataAccessMode,
-          current.mongodbCompatibleDataAccessMode,
-        )
+        enumChanged(news.mongodbCompatibleDataAccessMode, current.mongodbCompatibleDataAccessMode)
       ) {
-        patchBody.mongodbCompatibleDataAccessMode =
-          news.mongodbCompatibleDataAccessMode;
+        patchBody.mongodbCompatibleDataAccessMode = news.mongodbCompatibleDataAccessMode;
         mask.push("mongodbCompatibleDataAccessMode");
       }
 
@@ -801,11 +531,6 @@ export const DatabaseProvider = () =>
         current = yield* waitUntilExists(name);
       }
 
-      const observedOwnership = yield* getOwnershipLabels(name);
-      if (!sameOwnership(observedOwnership, desiredLabels)) {
-        yield* stampOwnership(name, desiredLabels);
-      }
-
       return toAttrs(current, env.project);
     }),
 
@@ -814,10 +539,8 @@ export const DatabaseProvider = () =>
       if (current === undefined) return;
 
       if (
-        normalizeEnum(
-          current.deleteProtectionState,
-          DEFAULT_DELETE_PROTECTION,
-        ) === "DELETE_PROTECTION_ENABLED"
+        normalizeEnum(current.deleteProtectionState, DEFAULT_DELETE_PROTECTION) ===
+        "DELETE_PROTECTION_ENABLED"
       ) {
         const patched = yield* retryConcurrentChanges(
           firestore.patchProjectsDatabases({
@@ -831,9 +554,9 @@ export const DatabaseProvider = () =>
         yield* waitForOperation(patched);
       }
 
-      yield* retryConcurrentChanges(
-        firestore.deleteProjectsDatabases({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryConcurrentChanges(firestore.deleteProjectsDatabases({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       // Soft-delete: GET reports `deleteTime` long before the LRO is done.
       yield* waitUntilGone(output.name);
     }),

@@ -8,16 +8,9 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  MAX_DISPLAY_NAME_LENGTH,
   MAX_ID_LENGTH,
-  encodeOwnershipLine,
   expandCatalog,
-  listProjectCatalogs,
-  listServingConfigs,
   normalizeLocation,
-  ownedByAlchemy,
-  ownershipLabels,
-  parseOwnership,
   parseResourceName,
   replaceOnIdentity,
   sameStringList,
@@ -47,9 +40,7 @@ export type CatalogsServingConfigProps = {
    */
   servingConfigId?: string;
   /**
-   * Human-readable name (max 128 characters). Serving configs have no
-   * labels field, so Alchemy stamps ownership into this field for
-   * `list` / nuke.
+   * Human-readable name (max 128 characters).
    */
   displayName?: string;
   /**
@@ -127,7 +118,7 @@ export type CatalogsServingConfig = Resource<
     project: string;
     /** Location id. */
     location: string;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** Display name. */
     displayName: string | undefined;
     /** Solution types. */
     solutionTypes: string[];
@@ -163,10 +154,10 @@ export type CatalogsServingConfig = Resource<
 /**
  * A Retail serving config on a catalog.
  *
- * Serving configs have no labels field, so Alchemy stamps ownership into
- * `displayName` for `list` / nuke. Parent, serving config id, and solution
- * types are immutable. Display name, model id, and control-id lists update
- * in place.
+ * Without labels, ownership rests on the deterministic id: `read` reports a
+ * resource it finds without prior state as unowned (adopt it with `--adopt`).
+ * Parent, serving config id, and solution types are immutable. Display name,
+ * model id, and control-id lists update in place.
  *
  * ### Creating a Serving Config
  * **Example:** Extra search serving config
@@ -191,20 +182,16 @@ export class CatalogsServingConfigNotResolved extends Data.TaggedError(
 
 const defaultSolutionTypes = ["SOLUTION_TYPE_SEARCH"] as const;
 
-const toAttrs = (
-  config: retail.GoogleCloudRetailV2ServingConfig,
-  project: string,
-) => {
+const toAttrs = (config: retail.GoogleCloudRetailV2ServingConfig, project: string) => {
   const name = config.name ?? "";
   const parsed = parseResourceName(name, "servingConfigs");
-  const ownership = parseOwnership(config.displayName);
   return {
     name,
     servingConfigId: parsed.id,
     catalog: parsed.catalog,
     project: parsed.project || project,
     location: parsed.location,
-    displayName: ownership.text,
+    displayName: config.displayName,
     solutionTypes: [...(config.solutionTypes ?? [])],
     modelId: config.modelId,
     filterControlIds: [...(config.filterControlIds ?? [])],
@@ -251,19 +238,6 @@ const getByName = (name: string) =>
         .getProjectsLocationsCatalogsServingConfigs({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const findOwned = (id: string, catalog: string, hinted?: string) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const configs = yield* listServingConfigs(catalog);
-    for (const config of configs) {
-      if (yield* ownedByAlchemy(id, config.displayName)) return config;
-    }
-    return undefined as retail.GoogleCloudRetailV2ServingConfig | undefined;
-  });
-
 export const CatalogsServingConfigProvider = () =>
   Provider.succeed(CatalogsServingConfig, {
     stables: ["name", "servingConfigId", "catalog", "project", "location"],
@@ -304,43 +278,28 @@ export const CatalogsServingConfigProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const catalog = olds?.catalog ?? output?.catalog;
-      const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : catalog !== undefined
-            ? yield* findOwned(id, catalog)
-            : undefined;
+      const servingConfigId = yield* toPhysical(
+        id,
+        olds?.servingConfigId,
+        output?.servingConfigId,
+        (name) => slugNoDigits(name, MAX_ID_LENGTH),
+        MAX_ID_LENGTH,
+      );
+      const name =
+        output?.name ??
+        (catalog !== undefined
+          ? resourceName(
+              expandCatalog(catalog, env.project, normalizeLocation(output?.location)),
+              servingConfigId,
+            )
+          : undefined);
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const catalogs = yield* listProjectCatalogs(env.project, env.region);
-        const pages = yield* Effect.forEach(
-          catalogs,
-          (catalog) =>
-            catalog.name
-              ? listServingConfigs(catalog.name).pipe(
-                  Effect.map((configs) =>
-                    configs
-                      .filter(
-                        (config) =>
-                          Object.keys(parseOwnership(config.displayName).labels)
-                            .length > 0,
-                      )
-                      .map((config) => toAttrs(config, env.project)),
-                  ),
-                )
-              : Effect.succeed([]),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -354,18 +313,10 @@ export const CatalogsServingConfigProvider = () =>
         MAX_ID_LENGTH,
       );
       const name = resourceName(catalog, servingConfigId);
-      const ownership = yield* ownershipLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? servingConfigId,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const displayName = news.displayName ?? servingConfigId;
       const body = toBody(news, displayName);
 
-      let current = yield* findOwned(id, catalog, output?.name);
-      if (current === undefined) {
-        current = yield* getByName(name);
-      }
+      let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* retail
@@ -384,9 +335,7 @@ export const CatalogsServingConfigProvider = () =>
 
       const resource = current.name ?? name;
       const mask = updateMaskOf(
-        (current.displayName ?? "") !== displayName
-          ? "display_name"
-          : undefined,
+        (current.displayName ?? "") !== displayName ? "display_name" : undefined,
         sameText(current.modelId, news.modelId) ? undefined : "model_id",
         sameStringList(current.filterControlIds, news.filterControlIds)
           ? undefined
@@ -397,39 +346,25 @@ export const CatalogsServingConfigProvider = () =>
         sameStringList(current.redirectControlIds, news.redirectControlIds)
           ? undefined
           : "redirect_control_ids",
-        sameStringList(
-          current.twowaySynonymsControlIds,
-          news.twowaySynonymsControlIds,
-        )
+        sameStringList(current.twowaySynonymsControlIds, news.twowaySynonymsControlIds)
           ? undefined
           : "twoway_synonyms_control_ids",
-        sameStringList(
-          current.onewaySynonymsControlIds,
-          news.onewaySynonymsControlIds,
-        )
+        sameStringList(current.onewaySynonymsControlIds, news.onewaySynonymsControlIds)
           ? undefined
           : "oneway_synonyms_control_ids",
-        sameStringList(
-          current.replacementControlIds,
-          news.replacementControlIds,
-        )
+        sameStringList(current.replacementControlIds, news.replacementControlIds)
           ? undefined
           : "replacement_control_ids",
         sameStringList(current.ignoreControlIds, news.ignoreControlIds)
           ? undefined
           : "ignore_control_ids",
-        sameStringList(
-          current.doNotAssociateControlIds,
-          news.doNotAssociateControlIds,
-        )
+        sameStringList(current.doNotAssociateControlIds, news.doNotAssociateControlIds)
           ? undefined
           : "do_not_associate_control_ids",
         sameStringList(current.facetControlIds, news.facetControlIds)
           ? undefined
           : "facet_control_ids",
-        sameText(current.diversityLevel, news.diversityLevel)
-          ? undefined
-          : "diversity_level",
+        sameText(current.diversityLevel, news.diversityLevel) ? undefined : "diversity_level",
         sameText(current.priceRerankingLevel, news.priceRerankingLevel)
           ? undefined
           : "price_reranking_level",

@@ -5,10 +5,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import { orgParent, organizationOf } from "./names.ts";
 import { hasOwnershipMarker } from "./ownership.ts";
 
-export const currentOrganization = (
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const currentOrganization = (explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     const env = yield* GcpEnvironment.current;
     return organizationOf(explicit, existing, env.project);
@@ -25,7 +22,7 @@ export const listOwnedInstances = (organization: string) =>
       Stream.filter((instance) => hasOwnershipMarker(instance.description)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed([] as apigee.GoogleCloudApigeeV1Instance[]),
       ),
     );

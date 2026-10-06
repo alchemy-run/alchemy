@@ -14,11 +14,6 @@ import {
   LIEN_ORIGIN_MAX,
   LIEN_REASON_MAX,
   collectPages,
-  createOwnership,
-  encodeDescription,
-  hasOwnershipMarker,
-  ownedByAlchemy,
-  parseDescription,
   projectNumberOf,
   projectParent,
   sameStringList,
@@ -39,9 +34,7 @@ export type LienProps = {
   origin?: string;
   /**
    * User-visible reason the restriction exists (max 200 characters).
-   * Liens have no labels, so Alchemy stamps ownership into a
-   * `[alchemy …]` prefix for `list` / nuke and strips it from
-   * attributes.
+   * @default "Protected by a lien."
    */
   reason?: string;
   /**
@@ -61,7 +54,7 @@ export type Lien = Resource<
     parent: string;
     /** Origin identifier. */
     origin: string;
-    /** User reason with the Alchemy ownership prefix stripped. */
+    /** Reason shown when a restricted operation is refused. */
     reason: string | undefined;
     /** Blocked IAM permissions. */
     restrictions: string[];
@@ -78,8 +71,9 @@ export type Lien = Resource<
  * A Cloud Resource Manager lien — an encumbrance that blocks selected
  * operations on a project (most commonly project deletion).
  *
- * Liens have no update API and no labels. Alchemy stamps ownership into
- * `reason` so `list` / `pnpm nuke:gcp` can find them. Changing `parent`,
+ * Liens have no update API, id, or labels: the lien on `parent` with the
+ * same origin, reason, and restrictions is the managed one, and `list` /
+ * `pnpm nuke:gcp` return liens whose `origin` is `alchemy.effect`. Changing `parent`,
  * `origin`, `reason`, or `restrictions` replaces the lien (delete-first).
  *
  * ### Creating a Lien
@@ -105,52 +99,29 @@ export type Lien = Resource<
  */
 export const Lien = Resource<Lien>("GCP.ResourceManager.Lien");
 
-export class LienNotResolved extends Data.TaggedError(
-  "GCP.ResourceManager.LienNotResolved",
-)<{
+export class LienNotResolved extends Data.TaggedError("GCP.ResourceManager.LienNotResolved")<{
   name: string;
 }> {}
 
-export class LienStillExists extends Data.TaggedError(
-  "GCP.ResourceManager.LienStillExists",
-)<{
+export class LienStillExists extends Data.TaggedError("GCP.ResourceManager.LienStillExists")<{
   name: string;
 }> {}
 
-const unique = (values: string[]) => [
-  ...new Set(values.filter((value) => value.length > 0)),
-];
+const unique = (values: string[]) => [...new Set(values.filter((value) => value.length > 0))];
 
-const parentAliases = (
-  parent: string,
-  project: string,
-  projectNumber: string,
-) => {
+const parentAliases = (parent: string, project: string, projectNumber: string) => {
   const normalized = projectParent(parent);
   if (!normalized.startsWith("projects/")) return [normalized];
-  return unique([
-    normalized,
-    `projects/${project}`,
-    `projects/${projectNumber}`,
-  ]);
+  return unique([normalized, `projects/${project}`, `projects/${projectNumber}`]);
 };
 
-const sameParent = (
-  left: string,
-  right: string,
-  project: string,
-  projectNumber: string,
-) => {
+const sameParent = (left: string, right: string, project: string, projectNumber: string) => {
   const aliases = new Set(parentAliases(left, project, projectNumber));
-  return parentAliases(right, project, projectNumber).some((alias) =>
-    aliases.has(alias),
-  );
+  return parentAliases(right, project, projectNumber).some((alias) => aliases.has(alias));
 };
 
 const restrictionsOf = (values: readonly string[] | undefined) => {
-  const next = [...(values ?? DEFAULT_LIEN_RESTRICTIONS)].filter(
-    (value) => value.length > 0,
-  );
+  const next = [...(values ?? DEFAULT_LIEN_RESTRICTIONS)].filter((value) => value.length > 0);
   return next.length > 0 ? next : [...DEFAULT_LIEN_RESTRICTIONS];
 };
 
@@ -163,7 +134,7 @@ const toAttrs = (lien: resourcemanager.Lien, project: string) => ({
   name: lien.name ?? "",
   parent: lien.parent ?? "",
   origin: lien.origin ?? DEFAULT_LIEN_ORIGIN,
-  reason: parseDescription(lien.reason).description,
+  reason: lien.reason,
   restrictions: lien.restrictions ?? [],
   createTime: lien.createTime,
   project,
@@ -172,11 +143,7 @@ const toAttrs = (lien: resourcemanager.Lien, project: string) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getLiens({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOnParent = (parent: string) =>
   collectPages(
@@ -185,11 +152,7 @@ const listOnParent = (parent: string) =>
       pageSize: 300,
     }),
     (page) => page.liens,
-  ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as resourcemanager.Lien[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as resourcemanager.Lien[])));
 
 const listOnParents = (parents: string[]) =>
   Effect.gen(function* () {
@@ -217,9 +180,20 @@ const matchesDesired = (
   (lien.reason ?? "") === reason &&
   sameStringList(lien.restrictions, restrictions);
 
-const findOwned = (
-  id: string,
+const DEFAULT_REASON = "Protected by a lien.";
+
+const reasonOf = (reason: string | undefined) =>
+  (reason ?? DEFAULT_REASON).slice(0, LIEN_REASON_MAX);
+
+/**
+ * Liens have no user-chosen id or labels: a lien on the parent with the
+ * same origin, reason, and restrictions is the one this resource manages.
+ */
+const findMatching = (
   parent: string,
+  origin: string,
+  reason: string,
+  restrictions: readonly string[],
   project: string,
   projectNumber: string,
   resourceName?: string,
@@ -229,29 +203,24 @@ const findOwned = (
       const byName = yield* getByName(resourceName);
       if (byName !== undefined) return byName;
     }
-    const liens = yield* listOnParents(
-      parentAliases(parent, project, projectNumber),
+    const liens = yield* listOnParents(parentAliases(parent, project, projectNumber));
+    return liens.find((lien) =>
+      matchesDesired(lien, parent, origin, reason, restrictions, project, projectNumber),
     );
-    for (const lien of liens) {
-      if (yield* ownedByAlchemy(id, lien.reason)) return lien;
-    }
-    return undefined;
   });
 
 const waitUntilExists = (
-  id: string,
   parent: string,
+  origin: string,
+  reason: string,
+  restrictions: readonly string[],
   project: string,
   projectNumber: string,
-  resourceName?: string,
 ) =>
-  findOwned(id, parent, project, projectNumber, resourceName).pipe(
+  findMatching(parent, origin, reason, restrictions, project, projectNumber).pipe(
     Effect.filterOrFail(
       (lien): lien is resourcemanager.Lien => lien !== undefined,
-      () =>
-        new LienNotResolved({
-          name: resourceName ?? parent,
-        }),
+      () => new LienNotResolved({ name: parent }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.LienNotResolved",
@@ -263,9 +232,7 @@ const waitUntilExists = (
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((lien) =>
-      lien === undefined
-        ? Effect.void
-        : Effect.fail(new LienStillExists({ name })),
+      lien === undefined ? Effect.void : Effect.fail(new LienStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.LienStillExists",
@@ -283,57 +250,44 @@ export const LienProvider = () =>
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
       const previousParent = olds?.parent ?? output?.parent;
-      const nextParent = projectParent(
-        news.parent ?? previousParent ?? env.project,
-      );
+      const nextParent = projectParent(news.parent ?? previousParent ?? env.project);
       const parentChanged =
         previousParent !== undefined &&
         !sameParent(previousParent, nextParent, env.project, projectNumber);
 
       const previousOrigin = originOf(olds?.origin ?? output?.origin);
-      const originChanged =
-        news.origin !== undefined && originOf(news.origin) !== previousOrigin;
+      const originChanged = news.origin !== undefined && originOf(news.origin) !== previousOrigin;
 
-      const previousRestrictions = restrictionsOf(
-        olds?.restrictions ?? output?.restrictions,
-      );
+      const previousRestrictions = restrictionsOf(olds?.restrictions ?? output?.restrictions);
       const restrictionsChanged =
-        news.restrictions !== undefined &&
-        !sameStringList(news.restrictions, previousRestrictions);
+        news.restrictions !== undefined && !sameStringList(news.restrictions, previousRestrictions);
 
       const previousReason = olds?.reason ?? output?.reason;
-      const reasonChanged =
-        news.reason !== undefined && news.reason !== previousReason;
+      const reasonChanged = news.reason !== undefined && news.reason !== previousReason;
 
-      if (
-        !parentChanged &&
-        !originChanged &&
-        !restrictionsChanged &&
-        !reasonChanged
-      ) {
+      if (!parentChanged && !originChanged && !restrictionsChanged && !reasonChanged) {
         return undefined;
       }
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
-      const parent = projectParent(
-        output?.parent ?? olds?.parent ?? `projects/${projectNumber}`,
-      );
-      const existing = yield* findOwned(
-        id,
+      const parent = projectParent(output?.parent ?? olds?.parent ?? `projects/${projectNumber}`);
+      const existing = yield* findMatching(
         parent,
+        originOf(olds?.origin ?? output?.origin),
+        reasonOf(olds?.reason ?? output?.reason),
+        restrictionsOf(olds?.restrictions ?? output?.restrictions),
         env.project,
         projectNumber,
         output?.name,
       );
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.reason))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -341,31 +295,27 @@ export const LienProvider = () =>
         const env = yield* GcpEnvironment.current;
         const projectNumber = yield* projectNumberOf(env.project);
         const liens = yield* listOnParents(
-          parentAliases(
-            `projects/${projectNumber}`,
-            env.project,
-            projectNumber,
-          ),
+          parentAliases(`projects/${projectNumber}`, env.project, projectNumber),
         );
+        // `origin` identifies the system that placed a lien.
         return liens
-          .filter((lien) => hasOwnershipMarker(lien.reason))
+          .filter((lien) => lien.origin === DEFAULT_LIEN_ORIGIN)
           .map((lien) => toAttrs(lien, env.project));
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
-      const parent = projectParent(
-        news.parent ?? output?.parent ?? `projects/${projectNumber}`,
-      );
+      const parent = projectParent(news.parent ?? output?.parent ?? `projects/${projectNumber}`);
       const origin = originOf(news.origin);
       const restrictions = restrictionsOf(news.restrictions);
-      const ownership = yield* createOwnership(id);
-      const reason = encodeDescription(ownership, news.reason, LIEN_REASON_MAX);
+      const reason = reasonOf(news.reason);
 
-      let current = yield* findOwned(
-        id,
+      let current = yield* findMatching(
         parent,
+        origin,
+        reason,
+        restrictions,
         env.project,
         projectNumber,
         output?.name,
@@ -373,22 +323,12 @@ export const LienProvider = () =>
 
       if (
         current !== undefined &&
-        !matchesDesired(
-          current,
-          parent,
-          origin,
-          reason,
-          restrictions,
-          env.project,
-          projectNumber,
-        )
+        !matchesDesired(current, parent, origin, reason, restrictions, env.project, projectNumber)
       ) {
         if (current.name !== undefined) {
           yield* resourcemanager
             .deleteLiens({ name: current.name })
-            .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
-            );
+            .pipe(Effect.catchTag("NotFound", () => Effect.void));
           yield* waitUntilGone(current.name);
         }
         current = undefined;
@@ -409,8 +349,10 @@ export const LienProvider = () =>
           current = created;
         } else {
           current = yield* waitUntilExists(
-            id,
             parent,
+            origin,
+            reason,
+            restrictions,
             env.project,
             projectNumber,
           );
@@ -427,7 +369,7 @@ export const LienProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* resourcemanager
         .deleteLiens({ name: output.name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(output.name);
     }),
   });

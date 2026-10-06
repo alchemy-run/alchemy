@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type LoggingConfig,
@@ -310,12 +305,14 @@ export type Pipeline = Resource<
  * ```
  *
  * ### Updating a Pipeline
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical pipeline and patches it in place.
+ *
  * **Example:** Change labels and retry policy
  * ```typescript
  * const pipeline = yield* GCP.Eventarc.Pipeline("Forward", {
- *   pipelineId: existing.pipelineId,
- *   location: existing.location,
- *   destinations: existing.destinations,
+ *   location: "us-central1",
+ *   destinations: [{ topic: topic.name }],
  *   retryPolicy: { maxAttempts: 8 },
  *   labels: { env: "prod", role: "pipeline" },
  * });
@@ -349,10 +346,7 @@ const toPayloadFormat = (
 };
 
 const toRetryPolicy = (
-  policy:
-    | PipelineRetryPolicy
-    | eventarc.GoogleCloudEventarcV1PipelineRetryPolicy
-    | undefined,
+  policy: PipelineRetryPolicy | eventarc.GoogleCloudEventarcV1PipelineRetryPolicy | undefined,
 ): PipelineRetryPolicy | undefined => {
   if (policy === undefined) return undefined;
   if (
@@ -379,17 +373,14 @@ const toMediations = (
   return mediations.map((mediation) => ({
     transformation: mediation.transformation
       ? {
-          transformationTemplate:
-            mediation.transformation.transformationTemplate,
+          transformationTemplate: mediation.transformation.transformationTemplate,
         }
       : undefined,
   }));
 };
 
 const toDestination = (
-  destination:
-    | PipelineDestination
-    | eventarc.GoogleCloudEventarcV1PipelineDestination,
+  destination: PipelineDestination | eventarc.GoogleCloudEventarcV1PipelineDestination,
   project: string,
   location: string,
 ): PipelineDestination => {
@@ -398,23 +389,15 @@ const toDestination = (
     httpEndpoint: destination.httpEndpoint
       ? {
           uri: destination.httpEndpoint.uri ?? "",
-          messageBindingTemplate:
-            destination.httpEndpoint.messageBindingTemplate,
+          messageBindingTemplate: destination.httpEndpoint.messageBindingTemplate,
         }
       : undefined,
     workflow: destination.workflow
       ? expandResource(destination.workflow, project, location, "workflows")
       : undefined,
-    topic: destination.topic
-      ? expandTopic(destination.topic, project)
-      : undefined,
+    topic: destination.topic ? expandTopic(destination.topic, project) : undefined,
     messageBus: destination.messageBus
-      ? expandResource(
-          destination.messageBus,
-          project,
-          location,
-          "messageBuses",
-        )
+      ? expandResource(destination.messageBus, project, location, "messageBuses")
       : undefined,
     networkConfig: destination.networkConfig?.networkAttachment
       ? { networkAttachment: destination.networkConfig.networkAttachment }
@@ -447,15 +430,9 @@ const toDestinations = (
   project: string,
   location: string,
 ): PipelineDestination[] =>
-  (destinations ?? []).map((destination) =>
-    toDestination(destination, project, location),
-  );
+  (destinations ?? []).map((destination) => toDestination(destination, project, location));
 
-const toAttrs = (
-  pipeline: eventarc.Pipeline,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (pipeline: eventarc.Pipeline, project: string, region: string) => {
   const name = pipeline.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const location = parsed.location;
@@ -465,11 +442,7 @@ const toAttrs = (
     pipelineId: parsed.id,
     project: resolvedProject,
     location,
-    destinations: toDestinations(
-      pipeline.destinations,
-      resolvedProject,
-      location,
-    ),
+    destinations: toDestinations(pipeline.destinations, resolvedProject, location),
     inputPayloadFormat: toPayloadFormat(pipeline.inputPayloadFormat),
     mediations: toMediations(pipeline.mediations),
     retryPolicy: toRetryPolicy(pipeline.retryPolicy),
@@ -499,21 +472,14 @@ export const PipelineProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.pipelineId ?? output?.pipelineId;
-      const nextId = news.pipelineId
-        ? rfc1035(news.pipelineId, "pipeline")
-        : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const nextId = news.pipelineId ? rfc1035(news.pipelineId, "pipeline") : previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -523,25 +489,13 @@ export const PipelineProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const pipelineId = yield* toPhysicalId(
-        id,
-        olds?.pipelineId,
-        output?.pipelineId,
-        "pipeline",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, pipelineId);
+      const pipelineId = yield* toPhysicalId(id, olds?.pipelineId, output?.pipelineId, "pipeline");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, pipelineId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -561,34 +515,18 @@ export const PipelineProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const pipelineId = yield* toPhysicalId(
-        id,
-        news.pipelineId,
-        output?.pipelineId,
-        "pipeline",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const pipelineId = yield* toPhysicalId(id, news.pipelineId, output?.pipelineId, "pipeline");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, COLLECTION, pipelineId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const destinations = toDestinations(
-        news.destinations,
-        env.project,
-        location,
-      );
+      const destinations = toDestinations(news.destinations, env.project, location);
       const desiredLogging = toLoggingConfig(news.loggingConfig);
       const desiredCrypto =
-        news.cryptoKeyName && news.cryptoKeyName.length > 0
-          ? news.cryptoKeyName
-          : undefined;
-      const desiredAnnotations = news.annotations
-        ? tagRecord(news.annotations)
-        : undefined;
+        news.cryptoKeyName && news.cryptoKeyName.length > 0 ? news.cryptoKeyName : undefined;
+      const desiredAnnotations = news.annotations ? tagRecord(news.annotations) : undefined;
       const desiredFormat = toPayloadFormat(news.inputPayloadFormat);
       const desiredMediations = toMediations(news.mediations);
       const desiredRetry = toRetryPolicy(news.retryPolicy);
@@ -622,7 +560,7 @@ export const PipelineProvider = () =>
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         if (created !== undefined) {
-          yield* waitForOperation(created, { times: 10, delay: "8 seconds" });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilPresent(getByName(name), name);
       }
@@ -633,28 +571,13 @@ export const PipelineProvider = () =>
       const updateMask = changedFields([
         ["labels", upsert.length > 0 || removed.length > 0],
         ["destinations", !sameJson(observed.destinations, destinations)],
-        [
-          "inputPayloadFormat",
-          !sameJson(observed.inputPayloadFormat, desiredFormat),
-        ],
+        ["inputPayloadFormat", !sameJson(observed.inputPayloadFormat, desiredFormat)],
         ["mediations", !sameJson(observed.mediations, desiredMediations)],
         ["retryPolicy", !sameJson(observed.retryPolicy, desiredRetry)],
-        [
-          "displayName",
-          textKey(current.displayName) !== textKey(news.displayName),
-        ],
-        [
-          "cryptoKeyName",
-          cryptoKeyKey(current.cryptoKeyName) !== cryptoKeyKey(desiredCrypto),
-        ],
-        [
-          "loggingConfig",
-          loggingKey(current.loggingConfig) !== loggingKey(desiredLogging),
-        ],
-        [
-          "annotations",
-          !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {}),
-        ],
+        ["displayName", textKey(current.displayName) !== textKey(news.displayName)],
+        ["cryptoKeyName", cryptoKeyKey(current.cryptoKeyName) !== cryptoKeyKey(desiredCrypto)],
+        ["loggingConfig", loggingKey(current.loggingConfig) !== loggingKey(desiredLogging)],
+        ["annotations", !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {})],
       ]);
 
       if (updateMask.length > 0) {
@@ -674,11 +597,8 @@ export const PipelineProvider = () =>
             annotations: desiredAnnotations ?? {},
           },
         });
-        yield* waitForOperation(patched, { times: 10, delay: "8 seconds" });
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        yield* waitForOperation(patched);
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
@@ -696,19 +616,13 @@ export const PipelineProvider = () =>
             })
             .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
           if (operation !== undefined) {
-            yield* waitForOperation(operation, {
-              notFoundOk: true,
-              times: 10,
-              delay: "5 seconds",
-            });
+            yield* waitForOperation(operation, { notFoundOk: true });
           }
         }),
       ).pipe(
-        Effect.catchTag("GCP.Eventarc.OperationFailed", (error) =>
+        Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
-            Effect.flatMap((current) =>
-              current === undefined ? Effect.void : Effect.fail(error),
-            ),
+            Effect.flatMap((current) => (current === undefined ? Effect.void : Effect.fail(error))),
           ),
         ),
       );

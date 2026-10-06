@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -33,17 +28,13 @@ import {
 } from "./internal.ts";
 
 export type DataScanDataSource = dataplex.GoogleCloudDataplexV1DataSource;
-export type DataScanExecutionSpec =
-  dataplex.GoogleCloudDataplexV1DataScanExecutionSpec;
-export type DataScanExecutionIdentity =
-  dataplex.GoogleCloudDataplexV1ExecutionIdentity;
+export type DataScanExecutionSpec = dataplex.GoogleCloudDataplexV1DataScanExecutionSpec;
+export type DataScanExecutionIdentity = dataplex.GoogleCloudDataplexV1ExecutionIdentity;
 export type DataQualitySpec = dataplex.GoogleCloudDataplexV1DataQualitySpec;
 export type DataProfileSpec = dataplex.GoogleCloudDataplexV1DataProfileSpec;
 export type DataDiscoverySpec = dataplex.GoogleCloudDataplexV1DataDiscoverySpec;
-export type DataDocumentationSpec =
-  dataplex.GoogleCloudDataplexV1DataDocumentationSpec;
-export type UnstructuredDataProfileSpec =
-  dataplex.GoogleCloudDataplexV1UnstructuredDataProfileSpec;
+export type DataDocumentationSpec = dataplex.GoogleCloudDataplexV1DataDocumentationSpec;
+export type UnstructuredDataProfileSpec = dataplex.GoogleCloudDataplexV1UnstructuredDataProfileSpec;
 
 export type DataScanProps = {
   /**
@@ -185,10 +176,7 @@ export const DataScan = Resource<DataScan>("GCP.Dataplex.DataScan");
 const resourceName = (project: string, location: string, dataScanId: string) =>
   `projects/${project}/locations/${location}/dataScans/${dataScanId}`;
 
-const toAttrs = (
-  scan: dataplex.GoogleCloudDataplexV1DataScan,
-  project: string,
-) => {
+const toAttrs = (scan: dataplex.GoogleCloudDataplexV1DataScan, project: string) => {
   const name = scan.name ?? "";
   const parsed = parseName(name, "dataScans");
   return {
@@ -215,9 +203,9 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  retryQuota(
-    dataplex.getProjectsLocationsDataScans({ name, view: "FULL" }),
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  retryQuota(dataplex.getProjectsLocationsDataScans({ name, view: "FULL" })).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const listScans = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -228,11 +216,8 @@ const listScans = (project: string, region: string) => {
       }),
       (page) => page.dataScans,
     ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
+      Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
   return listAtLocation(project, region, collect);
 };
@@ -252,10 +237,7 @@ export const DataScanProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.dataScanId ?? output?.dataScanId,
         nextId: news.dataScanId ?? olds?.dataScanId ?? output?.dataScanId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -270,24 +252,13 @@ export const DataScanProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const dataScanId = yield* toPhysicalId(
-        id,
-        olds?.dataScanId,
-        output?.dataScanId,
-        "datascan",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dataScanId);
+      const dataScanId = yield* toPhysicalId(id, olds?.dataScanId, output?.dataScanId, "datascan");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, dataScanId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -299,16 +270,8 @@ export const DataScanProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const dataScanId = yield* toPhysicalId(
-        id,
-        news.dataScanId,
-        output?.dataScanId,
-        "datascan",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const dataScanId = yield* toPhysicalId(id, news.dataScanId, output?.dataScanId, "datascan");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, dataScanId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -338,15 +301,7 @@ export const DataScanProvider = () =>
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, {
-            interval: "5 seconds",
-            times: 10,
-          }).pipe(
-            Effect.catchIf(
-              (error) => error._tag === "GCP.Dataplex.OperationPending",
-              () => Effect.void,
-            ),
-          );
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -358,24 +313,18 @@ export const DataScanProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const executionChanged =
         fingerprint(current.executionSpec) !== fingerprint(news.executionSpec);
       const qualityChanged =
-        fingerprint(current.dataQualitySpec) !==
-        fingerprint(news.dataQualitySpec);
+        fingerprint(current.dataQualitySpec) !== fingerprint(news.dataQualitySpec);
       const profileChanged =
-        fingerprint(current.dataProfileSpec) !==
-        fingerprint(news.dataProfileSpec);
+        fingerprint(current.dataProfileSpec) !== fingerprint(news.dataProfileSpec);
       const discoveryChanged =
-        fingerprint(current.dataDiscoverySpec) !==
-        fingerprint(news.dataDiscoverySpec);
+        fingerprint(current.dataDiscoverySpec) !== fingerprint(news.dataDiscoverySpec);
       const documentationChanged =
-        fingerprint(current.dataDocumentationSpec) !==
-        fingerprint(news.dataDocumentationSpec);
+        fingerprint(current.dataDocumentationSpec) !== fingerprint(news.dataDocumentationSpec);
       const unstructuredChanged =
         fingerprint(current.unstructuredDataProfileSpec) !==
         fingerprint(news.unstructuredDataProfileSpec);
@@ -421,14 +370,8 @@ export const DataScanProvider = () =>
             },
           }),
         );
-        yield* waitForOperation(operation, {
-          interval: "5 seconds",
-          times: 10,
-        });
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        yield* waitForOperation(operation);
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
@@ -449,11 +392,7 @@ export const DataScanProvider = () =>
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, {
-          notFoundOk: true,
-          interval: "5 seconds",
-          times: 10,
-        });
+        yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

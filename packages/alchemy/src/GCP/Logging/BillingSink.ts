@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type { SinkBigQueryOptions, SinkExclusion } from "./Sink.ts";
 import {
   billingAccountIdOf,
   billingAccountParent,
@@ -21,6 +20,7 @@ import {
   resolveBillingAccountId,
   toPhysicalId,
 } from "./internal.ts";
+import type { SinkBigQueryOptions, SinkExclusion } from "./Sink.ts";
 
 export type BillingSinkExclusion = SinkExclusion;
 export type BillingSinkBigQueryOptions = SinkBigQueryOptions;
@@ -162,9 +162,8 @@ export type BillingSink = Resource<
  * **Example:** Change the filter and add an exclusion
  * ```typescript
  * const sink = yield* GCP.Logging.BillingSink("Errors", {
- *   sinkId: existing.sinkId,
- *   billingAccountId: existing.billingAccountId,
- *   destination: existing.destination,
+ *   destination:
+ *     "logging.googleapis.com/billingAccounts/AAAAAA-BBBBBB-CCCCCC/locations/global/buckets/_Default",
  *   filter: "severity>=WARNING",
  *   description: "warnings and errors",
  *   exclusions: [
@@ -181,9 +180,7 @@ export type BillingSink = Resource<
  */
 export const BillingSink = Resource<BillingSink>("GCP.Logging.BillingSink");
 
-export class BillingSinkNotResolved extends Data.TaggedError(
-  "GCP.Logging.BillingSinkNotResolved",
-)<{
+export class BillingSinkNotResolved extends Data.TaggedError("GCP.Logging.BillingSinkNotResolved")<{
   name: string;
 }> {}
 
@@ -201,10 +198,7 @@ const billingAccountOfName = (name: string, fallback: string) => {
 };
 
 const exclusionsOf = (
-  list:
-    | readonly logging.LogExclusion[]
-    | readonly BillingSinkExclusion[]
-    | undefined,
+  list: readonly logging.LogExclusion[] | readonly BillingSinkExclusion[] | undefined,
 ): BillingSinkExclusion[] =>
   (list ?? [])
     .map((exclusion) => ({
@@ -216,14 +210,8 @@ const exclusionsOf = (
     .sort((left, right) => left.name.localeCompare(right.name));
 
 const sameExclusions = (
-  left:
-    | readonly logging.LogExclusion[]
-    | readonly BillingSinkExclusion[]
-    | undefined,
-  right:
-    | readonly logging.LogExclusion[]
-    | readonly BillingSinkExclusion[]
-    | undefined,
+  left: readonly logging.LogExclusion[] | readonly BillingSinkExclusion[] | undefined,
+  right: readonly logging.LogExclusion[] | readonly BillingSinkExclusion[] | undefined,
 ) => JSON.stringify(exclusionsOf(left)) === JSON.stringify(exclusionsOf(right));
 
 const toExclusionsBody = (
@@ -242,10 +230,7 @@ const toAttrs = (sink: logging.LogSink, billingAccountId: string) => {
   const sinkId = sinkIdOf(sink);
   const parsed = parseDescription(sink.description);
   const bq = sink.bigqueryOptions;
-  const account = billingAccountOfName(
-    sink.resourceName ?? sink.name ?? "",
-    billingAccountId,
-  );
+  const account = billingAccountOfName(sink.resourceName ?? sink.name ?? "", billingAccountId);
   return {
     name: sink.resourceName ?? (sinkId ? resourceName(account, sinkId) : ""),
     sinkId,
@@ -292,16 +277,12 @@ export const BillingSinkProvider = () =>
       if (!isResolved(news)) return undefined;
       const previous = olds?.sinkId ?? output?.sinkId;
       const idChanged =
-        previous !== undefined &&
-        news.sinkId !== undefined &&
-        news.sinkId !== previous;
-      const previousAccount =
-        olds?.billingAccountId ?? output?.billingAccountId;
+        previous !== undefined && news.sinkId !== undefined && news.sinkId !== previous;
+      const previousAccount = olds?.billingAccountId ?? output?.billingAccountId;
       const accountChanged =
         previousAccount !== undefined &&
         news.billingAccountId !== undefined &&
-        billingAccountIdOf(news.billingAccountId) !==
-          billingAccountIdOf(previousAccount);
+        billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -323,9 +304,7 @@ export const BillingSinkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const billingAccountId = yield* lookupProjectBillingAccountId(
-          env.project,
-        );
+        const billingAccountId = yield* lookupProjectBillingAccountId(env.project);
         if (billingAccountId === undefined) return [];
         return yield* logging.listBillingAccountsSinks
           .pages({
@@ -338,9 +317,7 @@ export const BillingSinkProvider = () =>
             Stream.map((sink) => toAttrs(sink, billingAccountId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as BillingSink["Attributes"][]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as BillingSink["Attributes"][])),
           );
       }),
 
@@ -376,18 +353,12 @@ export const BillingSinkProvider = () =>
       const desiredBq = news.bigqueryOptions?.usePartitionedTables === true;
       const observedBq = current.bigqueryOptions?.usePartitionedTables === true;
 
-      const destinationChanged =
-        (current.destination ?? "") !== news.destination;
+      const destinationChanged = (current.destination ?? "") !== news.destination;
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
-      const exclusionsChanged = !sameExclusions(
-        current.exclusions,
-        news.exclusions,
-      );
-      const bqChanged =
-        news.bigqueryOptions !== undefined && desiredBq !== observedBq;
+      const exclusionsChanged = !sameExclusions(current.exclusions, news.exclusions);
+      const bqChanged = news.bigqueryOptions !== undefined && desiredBq !== observedBq;
 
       const updateMask = [
         destinationChanged ? "destination" : undefined,

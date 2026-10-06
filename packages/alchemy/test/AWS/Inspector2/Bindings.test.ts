@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import Inspector2TestFunctionLive, { Inspector2TestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "Inspector2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,26 +35,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // Accounts where Inspector scanning is not enabled answer some data-plane
 // reads with a typed AccessDeniedException — either outcome proves the
@@ -78,9 +68,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Inspector2 test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Inspector2 test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Inspector2 test setup: deploying fixture");
@@ -94,21 +82,15 @@ describe.sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Inspector2 test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Inspector2 test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Inspector2 test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Inspector2 test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -139,10 +121,7 @@ describe.sequential(
     describe("ListFindings", () => {
       test.provider("lists findings (or typed error when disabled)", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/findings")) as {
-            count?: number;
-            errorTag?: string;
-          };
+          const response = (yield* getJson("/findings")) as { count?: number; errorTag?: string };
           if (response.errorTag) {
             expect(DISABLED_OK).toContain(response.errorTag);
           } else {
@@ -155,10 +134,7 @@ describe.sequential(
     describe("ListCoverage", () => {
       test.provider("lists covered resources", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/coverage")) as {
-            count?: number;
-            errorTag?: string;
-          };
+          const response = (yield* getJson("/coverage")) as { count?: number; errorTag?: string };
           if (response.errorTag) {
             expect(DISABLED_OK).toContain(response.errorTag);
           } else {
@@ -171,9 +147,10 @@ describe.sequential(
     describe("SearchVulnerabilities", () => {
       test.provider("looks up log4shell in the vulnerability intel", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson(
-            "/vulnerability?id=CVE-2021-44228",
-          )) as { ids?: string[]; errorTag?: string };
+          const response = (yield* getJson("/vulnerability?id=CVE-2021-44228")) as {
+            ids?: string[];
+            errorTag?: string;
+          };
           if (response.errorTag) {
             expect(DISABLED_OK).toContain(response.errorTag);
           } else {
@@ -186,10 +163,7 @@ describe.sequential(
     describe("ListUsageTotals", () => {
       test.provider("answers with usage totals", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/usage")) as {
-            totals?: number;
-            errorTag?: string;
-          };
+          const response = (yield* getJson("/usage")) as { totals?: number; errorTag?: string };
           if (response.errorTag) {
             expect(DISABLED_OK).toContain(response.errorTag);
           } else {
@@ -219,9 +193,7 @@ describe.sequential(
       test.provider("reports free-trial status for the account", (_stack) =>
         Effect.gen(function* () {
           const { Account } = yield* sts.getCallerIdentity({});
-          const response = (yield* getJson(
-            `/free-trial?account=${Account}`,
-          )) as {
+          const response = (yield* getJson(`/free-trial?account=${Account}`)) as {
             accounts?: number;
             failed?: number;
             errorTag?: string;
@@ -276,9 +248,7 @@ describe.sequential(
           };
           if (response.errorTag) {
             // ResourceNotFoundException = no customer-managed key configured.
-            expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(
-              response.errorTag,
-            );
+            expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(response.errorTag);
           } else {
             expect(response.kmsKeyId).toBeTruthy();
           }
@@ -289,10 +259,7 @@ describe.sequential(
     describe("ListCisScans", () => {
       test.provider("enumerates CIS scans", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/cis-scans")) as {
-            scans?: number;
-            errorTag?: string;
-          };
+          const response = (yield* getJson("/cis-scans")) as { scans?: number; errorTag?: string };
           if (response.errorTag) {
             expect(DISABLED_OK).toContain(response.errorTag);
           } else {
@@ -305,10 +272,7 @@ describe.sequential(
     describe("ListMembers", () => {
       test.provider("enumerates organization members", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/members")) as {
-            members?: number;
-            errorTag?: string;
-          };
+          const response = (yield* getJson("/members")) as { members?: number; errorTag?: string };
           if (response.errorTag) {
             expect(DISABLED_OK).toContain(response.errorTag);
           } else {
@@ -337,42 +301,34 @@ describe.sequential(
     });
 
     describe("GetDelegatedAdminAccount", () => {
-      test.provider(
-        "answers (or rejects with a typed error outside an organization)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/delegated-admin")) as {
-              accountId?: string;
-              errorTag?: string;
-            };
-            if (response.errorTag) {
-              expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(
-                response.errorTag,
-              );
-            } else {
-              expect(response.accountId === undefined || true).toBe(true);
-            }
-          }),
+      test.provider("answers (or rejects with a typed error outside an organization)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/delegated-admin")) as {
+            accountId?: string;
+            errorTag?: string;
+          };
+          if (response.errorTag) {
+            expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(response.errorTag);
+          } else {
+            expect(response.accountId === undefined || true).toBe(true);
+          }
+        }),
       );
     });
 
     describe("GetFindingsReportStatus", () => {
-      test.provider(
-        "a nonexistent report id comes back as a typed error",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/report-status")) as {
-              status?: string;
-              errorTag?: string;
-            };
-            if (response.errorTag) {
-              expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(
-                response.errorTag,
-              );
-            } else {
-              expect(typeof response.status).toBe("string");
-            }
-          }),
+      test.provider("a nonexistent report id comes back as a typed error", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/report-status")) as {
+            status?: string;
+            errorTag?: string;
+          };
+          if (response.errorTag) {
+            expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(response.errorTag);
+          } else {
+            expect(typeof response.status).toBe("string");
+          }
+        }),
       );
     });
   },

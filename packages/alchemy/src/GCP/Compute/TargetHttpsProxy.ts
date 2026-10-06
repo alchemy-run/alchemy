@@ -1,8 +1,6 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -10,17 +8,12 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
-export type TargetHttpsProxyQuicOverride =
-  compute.TargetHttpsProxyQuicOverrideEnum;
-export type TargetHttpsProxyTlsEarlyData =
-  compute.TargetHttpsProxyTlsEarlyDataEnum;
+export type TargetHttpsProxyQuicOverride = compute.TargetHttpsProxyQuicOverrideEnum;
+export type TargetHttpsProxyTlsEarlyData = compute.TargetHttpsProxyTlsEarlyDataEnum;
 
 const DEFAULT_QUIC: TargetHttpsProxyQuicOverride = "NONE";
 
@@ -198,22 +191,12 @@ export type TargetHttpsProxy = Resource<
  * @resource
  * @category Compute
  */
-export const TargetHttpsProxy = Resource<TargetHttpsProxy>(
-  "GCP.Compute.TargetHttpsProxy",
-);
+export const TargetHttpsProxy = Resource<TargetHttpsProxy>("GCP.Compute.TargetHttpsProxy");
 
 export class TargetHttpsProxyNotResolved extends Data.TaggedError(
   "GCP.Compute.TargetHttpsProxyNotResolved",
 )<{
   targetHttpsProxyName: string;
-}> {}
-
-export class TargetHttpsProxyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.TargetHttpsProxyOperationFailed",
-)<{
-  targetHttpsProxyName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
@@ -312,53 +295,6 @@ const getByName = (project: string, targetHttpsProxy: string) =>
     .getTargetHttpsProxies({ project, targetHttpsProxy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  targetHttpsProxyName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new TargetHttpsProxyOperationFailed({
-        targetHttpsProxyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  targetHttpsProxyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(targetHttpsProxyName, operation);
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return yield* failIfErrored(targetHttpsProxyName, operation);
-    }
-    const done = yield* waitGlobalOperations({ project, operation: name }).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (op) => op.status === "DONE",
-        times: 8,
-      }),
-    );
-    return yield* failIfErrored(targetHttpsProxyName, done);
-  });
-
 export const TargetHttpsProxyProvider = () =>
   Provider.succeed(TargetHttpsProxy, {
     nuke: {
@@ -374,8 +310,7 @@ export const TargetHttpsProxyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previous =
-        olds?.targetHttpsProxyName ?? output?.targetHttpsProxyName;
+      const previous = olds?.targetHttpsProxyName ?? output?.targetHttpsProxyName;
       const next = news.targetHttpsProxyName;
       if (previous !== undefined && next !== undefined && previous !== next) {
         return { action: "replace" as const, deleteFirst: true };
@@ -405,9 +340,7 @@ export const TargetHttpsProxyProvider = () =>
           .pipe(
             Stream.filter((proxy) => {
               const { labels } = parseDescription(proxy.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((proxy) => toAttrs(proxy, env.project)),
             Stream.runCollect,
@@ -471,9 +404,7 @@ export const TargetHttpsProxyProvider = () =>
             body,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpsProxyName, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* getByName(env.project, targetHttpsProxyName);
@@ -492,11 +423,7 @@ export const TargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body: { urlMap: desiredUrlMap },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpsProxyName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new TargetHttpsProxyNotResolved({
@@ -515,11 +442,7 @@ export const TargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body: { sslCertificates: desiredCerts },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpsProxyName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new TargetHttpsProxyNotResolved({
@@ -538,11 +461,7 @@ export const TargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body: { certificateMap: news.certificateMap },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpsProxyName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new TargetHttpsProxyNotResolved({
@@ -558,11 +477,7 @@ export const TargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body: { quicOverride: desiredQuic },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpsProxyName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new TargetHttpsProxyNotResolved({
@@ -571,21 +486,14 @@ export const TargetHttpsProxyProvider = () =>
         }
       }
 
-      if (
-        news.sslPolicy !== undefined &&
-        (current.sslPolicy ?? "") !== news.sslPolicy
-      ) {
+      if (news.sslPolicy !== undefined && (current.sslPolicy ?? "") !== news.sslPolicy) {
         yield* compute
           .setSslPolicyTargetHttpsProxies({
             project: env.project,
             targetHttpsProxy: targetHttpsProxyName,
             body: { sslPolicy: news.sslPolicy },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpsProxyName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new TargetHttpsProxyNotResolved({
@@ -594,8 +502,7 @@ export const TargetHttpsProxyProvider = () =>
         }
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const keepAliveChanged =
         news.httpKeepAliveTimeoutSec !== undefined &&
         current.httpKeepAliveTimeoutSec !== news.httpKeepAliveTimeoutSec;
@@ -603,8 +510,7 @@ export const TargetHttpsProxyProvider = () =>
         news.tlsEarlyData !== undefined &&
         (current.tlsEarlyData ?? "DISABLED") !== news.tlsEarlyData;
       const proxyBindChanged =
-        news.proxyBind !== undefined &&
-        (current.proxyBind === true) !== news.proxyBind;
+        news.proxyBind !== undefined && (current.proxyBind === true) !== news.proxyBind;
       const serverTlsChanged =
         news.serverTlsPolicy !== undefined &&
         (current.serverTlsPolicy ?? "") !== news.serverTlsPolicy;
@@ -645,11 +551,7 @@ export const TargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpsProxyName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new TargetHttpsProxyNotResolved({
@@ -670,11 +572,9 @@ export const TargetHttpsProxyProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          output.targetHttpsProxyName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitGlobalOperation(env.project, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

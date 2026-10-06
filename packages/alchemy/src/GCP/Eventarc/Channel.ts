@@ -1,5 +1,4 @@
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
-import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./internal.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -135,11 +135,13 @@ export type Channel = Resource<
  * ```
  *
  * ### Updating a Channel
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical channel and patches it in place.
+ *
  * **Example:** Change labels and CMEK
  * ```typescript
  * const channel = yield* GCP.Eventarc.Channel("events", {
- *   channelId: existing.channelId,
- *   location: existing.location,
+ *   location: "us-central1",
  *   cryptoKeyName:
  *     "projects/my-project/locations/us-central1/keyRings/keys/cryptoKeys/events",
  *   labels: { env: "prod", role: "events" },
@@ -151,28 +153,11 @@ export type Channel = Resource<
  */
 export const Channel = Resource<Channel>("GCP.Eventarc.Channel");
 
-export class ChannelNotResolved extends Data.TaggedError(
-  "GCP.Eventarc.ChannelNotResolved",
-)<{
+export class ChannelNotResolved extends Data.TaggedError("GCP.Eventarc.ChannelNotResolved")<{
   name: string;
 }> {}
 
-export class ChannelOperationFailed extends Data.TaggedError(
-  "GCP.Eventarc.ChannelOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ChannelOperationPending extends Data.TaggedError(
-  "GCP.Eventarc.ChannelOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class ChannelStillExists extends Data.TaggedError(
-  "GCP.Eventarc.ChannelStillExists",
-)<{
+export class ChannelStillExists extends Data.TaggedError("GCP.Eventarc.ChannelStillExists")<{
   name: string;
 }> {}
 
@@ -182,10 +167,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -207,16 +190,11 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     channelId:
-      channelsAt >= 0 && parts[channelsAt + 1]
-        ? parts[channelsAt + 1]!
-        : lastSegment(name),
+      channelsAt >= 0 && parts[channelsAt + 1] ? parts[channelsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -245,11 +223,7 @@ const compact = <T extends Record<string, unknown>>(value: T): T => {
   return next as T;
 };
 
-const providerKey = (
-  provider: string | undefined,
-  project: string,
-  location: string,
-) => {
+const providerKey = (provider: string | undefined, project: string, location: string) => {
   if (provider === undefined || provider.length === 0) return "";
   if (provider.includes("/")) return provider;
   return `projects/${project}/locations/${location}/providers/${provider}`;
@@ -258,19 +232,7 @@ const providerKey = (
 const cryptoKeyKey = (name: string | undefined) =>
   name === undefined || name.length === 0 ? "" : name;
 
-const alreadyExists = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const toAttrs = (
-  channel: eventarc.Channel,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (channel: eventarc.Channel, project: string, region: string) => {
   const name = channel.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -296,119 +258,10 @@ const getByName = (name: string) =>
     .getProjectsLocationsChannels({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  operation: eventarc.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; allowAlreadyExists?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.allowAlreadyExists === true &&
-          alreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new ChannelOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    // Eventarc delete of a missing channel can return `{}` (no name,
-    // done unset). Treat that as already-gone when notFoundOk.
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new ChannelOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const fetched = eventarc.getProjectsLocationsOperations({ name });
-    const observe: Effect.Effect<
-      eventarc.GoogleLongrunningOperation,
-      eventarc.GetProjectsLocationsOperationsError,
-      GcpOpContext
-    > =
-      options?.notFoundOk === true
-        ? fetched.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<eventarc.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : fetched.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    const wait: Effect.Effect<
-      eventarc.GoogleLongrunningOperation,
-      | ChannelOperationFailed
-      | ChannelOperationPending
-      | eventarc.GetProjectsLocationsOperationsError,
-      GcpOpContext
-    > = observe.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        (): ChannelOperationPending =>
-          new ChannelOperationPending({ operation: name }),
-      ),
-      Effect.flatMap(
-        (
-          current,
-        ): Effect.Effect<
-          eventarc.GoogleLongrunningOperation,
-          ChannelOperationFailed
-        > => {
-          const status = current.error;
-          if (status) {
-            if (options?.allowAlreadyExists === true && alreadyExists(status)) {
-              return Effect.succeed(current);
-            }
-            if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-              return Effect.succeed(current);
-            }
-            return Effect.fail(
-              new ChannelOperationFailed({
-                operation: name,
-                message: status.message ?? "operation failed",
-              }),
-            );
-          }
-          return Effect.succeed(current);
-        },
-      ),
-    );
-
-    return yield* wait.pipe(
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Eventarc.ChannelOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel
-        ? Effect.succeed(channel)
-        : Effect.fail(new ChannelNotResolved({ name })),
+      channel ? Effect.succeed(channel) : Effect.fail(new ChannelNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelNotResolved",
@@ -420,9 +273,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel === undefined
-        ? Effect.void
-        : Effect.fail(new ChannelStillExists({ name })),
+      channel === undefined ? Effect.void : Effect.fail(new ChannelStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelStillExists",
@@ -433,15 +284,7 @@ const waitUntilGone = (name: string) =>
 
 export const ChannelProvider = () =>
   Provider.succeed(Channel, {
-    stables: [
-      "name",
-      "channelId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-      "provider",
-    ],
+    stables: ["name", "channelId", "project", "location", "uid", "createTime", "provider"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -449,14 +292,8 @@ export const ChannelProvider = () =>
 
       const previousId = olds?.channelId ?? output?.channelId;
       const nextId = news.channelId ? rfc1035(news.channelId) : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const project = output?.project ?? "";
       const previousProvider = providerKey(
         olds?.provider ?? output?.provider,
@@ -469,9 +306,7 @@ export const ChannelProvider = () =>
           : previousProvider;
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousProvider !== nextProvider;
 
@@ -479,27 +314,19 @@ export const ChannelProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const channelId = yield* toId(id, olds?.channelId, output?.channelId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, channelId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, channelId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -513,25 +340,19 @@ export const ChannelProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.channels ?? [])),
             Stream.filter((channel) =>
-              Object.keys(channel.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(channel.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((channel) => toAttrs(channel, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const channelId = yield* toId(id, news.channelId, output?.channelId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, channelId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -541,9 +362,7 @@ export const ChannelProvider = () =>
         ? providerKey(news.provider, env.project, location)
         : undefined;
       const desiredCryptoKey =
-        news.cryptoKeyName && news.cryptoKeyName.length > 0
-          ? news.cryptoKeyName
-          : undefined;
+        news.cryptoKeyName && news.cryptoKeyName.length > 0 ? news.cryptoKeyName : undefined;
 
       let current = yield* getByName(name);
 
@@ -561,7 +380,7 @@ export const ChannelProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { allowAlreadyExists: true });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(name);
       }
