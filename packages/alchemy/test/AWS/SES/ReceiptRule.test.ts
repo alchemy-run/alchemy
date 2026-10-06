@@ -189,12 +189,12 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertRuleDeleted(rule.ruleSetName, rule.ruleName);
-      expect(
-        yield* iam.getRole({ RoleName: role.roleName }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "NoSuchEntityException" });
-      expect(
-        yield* s3.headBucket({ Bucket: bucket.bucketName }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "NotFound" });
+      expect(yield* iam.getRole({ RoleName: role.roleName }).pipe(Effect.flip)).toMatchObject({
+        _tag: "NoSuchEntityException",
+      });
+      expect(yield* s3.headBucket({ Bucket: bucket.bucketName }).pipe(Effect.flip)).toMatchObject({
+        _tag: "NotFound",
+      });
     }),
   { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
@@ -222,9 +222,7 @@ test.provider(
           Effect.flip,
         );
       expect(failure).toMatchObject({ _tag: "InvalidParameterValue" });
-      expect(failure.message).not.toContain(
-        "Could not assume the provided IAM Role",
-      );
+      expect(failure.message).not.toContain("Could not assume the provided IAM Role");
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },

@@ -159,6 +159,23 @@ const observedPredecessor = (
   return rules[index - 1]?.Name;
 };
 
+/**
+ * An IAM role can exist before SES is able to assume it, so create and
+ * update retry that specific rejection while the role propagates.
+ */
+const retryRolePropagation = <A, E extends { _tag: string; message?: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e: E): boolean =>
+        e._tag === "InvalidParameterValue" &&
+        (e.message?.includes("Could not assume the provided IAM Role") ?? false),
+      schedule: Schedule.spaced("5 seconds"),
+      times: 12,
+    }),
+  );
+
 export const ReceiptRuleProvider = () =>
   Provider.effect(
     ReceiptRule,
@@ -239,29 +256,23 @@ export const ReceiptRuleProvider = () =>
                 Rule: rule,
               })
               .pipe(
-                // IAM roles can exist before SES is able to assume them.
-                Effect.retry({
-                  while: (e): boolean =>
-                    e._tag === "InvalidParameterValue" &&
-                    (e.message?.includes(
-                      "Could not assume the provided IAM Role",
-                    ) ??
-                      false),
-                  schedule: Schedule.spaced("5 seconds"),
-                  times: 12,
-                }),
+                retryRolePropagation,
                 Effect.catchTag("AlreadyExistsException", () =>
-                  ses.updateReceiptRule({
-                    RuleSetName: ruleSetName,
-                    Rule: rule,
-                  }),
+                  ses
+                    .updateReceiptRule({
+                      RuleSetName: ruleSetName,
+                      Rule: rule,
+                    })
+                    .pipe(retryRolePropagation),
                 ),
               );
           } else {
-            yield* ses.updateReceiptRule({
-              RuleSetName: ruleSetName,
-              Rule: rule,
-            });
+            yield* ses
+              .updateReceiptRule({
+                RuleSetName: ruleSetName,
+                Rule: rule,
+              })
+              .pipe(retryRolePropagation);
           }
 
           // SYNC POSITION — updateReceiptRule never moves the rule, so diff the
