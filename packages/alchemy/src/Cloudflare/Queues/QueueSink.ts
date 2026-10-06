@@ -81,10 +81,18 @@ export interface QueueSink extends Binding.Service<
   (queue: Queue) => Effect.Effect<QueueSinkClient>
 > {}
 
-export const QueueSink = Binding.Service<QueueSink>("Cloudflare.Queues.QueueSink");
+export const QueueSink = Binding.Service<QueueSink>(
+  "Cloudflare.Queues.QueueSink",
+);
 
 /**
  * A `Sink` that enqueues every element it receives as one message body.
  * Runtime-only: it can only run inside the deployed Worker (or Action).
  */
-export type QueueSinkClient = Sink.Sink<void, unknown, never, SendError, RuntimeContext>;
+export type QueueSinkClient = Sink.Sink<
+  void,
+  unknown,
+  never,
+  SendError,
+  RuntimeContext
+>;
