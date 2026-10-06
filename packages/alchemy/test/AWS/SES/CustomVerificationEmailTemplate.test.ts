@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { CustomVerificationEmailTemplate } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CustomVerificationEmailTemplate } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -50,8 +50,7 @@ test.provider(
             return yield* CustomVerificationEmailTemplate("UnverifiedProbe", {
               fromEmailAddress: "definitely-not-verified@alchemy-test.invalid",
               templateSubject: "Please confirm your email",
-              templateContent:
-                "<html><body>Click to verify your address.</body></html>",
+              templateContent: "<html><body>Click to verify your address.</body></html>",
               successRedirectionURL: "https://example.com/verified",
               failureRedirectionURL: "https://example.com/verify-failed",
             });
@@ -80,8 +79,7 @@ test.provider.skipIf(!VERIFIED_FROM)(
           return yield* CustomVerificationEmailTemplate("Verify", {
             fromEmailAddress: FROM,
             templateSubject: "Please confirm your email",
-            templateContent:
-              "<html><body>Click to verify your address.</body></html>",
+            templateContent: "<html><body>Click to verify your address.</body></html>",
             successRedirectionURL: "https://example.com/verified",
             failureRedirectionURL: "https://example.com/verify-failed",
           });
@@ -95,9 +93,7 @@ test.provider.skipIf(!VERIFIED_FROM)(
         TemplateName: template.templateName,
       });
       expect(observed.TemplateSubject).toBe("Please confirm your email");
-      expect(observed.SuccessRedirectionURL).toBe(
-        "https://example.com/verified",
-      );
+      expect(observed.SuccessRedirectionURL).toBe("https://example.com/verified");
 
       // update subject and content in place
       yield* stack.deploy(

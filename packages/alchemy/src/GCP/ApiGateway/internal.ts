@@ -34,21 +34,15 @@ export type ApiConfigGrpcServiceDefinition = {
   fileDescriptorSet?: ApiConfigFile;
 };
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.ApiGateway.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.ApiGateway.NotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.ApiGateway.StillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.ApiGateway.StillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.ApiGateway.NotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.ApiGateway.NotReady")<{
   name: string;
   state: string;
 }> {}
@@ -89,8 +83,7 @@ export const expandApi = (value: string, project: string) => {
   return `${locationParent(project)}/apis/${trimmed}`;
 };
 
-export const resourceName = (api: string, apiConfigId: string) =>
-  `${api}/configs/${apiConfigId}`;
+export const resourceName = (api: string, apiConfigId: string) => `${api}/configs/${apiConfigId}`;
 
 export const toPhysicalId = (
   id: string,
@@ -117,16 +110,10 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -138,9 +125,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -166,16 +152,12 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -196,9 +178,7 @@ export const replaceOnIdentity = (input: {
       input.nextId !== input.previousId);
   if (!replace) return undefined;
   const samePhysical =
-    !parentChanged &&
-    input.previousId !== undefined &&
-    input.nextId === input.previousId;
+    !parentChanged && input.previousId !== undefined && input.nextId === input.previousId;
   return {
     action: "replace" as const,
     deleteFirst: samePhysical,
@@ -228,9 +208,7 @@ export const encodeOpenApiDocuments = (
       );
 
 export const encodeFiles = (files: readonly ApiConfigFile[] | undefined) =>
-  files === undefined
-    ? Effect.succeed(undefined)
-    : Effect.forEach(files, encodeFile);
+  files === undefined ? Effect.succeed(undefined) : Effect.forEach(files, encodeFile);
 
 export const encodeGrpcServices = (
   services: readonly ApiConfigGrpcServiceDefinition[] | undefined,
@@ -275,8 +253,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.asVoid,
@@ -326,11 +303,7 @@ export const waitUntilReady = <A, E, R>(
     times?: number;
     interval?: `${number} seconds`;
   },
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceFailed | ResourceNotReady,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceFailed | ResourceNotReady, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
@@ -353,9 +326,7 @@ export const waitUntilReady = <A, E, R>(
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error instanceof ResourceNotReady ||
-        error instanceof ResourceNotResolved,
+      while: (error) => error instanceof ResourceNotReady || error instanceof ResourceNotResolved,
       times: options?.times ?? 10,
       schedule: Schedule.spaced(options?.interval ?? "8 seconds"),
     }),
@@ -382,11 +353,7 @@ export const listApis = (parent: string) =>
           pageSize: 1000,
         }),
         (page) => page.apis,
-      ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<apigateway.ApigatewayApi>(),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<apigateway.ApigatewayApi>()));
 
 export const listConfigs = (parent: string) =>
   parent.length === 0
@@ -397,11 +364,7 @@ export const listConfigs = (parent: string) =>
           pageSize: 1000,
         }),
         (page) => page.apiConfigs,
-      ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<apigateway.ApigatewayApiConfig>(),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<apigateway.ApigatewayApiConfig>()));
 
 export const listChildResources = <A, E, R>(
   parents: readonly { name?: string }[],

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Oracle Database@Google Cloud is not enabled in the test project
 // (ServiceDisabled) and needs an Oracle Cloud subscription. Set
@@ -63,42 +60,33 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const connection = yield* GCP.OracleDatabase.GoldengateConnection(
-            "Src",
-            {
-              connectionType: "GENERIC",
-              displayName: "alchemy-gg-src",
-              properties: {
-                genericConnectionProperties: {
-                  host: "db.example.com",
-                  technologyType: "GENERIC",
-                },
+          const connection = yield* GCP.OracleDatabase.GoldengateConnection("Src", {
+            connectionType: "GENERIC",
+            displayName: "alchemy-gg-src",
+            properties: {
+              genericConnectionProperties: {
+                host: "db.example.com",
+                technologyType: "GENERIC",
               },
             },
-          );
-          return yield* GCP.OracleDatabase.GoldengateConnectionAssignment(
-            "Assign",
-            {
-              location: "us-central1",
-              displayName: "alchemy-gg-assign",
-              goldengateConnection: connection.name,
-              goldengateDeployment: `projects/${project}/locations/us-central1/goldengateDeployments/missing`,
-              labels: { env: "test" },
-            },
-          );
+          });
+          return yield* GCP.OracleDatabase.GoldengateConnectionAssignment("Assign", {
+            location: "us-central1",
+            displayName: "alchemy-gg-assign",
+            goldengateConnection: connection.name,
+            goldengateDeployment: `projects/${project}/locations/us-central1/goldengateDeployments/missing`,
+            labels: { env: "test" },
+          });
         }),
       );
 
       expect(created.name).toContain("/goldengateConnectionAssignments/");
-      expect(created.goldengateConnectionAssignmentId).toEqual(
-        expect.any(String),
-      );
+      expect(created.goldengateConnectionAssignmentId).toEqual(expect.any(String));
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* oracle.getProjectsLocationsGoldengateConnectionAssignments({
-          name: created.name,
-        });
+      const fetched = yield* oracle.getProjectsLocationsGoldengateConnectionAssignments({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       yield* stack.destroy();

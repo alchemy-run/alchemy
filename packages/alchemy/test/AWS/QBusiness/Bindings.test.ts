@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import QBusinessTestFunctionLive, { QBusinessTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -33,10 +33,7 @@ describe(
     const NOT_FOUND = ["ResourceNotFoundException"] as const;
     // Operations whose body preconditions may be validated before the
     // application lookup surface either tag.
-    const NOT_FOUND_OR_INVALID = [
-      "ResourceNotFoundException",
-      "ValidationException",
-    ] as const;
+    const NOT_FOUND_OR_INVALID = ["ResourceNotFoundException", "ValidationException"] as const;
     // Chat operations may reject on licensing/authorization before resolving
     // the application.
     const CHAT_TAGS = [
@@ -49,10 +46,7 @@ describe(
     test.provider("chatSync yields a typed error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.chatSync({
-            applicationId: NONEXISTENT,
-            userMessage: "probe",
-          }),
+          qbusiness.chatSync({ applicationId: NONEXISTENT, userMessage: "probe" }),
         );
         expectTag(error, CHAT_TAGS);
       }),
@@ -78,54 +72,41 @@ describe(
             applicationId: NONEXISTENT,
             conversationId: NONEXISTENT,
             messageId: NONEXISTENT,
-            messageUsefulness: {
-              usefulness: "USEFUL",
-              submittedAt: new Date(),
-            },
+            messageUsefulness: { usefulness: "USEFUL", submittedAt: new Date() },
           }),
         );
         expectTag(error, NOT_FOUND_OR_INVALID);
       }),
     );
 
-    test.provider(
-      "getChatControlsConfiguration yields a typed not-found error",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            qbusiness.getChatControlsConfiguration({
-              applicationId: NONEXISTENT,
-            }),
-          );
-          expectTag(error, NOT_FOUND);
-        }),
+    test.provider("getChatControlsConfiguration yields a typed not-found error", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          qbusiness.getChatControlsConfiguration({ applicationId: NONEXISTENT }),
+        );
+        expectTag(error, NOT_FOUND);
+      }),
     );
 
-    test.provider(
-      "updateChatControlsConfiguration yields a typed not-found error",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            qbusiness.updateChatControlsConfiguration({
-              applicationId: NONEXISTENT,
-              responseScope: "ENTERPRISE_CONTENT_ONLY",
-            }),
-          );
-          expectTag(error, NOT_FOUND);
-        }),
+    test.provider("updateChatControlsConfiguration yields a typed not-found error", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          qbusiness.updateChatControlsConfiguration({
+            applicationId: NONEXISTENT,
+            responseScope: "ENTERPRISE_CONTENT_ONLY",
+          }),
+        );
+        expectTag(error, NOT_FOUND);
+      }),
     );
 
-    test.provider(
-      "deleteChatControlsConfiguration yields a typed not-found error",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            qbusiness.deleteChatControlsConfiguration({
-              applicationId: NONEXISTENT,
-            }),
-          );
-          expectTag(error, NOT_FOUND);
-        }),
+    test.provider("deleteChatControlsConfiguration yields a typed not-found error", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          qbusiness.deleteChatControlsConfiguration({ applicationId: NONEXISTENT }),
+        );
+        expectTag(error, NOT_FOUND);
+      }),
     );
 
     test.provider("listConversations yields a typed not-found error", () =>
@@ -140,10 +121,7 @@ describe(
     test.provider("deleteConversation yields a typed not-found error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.deleteConversation({
-            applicationId: NONEXISTENT,
-            conversationId: NONEXISTENT,
-          }),
+          qbusiness.deleteConversation({ applicationId: NONEXISTENT, conversationId: NONEXISTENT }),
         );
         expectTag(error, NOT_FOUND);
       }),
@@ -152,10 +130,7 @@ describe(
     test.provider("listMessages yields a typed not-found error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.listMessages({
-            applicationId: NONEXISTENT,
-            conversationId: NONEXISTENT,
-          }),
+          qbusiness.listMessages({ applicationId: NONEXISTENT, conversationId: NONEXISTENT }),
         );
         expectTag(error, NOT_FOUND);
       }),
@@ -163,9 +138,7 @@ describe(
 
     test.provider("listAttachments yields a typed not-found error", () =>
       Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          qbusiness.listAttachments({ applicationId: NONEXISTENT }),
-        );
+        const error = yield* Effect.flip(qbusiness.listAttachments({ applicationId: NONEXISTENT }));
         expectTag(error, NOT_FOUND);
       }),
     );
@@ -200,10 +173,7 @@ describe(
     test.provider("createUser yields a typed not-found error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.createUser({
-            applicationId: NONEXISTENT,
-            userId: "probe@example.com",
-          }),
+          qbusiness.createUser({ applicationId: NONEXISTENT, userId: "probe@example.com" }),
         );
         expectTag(error, NOT_FOUND);
       }),
@@ -212,10 +182,7 @@ describe(
     test.provider("getUser yields a typed not-found error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.getUser({
-            applicationId: NONEXISTENT,
-            userId: "probe@example.com",
-          }),
+          qbusiness.getUser({ applicationId: NONEXISTENT, userId: "probe@example.com" }),
         );
         expectTag(error, NOT_FOUND);
       }),
@@ -224,10 +191,7 @@ describe(
     test.provider("updateUser yields a typed not-found error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.updateUser({
-            applicationId: NONEXISTENT,
-            userId: "probe@example.com",
-          }),
+          qbusiness.updateUser({ applicationId: NONEXISTENT, userId: "probe@example.com" }),
         );
         expectTag(error, NOT_FOUND);
       }),
@@ -236,10 +200,7 @@ describe(
     test.provider("deleteUser yields a typed not-found error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.deleteUser({
-            applicationId: NONEXISTENT,
-            userId: "probe@example.com",
-          }),
+          qbusiness.deleteUser({ applicationId: NONEXISTENT, userId: "probe@example.com" }),
         );
         expectTag(error, NOT_FOUND);
       }),
@@ -247,9 +208,7 @@ describe(
 
     test.provider("getPolicy yields a typed not-found error", () =>
       Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          qbusiness.getPolicy({ applicationId: NONEXISTENT }),
-        );
+        const error = yield* Effect.flip(qbusiness.getPolicy({ applicationId: NONEXISTENT }));
         expectTag(error, NOT_FOUND);
       }),
     );
@@ -271,10 +230,7 @@ describe(
     test.provider("disassociatePermission yields a typed error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.disassociatePermission({
-            applicationId: NONEXISTENT,
-            statementId: "probe",
-          }),
+          qbusiness.disassociatePermission({ applicationId: NONEXISTENT, statementId: "probe" }),
         );
         expectTag(error, NOT_FOUND_OR_INVALID);
       }),
@@ -309,10 +265,7 @@ describe(
     test.provider("cancelSubscription yields a typed error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.cancelSubscription({
-            applicationId: NONEXISTENT,
-            subscriptionId: NONEXISTENT,
-          }),
+          qbusiness.cancelSubscription({ applicationId: NONEXISTENT, subscriptionId: NONEXISTENT }),
         );
         expectTag(error, NOT_FOUND_OR_INVALID);
       }),
@@ -322,9 +275,7 @@ describe(
     // answers with an empty page, which the probe pins down.
     test.provider("listSubscriptions answers an empty page", () =>
       Effect.gen(function* () {
-        const response = yield* qbusiness.listSubscriptions({
-          applicationId: NONEXISTENT,
-        });
+        const response = yield* qbusiness.listSubscriptions({ applicationId: NONEXISTENT });
         expect(response.subscriptions ?? []).toHaveLength(0);
       }),
     );
@@ -364,10 +315,7 @@ describe(
     test.provider("listDocuments yields a typed not-found error", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          qbusiness.listDocuments({
-            applicationId: NONEXISTENT,
-            indexId: NONEXISTENT,
-          }),
+          qbusiness.listDocuments({ applicationId: NONEXISTENT, indexId: NONEXISTENT }),
         );
         expectTag(error, NOT_FOUND);
       }),
@@ -408,9 +356,7 @@ describe(
             indexId: NONEXISTENT,
             groupName: "probe",
             type: "INDEX",
-            groupMembers: {
-              memberUsers: [{ userId: "probe@example.com", type: "INDEX" }],
-            },
+            groupMembers: { memberUsers: [{ userId: "probe@example.com", type: "INDEX" }] },
           }),
         );
         expectTag(error, NOT_FOUND);
@@ -495,18 +441,16 @@ describe(
       }),
     );
 
-    test.provider(
-      "createAnonymousWebExperienceUrl yields a typed not-found error",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            qbusiness.createAnonymousWebExperienceUrl({
-              applicationId: NONEXISTENT,
-              webExperienceId: NONEXISTENT,
-            }),
-          );
-          expectTag(error, NOT_FOUND);
-        }),
+    test.provider("createAnonymousWebExperienceUrl yields a typed not-found error", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          qbusiness.createAnonymousWebExperienceUrl({
+            applicationId: NONEXISTENT,
+            webExperienceId: NONEXISTENT,
+          }),
+        );
+        expectTag(error, NOT_FOUND);
+      }),
     );
   },
 );
@@ -540,16 +484,11 @@ test.provider.skipIf(!process.env.AWS_TEST_QBUSINESS)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -570,10 +509,7 @@ test.provider.skipIf(!process.env.AWS_TEST_QBUSINESS)(
         expect(sync.executionId).toBeTruthy();
 
         // BatchPutDocument — proves applicationId/indexId injection + IAM.
-        const put = (yield* getJson("/put-documents")) as {
-          failed?: number;
-          errorTag?: string;
-        };
+        const put = (yield* getJson("/put-documents")) as { failed?: number; errorTag?: string };
         expect(put.errorTag).toBeUndefined();
         expect(put.failed).toBe(0);
 
@@ -583,8 +519,7 @@ test.provider.skipIf(!process.env.AWS_TEST_QBUSINESS)(
           Effect.map((r) => (r as { statuses?: string[] }).statuses ?? []),
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
-            until: (s): boolean =>
-              s.includes("INDEXED") || s.includes("FAILED"),
+            until: (s): boolean => s.includes("INDEXED") || s.includes("FAILED"),
             times: 30,
           }),
         );
@@ -629,10 +564,7 @@ test.provider.skipIf(!process.env.AWS_TEST_QBUSINESS)(
         expect(updateControls.errorTag).toBeUndefined();
 
         // Application policy read.
-        const policy = (yield* getJson("/policy")) as {
-          policy?: string | null;
-          errorTag?: string;
-        };
+        const policy = (yield* getJson("/policy")) as { policy?: string | null; errorTag?: string };
         expect(policy.errorTag).toBeUndefined();
 
         // Anonymous URL minting (ANONYMOUS identity type).

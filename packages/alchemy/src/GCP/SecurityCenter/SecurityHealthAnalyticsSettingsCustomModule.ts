@@ -215,9 +215,7 @@ const customConfigOf = (
   stripOwnership: boolean,
 ): CustomConfig | undefined => {
   if (config === undefined) return undefined;
-  const description = stripOwnership
-    ? parseOwnership(config.description).text
-    : config.description;
+  const description = stripOwnership ? parseOwnership(config.description).text : config.description;
   return {
     predicate: config.predicate,
     resourceSelector: config.resourceSelector,
@@ -271,9 +269,7 @@ const listModules = (project: string) =>
     (page) => page.securityHealthAnalyticsCustomModules,
   ).pipe(
     Effect.catchTag("NotFound", () =>
-      Effect.succeed(
-        [] as scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule[],
-      ),
+      Effect.succeed([] as scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule[]),
     ),
   );
 
@@ -282,11 +278,7 @@ const observe = (project: string, id: string, name: string) =>
     const existing = yield* getByName(name);
     if (existing !== undefined) return existing;
     const items = yield* listModules(project);
-    return yield* findOwned(
-      items,
-      (item) => item.customConfig?.description,
-      id,
-    );
+    return yield* findOwned(items, (item) => item.customConfig?.description, id);
   });
 
 export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
@@ -304,8 +296,7 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const moduleId = olds?.moduleId ?? output?.moduleId;
-      const name =
-        output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
+      const name = output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
       const existing = yield* observe(env.project, id, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -319,9 +310,7 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
         const env = yield* GcpEnvironment.current;
         const items = yield* listModules(env.project);
         return items
-          .filter((module) =>
-            hasOwnershipMarker(module.customConfig?.description),
-          )
+          .filter((module) => hasOwnershipMarker(module.customConfig?.description))
           .map((module) => toAttrs(module, env.project));
       }),
 
@@ -329,8 +318,7 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = shaSettingsParent(`projects/${env.project}`);
       const moduleId = news.moduleId ?? output?.moduleId;
-      const name =
-        output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
+      const name = output?.name ?? (moduleId ? resourceName(env.project, moduleId) : "");
       const ownership = yield* createInternalLabels(id);
       const customConfig = desiredCustomConfig(news.customConfig, ownership);
       const enablementState = news.enablementState ?? "ENABLED";
@@ -343,39 +331,30 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
             lowercase: true,
           }),
         );
-      const body: scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule =
-        {
-          displayName,
-          enablementState,
-          customConfig,
-          cloudProvider: news.cloudProvider,
-        };
+      const body: scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule = {
+        displayName,
+        enablementState,
+        customConfig,
+        cloudProvider: news.cloudProvider,
+      };
 
       let current = yield* observe(env.project, id, name);
 
       if (current === undefined) {
-        current =
-          yield* scc.createProjectsSecurityHealthAnalyticsSettingsCustomModules(
-            {
-              parent,
-              body,
-            },
-          );
+        current = yield* scc.createProjectsSecurityHealthAnalyticsSettingsCustomModules({
+          parent,
+          body,
+        });
       }
 
       if (current === undefined) {
-        return yield* new SecurityHealthAnalyticsSettingsCustomModuleNotResolved(
-          {
-            name: name || parent,
-          },
-        );
+        return yield* new SecurityHealthAnalyticsSettingsCustomModuleNotResolved({
+          name: name || parent,
+        });
       }
 
       const currentName = current.name ?? name;
-      const enablementChanged = !sameText(
-        current.enablementState,
-        enablementState,
-      );
+      const enablementChanged = !sameText(current.enablementState, enablementState);
       const configChanged = !jsonEqual(
         {
           ...current.customConfig,
@@ -389,15 +368,14 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
       );
 
       if (updateMask.length > 0) {
-        current =
-          yield* scc.patchProjectsSecurityHealthAnalyticsSettingsCustomModules({
-            name: currentName,
-            updateMask,
-            body: {
-              enablementState,
-              customConfig,
-            },
-          });
+        current = yield* scc.patchProjectsSecurityHealthAnalyticsSettingsCustomModules({
+          name: currentName,
+          updateMask,
+          body: {
+            enablementState,
+            customConfig,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

@@ -3,17 +3,13 @@ import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  Platform,
-  type Main,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -22,22 +18,10 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
-import type { Scope } from "effect/Scope";
 import { tagRecord } from "../../Tags.ts";
-import {
-  destroyHostImageRepository,
-  makeImageSource,
-} from "../ArtifactRegistry/ImageSource.ts";
+import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  type LongRunningOperation,
-  waitForOperation as waitForLongRunningOperation,
-} from "../Operation.ts";
-import {
-  retryActAs,
-  type AppliedIamGrant,
-  type GcpHostBinding,
-} from "../Host.ts";
+import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -53,6 +37,10 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunningOperation,
+} from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/worker-pool";
@@ -368,30 +356,22 @@ export const WorkerPool: Platform<
   ) => WorkerPoolRuntimeContext,
 });
 
-export class WorkerPoolNotResolved extends Data.TaggedError(
-  "GCP.Run.WorkerPoolNotResolved",
-)<{
+export class WorkerPoolNotResolved extends Data.TaggedError("GCP.Run.WorkerPoolNotResolved")<{
   name: string;
 }> {}
 
-export class WorkerPoolNotReady extends Data.TaggedError(
-  "GCP.Run.WorkerPoolNotReady",
-)<{
+export class WorkerPoolNotReady extends Data.TaggedError("GCP.Run.WorkerPoolNotReady")<{
   name: string;
   state: string;
   message: string;
 }> {}
 
-export class WorkerPoolReconciling extends Data.TaggedError(
-  "GCP.Run.WorkerPoolReconciling",
-)<{
+export class WorkerPoolReconciling extends Data.TaggedError("GCP.Run.WorkerPoolReconciling")<{
   name: string;
   state: string;
 }> {}
 
-export class WorkerPoolStillExists extends Data.TaggedError(
-  "GCP.Run.WorkerPoolStillExists",
-)<{
+export class WorkerPoolStillExists extends Data.TaggedError("GCP.Run.WorkerPoolStillExists")<{
   name: string;
 }> {}
 
@@ -401,16 +381,11 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
-const resourceName = (
-  project: string,
-  location: string,
-  workerPoolId: string,
-) => `projects/${project}/locations/${location}/workerPools/${workerPoolId}`;
+const resourceName = (project: string, location: string, workerPoolId: string) =>
+  `projects/${project}/locations/${location}/workerPools/${workerPoolId}`;
 
 const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -418,16 +393,10 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    workerPoolId:
-      poolsAt >= 0 && parts[poolsAt + 1]
-        ? parts[poolsAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    workerPoolId: poolsAt >= 0 && parts[poolsAt + 1] ? parts[poolsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -439,17 +408,12 @@ const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => tagRecord(annotations);
 
-const recordsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) => {
+const recordsEqual = (left: Record<string, string>, right: Record<string, string>) => {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && left[key] === right[key],
-    )
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
   );
 };
 
@@ -464,11 +428,7 @@ const rfc1035 = (name: string): string => {
   return next.length > 0 ? next : "workerpool";
 };
 
-const toId = (
-  id: string,
-  workerPoolId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, workerPoolId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (workerPoolId !== undefined) return workerPoolId;
     if (existing !== undefined) return existing;
@@ -516,8 +476,7 @@ const containerNeedsSync = (
     if ((container.image ?? "") !== (current.image ?? "")) return true;
     if (
       container.command !== undefined &&
-      JSON.stringify(container.command) !==
-        JSON.stringify(current.command ?? [])
+      JSON.stringify(container.command) !== JSON.stringify(current.command ?? [])
     ) {
       return true;
     }
@@ -527,10 +486,7 @@ const containerNeedsSync = (
     ) {
       return true;
     }
-    if (
-      container.workingDir !== undefined &&
-      container.workingDir !== (current.workingDir ?? "")
-    ) {
+    if (container.workingDir !== undefined && container.workingDir !== (current.workingDir ?? "")) {
       return true;
     }
     if (
@@ -558,23 +514,18 @@ const containerNeedsSync = (
     ) {
       return true;
     }
-    if (
-      container.name !== undefined &&
-      container.name !== (current.name ?? "")
-    ) {
+    if (container.name !== undefined && container.name !== (current.name ?? "")) {
       return true;
     }
     if (
       container.volumeMounts !== undefined &&
-      JSON.stringify(container.volumeMounts) !==
-        JSON.stringify(current.volumeMounts ?? [])
+      JSON.stringify(container.volumeMounts) !== JSON.stringify(current.volumeMounts ?? [])
     ) {
       return true;
     }
     if (
       container.dependsOn !== undefined &&
-      JSON.stringify(container.dependsOn) !==
-        JSON.stringify(current.dependsOn ?? [])
+      JSON.stringify(container.dependsOn) !== JSON.stringify(current.dependsOn ?? [])
     ) {
       return true;
     }
@@ -628,16 +579,12 @@ const templateNeedsSync = (
   ) {
     return true;
   }
-  if (
-    desired.revision !== undefined &&
-    desired.revision !== (current.revision ?? "")
-  ) {
+  if (desired.revision !== undefined && desired.revision !== (current.revision ?? "")) {
     return true;
   }
   if (
     desired.gpuZonalRedundancyDisabled !== undefined &&
-    desired.gpuZonalRedundancyDisabled !==
-      (current.gpuZonalRedundancyDisabled === true)
+    desired.gpuZonalRedundancyDisabled !== (current.gpuZonalRedundancyDisabled === true)
   ) {
     return true;
   }
@@ -647,10 +594,7 @@ const templateNeedsSync = (
   ) {
     return true;
   }
-  if (
-    desired.volumes !== undefined &&
-    stable(desired.volumes) !== stable(current.volumes ?? [])
-  ) {
+  if (desired.volumes !== undefined && stable(desired.volumes) !== stable(current.volumes ?? [])) {
     return true;
   }
   if (
@@ -667,19 +611,13 @@ const templateNeedsSync = (
   }
   if (
     desired.labels !== undefined &&
-    !recordsEqual(
-      userAnnotations(desired.labels),
-      userAnnotations(current.labels),
-    )
+    !recordsEqual(userAnnotations(desired.labels), userAnnotations(current.labels))
   ) {
     return true;
   }
   if (
     desired.annotations !== undefined &&
-    !recordsEqual(
-      userAnnotations(desired.annotations),
-      userAnnotations(current.annotations),
-    )
+    !recordsEqual(userAnnotations(desired.annotations), userAnnotations(current.annotations))
   ) {
     return true;
   }
@@ -818,9 +756,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined
-        ? Effect.void
-        : Effect.fail(new WorkerPoolStillExists({ name })),
+      pool === undefined ? Effect.void : Effect.fail(new WorkerPoolStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.WorkerPoolStillExists",
@@ -855,9 +791,7 @@ const listAt = (project: string, location: string, region: string) =>
       Stream.filter(
         (pool) =>
           pool.deleteTime === undefined &&
-          Object.keys(pool.labels ?? {}).some((key) =>
-            key.startsWith("alchemy-"),
-          ),
+          Object.keys(pool.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((pool) => toAttrs(pool, project, region)),
       Stream.runCollect,
@@ -866,32 +800,16 @@ const listAt = (project: string, location: string, region: string) =>
 
 export const WorkerPoolProvider = () =>
   Provider.succeed(WorkerPool, {
-    stables: [
-      "name",
-      "workerPoolId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "workerPoolId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.workerPoolId ?? output?.workerPoolId;
       const nextId = news.workerPoolId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
       const locationChanged = previousLocation !== nextLocation;
       if (idChanged || locationChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -914,17 +832,9 @@ export const WorkerPoolProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const workerPoolId = yield* toId(
-        id,
-        olds?.workerPoolId,
-        output?.workerPoolId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, workerPoolId);
+      const workerPoolId = yield* toId(id, olds?.workerPoolId, output?.workerPoolId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, workerPoolId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
@@ -933,9 +843,7 @@ export const WorkerPoolProvider = () =>
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -946,9 +854,8 @@ export const WorkerPoolProvider = () =>
           Effect.catchTag("LocationWildcardUnsupported", () =>
             // `us-central1` was the default before `GCP.Region`; keep
             // listing it so older pools are still found.
-            Effect.forEach(
-              [...new Set([env.region, "us-central1"])],
-              (location) => listAt(env.project, location, env.region),
+            Effect.forEach([...new Set([env.region, "us-central1"])], (location) =>
+              listAt(env.project, location, env.region),
             ).pipe(Effect.map((groups) => groups.flat())),
           ),
         );
@@ -956,15 +863,8 @@ export const WorkerPoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
-      const workerPoolId = yield* toId(
-        id,
-        news.workerPoolId,
-        output?.workerPoolId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const workerPoolId = yield* toId(id, news.workerPoolId, output?.workerPoolId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, workerPoolId);
       const parent = `projects/${env.project}/locations/${location}`;
       const desiredLabels = {
@@ -1007,12 +907,7 @@ export const WorkerPoolProvider = () =>
           {
             ...container,
             image: image.imageUri,
-            env: mergeContainerEnv(
-              container.env,
-              identity.env,
-              yield* alchemyRuntimeEnv,
-              news.env,
-            ),
+            env: mergeContainerEnv(container.env, identity.env, yield* alchemyRuntimeEnv, news.env),
           },
         ];
       } else {
@@ -1060,32 +955,24 @@ export const WorkerPoolProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const annotationsChanged =
         desiredAnnotations !== undefined &&
-        !recordsEqual(
-          userAnnotations(current.annotations),
-          userAnnotations(desiredAnnotations),
-        );
+        !recordsEqual(userAnnotations(current.annotations), userAnnotations(desiredAnnotations));
       const launchStageChanged =
-        news.launchStage !== undefined &&
-        (current.launchStage ?? "GA") !== news.launchStage;
+        news.launchStage !== undefined && (current.launchStage ?? "GA") !== news.launchStage;
       const binaryAuthorizationChanged =
         news.binaryAuthorization !== undefined &&
-        stable(news.binaryAuthorization) !==
-          stable(current.binaryAuthorization);
+        stable(news.binaryAuthorization) !== stable(current.binaryAuthorization);
       const scalingChanged =
         news.scaling !== undefined &&
-        scalingFingerprint(current.scaling) !==
-          scalingFingerprint(news.scaling);
+        scalingFingerprint(current.scaling) !== scalingFingerprint(news.scaling);
       const instanceSplitsChanged =
         news.instanceSplits !== undefined &&
         instanceSplitFingerprint(current.instanceSplits) !==
           instanceSplitFingerprint(news.instanceSplits);
       const templateChanged =
-        news.template !== undefined &&
-        templateNeedsSync(template, current.template);
+        news.template !== undefined && templateNeedsSync(template, current.template);
 
       if (
         labelsChanged ||
@@ -1153,11 +1040,7 @@ export const WorkerPoolProvider = () =>
       }
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
-      yield* destroyHostImageRepository(
-        id,
-        output,
-        rfc1035(`${output.workerPoolId}-src`),
-      );
+      yield* destroyHostImageRepository(id, output, rfc1035(`${output.workerPoolId}-src`));
       yield* releaseHostIdentity(output);
     }),
   });

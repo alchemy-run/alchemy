@@ -33,14 +33,8 @@ export interface GetCluster extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetClusterRequest,
-    ) => Effect.Effect<
-      kafka.Cluster,
-      kafka.GetProjectsLocationsClustersError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<kafka.Cluster, kafka.GetProjectsLocationsClustersError, RuntimeContext>
   >
 > {}
 
-export const GetCluster = Binding.Service<GetCluster>(
-  "GCP.ManagedKafka.GetCluster",
-);
+export const GetCluster = Binding.Service<GetCluster>("GCP.ManagedKafka.GetCluster");

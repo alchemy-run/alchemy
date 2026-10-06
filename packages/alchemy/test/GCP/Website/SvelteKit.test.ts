@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -51,14 +51,10 @@ test.provider.skipIf(!dockerAvailable)(
         timeout: "180 seconds",
         label: "SvelteKit /",
       });
-      yield* expectUrlContains(
-        `${url}/api/hello?echo=roundtrip`,
-        "SVELTEKIT_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "SvelteKit /api/hello?echo=roundtrip",
-        },
-      );
+      yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "SVELTEKIT_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "SvelteKit /api/hello?echo=roundtrip",
+      });
 
       yield* stack.destroy();
       yield* assertSiteGone(service);

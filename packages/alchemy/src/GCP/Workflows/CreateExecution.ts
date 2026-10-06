@@ -44,6 +44,4 @@ export interface CreateExecution extends Binding.Service<
   >
 > {}
 
-export const CreateExecution = Binding.Service<CreateExecution>(
-  "GCP.Workflows.CreateExecution",
-);
+export const CreateExecution = Binding.Service<CreateExecution>("GCP.Workflows.CreateExecution");

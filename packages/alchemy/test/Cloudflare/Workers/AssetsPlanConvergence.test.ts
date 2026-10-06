@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
-const assetsFixture = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/assets-only",
-);
+const assetsFixture = pathe.resolve(import.meta.dirname, "fixtures/assets-only");
 
 const actionOf = (plan: any, logicalId: string) =>
   (Object.values(plan.resources) as any[]).find(
@@ -42,12 +39,8 @@ describe.concurrent(
           // feeds the main+assets worker, `dirB` feeds the assets-only and
           // script+assets workers, so editing `dirA` must dirty only the
           // first worker.
-          const dirA = yield* cloneFixture(assetsFixture, {
-            prefix: "alchemy-assets-plan-a-",
-          });
-          const dirB = yield* cloneFixture(assetsFixture, {
-            prefix: "alchemy-assets-plan-b-",
-          });
+          const dirA = yield* cloneFixture(assetsFixture, { prefix: "alchemy-assets-plan-a-" });
+          const dirB = yield* cloneFixture(assetsFixture, { prefix: "alchemy-assets-plan-b-" });
 
           // One worker per `hasChanged` branch that previously returned a
           // conservative "changed" whenever `assets` carried no precomputed
@@ -60,13 +53,10 @@ describe.concurrent(
                 assets: { directory: a },
                 compatibility: { date: "2024-01-01" },
               });
-              const assetsOnly = yield* Cloudflare.Worker(
-                "AssetsPlanAssetsOnly",
-                {
-                  assets: { directory: b, notFoundHandling: "404-page" },
-                  compatibility: { date: "2024-01-01" },
-                },
-              );
+              const assetsOnly = yield* Cloudflare.Worker("AssetsPlanAssetsOnly", {
+                assets: { directory: b, notFoundHandling: "404-page" },
+                compatibility: { date: "2024-01-01" },
+              });
               const withScript = yield* Cloudflare.Worker("AssetsPlanScript", {
                 script: `export default { fetch: () => new Response("assets-plan-script") };`,
                 assets: { directory: b },
@@ -108,23 +98,15 @@ describe.concurrent(
           // (CI runner → laptop, monorepo root → workspace root) converges
           // without spurious updates. The directory path is deliberately
           // excluded from the content hash.
-          const dirB2 = yield* cloneFixture(dirB, {
-            prefix: "alchemy-assets-plan-b2-",
-          });
+          const dirB2 = yield* cloneFixture(dirB, { prefix: "alchemy-assets-plan-b2-" });
           const moved = yield* stack.plan(program(dirA, dirB2));
           expect(actionOf(moved, "AssetsPlanAssetsOnly")).toBe("noop");
           expect(actionOf(moved, "AssetsPlanScript")).toBe("noop");
 
           // `.assetsignore` and the files it excludes participate in neither
           // the manifest nor the hash — adding them must stay a noop.
-          yield* fs.writeFileString(
-            path.join(dirB, ".assetsignore"),
-            "junk.txt",
-          );
-          yield* fs.writeFileString(
-            path.join(dirB, "junk.txt"),
-            "not-an-asset",
-          );
+          yield* fs.writeFileString(path.join(dirB, ".assetsignore"), "junk.txt");
+          yield* fs.writeFileString(path.join(dirB, "junk.txt"), "not-an-asset");
           const ignored = yield* stack.plan(program(dirA, dirB));
           expect(actionOf(ignored, "AssetsPlanAssetsOnly")).toBe("noop");
           expect(actionOf(ignored, "AssetsPlanScript")).toBe("noop");
@@ -132,19 +114,14 @@ describe.concurrent(
           // `_headers` is excluded from the manifest but shipped via the
           // asset config, so editing it must dirty every worker serving the
           // directory.
-          yield* fs.writeFileString(
-            path.join(dirB, "_headers"),
-            "/*\n  X-Assets-Plan: v1\n",
-          );
+          yield* fs.writeFileString(path.join(dirB, "_headers"), "/*\n  X-Assets-Plan: v1\n");
           const headers = yield* stack.plan(program(dirA, dirB));
           expect(actionOf(headers, "AssetsPlanWithMain")).toBe("noop");
           expect(actionOf(headers, "AssetsPlanAssetsOnly")).toBe("update");
           expect(actionOf(headers, "AssetsPlanScript")).toBe("update");
           yield* fs.remove(path.join(dirB, "_headers"));
           const headersReverted = yield* stack.plan(program(dirA, dirB));
-          expect(actionOf(headersReverted, "AssetsPlanAssetsOnly")).toBe(
-            "noop",
-          );
+          expect(actionOf(headersReverted, "AssetsPlanAssetsOnly")).toBe("noop");
           expect(actionOf(headersReverted, "AssetsPlanScript")).toBe("noop");
 
           // A directory that's missing at plan time (e.g. produced by an
@@ -204,9 +181,7 @@ describe.concurrent(
           expect(actionOf(converged, "AssetsHashMigration")).toBe("noop");
 
           // Re-introducing a different supplied hash dirties the plan again.
-          const reintroduced = yield* stack.plan(
-            program("hand-rolled-hash-v2"),
-          );
+          const reintroduced = yield* stack.plan(program("hand-rolled-hash-v2"));
           expect(actionOf(reintroduced, "AssetsHashMigration")).toBe("update");
 
           yield* stack.destroy();

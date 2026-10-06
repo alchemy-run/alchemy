@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 import { CAPACITY_ZONE_2 } from "../../zones.ts";
 
@@ -58,8 +58,7 @@ export const ZonalWorkers = Effect.gen(function* () {
 const clusterProbes = Effect.gen(function* () {
   const getCluster = yield* GCP.Container.GetCluster(App);
   const getNodePool = yield* GCP.Container.GetNodePool(Workers);
-  const getClustersNodePool =
-    yield* GCP.Container.GetClustersNodePool(ZonalWorkers);
+  const getClustersNodePool = yield* GCP.Container.GetClustersNodePool(ZonalWorkers);
   return {
     getCluster: getCluster(),
     getNodePool: getNodePool(),

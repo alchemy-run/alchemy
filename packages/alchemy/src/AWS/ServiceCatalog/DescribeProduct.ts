@@ -30,10 +30,7 @@ export interface DescribeProduct extends Binding.Service<
   () => Effect.Effect<
     (
       request?: servicecatalog.DescribeProductInput,
-    ) => Effect.Effect<
-      servicecatalog.DescribeProductOutput,
-      servicecatalog.DescribeProductError
-    >
+    ) => Effect.Effect<servicecatalog.DescribeProductOutput, servicecatalog.DescribeProductError>
   >
 > {}
 export const DescribeProduct = Binding.Service<DescribeProduct>(

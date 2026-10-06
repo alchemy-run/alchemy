@@ -41,6 +41,4 @@ export interface GetEndpoint extends Binding.Service<
   >
 > {}
 
-export const GetEndpoint = Binding.Service<GetEndpoint>(
-  "GCP.ServiceDirectory.GetEndpoint",
-);
+export const GetEndpoint = Binding.Service<GetEndpoint>("GCP.ServiceDirectory.GetEndpoint");

@@ -31,12 +31,7 @@ export interface GetComponent extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<greengrassv2.GetComponentRequest, "arn">,
-    ) => Effect.Effect<
-      greengrassv2.GetComponentResponse,
-      greengrassv2.GetComponentError
-    >
+    ) => Effect.Effect<greengrassv2.GetComponentResponse, greengrassv2.GetComponentError>
   >
 > {}
-export const GetComponent = Binding.Service<GetComponent>(
-  "AWS.GreengrassV2.GetComponent",
-);
+export const GetComponent = Binding.Service<GetComponent>("AWS.GreengrassV2.GetComponent");

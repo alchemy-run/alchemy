@@ -71,18 +71,12 @@ export type Edit = Resource<
  */
 export const Edit = Resource<Edit>("GCP.AndroidPublisher.Edit");
 
-export class EditNotResolved extends Data.TaggedError(
-  "GCP.AndroidPublisher.EditNotResolved",
-)<{
+export class EditNotResolved extends Data.TaggedError("GCP.AndroidPublisher.EditNotResolved")<{
   packageName: string;
   editId: string;
 }> {}
 
-const toAttrs = (
-  edit: androidpublisher.AppEdit,
-  packageName: string,
-  project: string,
-) => ({
+const toAttrs = (edit: androidpublisher.AppEdit, packageName: string, project: string) => ({
   editId: edit.id ?? "",
   packageName,
   project,
@@ -96,18 +90,11 @@ export const EditProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousPackage = olds?.packageName ?? output?.packageName;
-      if (
-        previousPackage !== undefined &&
-        news.packageName !== previousPackage
-      ) {
+      if (previousPackage !== undefined && news.packageName !== previousPackage) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.editId ?? output?.editId;
-      if (
-        previousId !== undefined &&
-        news.editId !== undefined &&
-        news.editId !== previousId
-      ) {
+      if (previousId !== undefined && news.editId !== undefined && news.editId !== previousId) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -146,9 +133,7 @@ export const EditProvider = () =>
             packageName,
             body: {},
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getEdit(packageName, editId)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getEdit(packageName, editId)));
         current = created ?? undefined;
       }
 

@@ -2,7 +2,6 @@ import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -86,14 +85,7 @@ export const isPrefixDelegation = (value: unknown): value is PrefixDelegation =>
 
 export const PrefixDelegationProvider = () =>
   Provider.succeed(PrefixDelegation, {
-    stables: [
-      "delegationId",
-      "prefixId",
-      "accountId",
-      "cidr",
-      "delegatedAccountId",
-      "createdAt",
-    ],
+    stables: ["delegationId", "prefixId", "accountId", "cidr", "delegatedAccountId", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (olds === undefined) return undefined;
@@ -110,8 +102,7 @@ export const PrefixDelegationProvider = () =>
       if (news.cidr !== (output?.cidr ?? olds.cidr)) {
         return { action: "replace" } as const;
       }
-      const oldDelegated =
-        output?.delegatedAccountId ?? olds.delegatedAccountId;
+      const oldDelegated = output?.delegatedAccountId ?? olds.delegatedAccountId;
       if (
         typeof oldDelegated === "string" &&
         typeof news.delegatedAccountId === "string" &&
@@ -126,8 +117,7 @@ export const PrefixDelegationProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const prefixId =
-        output?.prefixId ??
-        (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
+        output?.prefixId ?? (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
       if (!prefixId) return undefined;
 
       // There is no get-by-id op — list and filter. Cold reads match on
@@ -160,8 +150,7 @@ export const PrefixDelegationProvider = () =>
           ? delegations.find((d) => d.id === output.delegationId)
           : undefined) ??
         delegations.find(
-          (d) =>
-            d.cidr === news.cidr && d.delegatedAccountId === delegatedAccountId,
+          (d) => d.cidr === news.cidr && d.delegatedAccountId === delegatedAccountId,
         );
       if (observed) {
         // Nothing is mutable — converged.
@@ -196,18 +185,16 @@ export const PrefixDelegationProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const prefixIds = yield* addressing.listPrefixes
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .map((p) => p.id)
-                .filter((id): id is string => typeof id === "string"),
-            ),
+      const prefixIds = yield* addressing.listPrefixes.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((p) => p.id)
+              .filter((id): id is string => typeof id === "string"),
           ),
-        );
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         prefixIds,
@@ -240,9 +227,7 @@ const listDelegations = (accountId: string, prefixId: string) =>
   addressing.listPrefixDelegations.items({ accountId, prefixId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as ObservedDelegation[]),
-    Effect.catchTag("PrefixNotFound", () =>
-      Effect.succeed([] as ObservedDelegation[]),
-    ),
+    Effect.catchTag("PrefixNotFound", () => Effect.succeed([] as ObservedDelegation[])),
   );
 
 const toAttributes = (

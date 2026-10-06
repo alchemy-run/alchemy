@@ -1,15 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { CloudflareApiLive } from "@/Cloudflare/Providers.ts";
-import { waitForMetadata, waitForVectorize } from "./Readiness.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import { HttpClientResponse } from "effect/http";
 import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { CloudflareApiLive } from "@/Cloudflare/Providers.ts";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
+import { waitForMetadata, waitForVectorize } from "./Readiness.ts";
 
 /**
  * End-to-end test of the `Cloudflare.Vectorize` native worker binding against a
@@ -29,10 +29,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Fresh workers.dev URLs take a few seconds to start serving 200s, and edge
 // propagation can still transiently 404/500 individual route hits after the
@@ -64,12 +61,7 @@ const exercise = (label: string, baseUrl: string) =>
     yield* HttpClient.get(`${baseUrl}/health`).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.timeout("5 seconds"),
-      Effect.retry({
-        schedule: Schedule.max([
-          Schedule.spaced("1 second"),
-          Schedule.recurs(8),
-        ]),
-      }),
+      Effect.retry({ schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(8)]) }),
       Effect.timeout("15 seconds"),
     );
 
@@ -89,14 +81,9 @@ const exercise = (label: string, baseUrl: string) =>
           queryBody: getJson(`${baseUrl}/query`).pipe(
             Effect.map((body) => body as { count: number; ids: string[] }),
           ),
-          getRes: getJson(`${baseUrl}/get`).pipe(
-            Effect.map((body) => body as { ids: string[] }),
-          ),
+          getRes: getJson(`${baseUrl}/get`).pipe(Effect.map((body) => body as { ids: string[] })),
           filteredBody: getJson(`${baseUrl}/query-filtered`).pipe(
-            Effect.map(
-              (body) =>
-                body as { count: number; ids: string[]; kinds: string[] },
-            ),
+            Effect.map((body) => body as { count: number; ids: string[]; kinds: string[] }),
           ),
         },
         { concurrency: "unbounded" },

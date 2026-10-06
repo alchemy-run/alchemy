@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -205,9 +200,7 @@ export const TcpRoute = Resource<TcpRoute>("GCP.NetworkServices.TcpRoute");
 
 const toDestination = (
   project: string,
-  destination:
-    | TcpRouteRouteDestination
-    | networkservices.TcpRouteRouteDestination,
+  destination: TcpRouteRouteDestination | networkservices.TcpRouteRouteDestination,
 ): TcpRouteRouteDestination => ({
   serviceName: destination.serviceName
     ? toBackendServiceResource(project, destination.serviceName)
@@ -240,23 +233,11 @@ const toRule = (
   action: toAction(project, rule.action),
 });
 
-const toMeshes = (
-  project: string,
-  location: string,
-  meshes: readonly string[] | undefined,
-) =>
-  (meshes ?? []).map((mesh) =>
-    toNamedResource(project, location, "meshes", mesh),
-  );
+const toMeshes = (project: string, location: string, meshes: readonly string[] | undefined) =>
+  (meshes ?? []).map((mesh) => toNamedResource(project, location, "meshes", mesh));
 
-const toGateways = (
-  project: string,
-  location: string,
-  gateways: readonly string[] | undefined,
-) =>
-  (gateways ?? []).map((gateway) =>
-    toNamedResource(project, location, "gateways", gateway),
-  );
+const toGateways = (project: string, location: string, gateways: readonly string[] | undefined) =>
+  (gateways ?? []).map((gateway) => toNamedResource(project, location, "gateways", gateway));
 
 const toAttrs = (route: networkservices.TcpRoute, project: string) => {
   const name = route.name ?? "";
@@ -286,21 +267,12 @@ const getByName = (name: string) =>
 
 export const TcpRouteProvider = () =>
   Provider.succeed(TcpRoute, {
-    stables: [
-      "name",
-      "tcpRouteId",
-      "project",
-      "location",
-      "createTime",
-      "selfLink",
-    ],
+    stables: ["name", "tcpRouteId", "project", "location", "createTime", "selfLink"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.tcpRouteId ?? output?.tcpRouteId;
-      const nextId = news.tcpRouteId
-        ? rfc1035(news.tcpRouteId, "tcp-route")
-        : previousId;
+      const nextId = news.tcpRouteId ? rfc1035(news.tcpRouteId, "tcp-route") : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         DEFAULT_GLOBAL,
@@ -310,9 +282,7 @@ export const TcpRouteProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -322,25 +292,13 @@ export const TcpRouteProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const tcpRouteId = yield* toPhysicalId(
-        id,
-        olds?.tcpRouteId,
-        output?.tcpRouteId,
-        "tcp-route",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, tcpRouteId);
+      const tcpRouteId = yield* toPhysicalId(id, olds?.tcpRouteId, output?.tcpRouteId, "tcp-route");
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, tcpRouteId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -361,16 +319,8 @@ export const TcpRouteProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const tcpRouteId = yield* toPhysicalId(
-        id,
-        news.tcpRouteId,
-        output?.tcpRouteId,
-        "tcp-route",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const tcpRouteId = yield* toPhysicalId(id, news.tcpRouteId, output?.tcpRouteId, "tcp-route");
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, COLLECTION, tcpRouteId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -415,34 +365,27 @@ export const TcpRouteProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const updateMask = changedFields([
         ["labels", labelsChanged],
-        [
-          "description",
-          (current.description ?? "") !== (news.description ?? ""),
-        ],
+        ["description", (current.description ?? "") !== (news.description ?? "")],
         ["rules", !sameJson(observed.rules, desiredRules)],
         ["meshes", !sameStringList(observed.meshes, desiredMeshes)],
         ["gateways", !sameStringList(observed.gateways, desiredGateways)],
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsTcpRoutes({
+        const operation = yield* networkservices.patchProjectsLocationsTcpRoutes({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

@@ -1,16 +1,14 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Config from "effect/Config";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
   "SqlMigrationUpgradeObject",
   Effect.gen(function* () {
-    const dir = yield* Config.String("SQL_MIGRATIONS_DIRECTORY").pipe(
-      Effect.orDie,
-    );
+    const dir = yield* Config.String("SQL_MIGRATIONS_DIRECTORY").pipe(Effect.orDie);
     const migrations = yield* Cloudflare.SqlMigrations(dir);
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
@@ -28,9 +26,7 @@ class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
             };
           }),
         insert: () =>
-          state.storage.sql
-            .exec("INSERT INTO items VALUES ('user-data')")
-            .pipe(Effect.asVoid),
+          state.storage.sql.exec("INSERT INTO items VALUES ('user-data')").pipe(Effect.asVoid),
       };
     });
   }),
@@ -49,9 +45,7 @@ export default class UpgradeWorker extends Cloudflare.Worker<UpgradeWorker>()(
         return yield* HttpServerResponse.json(yield* object.inspect());
       }).pipe(
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
         ),
       ),
     };

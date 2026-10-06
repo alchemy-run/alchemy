@@ -1,21 +1,17 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import CloudFrontTestFunctionLive, {
-  CloudFrontTestFunction,
-} from "./handler.ts";
-import CloudFrontKvsTestFunctionLive, {
-  CloudFrontKvsTestFunction,
-} from "./kvs-handler.ts";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import CloudFrontTestFunctionLive, { CloudFrontTestFunction } from "./handler.ts";
+import CloudFrontKvsTestFunctionLive, { CloudFrontKvsTestFunction } from "./kvs-handler.ts";
 
 // The fixture deploys a CloudFront Distribution, which takes 3-10 minutes to
 // reach `Deployed` — gate the live run per the catalog's slow-test guidance.
@@ -38,14 +34,11 @@ const findFixtureDistributionId = Effect.gen(function* () {
   const match = (response.DistributionList?.Items ?? []).find(
     // Comment is a sensitive field — distilled decodes it as Redacted.
     (item) =>
-      (typeof item.Comment === "string"
-        ? item.Comment
-        : Redacted.value(item.Comment)) === "alchemy-cf-bindings-fixture",
+      (typeof item.Comment === "string" ? item.Comment : Redacted.value(item.Comment)) ===
+      "alchemy-cf-bindings-fixture",
   );
   if (!match) {
-    return yield* Effect.fail(
-      new Error("fixture distribution not found by comment"),
-    );
+    return yield* Effect.fail(new Error("fixture distribution not found by comment"));
   }
   return match.Id;
 }).pipe(
@@ -90,25 +83,18 @@ describe(
               Effect.flatMap((response) =>
                 response.status === 200
                   ? Effect.void
-                  : Effect.fail(
-                      new Error(`Function not ready: ${response.status}`),
-                    ),
+                  : Effect.fail(new Error(`Function not ready: ${response.status}`)),
               ),
               Effect.retry({
                 while: (e) => e instanceof Error,
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(60),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
               }),
             );
           })
         : Effect.void,
       { timeout: 900_000 },
     );
-    afterAll(runLive ? sharedStack.destroy() : Effect.void, {
-      timeout: 900_000,
-    });
+    afterAll(runLive ? sharedStack.destroy() : Effect.void, { timeout: 900_000 });
 
     describe("CreateInvalidation", () => {
       test.provider.skipIf(!runLive)(
@@ -124,10 +110,7 @@ describe(
               ),
             );
             expect(response.status).toBe(200);
-            const body = (yield* response.json) as {
-              invalidationId: string;
-              status: string;
-            };
+            const body = (yield* response.json) as { invalidationId: string; status: string };
             expect(body.invalidationId).toBeTruthy();
             expect(["InProgress", "Completed"]).toContain(body.status);
 
@@ -158,28 +141,19 @@ describe(
               ),
             );
             expect(created.status).toBe(200);
-            const { invalidationId } = (yield* created.json) as {
-              invalidationId: string;
-            };
+            const { invalidationId } = (yield* created.json) as { invalidationId: string };
 
             // GetInvalidation reads its status through the binding.
-            const got = yield* HttpClient.get(
-              `${baseUrl}/invalidation?id=${invalidationId}`,
-            );
+            const got = yield* HttpClient.get(`${baseUrl}/invalidation?id=${invalidationId}`);
             expect(got.status).toBe(200);
-            const gotBody = (yield* got.json) as {
-              invalidationId: string;
-              status: string;
-            };
+            const gotBody = (yield* got.json) as { invalidationId: string; status: string };
             expect(gotBody.invalidationId).toBe(invalidationId);
             expect(["InProgress", "Completed"]).toContain(gotBody.status);
 
             // ListInvalidations includes it.
             const listed = yield* HttpClient.get(`${baseUrl}/invalidations`);
             expect(listed.status).toBe(200);
-            const listedBody = (yield* listed.json) as {
-              invalidationIds: string[];
-            };
+            const listedBody = (yield* listed.json) as { invalidationIds: string[] };
             expect(listedBody.invalidationIds).toContain(invalidationId);
           }),
         { timeout: 120_000 },
@@ -207,14 +181,7 @@ const findFixtureStoreArn = Effect.suspend(() =>
 
 describe(
   "CloudFront KeyValueStore Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:cloudfront",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
@@ -238,18 +205,13 @@ describe(
               ? Effect.void
               : response.text.pipe(
                   Effect.flatMap((body) =>
-                    Effect.fail(
-                      new Error(`KVS not ready: ${response.status}: ${body}`),
-                    ),
+                    Effect.fail(new Error(`KVS not ready: ${response.status}: ${body}`)),
                   ),
                 ),
           ),
           Effect.retry({
             while: (e): boolean => e instanceof Error,
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -264,10 +226,7 @@ describe(
           Effect.gen(function* () {
             const response = yield* HttpClient.get(`${kvsBaseUrl}/describe`);
             expect(response.status).toBe(200);
-            const body = (yield* response.json) as {
-              etag: string;
-              itemCount: number;
-            };
+            const body = (yield* response.json) as { etag: string; itemCount: number };
             expect(body.etag).toBeTruthy();
             expect(body.itemCount).toBeGreaterThanOrEqual(0);
           }),
@@ -282,10 +241,7 @@ describe(
           Effect.gen(function* () {
             const put = yield* HttpClient.execute(
               HttpClientRequest.post(`${kvsBaseUrl}/put`).pipe(
-                HttpClientRequest.bodyJsonUnsafe({
-                  key: "routes:/about",
-                  value: "/about.html",
-                }),
+                HttpClientRequest.bodyJsonUnsafe({ key: "routes:/about", value: "/about.html" }),
               ),
             );
             expect(put.status).toBe(200);
@@ -302,29 +258,18 @@ describe(
 
             const listed = yield* HttpClient.get(`${kvsBaseUrl}/keys`);
             expect(listed.status).toBe(200);
-            const listedBody = (yield* listed.json) as {
-              keys: { key: string; value: string }[];
-            };
-            expect(listedBody.keys.map((k) => k.key)).toContain(
-              "routes:/about",
-            );
+            const listedBody = (yield* listed.json) as { keys: { key: string; value: string }[] };
+            expect(listedBody.keys.map((k) => k.key)).toContain("routes:/about");
 
             // Out-of-band: the key is visible through distilled directly.
             // KVS data-plane calls only accept us-east-1 signatures (see
             // `common.ts`), so pin the Region like the resource providers do.
             const storeArn = yield* findFixtureStoreArn;
             const observed = yield* kvs
-              .getKey({
-                KvsARN: storeArn,
-                Key: "routes:/about",
-              })
-              .pipe(
-                Effect.provideService(AwsRegion, Effect.succeed("us-east-1")),
-              );
+              .getKey({ KvsARN: storeArn, Key: "routes:/about" })
+              .pipe(Effect.provideService(AwsRegion, Effect.succeed("us-east-1")));
             expect(
-              typeof observed.Value === "string"
-                ? observed.Value
-                : Redacted.value(observed.Value),
+              typeof observed.Value === "string" ? observed.Value : Redacted.value(observed.Value),
             ).toBe("/about.html");
           }),
         { timeout: 60_000 },
@@ -357,9 +302,7 @@ describe(
 
             const listed = yield* HttpClient.get(`${kvsBaseUrl}/keys`);
             expect(listed.status).toBe(200);
-            const listedBody = (yield* listed.json) as {
-              keys: { key: string; value: string }[];
-            };
+            const listedBody = (yield* listed.json) as { keys: { key: string; value: string }[] };
             const keys = listedBody.keys.map((k) => k.key);
             expect(keys).toContain("routes:/");
             expect(keys).not.toContain("routes:/tmp");

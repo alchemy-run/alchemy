@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -147,15 +142,9 @@ export type DiscoveryClient = Resource<
  * @resource
  * @category MigrationCenter
  */
-export const DiscoveryClient = Resource<DiscoveryClient>(
-  "GCP.MigrationCenter.DiscoveryClient",
-);
+export const DiscoveryClient = Resource<DiscoveryClient>("GCP.MigrationCenter.DiscoveryClient");
 
-const resourceName = (
-  project: string,
-  location: string,
-  discoveryClientId: string,
-) =>
+const resourceName = (project: string, location: string, discoveryClientId: string) =>
   `${locationParent(project, location)}/discoveryClients/${discoveryClientId}`;
 
 const sourceOf = (value: string, project: string, location: string) =>
@@ -198,9 +187,7 @@ const listOwned = (project: string, region: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.discoveryClients ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.discoveryClients ?? [])),
       Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -211,15 +198,11 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.discoveryClients ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.discoveryClients ?? [])),
             Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as mc.DiscoveryClient[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as mc.DiscoveryClient[])),
           ),
       ),
     );
@@ -241,14 +224,8 @@ export const DiscoveryClientProvider = () =>
         !nextSource.endsWith(`/${previousSource}`);
       return replaceOnIdentity({
         previousId: olds?.discoveryClientId ?? output?.discoveryClientId,
-        nextId:
-          news.discoveryClientId ??
-          olds?.discoveryClientId ??
-          output?.discoveryClientId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.discoveryClientId ?? olds?.discoveryClientId ?? output?.discoveryClientId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -265,18 +242,12 @@ export const DiscoveryClientProvider = () =>
         output?.discoveryClientId,
         "discclient",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, discoveryClientId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, discoveryClientId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -294,10 +265,7 @@ export const DiscoveryClientProvider = () =>
         output?.discoveryClientId,
         "discclient",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, discoveryClientId);
       const source = sourceOf(news.source, env.project, location);
       const desiredLabels = {
@@ -338,12 +306,9 @@ export const DiscoveryClientProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const serviceAccountChanged =
-        (current.serviceAccount ?? "") !== news.serviceAccount;
-      const expireTimeChanged =
-        (current.expireTime ?? "") !== (news.expireTime ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const serviceAccountChanged = (current.serviceAccount ?? "") !== news.serviceAccount;
+      const expireTimeChanged = (current.expireTime ?? "") !== (news.expireTime ?? "");
       const mask = fieldMask([
         labelsChanged && "labels",
         displayNameChanged && "displayName",
@@ -366,10 +331,7 @@ export const DiscoveryClientProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

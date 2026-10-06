@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -28,23 +28,17 @@ test.provider.skipIf(!dockerAvailable)(
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
-      const rootDir = yield* cloneFixture(
-        cloudflareFixture("vite-spa-fixture"),
-        {
-          prefix: "alchemy-vite-gcp-",
-          tempRoot,
-          entries: ["index.html", "package.json", "src"],
-        },
-      );
+      const rootDir = yield* cloneFixture(cloudflareFixture("vite-spa-fixture"), {
+        prefix: "alchemy-vite-gcp-",
+        tempRoot,
+        entries: ["index.html", "package.json", "src"],
+      });
       const index = path.join(rootDir, "index.html");
       const original = yield* fs.readFileString(index);
       const writeVersion = (version: string) =>
         fs.writeFileString(
           index,
-          original.replaceAll(
-            "Vite SPA fixture",
-            `Vite SPA fixture ${version}`,
-          ),
+          original.replaceAll("Vite SPA fixture", `Vite SPA fixture ${version}`),
         );
       const deploy = () =>
         stack.deploy(

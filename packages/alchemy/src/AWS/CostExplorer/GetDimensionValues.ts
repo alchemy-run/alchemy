@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetDimensionValues}.
  */
-export interface GetDimensionValuesRequest
-  extends ce.GetDimensionValuesRequest {}
+export interface GetDimensionValuesRequest extends ce.GetDimensionValuesRequest {}
 
 /**
  * Runtime binding for `ce:GetDimensionValues`.
@@ -37,10 +36,7 @@ export interface GetDimensionValues extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetDimensionValuesRequest,
-    ) => Effect.Effect<
-      ce.GetDimensionValuesResponse,
-      ce.GetDimensionValuesError
-    >
+    ) => Effect.Effect<ce.GetDimensionValuesResponse, ce.GetDimensionValuesError>
   >
 > {}
 

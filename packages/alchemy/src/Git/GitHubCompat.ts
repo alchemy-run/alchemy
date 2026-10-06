@@ -32,12 +32,11 @@
  */
 import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 import type { RegistryEntry } from "./RegistryObject.ts";
 import type {
   CommitData,
@@ -53,7 +52,6 @@ import type {
   CommitLogPage,
   SignatureData,
 } from "./RepoObject.ts";
-import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dependencies injected by the Worker
@@ -61,14 +59,8 @@ import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 
 /** Outcome of the Worker's shared owner/repo + credential prelude. */
 export type CompatPrelude =
-  | {
-      readonly kind: "halt";
-      readonly response: HttpServerResponse.HttpServerResponse;
-    }
-  | {
-      readonly kind: "ok";
-      readonly entry: RegistryEntry;
-    };
+  | { readonly kind: "halt"; readonly response: HttpServerResponse.HttpServerResponse }
+  | { readonly kind: "ok"; readonly entry: RegistryEntry };
 
 /** The slice of the Repo-DO stub the facade calls. */
 export interface CompatRepoStub {
@@ -87,11 +79,7 @@ export interface CompatRepoStub {
   }) => Effect.Effect<CommitLogPage, { readonly _tag: string }, RuntimeContext>;
   readonly readCommitDiff: (input: {
     readonly oid: string;
-  }) => Effect.Effect<
-    CommitDiffData,
-    { readonly _tag: string },
-    RuntimeContext
-  >;
+  }) => Effect.Effect<CommitDiffData, { readonly _tag: string }, RuntimeContext>;
   readonly compareCommits: (input: {
     readonly base: string;
     readonly head: string;
@@ -124,11 +112,7 @@ export interface CompatRepoStub {
     readonly number: number;
     readonly message?: string | undefined;
     readonly expectedHeadOid?: string | undefined;
-  }) => Effect.Effect<
-    MergePullResult,
-    { readonly _tag: string },
-    RuntimeContext
-  >;
+  }) => Effect.Effect<MergePullResult, { readonly _tag: string }, RuntimeContext>;
 }
 
 export interface GitHubCompatOptions {
@@ -139,11 +123,7 @@ export interface GitHubCompatOptions {
   readonly prelude: (
     owner: string,
     repo: string,
-  ) => Effect.Effect<
-    CompatPrelude,
-    never,
-    HttpServerRequest.HttpServerRequest | RuntimeContext
-  >;
+  ) => Effect.Effect<CompatPrelude, never, HttpServerRequest.HttpServerRequest | RuntimeContext>;
   /** Repo-DO stub by repoId (the Worker's `repos.getByName`). */
   readonly stub: (repoId: string) => CompatRepoStub;
 }
@@ -156,8 +136,7 @@ const OID_RE = /^[0-9a-f]{40}$/;
 
 const iso = (epochMs: number): string => new Date(epochMs).toISOString();
 
-const isoSeconds = (sig: SignatureData): string =>
-  new Date(sig.date * 1000).toISOString();
+const isoSeconds = (sig: SignatureData): string => new Date(sig.date * 1000).toISOString();
 
 /** Stable 48-bit integer id from a string (GitHub ids are numbers). */
 const intId = (value: string): number => {
@@ -181,18 +160,14 @@ const originOf = Effect.gen(function* () {
 
 const ghJson = (
   value: unknown,
-  options?: {
-    readonly status?: number;
-    readonly headers?: Record<string, string>;
-  },
+  options?: { readonly status?: number; readonly headers?: Record<string, string> },
 ) =>
   HttpServerResponse.json(value, {
     status: options?.status ?? 200,
     headers: options?.headers,
   }).pipe(Effect.orDie);
 
-const ghError = (status: number, message: string) =>
-  ghJson({ message }, { status });
+const ghError = (status: number, message: string) => ghJson({ message }, { status });
 
 const ghNotFound = ghError(404, "Not Found");
 
@@ -202,11 +177,7 @@ const ghNotFound = ghError(404, "Not Found");
  * (defects, not silent 200s).
  */
 const ghCatch = <A, R>(
-  effect: Effect.Effect<
-    A,
-    { readonly _tag: string; readonly message?: string },
-    R
-  >,
+  effect: Effect.Effect<A, { readonly _tag: string; readonly message?: string }, R>,
 ): Effect.Effect<A | HttpServerResponse.HttpServerResponse, never, R> =>
   effect.pipe(
     Effect.catchIf(
@@ -234,10 +205,7 @@ const ghCatch = <A, R>(
           case "MergeConflict":
             return ghError(409, "Merge conflict");
           case "RefConflict":
-            return ghError(
-              409,
-              "Head branch was modified. Review and try the merge again.",
-            );
+            return ghError(409, "Head branch was modified. Review and try the merge again.");
           case "ReadOnlyRepo":
             return ghError(403, "Repository is archived (read-only)");
           case "StoreError":
@@ -306,10 +274,7 @@ const ghCommit = (commit: CommitData, origin: string, repoUrl: string) => ({
   },
   author: null,
   committer: null,
-  parents: commit.parents.map((sha) => ({
-    sha,
-    url: `${repoUrl}/commits/${sha}`,
-  })),
+  parents: commit.parents.map((sha) => ({ sha, url: `${repoUrl}/commits/${sha}` })),
 });
 
 /**
@@ -330,11 +295,7 @@ const ghFile = (entry: DiffEntryData) => ({
 const ghPullState = (state: PullData["state"]): "open" | "closed" =>
   state === "open" ? "open" : "closed";
 
-const ghPull = (
-  pull: PullData & Partial<PullDetailData>,
-  meta: RepoMetaData,
-  origin: string,
-) => {
+const ghPull = (pull: PullData & Partial<PullDetailData>, meta: RepoMetaData, origin: string) => {
   const repoUrl = `${origin}/api/v3/repos/${meta.owner}/${meta.name}`;
   return {
     id: intId(`${meta.repoId}#${pull.number}`),
@@ -368,11 +329,7 @@ const ghPull = (
     },
     mergeable: pull.mergeable ?? null,
     mergeable_state:
-      pull.mergeableReason === "conflict"
-        ? "dirty"
-        : pull.mergeable === true
-          ? "clean"
-          : "unknown",
+      pull.mergeableReason === "conflict" ? "dirty" : pull.mergeable === true ? "clean" : "unknown",
   };
 };
 
@@ -399,11 +356,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
       readonly request: HttpServerRequest.HttpServerRequest;
       readonly url: URL;
       readonly params: Readonly<Record<string, string | undefined>>;
-    }) => Effect.Effect<
-      HttpServerResponse.HttpServerResponse,
-      { readonly _tag: string },
-      R
-    >,
+    }) => Effect.Effect<HttpServerResponse.HttpServerResponse, { readonly _tag: string }, R>,
   ) =>
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
@@ -414,9 +367,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
       if (resolved.kind === "halt") {
         // The prelude's plain-text halts become GitHub JSON errors.
         const status = resolved.response.status;
-        return yield* status === 404
-          ? ghNotFound
-          : ghError(status, "Internal error");
+        return yield* status === 404 ? ghNotFound : ghError(status, "Internal error");
       }
       const origin = yield* originOf;
       const result = yield* ghCatch(
@@ -464,9 +415,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
     /** `GET /api/v3/repos/:owner/:repo` */
     repo: () =>
       withRepo(({ repo, origin }) =>
-        repo
-          .getRepoMeta()
-          .pipe(Effect.flatMap((meta) => ghJson(ghRepo(meta, origin)))),
+        repo.getRepoMeta().pipe(Effect.flatMap((meta) => ghJson(ghRepo(meta, origin)))),
       ),
     /** `GET /api/v3/repos/:owner/:repo/branches` */
     branches: () =>
@@ -528,9 +477,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
         Effect.gen(function* () {
           const marker = "/contents/";
           const at = url.pathname.indexOf(marker);
-          const path = decodeURIComponent(
-            url.pathname.slice(at + marker.length),
-          );
+          const path = decodeURIComponent(url.pathname.slice(at + marker.length));
           if (path.length === 0) return yield* ghNotFound;
           const ref = url.searchParams.get("ref") ?? undefined;
           const file = yield* repo.readFileAtPath({ ref, path });
@@ -548,7 +495,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
       ),
     /** `GET /api/v3/repos/:owner/:repo/pulls` */
     pulls: () =>
-      withRepo(({ repo, entry, origin, repoUrl, url }) =>
+      withRepo(({ repo, origin, repoUrl, url }) =>
         Effect.gen(function* () {
           // GitHub's `closed` includes merged; our store distinguishes.
           const requested = url.searchParams.get("state") ?? "open";
@@ -589,17 +536,9 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
         Effect.gen(function* () {
           const body = (yield* request.json.pipe(
             Effect.mapError(() => ({ _tag: "ValidationError" as const })),
-          )) as {
-            title?: string;
-            head?: string;
-            base?: string;
-            body?: string;
-          };
+          )) as { title?: string; head?: string; base?: string; body?: string };
           if (!body.title || !body.head || !body.base) {
-            return yield* ghError(
-              422,
-              "Validation Failed: title, head and base are required",
-            );
+            return yield* ghError(422, "Validation Failed: title, head and base are required");
           }
           const pull = yield* repo.createPull({
             title: body.title,
@@ -631,11 +570,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           const body = (yield* request.json.pipe(
             Effect.mapError(() => ({ _tag: "ValidationError" as const })),
           )) as { title?: string; body?: string | null; state?: string };
-          if (
-            body.state !== undefined &&
-            body.state !== "open" &&
-            body.state !== "closed"
-          ) {
+          if (body.state !== undefined && body.state !== "open" && body.state !== "closed") {
             return yield* ghError(422, "Validation Failed: invalid state");
           }
           const pull = yield* repo.updatePull({
@@ -654,23 +589,11 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
         Effect.gen(function* () {
           const number = Number.parseInt(params.number ?? "", 10);
           if (!Number.isFinite(number)) return yield* ghNotFound;
-          const raw = yield* request.json.pipe(
-            Effect.catch(() => Effect.succeed({})),
-          );
-          const body = raw as {
-            commit_message?: string;
-            sha?: string;
-            merge_method?: string;
-          };
-          if (
-            body.merge_method !== undefined &&
-            body.merge_method !== "merge"
-          ) {
+          const raw = yield* request.json.pipe(Effect.catch(() => Effect.succeed({})));
+          const body = raw as { commit_message?: string; sha?: string; merge_method?: string };
+          if (body.merge_method !== undefined && body.merge_method !== "merge") {
             // squash/rebase rewrite history server-side — not supported.
-            return yield* ghError(
-              405,
-              `Merge method '${body.merge_method}' is not supported`,
-            );
+            return yield* ghError(405, `Merge method '${body.merge_method}' is not supported`);
           }
           const result = yield* repo.mergePull({
             number,
@@ -694,16 +617,11 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           // Open PR with live branches: three-dot compare. Merged PR: the
           // merge commit's first-parent diff is the canonical record.
           if (pull.baseOid !== null && pull.headOid !== null) {
-            const compare = yield* repo.compareCommits({
-              base: pull.baseRef,
-              head: pull.headRef,
-            });
+            const compare = yield* repo.compareCommits({ base: pull.baseRef, head: pull.headRef });
             return yield* ghJson(compare.files.map(ghFile));
           }
           if (pull.mergeCommit !== null) {
-            const diff = yield* repo.readCommitDiff({
-              oid: pull.mergeCommit,
-            });
+            const diff = yield* repo.readCommitDiff({ oid: pull.mergeCommit });
             return yield* ghJson(diff.files.map(ghFile));
           }
           return yield* ghJson([]);

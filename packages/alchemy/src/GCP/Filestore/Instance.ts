@@ -1,6 +1,6 @@
 import * as file from "@distilled.cloud/gcp/file_v1";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -18,8 +18,8 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
-import type { Providers } from "../Providers.ts";
 import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
+import type { Providers } from "../Providers.ts";
 
 const DEFAULT_ZONAL_LOCATION = "us-central1-a";
 const DEFAULT_TIER = "BASIC_HDD";
@@ -399,30 +399,22 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.Filestore.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.Filestore.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.Filestore.InstanceNotResolved")<{
   name: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.Filestore.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.Filestore.InstanceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class InstanceFailed extends Data.TaggedError(
-  "GCP.Filestore.InstanceFailed",
-)<{
+export class InstanceFailed extends Data.TaggedError("GCP.Filestore.InstanceFailed")<{
   name: string;
   state: string;
   statusMessage: string | undefined;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.Filestore.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.Filestore.InstanceStillExists")<{
   name: string;
 }> {}
 
@@ -440,8 +432,7 @@ const canonicalizeTier = (tier: string | undefined) => {
   return value;
 };
 
-const isRegionalTier = (tier: string | undefined) =>
-  REGIONAL_TIERS.has(canonicalizeTier(tier));
+const isRegionalTier = (tier: string | undefined) => REGIONAL_TIERS.has(canonicalizeTier(tier));
 
 const defaultLocationFor = (tier: string | undefined, region: string) =>
   isRegionalTier(tier) ? region : DEFAULT_ZONAL_LOCATION;
@@ -491,16 +482,11 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_ZONAL_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_ZONAL_LOCATION,
     instanceId:
-      instancesAt >= 0 && parts[instancesAt + 1]
-        ? parts[instancesAt + 1]!
-        : lastSegment(name),
+      instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -532,28 +518,20 @@ const asNumber = (value: string | number | undefined): number | undefined => {
 const asIntString = (value: number | string | undefined): string | undefined =>
   value === undefined ? undefined : String(value);
 
-const stringsOf = (
-  values: ReadonlyArray<string | undefined> | null | undefined,
-): string[] =>
+const stringsOf = (values: ReadonlyArray<string | undefined> | null | undefined): string[] =>
   (values ?? []).filter((value): value is string => value !== undefined);
 
-const networkId = (network: string | undefined) =>
-  lastSegment(network ?? DEFAULT_NETWORK);
+const networkId = (network: string | undefined) => lastSegment(network ?? DEFAULT_NETWORK);
 
-const modesOf = (
-  modes: ReadonlyArray<string | undefined> | null | undefined,
-): string[] => {
+const modesOf = (modes: ReadonlyArray<string | undefined> | null | undefined): string[] => {
   const values = stringsOf(modes).map((mode) => mode.toUpperCase());
   return values.length > 0 ? values : [DEFAULT_MODE];
 };
 
-const modesKey = (
-  modes: ReadonlyArray<string | undefined> | null | undefined,
-) => [...modesOf(modes)].sort().join("\0");
+const modesKey = (modes: ReadonlyArray<string | undefined> | null | undefined) =>
+  [...modesOf(modes)].sort().join("\0");
 
-const nfsOf = (
-  options: file.NfsExportOptions | NfsExportOptions,
-): NfsExportOptions => ({
+const nfsOf = (options: file.NfsExportOptions | NfsExportOptions): NfsExportOptions => ({
   squashMode: options.squashMode,
   network: options.network,
   anonGid: asNumber(options.anonGid),
@@ -614,9 +592,7 @@ const networkOf = (
   modes: modesOf(network.modes),
   reservedIpRange: network.reservedIpRange,
   connectMode: network.connectMode,
-  pscConfig: network.pscConfig
-    ? { endpointProject: network.pscConfig.endpointProject }
-    : undefined,
+  pscConfig: network.pscConfig ? { endpointProject: network.pscConfig.endpointProject } : undefined,
   ipAddresses: "ipAddresses" in network ? stringsOf(network.ipAddresses) : [],
 });
 
@@ -635,16 +611,12 @@ const networksOf = (
   return networks.map(networkOf);
 };
 
-const networkIdentityKey = (
-  network: NetworkConfig,
-  options?: { includeReserved?: boolean },
-) =>
+const networkIdentityKey = (network: NetworkConfig, options?: { includeReserved?: boolean }) =>
   JSON.stringify({
     network: networkId(network.network),
     modes: modesKey(network.modes),
     connectMode: normalizeConnectMode(network.connectMode),
-    reservedIpRange:
-      options?.includeReserved === true ? (network.reservedIpRange ?? "") : "",
+    reservedIpRange: options?.includeReserved === true ? (network.reservedIpRange ?? "") : "",
     endpointProject: network.pscConfig?.endpointProject ?? "",
   });
 
@@ -655,24 +627,18 @@ const performanceOf = (
   const iopsPerTb = config.iopsPerTb
     ? { maxIopsPerTb: asNumber(config.iopsPerTb.maxIopsPerTb) }
     : undefined;
-  const fixedIops = config.fixedIops
-    ? { maxIops: asNumber(config.fixedIops.maxIops) }
-    : undefined;
+  const fixedIops = config.fixedIops ? { maxIops: asNumber(config.fixedIops.maxIops) } : undefined;
   if (iopsPerTb === undefined && fixedIops === undefined) return undefined;
   return { iopsPerTb, fixedIops };
 };
 
-const performanceKey = (
-  config: file.PerformanceConfig | PerformanceConfig | undefined,
-) =>
+const performanceKey = (config: file.PerformanceConfig | PerformanceConfig | undefined) =>
   JSON.stringify({
     iopsPerTb: performanceOf(config)?.iopsPerTb?.maxIopsPerTb ?? "",
     fixedIops: performanceOf(config)?.fixedIops?.maxIops ?? "",
   });
 
-const ldapOf = (
-  ldap: file.LdapConfig | LdapConfig | undefined,
-): LdapConfig | undefined => {
+const ldapOf = (ldap: file.LdapConfig | LdapConfig | undefined): LdapConfig | undefined => {
   if (ldap === undefined) return undefined;
   return {
     servers: ldap.servers ? [...ldap.servers] : undefined,
@@ -691,9 +657,7 @@ const directoryOf = (
   return { ldap };
 };
 
-const directoryKey = (
-  config: file.DirectoryServicesConfig | DirectoryServicesConfig | undefined,
-) =>
+const directoryKey = (config: file.DirectoryServicesConfig | DirectoryServicesConfig | undefined) =>
   JSON.stringify({
     servers: [...(directoryOf(config)?.ldap?.servers ?? [])].sort(),
     domain: directoryOf(config)?.ldap?.domain ?? "",
@@ -721,9 +685,7 @@ const replicationKey = (config: file.Replication | Replication | undefined) =>
       .sort(),
   });
 
-const limitsOf = (
-  limits: file.PerformanceLimits | undefined,
-): PerformanceLimits | undefined => {
+const limitsOf = (limits: file.PerformanceLimits | undefined): PerformanceLimits | undefined => {
   if (limits === undefined) return undefined;
   return {
     maxReadIops: asNumber(limits.maxReadIops),
@@ -811,11 +773,7 @@ const toAttrs = (instance: file.Instance, project: string) => {
 
 const isPlaceholder = (instance: file.Instance) => {
   const name = instance.name ?? "";
-  return (
-    name.length === 0 ||
-    name.endsWith("/instances/-") ||
-    name.endsWith("/instances/")
-  );
+  return name.length === 0 || name.endsWith("/instances/-") || name.endsWith("/instances/");
 };
 
 const getByName = (name: string) =>
@@ -828,10 +786,7 @@ const getByName = (name: string) =>
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */
-const waitForOperation = (
-  operation: file.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+const waitForOperation = (operation: file.Operation, options?: { notFoundOk?: boolean }) =>
   Effect.suspend(() => {
     let latest = operation;
     return waitForLongRunningOperation(
@@ -880,9 +835,7 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance
-        ? Effect.succeed(instance)
-        : Effect.fail(new InstanceNotResolved({ name })),
+      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Filestore.InstanceNotResolved",
@@ -927,9 +880,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Filestore.InstanceStillExists",
@@ -965,20 +916,11 @@ const toCreateBody = (
   tags: news.tags,
 });
 
-const sharesIdentityChanged = (
-  observed: FileShareConfig[],
-  desired: FileShareConfig[],
-) =>
+const sharesIdentityChanged = (observed: FileShareConfig[], desired: FileShareConfig[]) =>
   observed.length !== desired.length ||
-  observed.some(
-    (share, index) =>
-      shareIdentityKey(share) !== shareIdentityKey(desired[index]!),
-  );
+  observed.some((share, index) => shareIdentityKey(share) !== shareIdentityKey(desired[index]!));
 
-const sharesMutableChanged = (
-  observed: FileShareConfig[],
-  desired: FileShareConfig[],
-) =>
+const sharesMutableChanged = (observed: FileShareConfig[], desired: FileShareConfig[]) =>
   observed.length !== desired.length ||
   observed.some((share, index) => {
     const next = desired[index];
@@ -997,14 +939,10 @@ const sharesForPatch = (
 ): FileShareConfig[] =>
   desired.map((share, index) => ({
     ...share,
-    nfsExportOptions:
-      share.nfsExportOptions ?? observed[index]?.nfsExportOptions,
+    nfsExportOptions: share.nfsExportOptions ?? observed[index]?.nfsExportOptions,
   }));
 
-const networksIdentityChanged = (
-  observed: Array<NetworkConfig>,
-  desired: Array<NetworkConfig>,
-) => {
+const networksIdentityChanged = (observed: Array<NetworkConfig>, desired: Array<NetworkConfig>) => {
   if (observed.length !== desired.length) return true;
   return observed.some((network, index) => {
     const next = desired[index]!;
@@ -1038,43 +976,28 @@ export const InstanceProvider = () =>
         nextTier,
         env.region,
       );
-      const previousProtocol = normalizeProtocol(
-        olds?.protocol ?? output?.protocol,
-      );
+      const previousProtocol = normalizeProtocol(olds?.protocol ?? output?.protocol);
       const nextProtocol = normalizeProtocol(news.protocol ?? output?.protocol);
       const previousKey = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKey = news.kmsKeyName ?? previousKey;
-      const previousShares = sharesOf(
-        olds?.fileShares ?? output?.fileShares,
-        previousTier,
-      );
+      const previousShares = sharesOf(olds?.fileShares ?? output?.fileShares, previousTier);
       const nextShares = sharesOf(
         news.fileShares ?? olds?.fileShares ?? output?.fileShares,
         nextTier,
       );
       const previousNetworks = networksOf(olds?.networks ?? output?.networks);
-      const nextNetworks = networksOf(
-        news.networks ?? olds?.networks ?? output?.networks,
-      );
-      const previousDirectory = directoryKey(
-        olds?.directoryServices ?? output?.directoryServices,
-      );
+      const nextNetworks = networksOf(news.networks ?? olds?.networks ?? output?.networks);
+      const previousDirectory = directoryKey(olds?.directoryServices ?? output?.directoryServices);
       const nextDirectory = directoryKey(
-        news.directoryServices ??
-          olds?.directoryServices ??
-          output?.directoryServices,
+        news.directoryServices ?? olds?.directoryServices ?? output?.directoryServices,
       );
-      const previousReplication = replicationKey(
-        olds?.replication ?? output?.replication,
-      );
+      const previousReplication = replicationKey(olds?.replication ?? output?.replication);
       const nextReplication = replicationKey(
         news.replication ?? olds?.replication ?? output?.replication,
       );
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousTier !== nextTier ||
         previousProtocol !== nextProtocol ||
@@ -1088,9 +1011,7 @@ export const InstanceProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -1098,19 +1019,12 @@ export const InstanceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
       const tier = canonicalizeTier(olds?.tier ?? output?.tier);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        tier,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, instanceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, tier, env.region);
+      const name = output?.name ?? resourceName(env.project, location, instanceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -1126,9 +1040,7 @@ export const InstanceProvider = () =>
             Stream.filter(
               (instance) =>
                 !isPlaceholder(instance) &&
-                Object.keys(instance.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(instance.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((instance) => toAttrs(instance, env.project)),
             Stream.runCollect,
@@ -1141,11 +1053,7 @@ export const InstanceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, news.instanceId, output?.instanceId);
       const tier = canonicalizeTier(news.tier);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        tier,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, tier, env.region);
       const protocol = normalizeProtocol(news.protocol);
       const name = resourceName(env.project, location, instanceId);
       const desiredLabels = {
@@ -1194,22 +1102,17 @@ export const InstanceProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const protectionChanged =
-        (current.deletionProtectionEnabled === true) !== desiredProtection;
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const protectionChanged = (current.deletionProtectionEnabled === true) !== desiredProtection;
       const reasonChanged =
-        (current.deletionProtectionReason ?? "") !==
-        (news.deletionProtectionReason ?? "");
+        (current.deletionProtectionReason ?? "") !== (news.deletionProtectionReason ?? "");
       const observedShares = sharesOf(current.fileShares, tier);
       const nextShares = desiredShares(news, tier);
       const fileSharesChanged =
-        news.fileShares !== undefined &&
-        sharesMutableChanged(observedShares, nextShares);
+        news.fileShares !== undefined && sharesMutableChanged(observedShares, nextShares);
       const performanceChanged =
         news.performanceConfig !== undefined &&
-        performanceKey(current.performanceConfig) !==
-          performanceKey(news.performanceConfig);
+        performanceKey(current.performanceConfig) !== performanceKey(news.performanceConfig);
 
       if (
         labelsChanged ||
@@ -1235,9 +1138,7 @@ export const InstanceProvider = () =>
             name,
             labels: desiredLabels,
             description: news.description,
-            fileShares: sharesForPatch(nextShares, observedShares).map(
-              toApiShare,
-            ),
+            fileShares: sharesForPatch(nextShares, observedShares).map(toApiShare),
             performanceConfig: toApiPerformance(news.performanceConfig),
             deletionProtectionEnabled: desiredProtection,
             deletionProtectionReason: news.deletionProtectionReason,
@@ -1258,8 +1159,7 @@ export const InstanceProvider = () =>
         const patched = yield* file
           .patchProjectsLocationsInstances({
             name: output.name,
-            updateMask:
-              "deletion_protection_enabled,deletion_protection_reason",
+            updateMask: "deletion_protection_enabled,deletion_protection_reason",
             body: {
               name: output.name,
               deletionProtectionEnabled: false,

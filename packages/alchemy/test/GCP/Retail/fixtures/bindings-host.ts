@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -52,8 +52,5 @@ export default class RetailBindingsHost extends GCP.Function<RetailBindingsHost>
   Effect.gen(function* () {
     const serving = retailEnabled ? yield* servingProbes : {};
     return { fetch: serveProbes({ ...serving }) };
-  }).pipe(
-    Effect.provide(GCP.Retail.SearchHttp),
-    Effect.provide(GCP.Retail.PredictHttp),
-  ),
+  }).pipe(Effect.provide(GCP.Retail.SearchHttp), Effect.provide(GCP.Retail.PredictHttp)),
 ) {}

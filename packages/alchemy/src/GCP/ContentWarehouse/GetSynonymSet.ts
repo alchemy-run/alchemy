@@ -45,6 +45,4 @@ export interface GetSynonymSet extends Binding.Service<
   >
 > {}
 
-export const GetSynonymSet = Binding.Service<GetSynonymSet>(
-  "GCP.ContentWarehouse.GetSynonymSet",
-);
+export const GetSynonymSet = Binding.Service<GetSynonymSet>("GCP.ContentWarehouse.GetSynonymSet");

@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,12 +10,9 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -25,8 +21,7 @@ export type NodeTemplateCpuOvercommitType =
   | (string & {});
 export type NodeTemplateLocalDisk = compute.LocalDisk;
 export type NodeTemplateAccelerator = compute.AcceleratorConfig;
-export type NodeTemplateNodeTypeFlexibility =
-  compute.NodeTemplateNodeTypeFlexibility;
+export type NodeTemplateNodeTypeFlexibility = compute.NodeTemplateNodeTypeFlexibility;
 export type NodeTemplateServerBinding = compute.ServerBinding;
 
 export type NodeTemplateProps = {
@@ -239,17 +234,12 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
-const toAttrs = (
-  template: compute.NodeTemplate,
-  project: string,
-): NodeTemplate["Attributes"] => {
+const toAttrs = (template: compute.NodeTemplate, project: string): NodeTemplate["Attributes"] => {
   const parsed = parseDescription(template.description);
   return {
     nodeTemplateName: template.name ?? "",
@@ -277,18 +267,12 @@ const getByName = (project: string, region: string, nodeTemplate: string) =>
     .getNodeTemplates({ project, region, nodeTemplate })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const awaitResource = (
-  project: string,
-  region: string,
-  nodeTemplateName: string,
-) =>
+const awaitResource = (project: string, region: string, nodeTemplateName: string) =>
   getByName(project, region, nodeTemplateName).pipe(
     Effect.flatMap((template) =>
       template !== undefined
         ? Effect.succeed(template)
-        : Effect.fail(
-            new NodeTemplateNotResolved({ nodeTemplateName, region }),
-          ),
+        : Effect.fail(new NodeTemplateNotResolved({ nodeTemplateName, region })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.NodeTemplateNotResolved",
@@ -297,11 +281,7 @@ const awaitResource = (
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  nodeTemplateName: string,
-) =>
+const waitUntilGone = (project: string, region: string, nodeTemplateName: string) =>
   getByName(project, region, nodeTemplateName).pipe(
     Effect.flatMap((template) =>
       template === undefined
@@ -334,37 +314,25 @@ export const NodeTemplateProvider = () =>
       const previousName = olds?.nodeTemplateName ?? output?.nodeTemplateName;
       const nextName = news.nodeTemplateName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
 
       const previousType = olds?.nodeType ?? output?.nodeType ?? "";
       const nextType = news.nodeType ?? previousType;
-      const previousOvercommit =
-        olds?.cpuOvercommitType ?? output?.cpuOvercommitType;
+      const previousOvercommit = olds?.cpuOvercommitType ?? output?.cpuOvercommitType;
       const nextOvercommit = news.cpuOvercommitType ?? previousOvercommit;
       const previousBinding = olds?.serverBinding ?? output?.serverBinding;
       const nextBinding = news.serverBinding ?? previousBinding;
-      const previousFlex =
-        olds?.nodeTypeFlexibility ?? output?.nodeTypeFlexibility;
+      const previousFlex = olds?.nodeTypeFlexibility ?? output?.nodeTypeFlexibility;
       const nextFlex = news.nodeTypeFlexibility ?? previousFlex;
-      const previousAffinity =
-        olds?.nodeAffinityLabels ?? output?.nodeAffinityLabels ?? {};
+      const previousAffinity = olds?.nodeAffinityLabels ?? output?.nodeAffinityLabels ?? {};
       const nextAffinity = news.nodeAffinityLabels ?? previousAffinity;
       const previousDisks = olds?.disks ?? output?.disks ?? [];
       const nextDisks = news.disks ?? previousDisks;
       const previousAccel = olds?.accelerators ?? output?.accelerators ?? [];
       const nextAccel = news.accelerators ?? previousAccel;
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? previousDescription;
 
       const immutableChanged =
@@ -388,15 +356,8 @@ export const NodeTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const nodeTemplateName = yield* toName(
-        id,
-        olds?.nodeTemplateName,
-        output?.nodeTemplateName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const nodeTemplateName = yield* toName(id, olds?.nodeTemplateName, output?.nodeTemplateName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, nodeTemplateName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -425,11 +386,7 @@ export const NodeTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const nodeTemplateName = yield* toName(
-        id,
-        news.nodeTemplateName,
-        output?.nodeTemplateName,
-      );
+      const nodeTemplateName = yield* toName(id, news.nodeTemplateName, output?.nodeTemplateName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);

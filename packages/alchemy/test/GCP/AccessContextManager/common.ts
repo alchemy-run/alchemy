@@ -1,16 +1,14 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 
 // Access policies live on the organization and need Access Context Manager
 // admin there; the testing credentials get Forbidden "The caller does not have
@@ -28,9 +26,7 @@ export const lastSegment = (value: string) => {
 
 export const projectContext = () =>
   currentProject.pipe(
-    Effect.flatMap((project) =>
-      resourcemanager.getProjects({ name: `projects/${project}` }),
-    ),
+    Effect.flatMap((project) => resourcemanager.getProjects({ name: `projects/${project}` })),
     Effect.map((resource) => {
       const parent = resource.parent ?? "";
       return {

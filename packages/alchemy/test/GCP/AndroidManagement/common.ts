@@ -1,14 +1,13 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const enterpriseName =
-  process.env.GCP_ANDROIDMANAGEMENT_ENTERPRISE?.trim() || undefined;
+export const enterpriseName = process.env.GCP_ANDROIDMANAGEMENT_ENTERPRISE?.trim() || undefined;
 
 // Android Management needs credentials carrying the androidmanagement scope
 // (plus an enterprise signup); the service account profile is rejected with
@@ -18,6 +17,4 @@ export const runLifecycle = !!process.env.GCP_TEST_ANDROIDMANAGEMENT_OAUTH;
 
 export const runChildLifecycle = runLifecycle && !!enterpriseName;
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));

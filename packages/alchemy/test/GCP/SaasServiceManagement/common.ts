@@ -1,7 +1,7 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -15,12 +15,9 @@ export const runLifecycle = !process.env.FAST;
 // `us-central1-docker.pkg.dev/<project>/blueprints/store:v1`) to run the
 // release, rollout, and unit-operation lifecycles.
 export const blueprintPackage = process.env.GCP_TEST_SAAS_BLUEPRINT_PACKAGE;
-export const runBlueprintLifecycle =
-  runLifecycle && blueprintPackage !== undefined;
+export const runBlueprintLifecycle = runLifecycle && blueprintPackage !== undefined;
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 export const location = "us-central1";
 
 export const waitUntilGone = <E extends { readonly _tag: string }, R>(

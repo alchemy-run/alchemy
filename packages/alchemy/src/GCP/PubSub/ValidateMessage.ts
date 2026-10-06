@@ -48,6 +48,4 @@ export interface ValidateMessage extends Binding.Service<
   >
 > {}
 
-export const ValidateMessage = Binding.Service<ValidateMessage>(
-  "GCP.PubSub.ValidateMessage",
-);
+export const ValidateMessage = Binding.Service<ValidateMessage>("GCP.PubSub.ValidateMessage");

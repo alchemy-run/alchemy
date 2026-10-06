@@ -4,10 +4,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface GetImagesRequest extends Omit<
-  kvam.GetImagesInput,
-  "StreamName" | "StreamARN"
-> {}
+export interface GetImagesRequest extends Omit<kvam.GetImagesInput, "StreamName" | "StreamARN"> {}
 
 /**
  * Runtime binding for `kinesisvideo:GetImages` (archived media data plane).
@@ -41,13 +38,8 @@ export interface GetImages extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetImagesRequest,
-    ) => Effect.Effect<
-      kvam.GetImagesOutput,
-      kvam.GetImagesError | kv.GetDataEndpointError
-    >
+    ) => Effect.Effect<kvam.GetImagesOutput, kvam.GetImagesError | kv.GetDataEndpointError>
   >
 > {}
 
-export const GetImages = Binding.Service<GetImages>(
-  "AWS.KinesisVideo.GetImages",
-);
+export const GetImages = Binding.Service<GetImages>("AWS.KinesisVideo.GetImages");

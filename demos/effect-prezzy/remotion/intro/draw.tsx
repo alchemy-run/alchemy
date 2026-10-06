@@ -67,7 +67,8 @@ export const strikePath = (x: number, y: number, w: number, seed = 1) =>
   `M ${x - 6} ${y + wobble(seed) * 3} L ${x + w + 6} ${y + wobble(seed + 2) * 3}`;
 
 export const boxPath = (x: number, y: number, w: number, h: number, seed = 1) => {
-  const p = (px: number, py: number, s: number) => `${px + wobble(seed + s) * 5},${py + wobble(seed + s + 7) * 5}`;
+  const p = (px: number, py: number, s: number) =>
+    `${px + wobble(seed + s) * 5},${py + wobble(seed + s + 7) * 5}`;
   const l = x - 12;
   const r = x + w + 12;
   const t = y - 8;

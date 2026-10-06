@@ -173,21 +173,15 @@ const resourceName = (project: string, location: string, dataStoreId: string) =>
   `projects/${project}/locations/${location}/dataStores/${dataStoreId}`;
 
 const verticalOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1DataStoreIndustryVerticalEnum
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1DataStoreIndustryVerticalEnum | undefined,
 ) => value ?? "GENERIC";
 
 const contentOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1DataStoreContentConfigEnum
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1DataStoreContentConfigEnum | undefined,
 ) => value ?? "NO_CONTENT";
 
 const solutionsOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1DataStoreSolutionTypesItemEnumList
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1DataStoreSolutionTypesItemEnumList | undefined,
 ): discoveryengine.GoogleCloudDiscoveryengineV1DataStoreSolutionTypesItemEnumList =>
   value && value.length > 0 ? value : ["SOLUTION_TYPE_SEARCH"];
 
@@ -196,10 +190,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsDataStores({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toAttrs = (
-  store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore,
-  project: string,
-) => {
+const toAttrs = (store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore, project: string) => {
   const name = store.name ?? "";
   const parsed = parseResourceName(name, "dataStores");
   return {
@@ -207,9 +198,7 @@ const toAttrs = (
     dataStoreId: parsed.id,
     project: parsed.project || project,
     location: parsed.location,
-    collectionId: name.includes("/collections/")
-      ? parsed.collectionId
-      : undefined,
+    collectionId: name.includes("/collections/") ? parsed.collectionId : undefined,
     displayName: store.displayName,
     industryVertical: store.industryVertical,
     contentConfig: store.contentConfig,
@@ -223,13 +212,10 @@ const toAttrs = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store
-        ? Effect.succeed(store)
-        : Effect.fail(new DataStoreNotResolved({ name })),
+      store ? Effect.succeed(store) : Effect.fail(new DataStoreNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DiscoveryEngine.DataStoreNotResolved",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.DataStoreNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -238,13 +224,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined
-        ? Effect.void
-        : Effect.fail(new DataStoreStillExists({ name })),
+      store === undefined ? Effect.void : Effect.fail(new DataStoreStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DiscoveryEngine.DataStoreStillExists",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.DataStoreStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -267,34 +250,24 @@ export const DataStoreProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.dataStoreId ?? output?.dataStoreId;
       const nextId = news.dataStoreId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousVertical = verticalOf(
-        olds?.industryVertical ??
-          (output?.industryVertical as DataStoreProps["industryVertical"]),
+        olds?.industryVertical ?? (output?.industryVertical as DataStoreProps["industryVertical"]),
       );
       const nextVertical = verticalOf(
-        news.industryVertical ??
-          (output?.industryVertical as DataStoreProps["industryVertical"]),
+        news.industryVertical ?? (output?.industryVertical as DataStoreProps["industryVertical"]),
       );
       const previousContent = contentOf(
-        olds?.contentConfig ??
-          (output?.contentConfig as DataStoreProps["contentConfig"]),
+        olds?.contentConfig ?? (output?.contentConfig as DataStoreProps["contentConfig"]),
       );
       const nextContent = contentOf(
-        news.contentConfig ??
-          (output?.contentConfig as DataStoreProps["contentConfig"]),
+        news.contentConfig ?? (output?.contentConfig as DataStoreProps["contentConfig"]),
       );
       const previousAcl = olds?.aclEnabled ?? output?.aclEnabled ?? false;
       const nextAcl = news.aclEnabled ?? previousAcl;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousVertical !== nextVertical ||
         previousContent !== nextContent ||
@@ -303,19 +276,13 @@ export const DataStoreProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const dataStoreId = yield* toResourceId(
-        id,
-        olds?.dataStoreId,
-        output?.dataStoreId,
-      );
+      const dataStoreId = yield* toResourceId(id, olds?.dataStoreId, output?.dataStoreId);
       const location = normalizeLocation(olds?.location ?? output?.location);
       const existing = yield* getByName(
         output?.name ?? resourceName(env.project, location, dataStoreId),
@@ -329,17 +296,12 @@ export const DataStoreProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
-      const dataStoreId = yield* toResourceId(
-        id,
-        news.dataStoreId,
-        output?.dataStoreId,
-      );
+      const dataStoreId = yield* toResourceId(id, news.dataStoreId, output?.dataStoreId);
       const displayName = news.displayName ?? dataStoreId;
       const industryVertical = verticalOf(news.industryVertical);
       const contentConfig = contentOf(news.contentConfig);
       const solutionTypes = solutionsOf(news.solutionTypes);
-      const fallbackName =
-        output?.name ?? resourceName(env.project, location, dataStoreId);
+      const fallbackName = output?.name ?? resourceName(env.project, location, dataStoreId);
 
       let current = yield* getByName(fallbackName);
 
@@ -350,11 +312,7 @@ export const DataStoreProvider = () =>
         // `projects/{p}/locations/{l}/dataStores/{id}`.
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStores({
-            parent: collectionParent(
-              env.project,
-              location,
-              "default_collection",
-            ),
+            parent: collectionParent(env.project, location, "default_collection"),
             dataStoreId,
             skipDefaultSchemaCreation: news.skipDefaultSchemaCreation,
             createAdvancedSiteSearch: news.createAdvancedSiteSearch,
@@ -382,10 +340,7 @@ export const DataStoreProvider = () =>
 
       const name = current.name ?? fallbackName;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const solutionsChanged = !sameStringList(
-        current.solutionTypes,
-        solutionTypes,
-      );
+      const solutionsChanged = !sameStringList(current.solutionTypes, solutionTypes);
 
       if (displayNameChanged || solutionsChanged) {
         current = yield* discoveryengine.patchProjectsLocationsDataStores({

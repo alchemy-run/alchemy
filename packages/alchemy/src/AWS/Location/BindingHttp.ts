@@ -219,12 +219,7 @@ export const makeLocationCalculatorHttpBinding = <
  * callable injects the bound {@link LocationMap}'s name as `MapName` and the
  * deploy-time half grants `actions` on the map ARN.
  */
-export const makeLocationMapHttpBinding = <
-  I extends { MapName: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeLocationMapHttpBinding = <I extends { MapName: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Location.GetMapTile`. */
   tag: string;
   /** The distilled operation; `MapName` is injected. */

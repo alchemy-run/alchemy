@@ -192,10 +192,9 @@ export type ConversionWorkspacesMappingRule = Resource<
  * @resource
  * @category DataMigration
  */
-export const ConversionWorkspacesMappingRule =
-  Resource<ConversionWorkspacesMappingRule>(
-    "GCP.DataMigration.ConversionWorkspacesMappingRule",
-  );
+export const ConversionWorkspacesMappingRule = Resource<ConversionWorkspacesMappingRule>(
+  "GCP.DataMigration.ConversionWorkspacesMappingRule",
+);
 
 const DEFAULT_ORDER = "1";
 
@@ -286,16 +285,12 @@ const getByName = (name: string) =>
       );
 
 const listRules = (parent: string) =>
-  dm.listProjectsLocationsConversionWorkspacesMappingRules
-    .pages({ parent, pageSize: 1000 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.mappingRules ?? [])),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as dm.MappingRule[]),
-      ),
-    );
+  dm.listProjectsLocationsConversionWorkspacesMappingRules.pages({ parent, pageSize: 1000 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.mappingRules ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as dm.MappingRule[])),
+  );
 
 const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
@@ -310,13 +305,7 @@ const listOwned = (project: string, region: string) =>
 
 export const ConversionWorkspacesMappingRuleProvider = () =>
   Provider.succeed(ConversionWorkspacesMappingRule, {
-    stables: [
-      "name",
-      "mappingRuleId",
-      "conversionWorkspace",
-      "project",
-      "location",
-    ],
+    stables: ["name", "mappingRuleId", "conversionWorkspace", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -327,53 +316,38 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
         ruleOrder: olds?.ruleOrder ?? output?.ruleOrder,
         displayName: olds?.displayName ?? output?.displayName,
         state: olds?.state ?? output?.state,
-        singleEntityRename:
-          olds?.singleEntityRename ?? output?.singleEntityRename,
+        singleEntityRename: olds?.singleEntityRename ?? output?.singleEntityRename,
         multiEntityRename: olds?.multiEntityRename ?? output?.multiEntityRename,
         entityMove: olds?.entityMove ?? output?.entityMove,
         sourceSqlChange: olds?.sourceSqlChange ?? output?.sourceSqlChange,
-        singlePackageChange:
-          olds?.singlePackageChange ?? output?.singlePackageChange,
-        setTablePrimaryKey:
-          olds?.setTablePrimaryKey ?? output?.setTablePrimaryKey,
-        filterTableColumns:
-          olds?.filterTableColumns ?? output?.filterTableColumns,
+        singlePackageChange: olds?.singlePackageChange ?? output?.singlePackageChange,
+        setTablePrimaryKey: olds?.setTablePrimaryKey ?? output?.setTablePrimaryKey,
+        filterTableColumns: olds?.filterTableColumns ?? output?.filterTableColumns,
         multiColumnDataTypeChange:
           olds?.multiColumnDataTypeChange ?? output?.multiColumnDataTypeChange,
-        convertRowidColumn:
-          olds?.convertRowidColumn ?? output?.convertRowidColumn,
-        singleColumnChange:
-          olds?.singleColumnChange ?? output?.singleColumnChange,
+        convertRowidColumn: olds?.convertRowidColumn ?? output?.convertRowidColumn,
+        singleColumnChange: olds?.singleColumnChange ?? output?.singleColumnChange,
         conditionalColumnSetValue:
           olds?.conditionalColumnSetValue ?? output?.conditionalColumnSetValue,
       };
       return replaceOnIdentity({
         previousId: olds?.mappingRuleId ?? output?.mappingRuleId,
-        nextId:
-          news.mappingRuleId ?? olds?.mappingRuleId ?? output?.mappingRuleId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.mappingRuleId ?? olds?.mappingRuleId ?? output?.mappingRuleId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
-        previousParent:
-          olds?.conversionWorkspace ?? output?.conversionWorkspace,
+        previousParent: olds?.conversionWorkspace ?? output?.conversionWorkspace,
         nextParent: news.conversionWorkspace,
         extra:
-          (olds !== undefined || output !== undefined) &&
-          ruleBody(news) !== ruleBody(previous),
+          (olds !== undefined || output !== undefined) && ruleBody(news) !== ruleBody(previous),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const conversionWorkspace = conversionWorkspaceOf(
         olds?.conversionWorkspace ?? output?.conversionWorkspace ?? "",
         env.project,
@@ -387,15 +361,11 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
       );
       const name =
         output?.name ??
-        (conversionWorkspace.length > 0
-          ? resourceName(conversionWorkspace, mappingRuleId)
-          : "");
+        (conversionWorkspace.length > 0 ? resourceName(conversionWorkspace, mappingRuleId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, name);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -407,10 +377,7 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const conversionWorkspace = conversionWorkspaceOf(
         news.conversionWorkspace,
         env.project,

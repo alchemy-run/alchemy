@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   accountId,
   logLevel,
@@ -103,9 +103,7 @@ test.provider.skipIf(!runProductReviewLifecycle)(
       expect(created.name).toContain("/productReviews/");
       expect(created.account).toEqual(accountId);
       expect(created.productReviewAttributes?.title).toEqual("Sturdy tote");
-      expect(created.productReviewAttributes?.content).toEqual(
-        "Holds a laptop and lunch",
-      );
+      expect(created.productReviewAttributes?.content).toEqual("Holds a laptop and lunch");
 
       const fetched = yield* reviews.getAccountsProductReviews({
         name: created.name,
@@ -135,9 +133,7 @@ test.provider.skipIf(!runProductReviewLifecycle)(
 
       expect(updated.productReviewId).toEqual(created.productReviewId);
       expect(updated.productReviewAttributes?.title).toEqual("Roomy tote");
-      expect(updated.productReviewAttributes?.content).toEqual(
-        "Holds a laptop, lunch, and jacket",
-      );
+      expect(updated.productReviewAttributes?.content).toEqual("Holds a laptop, lunch, and jacket");
       expect(updated.productReviewAttributes?.rating).toEqual(4);
 
       yield* stack.destroy();

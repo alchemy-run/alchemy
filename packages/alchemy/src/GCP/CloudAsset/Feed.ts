@@ -181,26 +181,20 @@ export type Feed = Resource<
  */
 export const Feed = Resource<Feed>("GCP.CloudAsset.Feed");
 
-export class FeedNotResolved extends Data.TaggedError(
-  "GCP.CloudAsset.FeedNotResolved",
-)<{
+export class FeedNotResolved extends Data.TaggedError("GCP.CloudAsset.FeedNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (parent: string, feedId: string) =>
-  `${parent}/feeds/${feedId}`;
+const resourceName = (parent: string, feedId: string) => `${parent}/feeds/${feedId}`;
 
 const contentTypeOf = (value: string | undefined) =>
   !value || value === "CONTENT_TYPE_UNSPECIFIED" ? undefined : value;
 
-const toUserCondition = (
-  condition: cloudasset.Expr | undefined,
-): FeedCondition | undefined => {
+const toUserCondition = (condition: cloudasset.Expr | undefined): FeedCondition | undefined => {
   if (condition === undefined) return undefined;
   const { description } = parseDescription(condition.description);
   const isInternalOnly =
-    (condition.expression === undefined ||
-      condition.expression === NO_OP_EXPRESSION) &&
+    (condition.expression === undefined || condition.expression === NO_OP_EXPRESSION) &&
     condition.title === undefined &&
     condition.location === undefined &&
     description === undefined;
@@ -260,10 +254,7 @@ const observe = (project: string, feedId: string, outputName?: string) =>
     return feeds.find((feed) => lastSegment(feed.name ?? "") === feedId);
   });
 
-const toFeedBody = (
-  news: FeedProps,
-  condition: cloudasset.Expr,
-): cloudasset.Feed => ({
+const toFeedBody = (news: FeedProps, condition: cloudasset.Expr): cloudasset.Feed => ({
   assetNames: news.assetNames,
   assetTypes: news.assetTypes,
   contentType: news.contentType,
@@ -292,9 +283,7 @@ export const FeedProvider = () =>
       const existing = yield* observe(env.project, feedId, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.condition?.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.condition?.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -331,9 +320,7 @@ export const FeedProvider = () =>
               times: 8,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () =>
-              observe(env.project, feedId, output?.name),
-            ),
+            Effect.catchTag("Conflict", () => observe(env.project, feedId, output?.name)),
           );
         current = created ?? undefined;
       }

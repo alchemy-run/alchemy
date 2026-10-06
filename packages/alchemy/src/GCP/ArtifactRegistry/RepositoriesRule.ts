@@ -64,16 +64,12 @@ export type RepositoriesRuleProps = {
   /**
    * Action applied to matching downloads.
    */
-  action:
-    | artifactregistry.GoogleDevtoolsArtifactregistryV1RuleActionEnum
-    | (string & {});
+  action: artifactregistry.GoogleDevtoolsArtifactregistryV1RuleActionEnum | (string & {});
   /**
    * Operation the rule applies to.
    * @default "DOWNLOAD"
    */
-  operation?:
-    | artifactregistry.GoogleDevtoolsArtifactregistryV1RuleOperationEnum
-    | (string & {});
+  operation?: artifactregistry.GoogleDevtoolsArtifactregistryV1RuleOperationEnum | (string & {});
   /**
    * Package id this rule applies to. Empty or omitted applies to every
    * package in the repository. Each repository may have one
@@ -147,9 +143,7 @@ export type RepositoriesRule = Resource<
  * @resource
  * @category ArtifactRegistry
  */
-export const RepositoriesRule = Resource<RepositoriesRule>(
-  "GCP.ArtifactRegistry.RepositoriesRule",
-);
+export const RepositoriesRule = Resource<RepositoriesRule>("GCP.ArtifactRegistry.RepositoriesRule");
 
 const normalizeOperation = (operation: string | undefined) => {
   const value = (operation ?? DEFAULT_OPERATION).toUpperCase();
@@ -158,8 +152,7 @@ const normalizeOperation = (operation: string | undefined) => {
 
 const normalizeAction = (action: string) => action.toUpperCase();
 
-const resourceNameOf = (repository: string, ruleId: string) =>
-  `${repository}/rules/${ruleId}`;
+const resourceNameOf = (repository: string, ruleId: string) => `${repository}/rules/${ruleId}`;
 
 const desiredCondition = (
   news: RepositoriesRuleProps,
@@ -215,15 +208,12 @@ const toAttrs = (
     location: parsed.location,
     action: rule.action,
     operation: normalizeOperation(rule.operation),
-    packageId:
-      rule.packageId && rule.packageId.length > 0 ? rule.packageId : undefined,
+    packageId: rule.packageId && rule.packageId.length > 0 ? rule.packageId : undefined,
     condition: toUserCondition(rule.condition),
   };
 };
 
-const getByName = missingGet(
-  artifactregistry.getProjectsLocationsRepositoriesRules,
-);
+const getByName = missingGet(artifactregistry.getProjectsLocationsRepositoriesRules);
 
 export const RepositoriesRuleProvider = () =>
   Provider.succeed(RepositoriesRule, {
@@ -234,13 +224,9 @@ export const RepositoriesRuleProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.ruleId ?? output?.ruleId;
       const nextId = news.ruleId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
-        news.location ??
-          locationFromRepository(news.repository, previousLocation),
+        news.location ?? locationFromRepository(news.repository, previousLocation),
         env.region,
       );
       return replaceOnIdentity({
@@ -258,10 +244,7 @@ export const RepositoriesRuleProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          locationFromRepository(
-            olds?.repository ?? output?.repository,
-            env.region,
-          ),
+          locationFromRepository(olds?.repository ?? output?.repository, env.region),
         env.region,
       );
       const repository = expandRepository(
@@ -269,12 +252,7 @@ export const RepositoriesRuleProvider = () =>
         env.project,
         location,
       );
-      const ruleId = yield* toPhysicalId(
-        id,
-        olds?.ruleId,
-        output?.ruleId,
-        "rule",
-      );
+      const ruleId = yield* toPhysicalId(id, olds?.ruleId, output?.ruleId, "rule");
       const name = output?.name ?? resourceNameOf(repository, ruleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -296,22 +274,11 @@ export const RepositoriesRuleProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromRepository(news.repository, env.region),
+        news.location ?? output?.location ?? locationFromRepository(news.repository, env.region),
         env.region,
       );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
-      const ruleId = yield* toPhysicalId(
-        id,
-        news.ruleId,
-        output?.ruleId,
-        "rule",
-      );
+      const repository = expandRepository(news.repository, env.project, location);
+      const ruleId = yield* toPhysicalId(id, news.ruleId, output?.ruleId, "rule");
       const name = resourceNameOf(repository, ruleId);
       const ownership = yield* createInternalLabels(id);
       const action = normalizeAction(news.action);
@@ -343,8 +310,7 @@ export const RepositoriesRuleProvider = () =>
 
       const observed = current.name ?? name;
       const actionChanged = normalizeAction(current.action ?? "") !== action;
-      const operationChanged =
-        normalizeOperation(current.operation) !== operation;
+      const operationChanged = normalizeOperation(current.operation) !== operation;
       const packageChanged = !sameText(current.packageId, packageId);
       const conditionChanged = !sameJson(current.condition, condition);
       const updateMask = fieldMask([
@@ -355,18 +321,17 @@ export const RepositoriesRuleProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        current =
-          yield* artifactregistry.patchProjectsLocationsRepositoriesRules({
+        current = yield* artifactregistry.patchProjectsLocationsRepositoriesRules({
+          name: observed,
+          updateMask,
+          body: {
             name: observed,
-            updateMask,
-            body: {
-              name: observed,
-              action,
-              operation,
-              packageId,
-              condition,
-            },
-          });
+            action,
+            operation,
+            packageId,
+            condition,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);

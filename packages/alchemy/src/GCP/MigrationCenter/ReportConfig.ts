@@ -119,15 +119,10 @@ export type ReportConfig = Resource<
  * @resource
  * @category MigrationCenter
  */
-export const ReportConfig = Resource<ReportConfig>(
-  "GCP.MigrationCenter.ReportConfig",
-);
+export const ReportConfig = Resource<ReportConfig>("GCP.MigrationCenter.ReportConfig");
 
-const resourceName = (
-  project: string,
-  location: string,
-  reportConfigId: string,
-) => `${locationParent(project, location)}/reportConfigs/${reportConfigId}`;
+const resourceName = (project: string, location: string, reportConfigId: string) =>
+  `${locationParent(project, location)}/reportConfigs/${reportConfigId}`;
 
 const assignmentsOf = (
   items: GroupPreferenceSetAssignment[],
@@ -136,12 +131,7 @@ const assignmentsOf = (
 ): mc.ReportConfigGroupPreferenceSetAssignment[] =>
   items.map((item) => ({
     group: expandParent(item.group, project, location, "groups"),
-    preferenceSet: expandParent(
-      item.preferenceSet,
-      project,
-      location,
-      "preferenceSets",
-    ),
+    preferenceSet: expandParent(item.preferenceSet, project, location, "preferenceSets"),
   }));
 
 const toAssignments = (
@@ -163,9 +153,7 @@ const toAttrs = (item: mc.ReportConfig, project: string, region: string) => {
     reportConfigId: parsed.id,
     project: parsed.project || project,
     location: parsed.location,
-    groupPreferencesetAssignments: toAssignments(
-      item.groupPreferencesetAssignments,
-    ),
+    groupPreferencesetAssignments: toAssignments(item.groupPreferencesetAssignments),
     displayName: item.displayName,
     description: ownership.text,
     createTime: item.createTime,
@@ -198,15 +186,11 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.reportConfigs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.reportConfigs ?? [])),
             Stream.filter((item) => hasOwnershipMarker(item.description)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as mc.ReportConfig[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as mc.ReportConfig[])),
           ),
       ),
     );
@@ -225,20 +209,14 @@ export const ReportConfigProvider = () =>
           description: news.description,
         }) !==
         fingerprint({
-          assignments:
-            olds?.groupPreferencesetAssignments ??
-            output?.groupPreferencesetAssignments,
+          assignments: olds?.groupPreferencesetAssignments ?? output?.groupPreferencesetAssignments,
           displayName: olds?.displayName ?? output?.displayName,
           description: olds?.description ?? output?.description,
         });
       return replaceOnIdentity({
         previousId: olds?.reportConfigId ?? output?.reportConfigId,
-        nextId:
-          news.reportConfigId ?? olds?.reportConfigId ?? output?.reportConfigId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.reportConfigId ?? olds?.reportConfigId ?? output?.reportConfigId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -255,18 +233,12 @@ export const ReportConfigProvider = () =>
         output?.reportConfigId,
         "reportcfg",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, reportConfigId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, reportConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -284,10 +256,7 @@ export const ReportConfigProvider = () =>
         output?.reportConfigId,
         "reportcfg",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, reportConfigId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

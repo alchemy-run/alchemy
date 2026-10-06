@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 const nativeDatabase = (id: string) =>
@@ -76,23 +76,19 @@ export default class FirestoreBindingsHost extends GCP.Function<FirestoreBinding
         write: Effect.gen(function* () {
           yield* writer.delete("things/created");
           const created = yield* writer.create("things/created", { n: 1 });
-          const conflict = yield* writer
-            .create("things/created", { n: 2 })
-            .pipe(
-              Effect.map(() => "created"),
-              Effect.catchTag("GCP.Firestore.DocumentAlreadyExists", (error) =>
-                Effect.succeed(error.path),
-              ),
-            );
+          const conflict = yield* writer.create("things/created", { n: 2 }).pipe(
+            Effect.map(() => "created"),
+            Effect.catchTag("GCP.Firestore.DocumentAlreadyExists", (error) =>
+              Effect.succeed(error.path),
+            ),
+          );
           const updated = yield* writer.update("things/created", {
             "odd key": "x",
           });
-          const updateMissing = yield* writer
-            .update("things/never", { a: 1 })
-            .pipe(
-              Effect.map(() => "updated"),
-              Effect.catchTag("NotFound", () => Effect.succeed("NotFound")),
-            );
+          const updateMissing = yield* writer.update("things/never", { a: 1 }).pipe(
+            Effect.map(() => "updated"),
+            Effect.catchTag("NotFound", () => Effect.succeed("NotFound")),
+          );
           yield* writer.set("things/set", { team: "red" });
           yield* writer.set("things/gone", { team: "blue" });
           yield* writer.delete("things/gone");
@@ -127,9 +123,7 @@ export default class FirestoreBindingsHost extends GCP.Function<FirestoreBinding
           return {
             missing: missing === undefined,
             b: b?.fields,
-            listed: listed.documents
-              .map((doc) => doc.name.split("/").pop())
-              .sort(),
+            listed: listed.documents.map((doc) => doc.name.split("/").pop()).sort(),
             red: red.map((doc) => doc.name.split("/").pop()),
             afterDelete: afterDelete === undefined,
           };

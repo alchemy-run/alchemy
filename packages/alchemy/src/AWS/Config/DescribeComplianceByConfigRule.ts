@@ -37,7 +37,6 @@ export interface DescribeComplianceByConfigRule extends Binding.Service<
   >
 > {}
 
-export const DescribeComplianceByConfigRule =
-  Binding.Service<DescribeComplianceByConfigRule>(
-    "AWS.Config.DescribeComplianceByConfigRule",
-  );
+export const DescribeComplianceByConfigRule = Binding.Service<DescribeComplianceByConfigRule>(
+  "AWS.Config.DescribeComplianceByConfigRule",
+);

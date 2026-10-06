@@ -1,10 +1,10 @@
 import * as transcoder from "@distilled.cloud/gcp/transcoder_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { bindGcpHost } from "../Host.ts";
 import { CreateJob, type CreateJobRequest } from "./CreateJob.ts";
 import { lastSegment, parentOfName } from "./internal.ts";
 import type { JobTemplate } from "./JobTemplate.ts";
-import { bindGcpHost } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link CreateJob}.
@@ -15,8 +15,7 @@ import { bindGcpHost } from "../Host.ts";
 export const CreateJobHttp = Layer.effect(
   CreateJob,
   Effect.gen(function* () {
-    const createProjectsLocationsJobs =
-      yield* transcoder.createProjectsLocationsJobs;
+    const createProjectsLocationsJobs = yield* transcoder.createProjectsLocationsJobs;
     return Effect.fn(function* (template: JobTemplate) {
       yield* bindGcpHost({
         tag: "GCP.Transcoder.CreateJob",
@@ -27,23 +26,22 @@ export const CreateJobHttp = Layer.effect(
       });
       const name = yield* template.name;
       const location = yield* template.location;
-      return Effect.fn(`GCP.Transcoder.CreateJob(${template.LogicalId})`)(
-        function* (request?: CreateJobRequest) {
-          const templateName = yield* name;
-          const templateLocation = yield* location;
-          const templateId = lastSegment(templateName);
-          const config = request?.body?.config;
-          return yield* createProjectsLocationsJobs({
-            parent: parentOfName(templateName, templateLocation),
-            body: {
-              ...request?.body,
-              templateId:
-                request?.body?.templateId ??
-                (config === undefined ? templateId : undefined),
-            },
-          });
-        },
-      );
+      return Effect.fn(`GCP.Transcoder.CreateJob(${template.LogicalId})`)(function* (
+        request?: CreateJobRequest,
+      ) {
+        const templateName = yield* name;
+        const templateLocation = yield* location;
+        const templateId = lastSegment(templateName);
+        const config = request?.body?.config;
+        return yield* createProjectsLocationsJobs({
+          parent: parentOfName(templateName, templateLocation),
+          body: {
+            ...request?.body,
+            templateId:
+              request?.body?.templateId ?? (config === undefined ? templateId : undefined),
+          },
+        });
+      });
     });
   }),
 );

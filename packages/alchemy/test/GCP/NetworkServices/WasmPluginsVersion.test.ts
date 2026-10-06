@@ -1,23 +1,20 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const WASM = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 
@@ -44,18 +41,13 @@ const uploadPluginWasm = (repositoryName: string) =>
       `?uploadType=media&filename=plugin.wasm&packageId=plugin&versionId=v1`;
     const response = yield* client.execute(
       HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeader(
-          "Authorization",
-          `Bearer ${Redacted.value(creds.accessToken)}`,
-        ),
+        HttpClientRequest.setHeader("Authorization", `Bearer ${Redacted.value(creds.accessToken)}`),
         HttpClientRequest.bodyUint8Array(WASM, "application/octet-stream"),
       ),
     );
     if (response.status === 409) return;
     if (response.status < 200 || response.status >= 300) {
-      const body = yield* response.text.pipe(
-        Effect.catch(() => Effect.succeed("")),
-      );
+      const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
       return yield* Effect.fail(
         new Error(`generic artifact upload failed: ${response.status} ${body}`),
       );
@@ -146,18 +138,15 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.version.labels).toMatchObject({ env: "test" });
       expect(created.version.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networkservices.getProjectsLocationsWasmPluginsVersions({
-          name: created.version.name,
-        });
+      const fetched = yield* networkservices.getProjectsLocationsWasmPluginsVersions({
+        name: created.version.name,
+      });
       expect(fetched.name).toEqual(created.version.name);
       expect(fetched.description).toEqual("wasm version a");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const serving = yield* stack.deploy(
         Effect.gen(function* () {

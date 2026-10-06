@@ -1,3 +1,5 @@
+import * as NodeChildProcess from "node:child_process";
+import { fileURLToPath } from "node:url";
 /**
  * Child-process isolation for framework DEV servers.
  *
@@ -32,8 +34,6 @@
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import * as NodeChildProcess from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 
 /**
@@ -44,8 +44,7 @@ import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 export const DEV_CHILD_ENV_KEY = "ALCHEMY_FRAMEWORK_DEV_CHILD";
 
 /** `true` when this process IS a spawned dev child (or one of its children). */
-export const isInsideDevChild = (): boolean =>
-  process.env[DEV_CHILD_ENV_KEY] === "1";
+export const isInsideDevChild = (): boolean => process.env[DEV_CHILD_ENV_KEY] === "1";
 
 /** The runner's `argv[2]` payload (JSON). */
 export interface DevChildPayload {
@@ -66,8 +65,7 @@ export interface DevChildPayload {
 }
 
 /** Marker line the child prints once the dev server is listening. */
-export const DEV_CHILD_URL_REGEX =
-  /<ALCHEMY_DEV_CHILD_URL>(.+)<\/ALCHEMY_DEV_CHILD_URL>/;
+export const DEV_CHILD_URL_REGEX = /<ALCHEMY_DEV_CHILD_URL>(.+)<\/ALCHEMY_DEV_CHILD_URL>/;
 
 export const devChildUrlMarker = (url: string) =>
   `<ALCHEMY_DEV_CHILD_URL>${url}</ALCHEMY_DEV_CHILD_URL>`;
@@ -160,11 +158,7 @@ export const runDevChild = (
     const fail =
       (message: string) =>
       (cause?: unknown): FrameworkError =>
-        new FrameworkError({
-          framework: options.framework,
-          message,
-          cause,
-        });
+        new FrameworkError({ framework: options.framework, message, cause });
 
     const entry = fileURLToPath(
       new URL(
@@ -175,8 +169,7 @@ export const runDevChild = (
       ),
     );
     const isBun =
-      options.runtime !== "node" &&
-      typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+      options.runtime !== "node" && typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
     const executable = options.runtime === "node" ? "node" : process.execPath;
     const payload: DevChildPayload = {
       module: options.module,
@@ -193,9 +186,7 @@ export const runDevChild = (
       JSON.stringify(payload),
     ];
 
-    const spawnFailure = fail(
-      `Failed to spawn the ${options.framework} dev child (${executable})`,
-    );
+    const spawnFailure = fail(`Failed to spawn the ${options.framework} dev child (${executable})`);
     const spawnError = yield* Deferred.make<never, FrameworkError>();
     const handle = yield* Effect.acquireRelease(
       Effect.try({

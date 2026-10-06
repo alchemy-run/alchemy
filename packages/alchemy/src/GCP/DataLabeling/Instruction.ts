@@ -153,9 +153,7 @@ export type Instruction = Resource<
  * @resource
  * @category DataLabeling
  */
-export const Instruction = Resource<Instruction>(
-  "GCP.DataLabeling.Instruction",
-);
+export const Instruction = Resource<Instruction>("GCP.DataLabeling.Instruction");
 
 export class InstructionNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.InstructionNotResolved",
@@ -212,14 +210,10 @@ export const InstructionProvider = () =>
         (news.displayName !== undefined &&
           output?.displayName !== undefined &&
           !sameText(news.displayName, output.displayName)) ||
-        (output?.dataType !== undefined &&
-          !sameText(news.dataType, output.dataType)) ||
-        (olds !== undefined &&
-          !sameText(news.description, output?.description)) ||
-        (output !== undefined &&
-          !sameJson(news.pdfInstruction, output.pdfInstruction)) ||
-        (output !== undefined &&
-          !sameJson(news.csvInstruction, output.csvInstruction));
+        (output?.dataType !== undefined && !sameText(news.dataType, output.dataType)) ||
+        (olds !== undefined && !sameText(news.description, output?.description)) ||
+        (output !== undefined && !sameJson(news.pdfInstruction, output.pdfInstruction)) ||
+        (output !== undefined && !sameJson(news.csvInstruction, output.csvInstruction));
       return replaceOnIdentity({
         previousId: olds?.instructionId ?? output?.instructionId,
         nextId: news.instructionId,
@@ -234,17 +228,11 @@ export const InstructionProvider = () =>
         output?.instructionId ??
         (output?.name ? parseResourceName(output.name, "instructions").id : "");
       const name =
-        output?.name ??
-        (instructionId.length > 0
-          ? resourceName(env.project, instructionId)
-          : "");
-      const existing =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+        output?.name ?? (instructionId.length > 0 ? resourceName(env.project, instructionId) : "");
+      const existing = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -261,19 +249,12 @@ export const InstructionProvider = () =>
       const instructionId = news.instructionId ?? output?.instructionId;
       const name =
         output?.name ??
-        (instructionId !== undefined
-          ? resourceName(env.project, instructionId)
-          : "");
+        (instructionId !== undefined ? resourceName(env.project, instructionId) : "");
       const ownership = yield* createInternalLabels(id);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const description = encodeOwnership(ownership, news.description);
 
-      let current =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+      let current = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
 
       if (current === undefined) {
         const created = yield* retryTransient(
@@ -314,9 +295,7 @@ export const InstructionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* ignoreGone(
-        retryDelete(
-          datalabeling.deleteProjectsInstructions({ name: output.name }),
-        ),
+        retryDelete(datalabeling.deleteProjectsInstructions({ name: output.name })),
       );
       yield* waitUntilGone(getByName(output.name));
     }),

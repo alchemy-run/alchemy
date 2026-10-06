@@ -132,23 +132,17 @@ export type Session = Resource<
  */
 export const Session = Resource<Session>("GCP.Dataproc.Session");
 
-export class SessionNotResolved extends Data.TaggedError(
-  "GCP.Dataproc.SessionNotResolved",
-)<{
+export class SessionNotResolved extends Data.TaggedError("GCP.Dataproc.SessionNotResolved")<{
   name: string;
 }> {}
 
-export class SessionFailed extends Data.TaggedError(
-  "GCP.Dataproc.SessionFailed",
-)<{
+export class SessionFailed extends Data.TaggedError("GCP.Dataproc.SessionFailed")<{
   name: string;
   state: string | undefined;
   detail: string | undefined;
 }> {}
 
-export class SessionNotReady extends Data.TaggedError(
-  "GCP.Dataproc.SessionNotReady",
-)<{
+export class SessionNotReady extends Data.TaggedError("GCP.Dataproc.SessionNotReady")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -156,19 +150,13 @@ export class SessionNotReady extends Data.TaggedError(
 const resourceName = (project: string, location: string, sessionId: string) =>
   `${locationParent(project, location)}/sessions/${sessionId}`;
 
-const defaultJupyter = (
-  news: SessionProps,
-): dataproc.JupyterConfig | undefined => {
+const defaultJupyter = (news: SessionProps): dataproc.JupyterConfig | undefined => {
   if (news.sessionTemplate !== undefined) return news.jupyterSession;
   if (news.sparkConnectSession !== undefined) return undefined;
   return news.jupyterSession ?? { kernel: "PYTHON" };
 };
 
-const toAttrs = (
-  session: dataproc.Session,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (session: dataproc.Session, project: string, location: string) => {
   const name = session.name ?? "";
   const parsed = parseResourceName(name, "sessions", location);
   return {
@@ -213,9 +201,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((session) =>
-      session
-        ? Effect.succeed(session)
-        : Effect.fail(new SessionNotResolved({ name })),
+      session ? Effect.succeed(session) : Effect.fail(new SessionNotResolved({ name })),
     ),
     Effect.filterOrFail(
       (session) => session.state !== "FAILED",
@@ -269,26 +255,19 @@ export const SessionProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.sessionId ?? output?.sessionId;
       const nextId = news.sessionId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousLocation !== nextLocation)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -296,10 +275,7 @@ export const SessionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const sessionId = yield* toPhysicalId(
         id,
         olds?.sessionId,
@@ -307,14 +283,11 @@ export const SessionProvider = () =>
         MAX_WORKLOAD_ID_LENGTH,
         "session",
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, sessionId);
+      const name = output?.name ?? resourceName(env.project, location, sessionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -330,10 +303,7 @@ export const SessionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const sessionId = yield* toPhysicalId(
         id,
         news.sessionId,

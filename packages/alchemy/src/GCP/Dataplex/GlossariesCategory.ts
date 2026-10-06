@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -138,9 +133,7 @@ export type GlossariesCategory = Resource<
  * @resource
  * @category Dataplex
  */
-export const GlossariesCategory = Resource<GlossariesCategory>(
-  "GCP.Dataplex.GlossariesCategory",
-);
+export const GlossariesCategory = Resource<GlossariesCategory>("GCP.Dataplex.GlossariesCategory");
 
 const resolveParent = (
   project: string,
@@ -163,13 +156,9 @@ const resolveParent = (
   };
 };
 
-const resourceName = (parent: string, categoryId: string) =>
-  `${parent}/categories/${categoryId}`;
+const resourceName = (parent: string, categoryId: string) => `${parent}/categories/${categoryId}`;
 
-const toAttrs = (
-  category: dataplex.GoogleCloudDataplexV1GlossaryCategory,
-  project: string,
-) => {
+const toAttrs = (category: dataplex.GoogleCloudDataplexV1GlossaryCategory, project: string) => {
   const name = category.name ?? "";
   const parsed = parseName(name, "categories");
   const glossary = parseName(parsed.parent, "glossaries");
@@ -204,24 +193,14 @@ const listCategoriesUnder = (parent: string, project: string) =>
     (page) => page.categories,
   ).pipe(
     Effect.map((items) =>
-      items
-        .filter((item) => hasAlchemyLabelMap(item.labels))
-        .map((item) => toAttrs(item, project)),
+      items.filter((item) => hasAlchemyLabelMap(item.labels)).map((item) => toAttrs(item, project)),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
 export const GlossariesCategoryProvider = () =>
   Provider.succeed(GlossariesCategory, {
-    stables: [
-      "name",
-      "categoryId",
-      "glossary",
-      "glossaryId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "categoryId", "glossary", "glossaryId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -229,10 +208,7 @@ export const GlossariesCategoryProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.categoryId ?? output?.categoryId,
         nextId: news.categoryId ?? olds?.categoryId ?? output?.categoryId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -250,46 +226,30 @@ export const GlossariesCategoryProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const categoryId = yield* toPhysicalId(
-        id,
-        olds?.categoryId,
-        output?.categoryId,
-        "category",
-      );
+      const categoryId = yield* toPhysicalId(id, olds?.categoryId, output?.categoryId, "category");
       const name = output?.name ?? resourceName(resolved.parent, categoryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const glossaries = yield* listAtLocation(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              dataplex.listProjectsLocationsGlossaries.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.glossaries,
-            ).pipe(
-              Effect.map((items) =>
-                items.filter((item) => hasAlchemyLabelMap(item.labels)),
-              ),
-            ),
+        const glossaries = yield* listAtLocation(env.project, env.region, (parent) =>
+          collectPages(
+            dataplex.listProjectsLocationsGlossaries.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.glossaries,
+          ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels)))),
         );
         const nested = yield* Effect.forEach(
           glossaries,
           (glossary) =>
-            glossary.name
-              ? listCategoriesUnder(glossary.name, env.project)
-              : Effect.succeed([]),
+            glossary.name ? listCategoriesUnder(glossary.name, env.project) : Effect.succeed([]),
           { concurrency: 4 },
         );
         return nested.flat();
@@ -303,12 +263,7 @@ export const GlossariesCategoryProvider = () =>
         news.location ?? output?.location,
         env.region,
       );
-      const categoryId = yield* toPhysicalId(
-        id,
-        news.categoryId,
-        output?.categoryId,
-        "category",
-      );
+      const categoryId = yield* toPhysicalId(id, news.categoryId, output?.categoryId, "category");
       const name = resourceName(resolved.parent, categoryId);
       const hierarchyParent = news.parent ?? resolved.parent;
       const desiredLabels = {
@@ -347,18 +302,11 @@ export const GlossariesCategoryProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const parentChanged = (current.parent ?? "") !== hierarchyParent;
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        displayNameChanged ||
-        parentChanged
-      ) {
+      if (labelsChanged || descriptionChanged || displayNameChanged || parentChanged) {
         current = yield* retryQuota(
           dataplex.patchProjectsLocationsGlossariesCategories({
             name: current.name ?? name,

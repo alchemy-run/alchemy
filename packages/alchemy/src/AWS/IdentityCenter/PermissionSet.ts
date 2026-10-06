@@ -72,9 +72,7 @@ export interface PermissionSet extends Resource<
  *
  * @resource
  */
-export const PermissionSet = Resource<PermissionSet>(
-  "AWS.IdentityCenter.PermissionSet",
-);
+export const PermissionSet = Resource<PermissionSet>("AWS.IdentityCenter.PermissionSet");
 
 export const PermissionSetProvider = () =>
   Provider.effect(
@@ -107,16 +105,11 @@ export const PermissionSetProvider = () =>
                 }),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is PermissionSet["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is PermissionSet["Attributes"] => row !== undefined);
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            olds?.instanceArn !== news.instanceArn ||
-            olds?.name !== news.name
-          ) {
+          if (olds?.instanceArn !== news.instanceArn || olds?.name !== news.name) {
             return { action: "replace" } as const;
           }
         }),
@@ -135,9 +128,7 @@ export const PermissionSetProvider = () =>
           return yield* readPermissionSetByName(olds);
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          const instance = yield* resolveInstance(
-            output?.instanceArn ?? news.instanceArn,
-          );
+          const instance = yield* resolveInstance(output?.instanceArn ?? news.instanceArn);
           const desiredSessionDuration =
             news.sessionDuration !== undefined
               ? toIsoSessionDuration(news.sessionDuration)
@@ -184,9 +175,7 @@ export const PermissionSetProvider = () =>
 
             if (!existing) {
               return yield* Effect.fail(
-                new Error(
-                  `permission set '${news.name}' not found after create`,
-                ),
+                new Error(`permission set '${news.name}' not found after create`),
               );
             }
 
@@ -200,8 +189,7 @@ export const PermissionSetProvider = () =>
           // there's a real delta.
           if (
             (existing.description ?? undefined) !== news.description ||
-            (existing.sessionDuration ?? undefined) !==
-              desiredSessionDuration ||
+            (existing.sessionDuration ?? undefined) !== desiredSessionDuration ||
             (existing.relayState ?? undefined) !== news.relayState
           ) {
             yield* retryIdentityCenter(
@@ -220,9 +208,7 @@ export const PermissionSetProvider = () =>
             });
             if (!updated) {
               return yield* Effect.fail(
-                new Error(
-                  `permission set '${existing.permissionSetArn}' not found after update`,
-                ),
+                new Error(`permission set '${existing.permissionSetArn}' not found after update`),
               );
             }
             yield* session.note(updated.permissionSetArn);
@@ -239,9 +225,7 @@ export const PermissionSetProvider = () =>
                 InstanceArn: output.instanceArn,
                 PermissionSetArn: output.permissionSetArn,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
       };
@@ -255,9 +239,7 @@ export const PermissionSetProvider = () =>
  * round-trip re-hydration) comes from the central Duration util.
  */
 const toIsoSessionDuration = (input: Duration.Input): string => {
-  const totalSeconds = Math.round(
-    Duration.toSeconds(normalizeDurationInput(input)),
-  );
+  const totalSeconds = Math.round(Duration.toSeconds(normalizeDurationInput(input)));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
@@ -282,11 +264,7 @@ const readPermissionSetByArn = Effect.fn(function* ({
         InstanceArn: instanceArn,
         PermissionSetArn: permissionSetArn,
       })
-      .pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      ),
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
   );
 
   const permissionSet = response?.PermissionSet;

@@ -65,10 +65,9 @@ export interface VpcAssociationAuthorization extends Resource<
  *
  * @resource
  */
-export const VpcAssociationAuthorization =
-  Resource<VpcAssociationAuthorization>(
-    "AWS.Route53.VpcAssociationAuthorization",
-  );
+export const VpcAssociationAuthorization = Resource<VpcAssociationAuthorization>(
+  "AWS.Route53.VpcAssociationAuthorization",
+);
 
 export const VpcAssociationAuthorizationProvider = () =>
   Provider.effect(
@@ -76,10 +75,7 @@ export const VpcAssociationAuthorizationProvider = () =>
     Effect.gen(function* () {
       // Enumerate the zone's pending authorizations and find ours. The list
       // is per-zone and small; bound pagination defensively.
-      const observe = Effect.fn(function* (
-        hostedZoneId: string,
-        vpcId: string,
-      ) {
+      const observe = Effect.fn(function* (hostedZoneId: string, vpcId: string) {
         let nextToken: string | undefined;
         for (let page = 0; page < 10; page++) {
           const response = yield* route53
@@ -96,9 +92,7 @@ export const VpcAssociationAuthorizationProvider = () =>
                 }),
               ),
             );
-          const match = (response.VPCs ?? []).find(
-            (vpc) => vpc.VPCId === vpcId,
-          );
+          const match = (response.VPCs ?? []).find((vpc) => vpc.VPCId === vpcId);
           if (match) {
             return match;
           }
@@ -174,10 +168,7 @@ export const VpcAssociationAuthorizationProvider = () =>
               },
             })
             .pipe(
-              Effect.catchTag(
-                "VPCAssociationAuthorizationNotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("VPCAssociationAuthorizationNotFound", () => Effect.void),
               Effect.catchTag("NoSuchHostedZone", () => Effect.void),
             );
         }),

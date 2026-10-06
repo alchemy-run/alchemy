@@ -33,12 +33,8 @@ export interface GetTable extends Binding.Service<
   GetTable,
   "AWS.BCMDataExports.GetTable",
   () => Effect.Effect<
-    (
-      request: GetTableRequest,
-    ) => Effect.Effect<bcm.GetTableResponse, bcm.GetTableError>
+    (request: GetTableRequest) => Effect.Effect<bcm.GetTableResponse, bcm.GetTableError>
   >
 > {}
 
-export const GetTable = Binding.Service<GetTable>(
-  "AWS.BCMDataExports.GetTable",
-);
+export const GetTable = Binding.Service<GetTable>("AWS.BCMDataExports.GetTable");

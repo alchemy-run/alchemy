@@ -50,10 +50,7 @@ export const resourceNameCondition = (name: Input<string>) => ({
 });
 
 /** Build the grant for `iam` against a bound resource's full name. */
-export const grantFor = (
-  iam: BindingIam,
-  name: Input<string>,
-): Input<GcpIamGrant> =>
+export const grantFor = (iam: BindingIam, name: Input<string>): Input<GcpIamGrant> =>
   iam.on !== undefined
     ? // The engine resolves the name Output before the host reconciles.
       { role: iam.role, resource: { kind: iam.on, name } }

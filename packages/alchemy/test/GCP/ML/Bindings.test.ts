@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as ml from "@distilled.cloud/gcp/ml_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import { runLifecycle, runVersionLifecycle } from "./common.ts";
 import MlBindingsHost, { Classifier, V1 } from "./fixtures/bindings-host.ts";
@@ -24,9 +24,7 @@ const expectModelGrant = Effect.gen(function* () {
     "options.requestedPolicyVersion": 3,
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role);
   expect(roles).toEqual(["roles/ml.modelUser"]);
 });
@@ -67,10 +65,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the model as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<ml.GoogleCloudMlV1__Model>(
-              baseUrl,
-              "getModel",
-            );
+            const out = yield* expectProbe<ml.GoogleCloudMlV1__Model>(baseUrl, "getModel");
             const direct = yield* ml.getProjectsModels({ name: modelName });
             expect(out.name).toEqual(modelName);
             expect(out.description).toEqual("binding probe");
@@ -87,13 +82,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "predicts against the model's default version",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<ml.GoogleApi__HttpBody>(
-              baseUrl,
-              "predict",
-            );
-            const body = JSON.parse(
-              Buffer.from(out.data ?? "", "base64").toString("utf8"),
-            ) as { predictions?: unknown[] };
+            const out = yield* expectProbe<ml.GoogleApi__HttpBody>(baseUrl, "predict");
+            const body = JSON.parse(Buffer.from(out.data ?? "", "base64").toString("utf8")) as {
+              predictions?: unknown[];
+            };
             expect(body.predictions).toHaveLength(1);
             const model = yield* ml.getProjectsModels({ name: modelName });
             expect(model.defaultVersion?.name).toEqual(versionName);
@@ -108,10 +100,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the version as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<ml.GoogleCloudMlV1__Version>(
-              baseUrl,
-              "getVersion",
-            );
+            const out = yield* expectProbe<ml.GoogleCloudMlV1__Version>(baseUrl, "getVersion");
             const direct = yield* ml.getProjectsModelsVersions({
               name: versionName!,
             });

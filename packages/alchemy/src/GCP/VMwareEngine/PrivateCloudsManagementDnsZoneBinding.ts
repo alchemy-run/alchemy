@@ -176,10 +176,7 @@ const expandVpc = (project: string, value: string) => {
 const resourceName = (privateCloud: string, bindingId: string) =>
   `${canonicalizeLink(privateCloud)}/${COLLECTION}/${bindingId}`;
 
-const toAttrs = (
-  binding: vmwareengine.ManagementDnsZoneBinding,
-  project: string,
-) => {
+const toAttrs = (binding: vmwareengine.ManagementDnsZoneBinding, project: string) => {
   const name = binding.name ?? "";
   const parsed = parseName(name, COLLECTION, DEFAULT_ZONE);
   const ownership = parseOwnership(binding.description);
@@ -208,12 +205,10 @@ const getByName = (name: string) =>
 
 const listBindingsAt = (parent: string) =>
   collectPages(
-    vmwareengine.listProjectsLocationsPrivateCloudsManagementDnsZoneBindings.pages(
-      {
-        parent,
-        pageSize: 1000,
-      },
-    ),
+    vmwareengine.listProjectsLocationsPrivateCloudsManagementDnsZoneBindings.pages({
+      parent,
+      pageSize: 1000,
+    }),
     (page) => page.managementDnsZoneBindings,
   );
 
@@ -231,9 +226,7 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousVpc = canonicalizeLink(
-        olds?.vpcNetwork ?? output?.vpcNetwork,
-      );
+      const previousVpc = canonicalizeLink(olds?.vpcNetwork ?? output?.vpcNetwork);
       const nextVpc = canonicalizeLink(news.vpcNetwork);
       const previousVen = canonicalizeLink(
         olds?.vmwareEngineNetwork ?? output?.vmwareEngineNetwork,
@@ -242,13 +235,10 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       const switchedToVen = nextVen.length > 0 && previousVpc.length > 0;
       const switchedToVpc = nextVpc.length > 0 && previousVen.length > 0;
       return replaceOnIdentity({
-        previousId:
-          olds?.managementDnsZoneBindingId ??
-          output?.managementDnsZoneBindingId,
+        previousId: olds?.managementDnsZoneBindingId ?? output?.managementDnsZoneBindingId,
         nextId: news.managementDnsZoneBindingId
           ? rfc1035(news.managementDnsZoneBindingId, "binding")
-          : (olds?.managementDnsZoneBindingId ??
-            output?.managementDnsZoneBindingId),
+          : (olds?.managementDnsZoneBindingId ?? output?.managementDnsZoneBindingId),
         previousLocation: "",
         nextLocation: "",
         previousParent: olds?.privateCloud ?? output?.privateCloud,
@@ -256,12 +246,8 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
         extra:
           switchedToVen ||
           switchedToVpc ||
-          (previousVpc.length > 0 &&
-            nextVpc.length > 0 &&
-            previousVpc !== nextVpc) ||
-          (previousVen.length > 0 &&
-            nextVen.length > 0 &&
-            previousVen !== nextVen),
+          (previousVpc.length > 0 && nextVpc.length > 0 && previousVpc !== nextVpc) ||
+          (previousVen.length > 0 && nextVen.length > 0 && previousVen !== nextVen),
       });
     }),
 
@@ -278,8 +264,7 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
         "binding",
       );
       const name =
-        output?.name ??
-        (privateCloud.length > 0 ? resourceName(privateCloud, bindingId) : "");
+        output?.name ?? (privateCloud.length > 0 ? resourceName(privateCloud, bindingId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -290,17 +275,14 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clouds = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsPrivateClouds.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.privateClouds,
-            ),
+        const clouds = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsPrivateClouds.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.privateClouds,
+          ),
         );
         const nested = yield* Effect.forEach(
           clouds.filter((cloud) => (cloud.name ?? "").length > 0),
@@ -326,9 +308,7 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
       const vpcNetwork =
-        news.vpcNetwork === undefined
-          ? undefined
-          : expandVpc(env.project, news.vpcNetwork);
+        news.vpcNetwork === undefined ? undefined : expandVpc(env.project, news.vpcNetwork);
       const vmwareEngineNetwork =
         news.vmwareEngineNetwork === undefined
           ? undefined
@@ -376,16 +356,14 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       ]);
       if (updateMask.length > 0) {
         const operation =
-          yield* vmwareengine.patchProjectsLocationsPrivateCloudsManagementDnsZoneBindings(
-            {
+          yield* vmwareengine.patchProjectsLocationsPrivateCloudsManagementDnsZoneBindings({
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                description: desiredDescription,
-              },
+              description: desiredDescription,
             },
-          );
+          });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

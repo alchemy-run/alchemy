@@ -46,9 +46,7 @@ export const waitForSqlOperation = (
     if (operation.status === "DONE" || name.length === 0) return operation;
     return yield* get(name).pipe(
       Effect.catchTag("NotFound", (error) =>
-        options.notFoundOk === true
-          ? Effect.succeed(operation)
-          : Effect.fail(error),
+        options.notFoundOk === true ? Effect.succeed(operation) : Effect.fail(error),
       ),
     );
   });
@@ -64,9 +62,7 @@ export const recoverIfInstanceMissing =
   <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.catchIf(
-        (
-          error,
-        ): error is Extract<E, { readonly _tag: "SqlInstanceNotAuthorized" }> =>
+        (error): error is Extract<E, { readonly _tag: "SqlInstanceNotAuthorized" }> =>
           error._tag === "SqlInstanceNotAuthorized",
         (error) =>
           sqladmin.getInstances({ project, instance }).pipe(

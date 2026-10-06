@@ -1,14 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  normalizeRegion,
-  parseDescription,
-  runRegionOp,
-  sameJson,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,6 +10,16 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  normalizeRegion,
+  parseDescription,
+  runRegionOp,
+  sameJson,
+  toPhysicalName,
+} from "./internal.ts";
 
 export type RegionBackendBucketProps = {
   /**
@@ -145,9 +145,7 @@ export type RegionBackendBucket = Resource<
  * @resource
  * @category Compute
  */
-export const RegionBackendBucket = Resource<RegionBackendBucket>(
-  "GCP.Compute.RegionBackendBucket",
-);
+export const RegionBackendBucket = Resource<RegionBackendBucket>("GCP.Compute.RegionBackendBucket");
 
 export class RegionBackendBucketNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionBackendBucketNotResolved",
@@ -206,8 +204,7 @@ const awaitResource = (project: string, region: string, name: string) =>
         : Effect.fail(new RegionBackendBucketNotResolved({ name, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionBackendBucketNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionBackendBucketNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -215,44 +212,26 @@ const awaitResource = (project: string, region: string, name: string) =>
 
 export const RegionBackendBucketProvider = () =>
   Provider.succeed(RegionBackendBucket, {
-    stables: [
-      "name",
-      "project",
-      "region",
-      "selfLink",
-      "creationTimestamp",
-      "id",
-    ],
+    stables: ["name", "project", "region", "selfLink", "creationTimestamp", "id"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.name ?? output?.name;
       const nextName = news.name ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
-      const previousScheme =
-        olds?.loadBalancingScheme ?? output?.loadBalancingScheme;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
+      const previousScheme = olds?.loadBalancingScheme ?? output?.loadBalancingScheme;
       const schemeChanged =
         news.loadBalancingScheme !== undefined &&
         (previousScheme ?? "") !== news.loadBalancingScheme;
       if (nameChanged || regionChanged || schemeChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -260,16 +239,8 @@ export const RegionBackendBucketProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const name = yield* toPhysicalName(
-        id,
-        olds?.name,
-        output?.name,
-        "backend",
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const name = yield* toPhysicalName(id, olds?.name, output?.name, "backend");
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -290,9 +261,7 @@ export const RegionBackendBucketProvider = () =>
             Stream.runCollect,
             Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
-        return Array.from(
-          pages as readonly compute.BackendBucketAggregatedList[],
-        ).flatMap((page) =>
+        return Array.from(pages as readonly compute.BackendBucketAggregatedList[]).flatMap((page) =>
           Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
             if (!scope.startsWith("regions/")) return [];
             return (scoped?.backendBuckets ?? [])
@@ -304,12 +273,7 @@ export const RegionBackendBucketProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const name = yield* toPhysicalName(
-        id,
-        news.name,
-        output?.name,
-        "backend",
-      );
+      const name = yield* toPhysicalName(id, news.name, output?.name, "backend");
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -324,20 +288,17 @@ export const RegionBackendBucketProvider = () =>
           bucketName: news.bucketName,
           description: desiredDescription,
           enableCdn,
-          loadBalancingScheme:
-            news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME,
+          loadBalancingScheme: news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME,
         };
         if (
           news.compressionMode !== undefined &&
-          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
-            "EXTERNAL_MANAGED"
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !== "EXTERNAL_MANAGED"
         ) {
           insertBody.compressionMode = news.compressionMode;
         }
         if (
           desiredHeaders.length > 0 &&
-          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
-            "EXTERNAL_MANAGED"
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !== "EXTERNAL_MANAGED"
         ) {
           insertBody.customResponseHeaders = desiredHeaders;
         }
@@ -361,23 +322,16 @@ export const RegionBackendBucketProvider = () =>
         return yield* new RegionBackendBucketNotResolved({ name, region });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const bucketChanged = (current.bucketName ?? "") !== news.bucketName;
       const cdnChanged = (current.enableCdn === true) !== enableCdn;
       const compressionChanged =
         news.compressionMode !== undefined &&
         (current.compressionMode ?? "") !== news.compressionMode;
-      const headersChanged = !sameList(
-        current.customResponseHeaders,
-        desiredHeaders,
-      );
+      const headersChanged = !sameList(current.customResponseHeaders, desiredHeaders);
       const policyChanged =
         news.cdnPolicy !== undefined &&
-        !sameJson(
-          normalizeCdnPolicy(current.cdnPolicy),
-          normalizeCdnPolicy(news.cdnPolicy),
-        );
+        !sameJson(normalizeCdnPolicy(current.cdnPolicy), normalizeCdnPolicy(news.cdnPolicy));
 
       if (
         descriptionChanged ||
@@ -394,15 +348,13 @@ export const RegionBackendBucketProvider = () =>
         };
         if (
           news.compressionMode !== undefined &&
-          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
-            "EXTERNAL_MANAGED"
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !== "EXTERNAL_MANAGED"
         ) {
           patchBody.compressionMode = news.compressionMode;
         }
         if (
           desiredHeaders.length > 0 &&
-          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
-            "EXTERNAL_MANAGED"
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !== "EXTERNAL_MANAGED"
         ) {
           patchBody.customResponseHeaders = desiredHeaders;
         }

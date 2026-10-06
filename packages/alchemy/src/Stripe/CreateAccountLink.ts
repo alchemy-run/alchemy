@@ -39,6 +39,4 @@ export interface CreateAccountLink extends Binding.Service<
   >
 > {}
 
-export const CreateAccountLink = Binding.Service<CreateAccountLink>(
-  "Stripe.CreateAccountLink",
-);
+export const CreateAccountLink = Binding.Service<CreateAccountLink>("Stripe.CreateAccountLink");

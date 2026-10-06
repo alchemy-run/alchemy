@@ -19,9 +19,7 @@ export const makeHttpDnsBinding = <Client>(options: {
   makeClient: (auth: DnsAuth, zoneId: Effect.Effect<number>) => Client;
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (zone: Zone) {
       const zoneId = yield* zone.zoneId;

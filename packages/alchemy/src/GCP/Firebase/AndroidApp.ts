@@ -125,17 +125,9 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : firebase
         .getProjectsAndroidApps({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "AndroidAppNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.succeed(undefined)));
 
-const findOwned = (
-  project: string,
-  displayName: string,
-  packageName?: string,
-) =>
+const findOwned = (project: string, displayName: string, packageName?: string) =>
   listAndroidApps(project).pipe(
     Effect.map((apps) =>
       apps.find(
@@ -146,12 +138,8 @@ const findOwned = (
     ),
   );
 
-const sameList = (
-  left: readonly string[] | undefined,
-  right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+const sameList = (left: readonly string[] | undefined, right: readonly string[] | undefined) =>
+  JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
 export const AndroidAppProvider = () =>
   Provider.succeed(AndroidApp, {
@@ -189,9 +177,7 @@ export const AndroidAppProvider = () =>
         return undefined;
       }
       const attrs = toAttrs(existing);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -199,10 +185,7 @@ export const AndroidAppProvider = () =>
         const env = yield* GcpEnvironment.current;
         const apps = yield* listAndroidApps(env.project);
         return apps
-          .filter(
-            (app) =>
-              hasOwnershipMarker(app.displayName) && app.state !== "DELETED",
-          )
+          .filter((app) => hasOwnershipMarker(app.displayName) && app.state !== "DELETED")
           .map(toAttrs);
       }),
 
@@ -213,11 +196,7 @@ export const AndroidAppProvider = () =>
         news.displayName,
         parseDisplayName(output?.displayName).displayName,
       );
-      const packageName = yield* packageNameOf(
-        id,
-        news.packageName,
-        output?.packageName,
-      );
+      const packageName = yield* packageNameOf(id, news.packageName, output?.packageName);
 
       let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
@@ -253,14 +232,11 @@ export const AndroidAppProvider = () =>
         if (operation) {
           const done = yield* waitForOperation(operation);
           const name =
-            (typeof done.response?.name === "string"
-              ? done.response.name
-              : undefined) ??
+            (typeof done.response?.name === "string" ? done.response.name : undefined) ??
             output?.name ??
             "";
           current =
-            (yield* getByName(name)) ??
-            (yield* findOwned(env.project, displayName, packageName));
+            (yield* getByName(name)) ?? (yield* findOwned(env.project, displayName, packageName));
         }
       }
 
@@ -273,13 +249,10 @@ export const AndroidAppProvider = () =>
       const name = current.name ?? "";
       const displayChanged = current.displayName !== displayName;
       const sha1Changed =
-        news.sha1Hashes !== undefined &&
-        !sameList(current.sha1Hashes, news.sha1Hashes);
+        news.sha1Hashes !== undefined && !sameList(current.sha1Hashes, news.sha1Hashes);
       const sha256Changed =
-        news.sha256Hashes !== undefined &&
-        !sameList(current.sha256Hashes, news.sha256Hashes);
-      const apiKeyChanged =
-        news.apiKeyId !== undefined && current.apiKeyId !== news.apiKeyId;
+        news.sha256Hashes !== undefined && !sameList(current.sha256Hashes, news.sha256Hashes);
+      const apiKeyChanged = news.apiKeyId !== undefined && current.apiKeyId !== news.apiKeyId;
       const updateMask = [
         displayChanged ? "displayName" : undefined,
         sha1Changed ? "sha1Hashes" : undefined,
@@ -310,11 +283,7 @@ export const AndroidAppProvider = () =>
           name: output.name,
           body: { immediate: true, allowMissing: true },
         })
-        .pipe(
-          Effect.catchTag(["NotFound", "AndroidAppNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.succeed(undefined)));
       if (operation) {
         yield* waitForOperation(operation).pipe(
           Effect.catchIf(

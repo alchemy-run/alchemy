@@ -1,19 +1,16 @@
-import * as AWS from "@/AWS";
-import { EIP, InternetGateway, NatGateway, Subnet, Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { EIP, InternetGateway, NatGateway, Subnet, Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
 import { assertEipGone, assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // NAT gateways take ~1–2 min to become `available` and ~1–2 min to delete, so a
 // full create + list + destroy cycle exceeds the 240s factory test budget.
@@ -28,9 +25,7 @@ test.provider.skipIf(!process.env.AWS_TEST_NAT_GATEWAY)(
       yield* stack.destroy();
 
       const azResult = yield* EC2.describeAvailabilityZones({});
-      const az1 = azResult.AvailabilityZones?.find(
-        (az) => az.State === "available",
-      )?.ZoneName!;
+      const az1 = azResult.AvailabilityZones?.find((az) => az.State === "available")?.ZoneName!;
 
       // Phase 1: stand up the VPC + IGW + subnet + EIP. The IGW must be
       // attached before the NAT gateway is created, so split the deploy.
@@ -87,9 +82,7 @@ test.provider.skipIf(!process.env.AWS_TEST_NAT_GATEWAY)(
       const provider = yield* Provider.findProvider(NatGateway);
       const all = yield* provider.list();
 
-      expect(
-        all.some((x) => x.natGatewayId === deployed.natGateway.natGatewayId),
-      ).toBe(true);
+      expect(all.some((x) => x.natGatewayId === deployed.natGateway.natGatewayId)).toBe(true);
 
       yield* stack.destroy();
 

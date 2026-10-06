@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   OracleDatabaseNotResolved,
@@ -38,10 +33,8 @@ import { waitForOperation } from "./operations.ts";
 
 const COLLECTION = "autonomousDatabases";
 const FALLBACK_ID = "adb";
-const DEFAULT_LICENSE: oracle.AutonomousDatabasePropertiesLicenseTypeEnum =
-  "LICENSE_INCLUDED";
-const DEFAULT_WORKLOAD: oracle.AutonomousDatabasePropertiesDbWorkloadEnum =
-  "OLTP";
+const DEFAULT_LICENSE: oracle.AutonomousDatabasePropertiesLicenseTypeEnum = "LICENSE_INCLUDED";
+const DEFAULT_WORKLOAD: oracle.AutonomousDatabasePropertiesDbWorkloadEnum = "OLTP";
 
 export type EncryptionKey = {
   /** Key provider (`GOOGLE_MANAGED` or `ORACLE_MANAGED`). */
@@ -62,13 +55,9 @@ export type SourceConfig = {
 
 export type AutonomousDatabasePropertiesInput = {
   /** License type. Immutable. */
-  licenseType?:
-    | oracle.AutonomousDatabasePropertiesLicenseTypeEnum
-    | (string & {});
+  licenseType?: oracle.AutonomousDatabasePropertiesLicenseTypeEnum | (string & {});
   /** Workload type (`OLTP`, `DW`, `AJD`, `APEX`). Immutable. */
-  dbWorkload?:
-    | oracle.AutonomousDatabasePropertiesDbWorkloadEnum
-    | (string & {});
+  dbWorkload?: oracle.AutonomousDatabasePropertiesDbWorkloadEnum | (string & {});
   /** Database edition. Immutable. */
   dbEdition?: oracle.AutonomousDatabasePropertiesDbEditionEnum | (string & {});
   /** Oracle Database version. Immutable. */
@@ -186,13 +175,9 @@ export type AutonomousDatabaseProps = {
    */
   properties?: AutonomousDatabasePropertiesInput;
   /** License type. Immutable. Convenience alias for `properties.licenseType`. */
-  licenseType?:
-    | oracle.AutonomousDatabasePropertiesLicenseTypeEnum
-    | (string & {});
+  licenseType?: oracle.AutonomousDatabasePropertiesLicenseTypeEnum | (string & {});
   /** Workload type. Immutable. Convenience alias for `properties.dbWorkload`. */
-  dbWorkload?:
-    | oracle.AutonomousDatabasePropertiesDbWorkloadEnum
-    | (string & {});
+  dbWorkload?: oracle.AutonomousDatabasePropertiesDbWorkloadEnum | (string & {});
   /** CPU cores. Convenience alias for `properties.cpuCoreCount`. */
   cpuCoreCount?: number;
   /** Compute count. Convenience alias for `properties.computeCount`. */
@@ -321,30 +306,22 @@ export const AutonomousDatabase = Resource<AutonomousDatabase>(
   "GCP.OracleDatabase.AutonomousDatabase",
 );
 
-const mergedProperties = (
-  news: AutonomousDatabaseProps,
-): AutonomousDatabasePropertiesInput => ({
+const mergedProperties = (news: AutonomousDatabaseProps): AutonomousDatabasePropertiesInput => ({
   ...(news.properties ?? {}),
   licenseType: news.licenseType ?? news.properties?.licenseType,
   dbWorkload: news.dbWorkload ?? news.properties?.dbWorkload,
   cpuCoreCount: news.cpuCoreCount ?? news.properties?.cpuCoreCount,
   computeCount: news.computeCount ?? news.properties?.computeCount,
-  dataStorageSizeGb:
-    news.dataStorageSizeGb ?? news.properties?.dataStorageSizeGb,
-  dataStorageSizeTb:
-    news.dataStorageSizeTb ?? news.properties?.dataStorageSizeTb,
-  isAutoScalingEnabled:
-    news.isAutoScalingEnabled ?? news.properties?.isAutoScalingEnabled,
+  dataStorageSizeGb: news.dataStorageSizeGb ?? news.properties?.dataStorageSizeGb,
+  dataStorageSizeTb: news.dataStorageSizeTb ?? news.properties?.dataStorageSizeTb,
+  isAutoScalingEnabled: news.isAutoScalingEnabled ?? news.properties?.isAutoScalingEnabled,
   isStorageAutoScalingEnabled:
-    news.isStorageAutoScalingEnabled ??
-    news.properties?.isStorageAutoScalingEnabled,
+    news.isStorageAutoScalingEnabled ?? news.properties?.isStorageAutoScalingEnabled,
   dbVersion: news.dbVersion ?? news.properties?.dbVersion,
   dbEdition: news.dbEdition ?? news.properties?.dbEdition,
 });
 
-const toCreateProperties = (
-  news: AutonomousDatabaseProps,
-): oracle.AutonomousDatabaseProperties => {
+const toCreateProperties = (news: AutonomousDatabaseProps): oracle.AutonomousDatabaseProperties => {
   const props = mergedProperties(news);
   const body: oracle.AutonomousDatabaseProperties = {
     licenseType: props.licenseType ?? DEFAULT_LICENSE,
@@ -475,11 +452,7 @@ const listDatabases = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.autonomousDatabases,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -502,22 +475,14 @@ const identityChanged = (
   const previousDatabase = olds?.database ?? output?.database ?? "";
   const nextDatabase = news.database ?? previousDatabase;
   const previousLicense =
-    olds?.licenseType ??
-    olds?.properties?.licenseType ??
-    output?.licenseType ??
-    "";
+    olds?.licenseType ?? olds?.properties?.licenseType ?? output?.licenseType ?? "";
   const nextLicense = props.licenseType ?? previousLicense;
   const previousWorkload =
-    olds?.dbWorkload ??
-    olds?.properties?.dbWorkload ??
-    output?.dbWorkload ??
-    "";
+    olds?.dbWorkload ?? olds?.properties?.dbWorkload ?? output?.dbWorkload ?? "";
   const nextWorkload = props.dbWorkload ?? previousWorkload;
-  const previousEdition =
-    olds?.dbEdition ?? olds?.properties?.dbEdition ?? output?.dbEdition ?? "";
+  const previousEdition = olds?.dbEdition ?? olds?.properties?.dbEdition ?? output?.dbEdition ?? "";
   const nextEdition = props.dbEdition ?? previousEdition;
-  const previousVersion =
-    olds?.dbVersion ?? olds?.properties?.dbVersion ?? output?.dbVersion ?? "";
+  const previousVersion = olds?.dbVersion ?? olds?.properties?.dbVersion ?? output?.dbVersion ?? "";
   const nextVersion = props.dbVersion ?? previousVersion;
   return (
     nextNetwork !== previousNetwork ||
@@ -534,14 +499,7 @@ const identityChanged = (
 
 export const AutonomousDatabaseProvider = () =>
   Provider.succeed(AutonomousDatabase, {
-    stables: [
-      "name",
-      "autonomousDatabaseId",
-      "project",
-      "location",
-      "createTime",
-      "ocid",
-    ],
+    stables: ["name", "autonomousDatabaseId", "project", "location", "createTime", "ocid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -549,12 +507,8 @@ export const AutonomousDatabaseProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.autonomousDatabaseId ?? output?.autonomousDatabaseId,
         nextId:
-          news.autonomousDatabaseId ??
-          olds?.autonomousDatabaseId ??
-          output?.autonomousDatabaseId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+          news.autonomousDatabaseId ?? olds?.autonomousDatabaseId ?? output?.autonomousDatabaseId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -570,18 +524,13 @@ export const AutonomousDatabaseProvider = () =>
         output?.autonomousDatabaseId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
-        output?.name ??
-        resourceNameOf(env.project, location, COLLECTION, autonomousDatabaseId);
+        output?.name ?? resourceNameOf(env.project, location, COLLECTION, autonomousDatabaseId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -599,15 +548,8 @@ export const AutonomousDatabaseProvider = () =>
         output?.autonomousDatabaseId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceNameOf(
-        env.project,
-        location,
-        COLLECTION,
-        autonomousDatabaseId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, autonomousDatabaseId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -648,30 +590,19 @@ export const AutonomousDatabaseProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const computeChanged =
         (props.cpuCoreCount !== undefined &&
-          !specifiedEquals(
-            props.cpuCoreCount,
-            ready.properties?.cpuCoreCount,
-          )) ||
+          !specifiedEquals(props.cpuCoreCount, ready.properties?.cpuCoreCount)) ||
         (props.computeCount !== undefined &&
           !specifiedEquals(props.computeCount, ready.properties?.computeCount));
       const storageChanged =
         (props.dataStorageSizeGb !== undefined &&
-          !specifiedEquals(
-            props.dataStorageSizeGb,
-            ready.properties?.dataStorageSizeGb,
-          )) ||
+          !specifiedEquals(props.dataStorageSizeGb, ready.properties?.dataStorageSizeGb)) ||
         (props.dataStorageSizeTb !== undefined &&
-          !specifiedEquals(
-            props.dataStorageSizeTb,
-            ready.properties?.dataStorageSizeTb,
-          ));
+          !specifiedEquals(props.dataStorageSizeTb, ready.properties?.dataStorageSizeTb));
       const scalingChanged =
         (props.isAutoScalingEnabled !== undefined &&
-          props.isAutoScalingEnabled !==
-            ready.properties?.isAutoScalingEnabled) ||
+          props.isAutoScalingEnabled !== ready.properties?.isAutoScalingEnabled) ||
         (props.isStorageAutoScalingEnabled !== undefined &&
-          props.isStorageAutoScalingEnabled !==
-            ready.properties?.isStorageAutoScalingEnabled);
+          props.isStorageAutoScalingEnabled !== ready.properties?.isStorageAutoScalingEnabled);
       const encryptionChanged =
         props.encryptionKey !== undefined &&
         !specifiedEquals(props.encryptionKey, ready.properties?.encryptionKey);
@@ -701,9 +632,7 @@ export const AutonomousDatabaseProvider = () =>
           storageChanged ? "properties.data_storage_size_gb" : undefined,
           storageChanged ? "properties.data_storage_size_tb" : undefined,
           scalingChanged ? "properties.is_auto_scaling_enabled" : undefined,
-          scalingChanged
-            ? "properties.is_storage_auto_scaling_enabled"
-            : undefined,
+          scalingChanged ? "properties.is_storage_auto_scaling_enabled" : undefined,
           encryptionChanged ? "properties.encryption_key" : undefined,
           dataGuardChanged ? "properties.local_data_guard_enabled" : undefined,
           failoverLimitChanged
@@ -735,10 +664,7 @@ export const AutonomousDatabaseProvider = () =>
         );
         yield* waitForOperation(operation);
         return toAttrs(
-          yield* waitUntilExists(
-            getByName(ready.name ?? name),
-            ready.name ?? name,
-          ),
+          yield* waitUntilExists(getByName(ready.name ?? name), ready.name ?? name),
           env.project,
         );
       }

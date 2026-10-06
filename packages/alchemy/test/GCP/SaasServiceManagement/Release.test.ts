@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -47,20 +47,14 @@ test.provider.skipIf(!runLifecycle || runBlueprintLifecycle)(
       const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
-            const product = yield* GCP.SaasServiceManagement.Saa(
-              "MissingProduct",
-              {
-                location,
-                locations: [{ name: location }],
-              },
-            );
-            const kind = yield* GCP.SaasServiceManagement.UnitKind(
-              "MissingKind",
-              {
-                location,
-                saas: product.name,
-              },
-            );
+            const product = yield* GCP.SaasServiceManagement.Saa("MissingProduct", {
+              location,
+              locations: [{ name: location }],
+            });
+            const kind = yield* GCP.SaasServiceManagement.UnitKind("MissingKind", {
+              location,
+              saas: product.name,
+            });
             return yield* GCP.SaasServiceManagement.Release("Missing", {
               location,
               unitKind: kind.name,
@@ -118,11 +112,9 @@ test.provider.skipIf(!runBlueprintLifecycle)(
       });
       expect(fetched.name).toEqual(created.release.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -141,9 +133,7 @@ test.provider.skipIf(!runBlueprintLifecycle)(
             location,
             unitKind: kind.name,
             blueprint: { package: blueprint },
-            inputVariableDefaults: [
-              { variable: "region", type: "STRING", value: location },
-            ],
+            inputVariableDefaults: [{ variable: "region", type: "STRING", value: location }],
             labels: { env: "prod" },
           });
           return { product, kind, release };
@@ -152,9 +142,7 @@ test.provider.skipIf(!runBlueprintLifecycle)(
 
       expect(updated.release.name).toEqual(created.release.name);
       expect(updated.release.labels).toMatchObject({ env: "prod" });
-      expect(updated.release.inputVariableDefaults[0]?.variable).toEqual(
-        "region",
-      );
+      expect(updated.release.inputVariableDefaults[0]?.variable).toEqual("region");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(

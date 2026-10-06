@@ -37,14 +37,8 @@ export interface PauseJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: PauseJobRequest,
-    ) => Effect.Effect<
-      scheduler.Job,
-      scheduler.PauseProjectsLocationsJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<scheduler.Job, scheduler.PauseProjectsLocationsJobsError, RuntimeContext>
   >
 > {}
 
-export const PauseJob = Binding.Service<PauseJob>(
-  "GCP.CloudScheduler.PauseJob",
-);
+export const PauseJob = Binding.Service<PauseJob>("GCP.CloudScheduler.PauseJob");

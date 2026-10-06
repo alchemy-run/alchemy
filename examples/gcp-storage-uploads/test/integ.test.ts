@@ -1,18 +1,18 @@
+import { describe, expect } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Alchemy from "alchemy";
 import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Bun";
-import { describe, expect } from "bun:test";
-import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -24,11 +24,7 @@ const { getWhenReady } = Test;
 
 // Out-of-band calls to the Google APIs resolve the same stored credentials
 // the deploy uses, so the test runs against the configured profile.
-const GcpHttp = Layer.mergeAll(
-  GCP.GcpAuth,
-  GCP.fromAuthProvider(),
-  FetchHttpClient.layer,
-);
+const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
 // The project comes from the same credential the deploy uses.
 const currentProject = GCP.GcpEnvironment.current.pipe(
@@ -38,8 +34,7 @@ const currentProject = GCP.GcpEnvironment.current.pipe(
 
 // Both services are built from `main`, which needs a local image build.
 const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status ===
-  0;
+  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
 
 // Kept for the post-destroy checks in `afterAll`.
 let deployed:
@@ -65,9 +60,7 @@ describe.skipIf(!dockerAvailable)("gcp-storage-uploads", () => {
     { timeout: 900_000 },
   );
 
-  const gone = <A, E extends { _tag: string }, R>(
-    get: Effect.Effect<A, E, R>,
-  ) =>
+  const gone = <A, E extends { _tag: string }, R>(get: Effect.Effect<A, E, R>) =>
     get.pipe(
       Effect.as("found" as const),
       Effect.catchIf(
@@ -84,18 +77,12 @@ describe.skipIf(!dockerAvailable)("gcp-storage-uploads", () => {
 
       // Destroy leaves nothing behind: bucket (and its notification),
       // database, and both services.
-      expect(yield* gone(storage.getBuckets({ bucket: bucketName }))).toEqual(
-        "gone",
-      );
+      expect(yield* gone(storage.getBuckets({ bucket: bucketName }))).toEqual("gone");
       // A deleted database may linger briefly with `deleteTime` set.
-      const database = yield* firestore
-        .getProjectsDatabases({ name: databaseName })
-        .pipe(
-          Effect.map((database) =>
-            database.deleteTime === undefined ? "found" : "gone",
-          ),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        );
+      const database = yield* firestore.getProjectsDatabases({ name: databaseName }).pipe(
+        Effect.map((database) => (database.deleteTime === undefined ? "found" : "gone")),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      );
       expect(database).toEqual("gone");
       const project = yield* currentProject;
       const services = yield* run.listProjectsLocationsServices({
@@ -116,8 +103,7 @@ describe.skipIf(!dockerAvailable)("gcp-storage-uploads", () => {
     return url.replace(/\/+$/, "");
   };
 
-  const sha256 = (bytes: Uint8Array) =>
-    createHash("sha256").update(bytes).digest("hex");
+  const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
   const put = (baseUrl: string, name: string, body: Uint8Array, type: string) =>
     HttpClient.execute(
@@ -138,9 +124,7 @@ describe.skipIf(!dockerAvailable)("gcp-storage-uploads", () => {
 
   const listFiles = (baseUrl: string) =>
     Effect.gen(function* () {
-      const res = yield* HttpClient.execute(
-        HttpClientRequest.get(`${baseUrl}/files`),
-      );
+      const res = yield* HttpClient.execute(HttpClientRequest.get(`${baseUrl}/files`));
       if (res.status !== 200) return [] as FileRecord[];
       return ((yield* res.json) as unknown as { files: FileRecord[] }).files;
     });
@@ -215,9 +199,7 @@ describe.skipIf(!dockerAvailable)("gcp-storage-uploads", () => {
         Effect.repeat({
           schedule: Schedule.spaced("10 seconds"),
           until: (records) =>
-            files.every((file) =>
-              records.some((record) => record.name === file.name),
-            ),
+            files.every((file) => records.some((record) => record.name === file.name)),
           times: 42,
         }),
       );

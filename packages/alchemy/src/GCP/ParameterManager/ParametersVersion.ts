@@ -155,10 +155,7 @@ export const ParametersVersion = Resource<ParametersVersion>(
 
 export { ParameterVersionNotResolved, ParameterVersionPayloadRequired };
 
-const toAttrs = (
-  version: parametermanager.ParameterVersion,
-  project: string,
-) => {
+const toAttrs = (version: parametermanager.ParameterVersion, project: string) => {
   const name = version.name ?? "";
   const parsed = parseVersionName(name);
   return {
@@ -176,10 +173,7 @@ const toAttrs = (
   };
 };
 
-const createBody = (
-  payloadData: string,
-  disabled: boolean,
-): parametermanager.ParameterVersion => ({
+const createBody = (payloadData: string, disabled: boolean): parametermanager.ParameterVersion => ({
   payload: { data: payloadData },
   disabled,
 });
@@ -200,34 +194,22 @@ export const ParametersVersionProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.parameterVersionId ?? output?.parameterVersionId;
       const nextId = news.parameterVersionId ?? previousId;
-      const previousParameter = lastSegment(
-        olds?.parameter ?? output?.parameter ?? "",
-      );
+      const previousParameter = lastSegment(olds?.parameter ?? output?.parameter ?? "");
       const nextParameter = lastSegment(news.parameter);
       const previousLocation = normalizeLocation(
         olds?.location ??
           output?.location ??
-          locationFromParameter(
-            olds?.parameter ?? output?.parameter,
-            DEFAULT_LOCATION,
-          ),
+          locationFromParameter(olds?.parameter ?? output?.parameter, DEFAULT_LOCATION),
       );
       const nextLocation = normalizeLocation(
-        news.location ??
-          locationFromParameter(news.parameter, previousLocation),
+        news.location ?? locationFromParameter(news.parameter, previousLocation),
       );
       const previousPayload =
         olds?.payload?.data ??
-        (olds?.data !== undefined
-          ? yield* desiredPayloadData(olds)
-          : output?.payloadData);
+        (olds?.data !== undefined ? yield* desiredPayloadData(olds) : output?.payloadData);
       const nextPayload = yield* desiredPayloadData(news);
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        previousId !== nextId;
-      const parentChanged =
-        previousParameter.length > 0 && previousParameter !== nextParameter;
+      const idChanged = previousId !== undefined && nextId !== undefined && previousId !== nextId;
+      const parentChanged = previousParameter.length > 0 && previousParameter !== nextParameter;
       const locationChanged = previousLocation !== nextLocation;
       const payloadChanged =
         nextPayload !== undefined &&
@@ -253,10 +235,7 @@ export const ParametersVersionProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          locationFromParameter(
-            olds?.parameter ?? output?.parameter,
-            DEFAULT_LOCATION,
-          ),
+          locationFromParameter(olds?.parameter ?? output?.parameter, DEFAULT_LOCATION),
       );
       const parameter = expandParameter(
         olds?.parameter ?? output?.parameter ?? "",
@@ -269,8 +248,7 @@ export const ParametersVersionProvider = () =>
         output?.parameterVersionId,
         "version",
       );
-      const name =
-        output?.name ?? versionResourceName(parameter, parameterVersionId);
+      const name = output?.name ?? versionResourceName(parameter, parameterVersionId);
       const existing = yield* getVersion(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -315,8 +293,7 @@ export const ParametersVersionProvider = () =>
             : Effect.succeed(parent),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.ParameterManager.ParameterNotResolved",
+          while: (error) => error._tag === "GCP.ParameterManager.ParameterNotResolved",
           times: 8,
           schedule: Schedule.spaced("1 second"),
         }),
@@ -380,16 +357,14 @@ export const ParametersVersionProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* parametermanager
-        .deleteProjectsLocationsParametersVersions({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("1 second"),
-          }),
-          Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
-        );
+      yield* parametermanager.deleteProjectsLocationsParametersVersions({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("1 second"),
+        }),
+        Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
+      );
       yield* waitUntilVersionGone(output.name);
     }),
   });

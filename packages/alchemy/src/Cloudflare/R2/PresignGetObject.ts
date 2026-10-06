@@ -85,12 +85,8 @@ export interface PresignGetObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: PresignGetObjectRequest,
-    ) => Effect.Effect<string, PresignError, RuntimeContext>
+    (request: PresignGetObjectRequest) => Effect.Effect<string, PresignError, RuntimeContext>
   >
 > {}
 
-export const PresignGetObject = Binding.Service<PresignGetObject>(
-  "Cloudflare.R2.PresignGetObject",
-);
+export const PresignGetObject = Binding.Service<PresignGetObject>("Cloudflare.R2.PresignGetObject");

@@ -6,11 +6,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fetchWafTags,
@@ -148,9 +144,7 @@ export const IPSetProvider = () =>
     IPSet,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: IPSetProps) {
-        return (
-          props.ipSetName ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.ipSetName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const findIPSet = Effect.fn(function* (
@@ -164,9 +158,7 @@ export const IPSetProvider = () =>
             wafv2
               .getIPSet({ Name: name, Scope: scope, Id: cachedId })
               .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
               ),
           );
           if (byId?.IPSet) {
@@ -186,9 +178,7 @@ export const IPSetProvider = () =>
               wafv2
                 .getIPSet({ Name: name, Scope: scope, Id: summary.Id })
                 .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
                 ),
             );
           }
@@ -244,13 +234,7 @@ export const IPSetProvider = () =>
       });
 
       return {
-        stables: [
-          "ipSetName",
-          "ipSetId",
-          "ipSetArn",
-          "scope",
-          "ipAddressVersion",
-        ],
+        stables: ["ipSetName", "ipSetId", "ipSetArn", "scope", "ipAddressVersion"],
 
         list: () =>
           Effect.gen(function* () {
@@ -275,9 +259,7 @@ export const IPSetProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const scope = output?.scope ?? olds?.scope ?? defaultScope;
-          const name =
-            output?.ipSetName ??
-            (yield* createName(id, olds ?? { addresses: [] }));
+          const name = output?.ipSetName ?? (yield* createName(id, olds ?? { addresses: [] }));
           const found = yield* findIPSet(scope, name, output?.ipSetId);
           if (!found?.IPSet) {
             return undefined;
@@ -310,18 +292,14 @@ export const IPSetProvider = () =>
                   Tags: createTagsList(desiredTags),
                 })
                 .pipe(
-                  Effect.catchTag("WAFDuplicateItemException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
                 ),
             );
             observed = yield* findIPSet(scope, name, undefined);
           }
 
           if (!observed?.IPSet) {
-            return yield* Effect.fail(
-              new Error(`Failed to observe IPSet '${name}' after create`),
-            );
+            return yield* Effect.fail(new Error(`Failed to observe IPSet '${name}' after create`));
           }
 
           const ipSet = observed.IPSet;
@@ -405,12 +383,7 @@ export const IPSetProvider = () =>
                       Id: output.ipSetId,
                       LockToken: found.LockToken,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        "WAFNonexistentItemException",
-                        () => Effect.void,
-                      ),
-                    ),
+                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
                 );
               }),
             ),

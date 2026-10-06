@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const siteId = process.env.GCP_TEST_APIGEE_SITE ?? "";
 const apiProductName = process.env.GCP_TEST_APIGEE_PRODUCT ?? "";
@@ -21,15 +18,12 @@ const apiProductName = process.env.GCP_TEST_APIGEE_PRODUCT ?? "";
 // ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
 // denied on resource \"organizations/{project}\" (or it may not exist)").
 // Set GCP_TEST_APIGEE_ORG=1 when the org exists.
-const runLifecycle =
-  !!process.env.GCP_TEST_APIGEE_ORG && !!siteId && !!apiProductName;
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG && !!siteId && !!apiProductName;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsSitesApidocs({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -114,9 +108,7 @@ test.provider.skipIf(!runLifecycle)(
         name: updated.name,
       });
       expect(fetchedUpdate.data?.title).toEqual("Checkout API v2");
-      expect(fetchedUpdate.data?.description).toContain(
-        "place and refund orders",
-      );
+      expect(fetchedUpdate.data?.description).toContain("place and refund orders");
       expect(fetchedUpdate.data?.published).toEqual(true);
 
       yield* stack.destroy();

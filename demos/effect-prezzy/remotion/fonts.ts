@@ -18,4 +18,7 @@ export const serif = loadSourceSerif("normal", {
 }).fontFamily;
 
 /** Hand-drawn annotations on code. */
-export const hand = loadCaveat("normal", { weights: ["600", "700"], subsets: ["latin"] }).fontFamily;
+export const hand = loadCaveat("normal", {
+  weights: ["600", "700"],
+  subsets: ["latin"],
+}).fontFamily;

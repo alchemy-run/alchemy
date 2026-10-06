@@ -7,7 +7,6 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
-import type { ExtraFile } from "../../Util/extraFiles.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
@@ -15,24 +14,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { type ServerHost } from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
-import {
-  destroyHostImageRepository,
-  makeImageSource,
-} from "../ArtifactRegistry/ImageSource.ts";
+import type { ExtraFile } from "../../Util/extraFiles.ts";
+import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  type LongRunningOperation,
-  waitForOperation as waitForLongRunningOperation,
-} from "../Operation.ts";
-import {
-  createGcpHostRuntimeContext,
-  type GcpHostRuntimeContext,
-} from "../HostContext.ts";
-import {
-  retryActAs,
-  type AppliedIamGrant,
-  type GcpHostBinding,
-} from "../Host.ts";
+import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import { createGcpHostRuntimeContext, type GcpHostRuntimeContext } from "../HostContext.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -49,6 +35,10 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunningOperation,
+} from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
@@ -430,41 +420,29 @@ export type ServiceShape = Main<ServiceServices>;
  * @resource
  * @category Run
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("GCP.Run.Service", {
-  createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service") as (
-    id: string,
-  ) => ServiceRuntimeContext,
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("GCP.Run.Service", {
+    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service") as (
+      id: string,
+    ) => ServiceRuntimeContext,
+  });
 
-export class ServiceNotResolved extends Data.TaggedError(
-  "GCP.Run.ServiceNotResolved",
-)<{
+export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
   name: string;
 }> {}
 
-export class ServiceNotReady extends Data.TaggedError(
-  "GCP.Run.ServiceNotReady",
-)<{
+export class ServiceNotReady extends Data.TaggedError("GCP.Run.ServiceNotReady")<{
   name: string;
   state: string;
   message: string;
 }> {}
 
-export class ServiceReconciling extends Data.TaggedError(
-  "GCP.Run.ServiceReconciling",
-)<{
+export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconciling")<{
   name: string;
   state: string;
 }> {}
 
-export class ServiceStillExists extends Data.TaggedError(
-  "GCP.Run.ServiceStillExists",
-)<{
+export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
   name: string;
 }> {}
 
@@ -474,10 +452,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const resourceName = (project: string, location: string, serviceId: string) =>
   `projects/${project}/locations/${location}/services/${serviceId}`;
@@ -488,16 +464,11 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     serviceId:
-      servicesAt >= 0 && parts[servicesAt + 1]
-        ? parts[servicesAt + 1]!
-        : lastSegment(name),
+      servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -509,17 +480,12 @@ const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => tagRecord(annotations);
 
-const recordsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) => {
+const recordsEqual = (left: Record<string, string>, right: Record<string, string>) => {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && left[key] === right[key],
-    )
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
   );
 };
 
@@ -547,9 +513,7 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
     );
   });
 
-const desiredTemplate = (
-  news: ServiceProps,
-): cloudrun.GoogleCloudRunV2RevisionTemplate => {
+const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionTemplate => {
   const template = news.template ?? {};
   return {
     ...template,
@@ -589,8 +553,7 @@ const containerNeedsSync = (
     if ((container.image ?? "") !== (current.image ?? "")) return true;
     if (
       container.command !== undefined &&
-      JSON.stringify(container.command) !==
-        JSON.stringify(current.command ?? [])
+      JSON.stringify(container.command) !== JSON.stringify(current.command ?? [])
     ) {
       return true;
     }
@@ -600,10 +563,7 @@ const containerNeedsSync = (
     ) {
       return true;
     }
-    if (
-      container.workingDir !== undefined &&
-      container.workingDir !== (current.workingDir ?? "")
-    ) {
+    if (container.workingDir !== undefined && container.workingDir !== (current.workingDir ?? "")) {
       return true;
     }
     if (
@@ -648,10 +608,7 @@ const containerNeedsSync = (
     ) {
       return true;
     }
-    if (
-      container.name !== undefined &&
-      container.name !== (current.name ?? "")
-    ) {
+    if (container.name !== undefined && container.name !== (current.name ?? "")) {
       return true;
     }
     if (
@@ -712,8 +669,7 @@ const templateNeedsSync = (
   }
   if (
     desired.maxInstanceRequestConcurrency !== undefined &&
-    desired.maxInstanceRequestConcurrency !==
-      (current.maxInstanceRequestConcurrency ?? 0)
+    desired.maxInstanceRequestConcurrency !== (current.maxInstanceRequestConcurrency ?? 0)
   ) {
     return true;
   }
@@ -741,10 +697,7 @@ const templateNeedsSync = (
   ) {
     return true;
   }
-  if (
-    desired.revision !== undefined &&
-    desired.revision !== (current.revision ?? "")
-  ) {
+  if (desired.revision !== undefined && desired.revision !== (current.revision ?? "")) {
     return true;
   }
   if (
@@ -755,8 +708,7 @@ const templateNeedsSync = (
   }
   if (
     desired.vpcAccess !== undefined &&
-    JSON.stringify(desired.vpcAccess) !==
-      JSON.stringify(current.vpcAccess ?? {})
+    JSON.stringify(desired.vpcAccess) !== JSON.stringify(current.vpcAccess ?? {})
   ) {
     return true;
   }
@@ -768,19 +720,13 @@ const templateNeedsSync = (
   }
   if (
     desired.labels !== undefined &&
-    !recordsEqual(
-      userAnnotations(desired.labels),
-      userAnnotations(current.labels),
-    )
+    !recordsEqual(userAnnotations(desired.labels), userAnnotations(current.labels))
   ) {
     return true;
   }
   if (
     desired.annotations !== undefined &&
-    !recordsEqual(
-      userAnnotations(desired.annotations),
-      userAnnotations(current.annotations),
-    )
+    !recordsEqual(userAnnotations(desired.annotations), userAnnotations(current.annotations))
   ) {
     return true;
   }
@@ -898,8 +844,7 @@ const waitUntilReady = (name: string) =>
       () => new ServiceNotResolved({ name }),
     ),
     Effect.filterOrFail(
-      (service) =>
-        (service.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
+      (service) => (service.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (service) =>
         new ServiceNotReady({
           name,
@@ -917,8 +862,7 @@ const waitUntilReady = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag === "GCP.Run.ServiceReconciling" ||
-        error._tag === "GCP.Run.ServiceNotResolved",
+        error._tag === "GCP.Run.ServiceReconciling" || error._tag === "GCP.Run.ServiceNotResolved",
       times: 10,
       schedule: Schedule.spaced("4 seconds"),
     }),
@@ -927,9 +871,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((service) =>
-      service === undefined
-        ? Effect.void
-        : Effect.fail(new ServiceStillExists({ name })),
+      service === undefined ? Effect.void : Effect.fail(new ServiceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.ServiceStillExists",
@@ -965,18 +907,9 @@ export const ServiceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.serviceId ?? output?.serviceId;
       const nextId = news.serviceId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
       const locationChanged = previousLocation !== nextLocation;
       if (idChanged || locationChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -1001,12 +934,8 @@ export const ServiceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, olds?.serviceId, output?.serviceId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, serviceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, serviceId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
@@ -1015,9 +944,7 @@ export const ServiceProvider = () =>
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -1033,9 +960,7 @@ export const ServiceProvider = () =>
             Stream.filter(
               (service) =>
                 service.deleteTime === undefined &&
-                Object.keys(service.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(service.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((service) => toAttrs(service, env.project, env.region)),
             Stream.runCollect,
@@ -1046,10 +971,7 @@ export const ServiceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, news.serviceId, output?.serviceId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, serviceId);
       const parent = `projects/${env.project}/locations/${location}`;
       const desiredLabels = {
@@ -1091,12 +1013,7 @@ export const ServiceProvider = () =>
             ...container,
             image: image.imageUri,
             ports: container.ports ?? [{ containerPort: port }],
-            env: mergeContainerEnv(
-              container.env,
-              identity.env,
-              yield* alchemyRuntimeEnv,
-              news.env,
-            ),
+            env: mergeContainerEnv(container.env, identity.env, yield* alchemyRuntimeEnv, news.env),
           },
         ];
       } else {
@@ -1151,16 +1068,11 @@ export const ServiceProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const annotationsChanged =
         desiredAnnotations !== undefined &&
-        !recordsEqual(
-          userAnnotations(current.annotations),
-          userAnnotations(desiredAnnotations),
-        );
-      const ingressChanged =
-        news.ingress !== undefined && (current.ingress ?? "") !== news.ingress;
+        !recordsEqual(userAnnotations(current.annotations), userAnnotations(desiredAnnotations));
+      const ingressChanged = news.ingress !== undefined && (current.ingress ?? "") !== news.ingress;
       const invokerChanged =
         news.invokerIamDisabled !== undefined &&
         (current.invokerIamDisabled === true) !== news.invokerIamDisabled;
@@ -1168,20 +1080,17 @@ export const ServiceProvider = () =>
         news.defaultUriDisabled !== undefined &&
         (current.defaultUriDisabled === true) !== news.defaultUriDisabled;
       const iapChanged =
-        news.iapEnabled !== undefined &&
-        (current.iapEnabled === true) !== news.iapEnabled;
+        news.iapEnabled !== undefined && (current.iapEnabled === true) !== news.iapEnabled;
       const audiencesChanged =
         news.customAudiences !== undefined &&
         audiencesFingerprint(current.customAudiences) !==
           audiencesFingerprint(news.customAudiences);
       const scalingChanged =
         news.scaling !== undefined &&
-        scalingFingerprint(current.scaling) !==
-          scalingFingerprint(news.scaling);
+        scalingFingerprint(current.scaling) !== scalingFingerprint(news.scaling);
       const trafficChanged =
         news.traffic !== undefined &&
-        trafficFingerprint(current.traffic) !==
-          trafficFingerprint(news.traffic);
+        trafficFingerprint(current.traffic) !== trafficFingerprint(news.traffic);
       const templateChanged = templateNeedsSync(template, current.template);
 
       if (
@@ -1244,26 +1153,20 @@ export const ServiceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ id, output }) {
-      const operation = yield* cloudrun
-        .deleteProjectsLocationsServices({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* cloudrun.deleteProjectsLocationsServices({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
-      yield* destroyHostImageRepository(
-        id,
-        output,
-        rfc1035(`${output.serviceId}-src`),
-      );
+      yield* destroyHostImageRepository(id, output, rfc1035(`${output.serviceId}-src`));
       yield* releaseHostIdentity(output);
     }),
   });

@@ -113,9 +113,7 @@ export class AuthorizedViewSetsAuthorizedViewsConversationsAssessmentNotResolved
 }> {}
 
 const agentInfoOf = (
-  info:
-    | cci.GoogleCloudContactcenterinsightsV1ConversationQualityMetadataAgentInfo
-    | undefined,
+  info: cci.GoogleCloudContactcenterinsightsV1ConversationQualityMetadataAgentInfo | undefined,
 ): AgentInfo | undefined => {
   if (info === undefined) return undefined;
   const parsed = parseOwnership(info.displayName);
@@ -129,10 +127,7 @@ const agentInfoOf = (
   };
 };
 
-const toAttrs = (
-  assessment: cci.GoogleCloudContactcenterinsightsV1Assessment,
-  project: string,
-) => {
+const toAttrs = (assessment: cci.GoogleCloudContactcenterinsightsV1Assessment, project: string) => {
   const name = assessment.name ?? "";
   return {
     name,
@@ -151,9 +146,7 @@ const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : cci
-        .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments(
-          { name },
-        )
+        .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAtParent = (parent: string, project: string) =>
@@ -161,20 +154,14 @@ const listAtParent = (parent: string, project: string) =>
     .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.assessments ?? [])),
-      Stream.filter((assessment) =>
-        hasOwnershipMarker(assessment.agentInfo?.displayName),
-      ),
+      Stream.filter((assessment) => hasOwnershipMarker(assessment.agentInfo?.displayName)),
       Stream.map((assessment) => toAttrs(assessment, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
-const findOwned = (
-  parent: string,
-  displayName: string,
-  agentId: string | undefined,
-) =>
+const findOwned = (parent: string, displayName: string, agentId: string | undefined) =>
   cci.listProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments
     .pages({ parent, pageSize: 100 })
     .pipe(
@@ -185,140 +172,112 @@ const findOwned = (
           (agentId === undefined || assessment.agentInfo?.agentId === agentId),
       ),
       Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
+      Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
-export const AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProvider =
-  () =>
-    Provider.succeed(AuthorizedViewSetsAuthorizedViewsConversationsAssessment, {
-      stables: [
-        "name",
-        "assessmentId",
-        "parent",
-        "location",
-        "project",
-        "createTime",
-      ],
+export const AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProvider = () =>
+  Provider.succeed(AuthorizedViewSetsAuthorizedViewsConversationsAssessment, {
+    stables: ["name", "assessmentId", "parent", "location", "project", "createTime"],
 
-      diff: Effect.fn(function* ({ news, olds, output }) {
-        if (!isResolved(news)) return undefined;
-        const previousParent = olds?.parent ?? output?.parent;
-        if (previousParent !== undefined && news.parent !== previousParent) {
-          return { action: "replace" as const, deleteFirst: false };
-        }
-        const previousAgent =
-          olds?.agentInfo?.agentId ?? output?.agentInfo?.agentId;
-        if (
-          previousAgent !== undefined &&
-          news.agentInfo.agentId !== undefined &&
-          news.agentInfo.agentId !== previousAgent
-        ) {
-          return { action: "replace" as const, deleteFirst: false };
-        }
-        return undefined;
-      }),
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (!isResolved(news)) return undefined;
+      const previousParent = olds?.parent ?? output?.parent;
+      if (previousParent !== undefined && news.parent !== previousParent) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      const previousAgent = olds?.agentInfo?.agentId ?? output?.agentInfo?.agentId;
+      if (
+        previousAgent !== undefined &&
+        news.agentInfo.agentId !== undefined &&
+        news.agentInfo.agentId !== previousAgent
+      ) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      return undefined;
+    }),
 
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const env = yield* GcpEnvironment.current;
-        let existing = yield* getByName(output?.name ?? "");
-        if (existing === undefined && olds?.parent !== undefined) {
-          const ownership = yield* createInternalLabels(id);
-          existing = yield* findOwned(
-            olds.parent,
-            encodeOwnershipLine(ownership, olds.agentInfo?.displayName),
-            olds.agentInfo?.agentId,
-          );
-        }
-        if (existing === undefined) return undefined;
-        const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.agentInfo?.displayName))
-          ? attrs
-          : Unowned(attrs);
-      }),
-
-      list: () =>
-        Effect.gen(function* () {
-          const env = yield* GcpEnvironment.current;
-          const viewsParent = `${locationParent(env.project, env.region)}/authorizedViewSets/-`;
-          const views =
-            yield* cci.listProjectsLocationsAuthorizedViewSetsAuthorizedViews
-              .pages({ parent: viewsParent, pageSize: 100 })
-              .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.authorizedViews ?? []),
-                ),
-                Stream.map((view) => view.name ?? ""),
-                Stream.filter((name) => name.length > 0),
-                Stream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as string[]),
-                ),
-              );
-          const pages = yield* Effect.forEach(
-            views,
-            (view) => listAtParent(`${view}/conversations/-`, env.project),
-            { concurrency: 4 },
-          );
-          return pages.flat();
-        }),
-
-      reconcile: Effect.fn(function* ({ id, news, output }) {
-        const env = yield* GcpEnvironment.current;
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const env = yield* GcpEnvironment.current;
+      let existing = yield* getByName(output?.name ?? "");
+      if (existing === undefined && olds?.parent !== undefined) {
         const ownership = yield* createInternalLabels(id);
-        const displayName = encodeOwnershipLine(
-          ownership,
-          news.agentInfo.displayName,
+        existing = yield* findOwned(
+          olds.parent,
+          encodeOwnershipLine(ownership, olds.agentInfo?.displayName),
+          olds.agentInfo?.agentId,
         );
-        const agentInfo = {
-          ...news.agentInfo,
-          displayName,
-        };
+      }
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return (yield* ownedByAlchemy(id, existing.agentInfo?.displayName)) ? attrs : Unowned(attrs);
+    }),
 
-        let current = yield* getByName(output?.name ?? "");
-        if (current === undefined) {
-          current = yield* findOwned(
-            news.parent,
-            displayName,
-            news.agentInfo.agentId,
+    list: () =>
+      Effect.gen(function* () {
+        const env = yield* GcpEnvironment.current;
+        const viewsParent = `${locationParent(env.project, env.region)}/authorizedViewSets/-`;
+        const views = yield* cci.listProjectsLocationsAuthorizedViewSetsAuthorizedViews
+          .pages({ parent: viewsParent, pageSize: 100 })
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.authorizedViews ?? [])),
+            Stream.map((view) => view.name ?? ""),
+            Stream.filter((name) => name.length > 0),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
           );
-        }
-
-        if (current === undefined) {
-          const created = yield* cci
-            .createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments(
-              {
-                parent: news.parent,
-                body: { agentInfo },
-              },
-            )
-            .pipe(
-              Effect.catchTag("Conflict", () =>
-                findOwned(news.parent, displayName, news.agentInfo.agentId),
-              ),
-            );
-          current = created ?? undefined;
-        }
-
-        if (current === undefined) {
-          return yield* new AuthorizedViewSetsAuthorizedViewsConversationsAssessmentNotResolved(
-            {
-              name: output?.name ?? `${news.parent}/assessments/-`,
-            },
-          );
-        }
-
-        return toAttrs(current, env.project);
+        const pages = yield* Effect.forEach(
+          views,
+          (view) => listAtParent(`${view}/conversations/-`, env.project),
+          { concurrency: 4 },
+        );
+        return pages.flat();
       }),
 
-      delete: Effect.fn(function* ({ output }) {
-        yield* cci
-          .deleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments(
-            { name: output.name, force: true },
-          )
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      }),
-    });
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const env = yield* GcpEnvironment.current;
+      const ownership = yield* createInternalLabels(id);
+      const displayName = encodeOwnershipLine(ownership, news.agentInfo.displayName);
+      const agentInfo = {
+        ...news.agentInfo,
+        displayName,
+      };
+
+      let current = yield* getByName(output?.name ?? "");
+      if (current === undefined) {
+        current = yield* findOwned(news.parent, displayName, news.agentInfo.agentId);
+      }
+
+      if (current === undefined) {
+        const created = yield* cci
+          .createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments({
+            parent: news.parent,
+            body: { agentInfo },
+          })
+          .pipe(
+            Effect.catchTag("Conflict", () =>
+              findOwned(news.parent, displayName, news.agentInfo.agentId),
+            ),
+          );
+        current = created ?? undefined;
+      }
+
+      if (current === undefined) {
+        return yield* new AuthorizedViewSetsAuthorizedViewsConversationsAssessmentNotResolved({
+          name: output?.name ?? `${news.parent}/assessments/-`,
+        });
+      }
+
+      return toAttrs(current, env.project);
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      yield* cci
+        .deleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments({
+          name: output.name,
+          force: true,
+        })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    }),
+  });

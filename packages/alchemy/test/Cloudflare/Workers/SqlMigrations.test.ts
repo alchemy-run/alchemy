@@ -1,11 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import type { HistoryRow } from "./fixtures/sql-migrations/object.ts";
 import SqlMigrationsWorker from "./fixtures/sql-migrations/worker.ts";
 
@@ -64,9 +66,7 @@ for (const dev of [true, false]) {
         providers: Cloudflare.providers(),
         state,
         dev,
-        stage: dev
-          ? Test.defaultStage()
-          : `${Test.defaultStage()}_sql_migrations_live`,
+        stage: dev ? Test.defaultStage() : `${Test.defaultStage()}_sql_migrations_live`,
       };
       // Leading destroy closes its harness scope; deployment needs a fresh one.
       const cleanup = Test.make(options);
@@ -83,9 +83,7 @@ for (const dev of [true, false]) {
       const stack = beforeAll(
         Effect.gen(function* () {
           const deployed = yield* deploy(Stack);
-          expect(deployed.url).toMatch(
-            dev ? /^http:\/\/localhost:\d+/ : /^https:\/\//,
-          );
+          expect(deployed.url).toMatch(dev ? /^http:\/\/localhost:\d+/ : /^https:\/\//);
           const client = yield* HttpClient.HttpClient;
           // Readiness never invokes a migration or repeats an application write.
           yield* Effect.gen(function* () {
@@ -101,9 +99,7 @@ for (const dev of [true, false]) {
             }
           }).pipe(
             Effect.timeout("2 seconds"),
-            Effect.tapError((error) =>
-              Effect.logWarning("SQL Worker readiness", error),
-            ),
+            Effect.tapError((error) => Effect.logWarning("SQL Worker readiness", error)),
             Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
             Effect.timeout("45 seconds"),
           );
@@ -116,21 +112,21 @@ for (const dev of [true, false]) {
       const json = <A>(method: "GET" | "POST", path: string) =>
         Effect.gen(function* () {
           const { url } = yield* stack;
-          const client = yield* HttpClient.HttpClient;
-          const response = yield* method === "GET"
-            ? client.get(`${url}${path}`)
-            : client.post(`${url}${path}`);
+          // A fresh workers.dev route reaches edge nodes one at a time; retry
+          // only Cloudflare's not-yet-routed page, never application errors.
+          const response = yield* requestWorker(
+            method === "GET"
+              ? HttpClientRequest.get(`${url}${path}`)
+              : HttpClientRequest.post(`${url}${path}`),
+          );
           if (response.status !== 200) {
             return yield* Effect.fail(
-              new Error(
-                `${method} ${url}${path}: ${response.status}: ${yield* response.text}`,
-              ),
+              new Error(`${method} ${url}${path}: ${response.status}: ${yield* response.text}`),
             );
           }
           return (yield* response.json) as A;
         });
-      const read = (name: string) =>
-        json<MigratedState>("GET", `/state?name=${name}`);
+      const read = (name: string) => json<MigratedState>("GET", `/state?name=${name}`);
 
       test(
         "activation applies modern migrations, relations, and a snapshot larger than 5 KB",
@@ -141,27 +137,17 @@ for (const dev of [true, false]) {
           expect(state.boots).toBe(1);
           expect(state.payloadLength).toBe(6144);
           expect(state.users).toEqual(seedUsers);
-          expect(state.records.map((record) => record.name)).toEqual(
-            migrationNames,
-          );
+          expect(state.records.map((record) => record.name)).toEqual(migrationNames);
           expect(state.history).toHaveLength(2);
           expect(
-            state.history.map(({ name, hash, created_at }) => ({
-              name,
-              hash,
-              created_at,
-            })),
+            state.history.map(({ name, hash, created_at }) => ({ name, hash, created_at })),
           ).toEqual(state.records);
           for (const row of state.history) {
             expect(row.hash).toMatch(/^[a-f0-9]{64}$/);
             expect(row.applied_at).not.toBeNull();
           }
-          expect(state.tables.map((table) => table.name)).toContain(
-            "__alchemy_migrations",
-          );
-          expect(state.tables.map((table) => table.name)).not.toContain(
-            "__drizzle_migrations",
-          );
+          expect(state.tables.map((table) => table.name)).toContain("__alchemy_migrations");
+          expect(state.tables.map((table) => table.name)).not.toContain("__drizzle_migrations");
         }),
         { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
       );
@@ -190,19 +176,10 @@ for (const dev of [true, false]) {
         Effect.gen(function* () {
           const before = yield* read("reactivation");
           yield* json("POST", "/users?name=reactivation&user=preserved");
-          const repeated = yield* json<MigratedState>(
-            "POST",
-            "/repeat?name=reactivation",
-          );
+          const repeated = yield* json<MigratedState>("POST", "/repeat?name=reactivation");
           expect(repeated.history).toEqual(before.history);
-          expect(repeated.users).toEqual([
-            { name: "preserved", posts: [] },
-            ...seedUsers,
-          ]);
-          const reset = yield* json<{ reset: boolean }>(
-            "POST",
-            "/reset?name=reactivation",
-          );
+          expect(repeated.users).toEqual([{ name: "preserved", posts: [] }, ...seedUsers]);
+          const reset = yield* json<{ reset: boolean }>("POST", "/reset?name=reactivation");
           expect(reset.reset).toBe(true);
           const reactivated = yield* read("reactivation");
           expect(reactivated.boots).toBe(before.boots + 1);
@@ -226,10 +203,7 @@ for (const dev of [true, false]) {
           expect(tableNames).toContain("fixture_migrations");
           expect(tableNames).not.toContain("__alchemy_migrations");
           expect(tableNames).not.toContain("__drizzle_migrations");
-          const repeated = yield* json<CustomState>(
-            "POST",
-            "/custom/repeat?name=custom",
-          );
+          const repeated = yield* json<CustomState>("POST", "/custom/repeat?name=custom");
           expect(repeated).toEqual(state);
         }),
         { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
@@ -238,24 +212,14 @@ for (const dev of [true, false]) {
       test(
         "failed SQL rolls back DML and DDL without recording the failed migration",
         Effect.gen(function* () {
-          const failed = yield* json<RollbackState>(
-            "POST",
-            "/rollback?name=rollback",
-          );
+          const failed = yield* json<RollbackState>("POST", "/rollback?name=rollback");
           expect(failed.error).toBe("MigrationError");
           expect(failed.names).toEqual(["0001_stable.sql", "0002_broken.sql"]);
-          expect(failed.history.map((row) => row.name)).toEqual([
-            "0001_stable.sql",
-          ]);
+          expect(failed.history.map((row) => row.name)).toEqual(["0001_stable.sql"]);
           expect(failed.values).toEqual(["committed"]);
-          expect(failed.tables.map((table) => table.name)).not.toContain(
-            "must_roll_back",
-          );
+          expect(failed.tables.map((table) => table.name)).not.toContain("must_roll_back");
           // A second explicit attempt must not duplicate the committed predecessor.
-          const repeated = yield* json<RollbackState>(
-            "POST",
-            "/rollback?name=rollback",
-          );
+          const repeated = yield* json<RollbackState>("POST", "/rollback?name=rollback");
           expect(repeated).toEqual(failed);
         }),
         { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
@@ -264,10 +228,7 @@ for (const dev of [true, false]) {
       test(
         "adopts modern Drizzle history once, freezes its table, and applies only pending SQL",
         Effect.gen(function* () {
-          const state = yield* json<AdoptionState>(
-            "POST",
-            "/adopt?name=adoption",
-          );
+          const state = yield* json<AdoptionState>("POST", "/adopt?name=adoption");
           expect(state.names).toEqual(migrationNames);
           expect(state.before).toHaveLength(1);
           expect(state.before[0]!.name).toBe(migrationNames[0]);
@@ -295,21 +256,14 @@ for (const dev of [true, false]) {
               after: HistoryRow[];
               tables: { name: string }[];
               users: string[];
-            }>(
-              "POST",
-              `/conflict?name=conflict-${empty}${empty ? "&empty" : ""}`,
-            );
+            }>("POST", `/conflict?name=conflict-${empty}${empty ? "&empty" : ""}`);
             expect(state.error).toBe("MigrationHistoryConflictError");
             expect(state.before).toHaveLength(1);
             expect(state.before[0]!.name).toBe(migrationNames[0]);
             expect(state.after).toEqual(state.before);
             expect(state.users).toEqual(["seed"]);
-            expect(state.tables.map((table) => table.name)).not.toContain(
-              "__alchemy_migrations",
-            );
-            expect(state.tables.map((table) => table.name)).not.toContain(
-              "posts",
-            );
+            expect(state.tables.map((table) => table.name)).not.toContain("__alchemy_migrations");
+            expect(state.tables.map((table) => table.name)).not.toContain("posts");
           }),
           { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
         );

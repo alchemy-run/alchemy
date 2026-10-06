@@ -153,34 +153,27 @@ export const makeDmsConnectionScopedHttpBinding = <
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* (
-      instance: ReplicationInstance,
-      endpoint: Endpoint,
-    ) {
+    return Effect.fn(function* (instance: ReplicationInstance, endpoint: Endpoint) {
       const ReplicationInstanceArn = yield* instance.replicationInstanceArn;
       const EndpointArn = yield* endpoint.endpointArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${instance}, ${endpoint}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [
-                    Output.interpolate`${instance.replicationInstanceArn}`,
-                    Output.interpolate`${endpoint.endpointArn}`,
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${instance}, ${endpoint}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [
+                  Output.interpolate`${instance.replicationInstanceArn}`,
+                  Output.interpolate`${endpoint.endpointArn}`,
+                ],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `${options.tag}(${instance.LogicalId}, ${endpoint.LogicalId})`,
-      )(function* (
+      return Effect.fn(`${options.tag}(${instance.LogicalId}, ${endpoint.LogicalId})`)(function* (
         request?: Omit<I, "ReplicationInstanceArn" | "EndpointArn">,
       ) {
         return yield* op({

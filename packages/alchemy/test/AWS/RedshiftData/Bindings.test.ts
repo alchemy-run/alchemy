@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as data from "@distilled.cloud/aws/redshift-data";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import RedshiftDataApiFunctionLive, {
-  RedshiftDataApiFunction,
-} from "./fixtures/data-api-handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import RedshiftDataApiFunctionLive, { RedshiftDataApiFunction } from "./fixtures/data-api-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -24,13 +22,9 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        data.describeStatement({
-          Id: "d9b6c0c9-0747-4bf4-b142-e8883122f766",
-        }),
+        data.describeStatement({ Id: "d9b6c0c9-0747-4bf4-b142-e8883122f766" }),
       );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:redshiftdata", "live"] },
 );
@@ -40,10 +34,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        data.listDatabases({
-          Database: "dev",
-          WorkgroupName: "alchemy-test-rsd-does-not-exist",
-        }),
+        data.listDatabases({ Database: "dev", WorkgroupName: "alchemy-test-rsd-does-not-exist" }),
       );
       expect([
         "ValidationException",
@@ -70,17 +61,12 @@ const get = (route: string) =>
         ? Effect.succeed(res)
         : res.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new Error(`${route} returned ${res.status}: ${body}`),
-              ),
+              Effect.fail(new Error(`${route} returned ${res.status}: ${body}`)),
             ),
           ),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
     Effect.flatMap((res) => res.json),
   );
@@ -99,9 +85,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "RedshiftData client setup: destroying previous run",
-        );
+        yield* Effect.logInfo("RedshiftData client setup: destroying previous run");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("RedshiftData client setup: deploying fixture");
@@ -113,9 +97,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
 
         expect(functionUrl).toBeTruthy();
         baseUrl = functionUrl!.replace(/\/+$/, "");
-        yield* Effect.logInfo(
-          `RedshiftData client setup: function URL ready (${functionUrl})`,
-        );
+        yield* Effect.logInfo(`RedshiftData client setup: function URL ready (${functionUrl})`);
       }),
       // namespace (~1 min) + workgroup create (~2-5 min) + Lambda deploy.
       { timeout: 900_000 },
@@ -176,10 +158,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
       "listStatements: sees the caller's submitted statement",
       (_stack) =>
         Effect.gen(function* () {
-          const body = (yield* get("/statements")) as {
-            count: number;
-            hasSubmitted: boolean;
-          };
+          const body = (yield* get("/statements")) as { count: number; hasSubmitted: boolean };
           expect(body.count).toBeGreaterThan(0);
           expect(body.hasSubmitted).toBe(true);
         }),

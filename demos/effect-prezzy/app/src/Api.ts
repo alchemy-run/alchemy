@@ -1,13 +1,13 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpRouter from "effect/http/HttpRouter";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import LinkRoom from "./LinkRoom.ts";
 import { Links, type Link } from "./Links.ts";
 import { LinksDynamo } from "./LinksDynamo.ts";
@@ -119,17 +119,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
         )
         .handle("list", () =>
           links.list().pipe(
-            Effect.flatMap((all) =>
-              Effect.forEach(all, withClicks, { concurrency: "unbounded" }),
-            ),
+            Effect.flatMap((all) => Effect.forEach(all, withClicks, { concurrency: "unbounded" })),
             Effect.orDie,
           ),
         )
         .handle("get", ({ params }) =>
-          links.get(params.code).pipe(
-            Effect.flatMap(withClicks),
-            Effect.catchTag("LinkStoreError", Effect.die),
-          ),
+          links
+            .get(params.code)
+            .pipe(Effect.flatMap(withClicks), Effect.catchTag("LinkStoreError", Effect.die)),
         ),
     );
 
@@ -144,7 +141,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const [, first, code, action] = new URL(request.url, "http://localhost").pathname.split("/");
+        const [, first, code, action] = new URL(request.url, "http://localhost").pathname.split(
+          "/",
+        );
 
         // Live click counts: hand the WebSocket to the link's Durable Object.
         if (first === "links" && code && action === "live") {
@@ -165,8 +164,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             HttpServerResponse.json({ error: `no link ${code}` }, { status: 404 }),
           LinkStoreError: () =>
             HttpServerResponse.json({ error: "storage unavailable" }, { status: 503 }),
-          SendError: () =>
-            HttpServerResponse.json({ error: "queue unavailable" }, { status: 503 }),
+          SendError: () => HttpServerResponse.json({ error: "queue unavailable" }, { status: 503 }),
         }),
       ),
     };

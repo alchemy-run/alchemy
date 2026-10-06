@@ -22,7 +22,14 @@ const Row = ({ item }: { item: ReqItem }) => {
   const noteColor = state === "met" ? TONE.good : state === "bad" ? TONE.bad : brand.fgMuted;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
-      <div style={{ fontFamily: mono, fontSize: SIZE, whiteSpace: "pre", opacity: state === "met" ? 0.45 : 1 }}>
+      <div
+        style={{
+          fontFamily: mono,
+          fontSize: SIZE,
+          whiteSpace: "pre",
+          opacity: state === "met" ? 0.45 : 1,
+        }}
+      >
         <span style={{ color: PUNCT }}>| </span>
         <span
           style={{
@@ -36,7 +43,15 @@ const Row = ({ item }: { item: ReqItem }) => {
         </span>
       </div>
       {item.note ? (
-        <div style={{ fontFamily: sans, fontSize: 18, lineHeight: 1.35, color: noteColor, whiteSpace: "pre" }}>
+        <div
+          style={{
+            fontFamily: sans,
+            fontSize: 18,
+            lineHeight: 1.35,
+            color: noteColor,
+            whiteSpace: "pre",
+          }}
+        >
           {state === "met" ? `✓ ${item.note}` : state === "bad" ? `✗ ${item.note}` : item.note}
         </div>
       ) : null}
@@ -91,7 +106,13 @@ const same = (a: Entry, b: Entry) =>
   ((a.item.state ?? "open") === (b.item.state ?? "open") && a.item.note === b.item.note);
 
 const content = (e: Entry): ReactNode =>
-  e.kind === "item" ? <Row item={e.item} /> : e.kind === "never" ? <Never /> : <Heading text={e.text} />;
+  e.kind === "item" ? (
+    <Row item={e.item} />
+  ) : e.kind === "never" ? (
+    <Never />
+  ) : (
+    <Heading text={e.text} />
+  );
 
 /**
  * The requirements (Effect's `Req`) of the code on screen, written as the
@@ -115,7 +136,10 @@ export const ReqView = ({
   local: number;
   delay: number;
 }) => {
-  const p = interpolate(local, [delay, delay + 7], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const p = interpolate(local, [delay, delay + 7], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
   const now = layout(req, top).entries;
   const before = prev ? layout(prev, top).entries : [];
   const at = (key: string) => before.find((e) => e.key === key);
@@ -138,7 +162,16 @@ export const ReqView = ({
         const old = at(e.key);
         if (!old) {
           return (
-            <div key={e.key} style={{ position: "absolute", left: x, top: e.y, opacity: p, transform: `translateX(${(1 - p) * 18}px)` }}>
+            <div
+              key={e.key}
+              style={{
+                position: "absolute",
+                left: x,
+                top: e.y,
+                opacity: p,
+                transform: `translateX(${(1 - p) * 18}px)`,
+              }}
+            >
               {content(e)}
             </div>
           );
@@ -154,15 +187,22 @@ export const ReqView = ({
         return (
           <div key={e.key}>
             {/* Out, then in: overlapping text of different lengths is unreadable. */}
-            <div style={{ position: "absolute", left: x, top: y, opacity: Math.max(0, 1 - p * 2) }}>{content(old)}</div>
-            <div style={{ position: "absolute", left: x, top: y, opacity: Math.max(0, p * 2 - 1) }}>{content(e)}</div>
+            <div style={{ position: "absolute", left: x, top: y, opacity: Math.max(0, 1 - p * 2) }}>
+              {content(old)}
+            </div>
+            <div style={{ position: "absolute", left: x, top: y, opacity: Math.max(0, p * 2 - 1) }}>
+              {content(e)}
+            </div>
           </div>
         );
       })}
       {before
         .filter((e) => !now.some((n) => n.key === e.key))
         .map((e) => (
-          <div key={`gone-${e.key}`} style={{ position: "absolute", left: x, top: e.y, opacity: 1 - p }}>
+          <div
+            key={`gone-${e.key}`}
+            style={{ position: "absolute", left: x, top: e.y, opacity: 1 - p }}
+          >
             {content(e)}
           </div>
         ))}

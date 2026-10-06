@@ -1,7 +1,7 @@
 import * as detective from "@distilled.cloud/aws/detective";
 import * as Layer from "effect/Layer";
-import { makeDetectiveGraphHttpBinding } from "./BindingHttp.ts";
 import { BatchGetGraphMemberDatasources } from "./BatchGetGraphMemberDatasources.ts";
+import { makeDetectiveGraphHttpBinding } from "./BindingHttp.ts";
 
 export const BatchGetGraphMemberDatasourcesHttp = Layer.effect(
   BatchGetGraphMemberDatasources,

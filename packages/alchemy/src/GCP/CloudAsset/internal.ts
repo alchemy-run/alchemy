@@ -30,8 +30,7 @@ export const projectParent = (project: string) => `projects/${project}`;
 export const scopeParent = (project: string, explicit?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined && explicit.length > 0) {
-      if (!explicit.startsWith("projects/"))
-        return explicit.replace(/\/+$/, "");
+      if (!explicit.startsWith("projects/")) return explicit.replace(/\/+$/, "");
       const id = lastSegment(explicit);
       if (/^\d+$/.test(id)) return `projects/${id}`;
       const number = yield* projectNumberOf(id);
@@ -64,10 +63,7 @@ export const toPhysicalId = (
   Effect.gen(function* () {
     if (explicit !== undefined) return rfc1035(explicit, maxLength);
     if (existing !== undefined) return existing;
-    return rfc1035(
-      yield* createPhysicalName({ id, maxLength, lowercase: true }),
-      maxLength,
-    );
+    return rfc1035(yield* createPhysicalName({ id, maxLength, lowercase: true }), maxLength);
   });
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
@@ -79,8 +75,7 @@ export const sortedStrings = (values: readonly string[] | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
+) => JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
 
 const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -102,8 +97,7 @@ const canonical = (value: unknown): unknown => {
 };
 
 export const sameJson = (left: unknown, right: unknown) =>
-  JSON.stringify(canonical(left) ?? null) ===
-  JSON.stringify(canonical(right) ?? null);
+  JSON.stringify(canonical(left) ?? null) === JSON.stringify(canonical(right) ?? null);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -114,10 +108,7 @@ export const encodeDescription = (
   maxLength?: number,
 ): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  const combined =
-    description && description.length > 0
-      ? `${marker}\n${description}`
-      : marker;
+  const combined = description && description.length > 0 ? `${marker}\n${description}` : marker;
   return maxLength !== undefined ? combined.slice(0, maxLength) : combined;
 };
 
@@ -144,9 +135,7 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, description: string | undefined) =>
   Effect.gen(function* () {
@@ -154,10 +143,7 @@ export const ownedByAlchemy = (id: string, description: string | undefined) =>
     return yield* hasAlchemyLabels(id, labels);
   });
 
-export const replaceOn = (
-  previous: string | undefined,
-  next: string | undefined,
-) =>
+export const replaceOn = (previous: string | undefined, next: string | undefined) =>
   previous !== undefined && next !== undefined && previous !== next
     ? ({ action: "replace" as const, deleteFirst: false } as const)
     : undefined;
@@ -193,9 +179,7 @@ export const grantCloudAssetPublisher = (project: string, topic: string) =>
       ...binding,
       members: [...(binding.members ?? [])],
     }));
-    const publisher = bindings.find(
-      (binding) => binding.role === PUBLISHER_ROLE,
-    );
+    const publisher = bindings.find((binding) => binding.role === PUBLISHER_ROLE);
     if (publisher?.members?.includes(member)) return;
     if (publisher) {
       publisher.members = [...(publisher.members ?? []), member];

@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networksecurity.getOrganizationsLocationsAddressGroups({ name }).pipe(
@@ -97,9 +94,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_NETWORKSECURITY)(
   },
 );
 
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.GCP_TEST_ORG_NETWORKSECURITY,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_ORG_NETWORKSECURITY)(
   "create, update, and delete an organization address group",
   (stack) =>
     Effect.gen(function* () {
@@ -107,16 +102,13 @@ test.provider.skipIf(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.NetworkSecurity.OrganizationsAddressGroup(
-            "OrgAllowlist",
-            {
-              type: "IPV4",
-              capacity: 100,
-              items: ["10.0.0.1"],
-              description: "org address group a",
-              labels: { env: "test" },
-            },
-          );
+          return yield* GCP.NetworkSecurity.OrganizationsAddressGroup("OrgAllowlist", {
+            type: "IPV4",
+            capacity: 100,
+            items: ["10.0.0.1"],
+            description: "org address group a",
+            labels: { env: "test" },
+          });
         }),
       );
 
@@ -127,27 +119,23 @@ test.provider.skipIf(
       expect(created.items).toEqual(["10.0.0.1"]);
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networksecurity.getOrganizationsLocationsAddressGroups({
-          name: created.name,
-        });
+      const fetched = yield* networksecurity.getOrganizationsLocationsAddressGroups({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.NetworkSecurity.OrganizationsAddressGroup(
-            "OrgAllowlist",
-            {
-              addressGroupId: created.addressGroupId,
-              organization: created.organization,
-              type: "IPV4",
-              capacity: 100,
-              items: ["10.0.0.1", "10.1.0.0/24"],
-              description: "org address group b",
-              labels: { env: "prod", role: "allowlist" },
-            },
-          );
+          return yield* GCP.NetworkSecurity.OrganizationsAddressGroup("OrgAllowlist", {
+            addressGroupId: created.addressGroupId,
+            organization: created.organization,
+            type: "IPV4",
+            capacity: 100,
+            items: ["10.0.0.1", "10.1.0.0/24"],
+            description: "org address group b",
+            labels: { env: "prod", role: "allowlist" },
+          });
         }),
       );
 

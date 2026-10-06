@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -18,14 +18,7 @@ import {
 const { test } = Test.make({ providers: GCP.providers() });
 
 const fixtureDir = awsFixture("nuxt-app");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
 test.provider.skipIf(!dockerAvailable)(
   "Nuxt: deploy, GET page, API and prerendered routes, destroy, gone",
@@ -44,13 +37,7 @@ test.provider.skipIf(!dockerAvailable)(
           const site = yield* GCP.Website.Nuxt("Web", {
             rootDir,
             memo: {
-              include: [
-                "app/**",
-                "server/**",
-                "public/**",
-                "package.json",
-                "nuxt.config.ts",
-              ],
+              include: ["app/**", "server/**", "public/**", "package.json", "nuxt.config.ts"],
             },
           });
           return { site };
@@ -66,22 +53,14 @@ test.provider.skipIf(!dockerAvailable)(
         timeout: "180 seconds",
         label: "Nuxt /",
       });
-      yield* expectUrlContains(
-        `${url}/api/hello?echo=roundtrip`,
-        "NUXT_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "Nuxt /api/hello?echo=roundtrip",
-        },
-      );
-      yield* expectUrlContains(
-        `${url}/prerendered`,
-        "NUXT_AWS_PRERENDERED_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "Nuxt /prerendered",
-        },
-      );
+      yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "NUXT_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "Nuxt /api/hello?echo=roundtrip",
+      });
+      yield* expectUrlContains(`${url}/prerendered`, "NUXT_AWS_PRERENDERED_MARKER", {
+        timeout: "30 seconds",
+        label: "Nuxt /prerendered",
+      });
 
       yield* stack.destroy();
       yield* assertSiteGone(service);

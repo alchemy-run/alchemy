@@ -12,8 +12,13 @@ export const FilesS3 = Layer.effect(
 
     return {
       upload: (name: string, body: string) =>
-        putObject({ Key: name, Body: body })/*hide*/.pipe(Effect.asVoid, Effect.mapError((cause) => new UploadError({ cause })))/*end*/,
+        putObject({ Key: name, Body: body }) /*hide*/
+          .pipe(
+            Effect.asVoid,
+            Effect.mapError((cause) => new UploadError({ cause })),
+          ) /*end*/,
     };
   }),
-)/*hide*/.pipe(Layer.provide(AWS.S3.PutObjectHttp))/*end*/;
+) /*hide*/
+  .pipe(Layer.provide(AWS.S3.PutObjectHttp)); /*end*/
 // #endregion show

@@ -1,10 +1,10 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { GetSchema, type GetSchemaRequest } from "./GetSchema.ts";
-import type { Schema } from "./Schema.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
+import { GetSchema, type GetSchemaRequest } from "./GetSchema.ts";
+import type { Schema } from "./Schema.ts";
 
 /**
  * HTTP implementation of {@link GetSchema}.
@@ -20,12 +20,7 @@ export const GetSchemaHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.PubSub.GetSchema",
         resource: schema,
-        iam: [
-          grantFor(
-            { role: "roles/pubsub.viewer", on: "pubsub.schema" },
-            schema.name,
-          ),
-        ],
+        iam: [grantFor({ role: "roles/pubsub.viewer", on: "pubsub.schema" }, schema.name)],
       });
       const name = yield* schema.name;
       return Effect.fn(`GCP.PubSub.GetSchema(${schema.LogicalId})`)(function* (

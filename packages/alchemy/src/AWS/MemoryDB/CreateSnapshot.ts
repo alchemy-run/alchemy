@@ -30,12 +30,7 @@ export interface CreateSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<memorydb.CreateSnapshotRequest, "ClusterName">,
-    ) => Effect.Effect<
-      memorydb.CreateSnapshotResponse,
-      memorydb.CreateSnapshotError
-    >
+    ) => Effect.Effect<memorydb.CreateSnapshotResponse, memorydb.CreateSnapshotError>
   >
 > {}
-export const CreateSnapshot = Binding.Service<CreateSnapshot>(
-  "AWS.MemoryDB.CreateSnapshot",
-);
+export const CreateSnapshot = Binding.Service<CreateSnapshot>("AWS.MemoryDB.CreateSnapshot");

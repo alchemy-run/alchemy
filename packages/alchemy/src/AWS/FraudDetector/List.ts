@@ -100,32 +100,21 @@ export const ListProvider = () =>
     List,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: ListProps) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
       /** Look a list's metadata up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getListsMetadata({ name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.lists?.find((list) => list.name === name);
       });
 
       /** Read the full (paginated) element set of a list. */
       const getElements = Effect.fn(function* (name: string) {
-        const pages = yield* frauddetector.getListElements
-          .pages({ name })
-          .pipe(Stream.runCollect);
-        return Array.from(pages).flatMap((page) =>
-          (page.elements ?? []).map(toElement),
-        );
+        const pages = yield* frauddetector.getListElements.pages({ name }).pipe(Stream.runCollect);
+        return Array.from(pages).flatMap((page) => (page.elements ?? []).map(toElement));
       });
 
       const toAttrs = (list: frauddetector.AllowDenyList) => ({
@@ -144,8 +133,7 @@ export const ListProvider = () =>
             oldName !== newName ||
             // The variable type can only be set once — changing an
             // already-set variable type requires a replacement.
-            (olds.variableType !== undefined &&
-              news.variableType !== olds.variableType)
+            (olds.variableType !== undefined && news.variableType !== olds.variableType)
           ) {
             return { action: "replace" } as const;
           }
@@ -192,30 +180,18 @@ export const ListProvider = () =>
               desiredSet.size !== observedSet.size ||
               Array.from(desiredSet).some((e) => !observedSet.has(e));
             const descriptionChanged =
-              (news.description ?? undefined) !==
-              (list.description ?? undefined);
+              (news.description ?? undefined) !== (list.description ?? undefined);
             // The variable type can only be introduced, never changed (a
             // change is a replacement, handled by diff above).
             const variableTypeIntroduced =
-              list.variableType === undefined &&
-              news.variableType !== undefined;
+              list.variableType === undefined && news.variableType !== undefined;
 
-            if (
-              elementsChanged ||
-              descriptionChanged ||
-              variableTypeIntroduced
-            ) {
+            if (elementsChanged || descriptionChanged || variableTypeIntroduced) {
               yield* frauddetector.updateList({
                 name,
-                ...(elementsChanged
-                  ? { elements: desiredElements, updateMode: "REPLACE" }
-                  : {}),
-                ...(descriptionChanged
-                  ? { description: news.description }
-                  : {}),
-                ...(variableTypeIntroduced
-                  ? { variableType: news.variableType }
-                  : {}),
+                ...(elementsChanged ? { elements: desiredElements, updateMode: "REPLACE" } : {}),
+                ...(descriptionChanged ? { description: news.description } : {}),
+                ...(variableTypeIntroduced ? { variableType: news.variableType } : {}),
               });
               list = yield* get(name);
             }
@@ -240,9 +216,7 @@ export const ListProvider = () =>
           frauddetector.getListsMetadata.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.lists ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.lists ?? []).map(toAttrs)),
             ),
           ),
       };

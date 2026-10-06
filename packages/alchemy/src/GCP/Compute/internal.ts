@@ -1,13 +1,13 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { createPhysicalName } from "../../PhysicalName.ts";
+import { alchemyLabelKeys } from "../Labels.ts";
 import {
   waitGlobalOperation,
   waitOrganizationOperation,
   waitRegionOperation,
 } from "./operations.ts";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import { createPhysicalName } from "../../PhysicalName.ts";
-import { alchemyLabelKeys } from "../Labels.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
@@ -17,10 +17,8 @@ export const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? value;
 };
 
-export const normalizeRegion = (
-  region: string | undefined,
-  defaultRegion: string,
-) => lastSegment(region ?? defaultRegion).toLowerCase();
+export const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 export const rfc1035 = (name: string, fallback: string): string => {
   let next = name
@@ -86,24 +84,17 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
-export const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+export const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 export const sameUrlList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  sameJson(
-    sorted((left ?? []).map(lastSegment)),
-    sorted((right ?? []).map(lastSegment)),
-  );
+) => sameJson(sorted((left ?? []).map(lastSegment)), sorted((right ?? []).map(lastSegment)));
 
 export interface RunOperationOptions {
   /** Treat `RESOURCE_ALREADY_EXISTS` as success (idempotent insert). */
@@ -123,9 +114,7 @@ export const ignoredCodes = (options: RunOperationOptions | undefined) => [
  */
 const runOp = <E extends { readonly _tag: string }, R, E2, R2>(
   start: Effect.Effect<compute.Operation, E, R>,
-  wait: (
-    operation: compute.Operation,
-  ) => Effect.Effect<compute.Operation, E2, R2>,
+  wait: (operation: compute.Operation) => Effect.Effect<compute.Operation, E2, R2>,
 ) =>
   start.pipe(
     Effect.retry({

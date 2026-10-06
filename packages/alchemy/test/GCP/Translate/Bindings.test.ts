@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as translate from "@distilled.cloud/gcp/translate_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
 import TranslateBindingsHost, {
   Dataset,
@@ -36,9 +36,7 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({ role: binding.role, condition: binding.condition }))
     .sort((a, b) => (a.role ?? "").localeCompare(b.role ?? ""));
   expect(roles).toEqual([
@@ -50,12 +48,7 @@ const expectProjectGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable)(
   "Translate Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:translate",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:translate", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -116,9 +109,7 @@ describe.skipIf(!dockerAvailable)(
             // The dataset has no sentence pairs, so an authorized call gets
             // the typed "fewer than 5 sentences" rejection.
             const outcome = yield* callProbe(baseUrl, "adaptiveMtTranslate");
-            expect(outcome.ok ? "ok" : outcome.error._tag).toEqual(
-              "AdaptiveMtDatasetTooSmall",
-            );
+            expect(outcome.ok ? "ok" : outcome.error._tag).toEqual("AdaptiveMtDatasetTooSmall");
             yield* expectProjectGrants;
           }),
         {
@@ -133,10 +124,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the model as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<translate.Model>(
-              baseUrl,
-              "getModel",
-            );
+            const live = yield* expectProbe<translate.Model>(baseUrl, "getModel");
             expect(live.name).toEqual(modelName);
             yield* expectProjectGrants;
           }),
@@ -172,10 +160,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the glossary entry as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<translate.GlossaryEntry>(
-              baseUrl,
-              "getGlossaryEntry",
-            );
+            const live = yield* expectProbe<translate.GlossaryEntry>(baseUrl, "getGlossaryEntry");
             expect(live.name).toEqual(entryName);
             expect(live.termsPair?.targetTerm?.text).toEqual("hola");
             yield* expectProjectGrants;

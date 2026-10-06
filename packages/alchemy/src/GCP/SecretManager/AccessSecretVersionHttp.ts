@@ -1,9 +1,6 @@
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Layer from "effect/Layer";
-import {
-  AccessSecretVersion,
-  type AccessSecretVersionRequest,
-} from "./AccessSecretVersion.ts";
+import { AccessSecretVersion, type AccessSecretVersionRequest } from "./AccessSecretVersion.ts";
 import { makeSecretHttpBinding } from "./BindingHttp.ts";
 
 /**

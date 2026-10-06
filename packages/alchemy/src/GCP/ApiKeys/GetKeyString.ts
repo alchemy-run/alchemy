@@ -35,6 +35,4 @@ export interface GetKeyString extends Binding.Service<
   >
 > {}
 
-export const GetKeyString = Binding.Service<GetKeyString>(
-  "GCP.ApiKeys.GetKeyString",
-);
+export const GetKeyString = Binding.Service<GetKeyString>("GCP.ApiKeys.GetKeyString");

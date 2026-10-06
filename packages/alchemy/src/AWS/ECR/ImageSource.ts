@@ -125,13 +125,8 @@ export const makeImageSource = Effect.gen(function* () {
       .createRepository({
         repositoryName: options.repositoryName,
         imageTagMutability: "MUTABLE",
-        imageScanningConfiguration: {
-          scanOnPush: true,
-        },
-        tags: Object.entries(options.tags ?? {}).map(([Key, Value]) => ({
-          Key,
-          Value,
-        })),
+        imageScanningConfiguration: { scanOnPush: true },
+        tags: Object.entries(options.tags ?? {}).map(([Key, Value]) => ({ Key, Value })),
       })
       .pipe(
         Effect.catchTag("RepositoryAlreadyExistsException", () =>
@@ -139,18 +134,14 @@ export const makeImageSource = Effect.gen(function* () {
             const existing = yield* ecr.describeRepositories({
               repositoryNames: [options.repositoryName],
             });
-            return {
-              repository: existing.repositories?.[0],
-            };
+            return { repository: existing.repositories?.[0] };
           }),
         ),
       );
     const repository = created.repository;
     if (!repository?.repositoryUri) {
       return yield* Effect.die(
-        new Error(
-          `Failed to resolve ECR repository '${options.repositoryName}'`,
-        ),
+        new Error(`Failed to resolve ECR repository '${options.repositoryName}'`),
       );
     }
     return repository.repositoryUri;
@@ -160,14 +151,10 @@ export const makeImageSource = Effect.gen(function* () {
   const hasTag = (repositoryName: string) =>
     Effect.fn(function* (imageTag: string) {
       const described = yield* ecr
-        .describeImages({
-          repositoryName,
-          imageIds: [{ imageTag }],
-        })
+        .describeImages({ repositoryName, imageIds: [{ imageTag }] })
         .pipe(
-          Effect.catchTag(
-            ["ImageNotFoundException", "RepositoryNotFoundException"],
-            () => Effect.succeed(undefined),
+          Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
+            Effect.succeed(undefined),
           ),
         );
       return described?.imageDetails?.[0] !== undefined;
@@ -183,10 +170,7 @@ export const makeImageSource = Effect.gen(function* () {
       repositoryUri:
         options.repositoryUri !== undefined
           ? Effect.succeed(options.repositoryUri)
-          : ensureRepository({
-              repositoryName: options.repositoryName,
-              tags: options.tags,
-            }),
+          : ensureRepository({ repositoryName: options.repositoryName, tags: options.tags }),
       hasTag: hasTag(options.repositoryName),
       credentials: getEcrRegistryCredentials,
     } satisfies ImageRegistryTarget<any>;

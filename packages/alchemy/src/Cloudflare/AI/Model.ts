@@ -18,13 +18,7 @@ export interface ModelAttributes {
   modelName: string;
 }
 
-export type Model = Resource<
-  "Cloudflare.AI.Model",
-  ModelProps,
-  ModelAttributes,
-  never,
-  Providers
->;
+export type Model = Resource<"Cloudflare.AI.Model", ModelProps, ModelAttributes, never, Providers>;
 
 /**
  * A persisted, non-owning handle to a Cloudflare Workers AI catalog model.
@@ -75,9 +69,7 @@ export type Model = Resource<
 export const Model = Resource<Model>("Cloudflare.AI.Model");
 
 const observeModel = (accountId: string, modelName: string) =>
-  ai
-    .getModelSchema({ accountId, model: modelName })
-    .pipe(Effect.as({ accountId, modelName }));
+  ai.getModelSchema({ accountId, model: modelName }).pipe(Effect.as({ accountId, modelName }));
 
 export const ModelProvider = () =>
   Provider.succeed(Model, {

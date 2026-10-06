@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { PROBE_NAME, PROBE_PARENT } from "@/GCP/RealTimeBidding/internal.ts";
-import * as Test from "@/Test/Alchemy";
 import * as rtb from "@distilled.cloud/gcp/realtimebidding_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { PROBE_NAME, PROBE_PARENT } from "@/GCP/RealTimeBidding/internal.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   rtb.getBiddersPretargetingConfigs({ name }).pipe(
@@ -43,9 +40,7 @@ test.provider.skipIf(runLifecycle)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const error = yield* Effect.flip(
-        rtb.getBiddersPretargetingConfigs({ name: PROBE_NAME }),
-      );
+      const error = yield* Effect.flip(rtb.getBiddersPretargetingConfigs({ name: PROBE_NAME }));
       expect(error._tag).toEqual("InsufficientScopes");
 
       yield* stack.destroy();
@@ -81,15 +76,12 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.RealTimeBidding.BiddersPretargetingConfig(
-            "WebHtml",
-            {
-              parent: parent!,
-              displayName: "web-html",
-              includedEnvironments: ["WEB"],
-              includedFormats: ["HTML"],
-            },
-          );
+          return yield* GCP.RealTimeBidding.BiddersPretargetingConfig("WebHtml", {
+            parent: parent!,
+            displayName: "web-html",
+            includedEnvironments: ["WEB"],
+            includedFormats: ["HTML"],
+          });
         }),
       );
 
@@ -113,24 +105,19 @@ test.provider.skipIf(!runLifecycle)(
         parent: parent!,
         pageSize: 100,
       });
-      expect(
-        (listed.pretargetingConfigs ?? []).some(
-          (row) => row.name === created.name,
-        ),
-      ).toEqual(true);
+      expect((listed.pretargetingConfigs ?? []).some((row) => row.name === created.name)).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.RealTimeBidding.BiddersPretargetingConfig(
-            "WebHtml",
-            {
-              parent: created.parent,
-              configId: created.configId,
-              displayName: "web-html-v2",
-              includedEnvironments: ["WEB"],
-              includedFormats: ["HTML", "NATIVE"],
-            },
-          );
+          return yield* GCP.RealTimeBidding.BiddersPretargetingConfig("WebHtml", {
+            parent: created.parent,
+            configId: created.configId,
+            displayName: "web-html-v2",
+            includedEnvironments: ["WEB"],
+            includedFormats: ["HTML", "NATIVE"],
+          });
         }),
       );
 
