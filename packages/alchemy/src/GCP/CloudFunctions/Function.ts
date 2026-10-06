@@ -1,34 +1,22 @@
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import { type ServerHost } from "../../Server/Process.ts";
 import { packEnvValue } from "../../RuntimeContext.ts";
+import { type ServerHost } from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import type * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  DEFAULT_NODE_RUNTIME,
-  FUNCTION_ENTRY_POINT,
-  makeFunctionSource,
-} from "./FunctionSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createGcpHostRuntimeContext,
-  type GcpHostRuntimeContext,
-} from "../HostContext.ts";
-import {
-  retryActAs,
-  type AppliedIamGrant,
-  type GcpHostBinding,
-} from "../Host.ts";
+import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import { createGcpHostRuntimeContext, type GcpHostRuntimeContext } from "../HostContext.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -42,7 +30,13 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  DEFAULT_NODE_RUNTIME,
+  FUNCTION_ENTRY_POINT,
+  makeFunctionSource,
+} from "./FunctionSource.ts";
 
 const DEFAULT_ENVIRONMENT = "GEN_2";
 const DEFAULT_RUNTIME = "nodejs20";
@@ -175,9 +169,7 @@ export type ServiceConfig = {
    * Ingress (`ALLOW_ALL`, `ALLOW_INTERNAL_ONLY`,
    * `ALLOW_INTERNAL_AND_GCLB`).
    */
-  ingressSettings?:
-    | cloudfunctions.ServiceConfigIngressSettingsEnum
-    | (string & {});
+  ingressSettings?: cloudfunctions.ServiceConfigIngressSettingsEnum | (string & {});
   /**
    * Serverless VPC Access connector
    * (`projects/{project}/locations/{location}/connectors/{connector}`).
@@ -199,9 +191,7 @@ export type ServiceConfig = {
   /** Secret Manager values mounted as files. */
   secretVolumes?: SecretVolume[];
   /** Direct VPC egress setting. */
-  directVpcEgress?:
-    | cloudfunctions.ServiceConfigDirectVpcEgressEnum
-    | (string & {});
+  directVpcEgress?: cloudfunctions.ServiceConfigDirectVpcEgressEnum | (string & {});
   /** Direct VPC network interfaces. Mutually exclusive with `vpcConnector`. */
   directVpcNetworkInterface?: DirectVpcNetworkInterface[];
 };
@@ -265,9 +255,7 @@ export type FunctionProps = PlatformProps & {
    * function.
    * @default "GEN_2"
    */
-  environment?:
-    | cloudfunctions.Cloudfunctions_FunctionEnvironmentEnum
-    | (string & {});
+  environment?: cloudfunctions.Cloudfunctions_FunctionEnvironmentEnum | (string & {});
   /** User-provided description. */
   description?: string;
   /**
@@ -486,34 +474,17 @@ export type FunctionShape = Main<FunctionServices>;
  * @resource
  * @category CloudFunctions
  */
-export const Function: Platform<
-  Function,
-  FunctionServices,
-  FunctionShape,
-  FunctionRuntimeContext
-> = Platform("GCP.CloudFunctions.Function", {
-  createRuntimeContext: createGcpHostRuntimeContext(
-    "GCP.CloudFunctions.Function",
-  ) as (id: string) => FunctionRuntimeContext,
-});
+export const Function: Platform<Function, FunctionServices, FunctionShape, FunctionRuntimeContext> =
+  Platform("GCP.CloudFunctions.Function", {
+    createRuntimeContext: createGcpHostRuntimeContext("GCP.CloudFunctions.Function") as (
+      id: string,
+    ) => FunctionRuntimeContext,
+  });
 
 export class FunctionNotResolved extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionNotResolved",
 )<{
   name: string;
-}> {}
-
-export class FunctionOperationFailed extends Data.TaggedError(
-  "GCP.CloudFunctions.FunctionOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class FunctionOperationPending extends Data.TaggedError(
-  "GCP.CloudFunctions.FunctionOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class FunctionStillExists extends Data.TaggedError(
@@ -553,16 +524,11 @@ const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     functionId:
-      functionsAt >= 0 && parts[functionsAt + 1]
-        ? parts[functionsAt + 1]!
-        : lastSegment(name),
+      functionsAt >= 0 && parts[functionsAt + 1] ? parts[functionsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -585,8 +551,7 @@ const toId = (id: string, functionId: string | undefined, existing?: string) =>
 
 const stable = (value: unknown) => JSON.stringify(value ?? null);
 
-const envMap = (value: Record<string, string | undefined> | null | undefined) =>
-  tagRecord(value);
+const envMap = (value: Record<string, string | undefined> | null | undefined) => tagRecord(value);
 
 const normalizeGeneration = (generation: string | undefined) =>
   generation === undefined || generation === "0" ? "" : generation;
@@ -614,14 +579,12 @@ const sameSource = (desired?: Source, observed?: Source) => {
   const observedRepo = observed?.repoSource;
   const desiredGeneration = normalizeGeneration(desiredStorage?.generation);
   const observedGeneration = normalizeGeneration(observedStorage?.generation);
-  const generationEqual =
-    desiredGeneration === "" || desiredGeneration === observedGeneration;
+  const generationEqual = desiredGeneration === "" || desiredGeneration === observedGeneration;
   return (
     (desired?.gitUri ?? "") === (observed?.gitUri ?? "") &&
     (desiredStorage?.bucket ?? "") === (observedStorage?.bucket ?? "") &&
     (desiredStorage?.object ?? "") === (observedStorage?.object ?? "") &&
-    (desiredStorage?.sourceUploadUrl ?? "") ===
-      (observedStorage?.sourceUploadUrl ?? "") &&
+    (desiredStorage?.sourceUploadUrl ?? "") === (observedStorage?.sourceUploadUrl ?? "") &&
     generationEqual &&
     (desiredRepo?.repoName ?? "") === (observedRepo?.repoName ?? "") &&
     (desiredRepo?.branchName ?? "") === (observedRepo?.branchName ?? "") &&
@@ -681,104 +644,35 @@ const getByName = (name: string) =>
     .getProjectsLocationsFunctions({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: cloudfunctions.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").includes("ALREADY_EXISTS") ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: cloudfunctions.Status | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
 const failedMessage = (fn: cloudfunctions.Cloudfunctions_Function) =>
   fn.stateMessages
     ?.map((item) => item.message)
     .filter((item): item is string => typeof item === "string")
     .join("; ") || "function is in FAILED state";
 
+/**
+ * A gen2 create/update builds the source and rolls out a Cloud Run revision
+ * (2–4 minutes; slow builds up to ~10). ALREADY_EXISTS (code 6) with
+ * `alreadyExistsOk` and NOT_FOUND (code 5) with `notFoundOk` count as
+ * success (create/delete races).
+ */
 const waitForOperation = (
   operation: cloudfunctions.Operation,
   options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          isAlreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new FunctionOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new FunctionOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudfunctions.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudfunctions.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new FunctionOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        const ignore =
-          (options?.alreadyExistsOk === true && isAlreadyExists(error)) ||
-          (options?.notFoundOk === true && isNotFoundStatus(error));
-        return error && !ignore
-          ? Effect.fail(
-              new FunctionOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.CloudFunctions.FunctionOperationPending",
-        // A gen2 create/update builds the source and rolls out a Cloud Run
-        // revision; 2–4 minutes is normal.
-        times: 36,
-        schedule: Schedule.spaced("10 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => cloudfunctions.getProjectsLocationsOperations({ name }),
+    { budget: "15 minutes", interval: "10 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        ((options?.alreadyExistsOk === true && error.code === 6) ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
@@ -809,9 +703,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((fn) =>
-      fn === undefined
-        ? Effect.void
-        : Effect.fail(new FunctionStillExists({ name })),
+      fn === undefined ? Effect.void : Effect.fail(new FunctionStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudFunctions.FunctionStillExists",
@@ -827,8 +719,7 @@ const mergeBuildConfig = (
   runtime: news?.runtime ?? observed?.runtime ?? DEFAULT_RUNTIME,
   entryPoint: news?.entryPoint ?? observed?.entryPoint,
   source: sanitizeSource(news?.source) ?? observed?.source,
-  environmentVariables:
-    news?.environmentVariables ?? envMap(observed?.environmentVariables),
+  environmentVariables: news?.environmentVariables ?? envMap(observed?.environmentVariables),
   workerPool: news?.workerPool ?? observed?.workerPool,
   dockerRepository: news?.dockerRepository ?? observed?.dockerRepository,
   serviceAccount: news?.serviceAccount ?? observed?.serviceAccount,
@@ -843,11 +734,9 @@ const sameBuildConfig = (
   (desired.workerPool ?? "") === (observed?.workerPool ?? "") &&
   (desired.dockerRepository ?? "") === (observed?.dockerRepository ?? "") &&
   (desired.serviceAccount ?? "") === (observed?.serviceAccount ?? "") &&
-  deepEqual(
-    envMap(desired.environmentVariables),
-    envMap(observed?.environmentVariables),
-    { stripNullish: true },
-  ) &&
+  deepEqual(envMap(desired.environmentVariables), envMap(observed?.environmentVariables), {
+    stripNullish: true,
+  }) &&
   sameSource(desired.source, observed?.source);
 
 const eventTriggerKey = (trigger: EventTrigger | undefined) => {
@@ -889,14 +778,7 @@ const observedEventTrigger = (
 
 export const FunctionProvider = () =>
   Provider.succeed(Function, {
-    stables: [
-      "name",
-      "functionId",
-      "project",
-      "location",
-      "environment",
-      "createTime",
-    ],
+    stables: ["name", "functionId", "project", "location", "environment", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -904,20 +786,10 @@ export const FunctionProvider = () =>
 
       const previousId = olds?.functionId ?? output?.functionId;
       const nextId = news.functionId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousEnvironment = normalizeEnvironment(
-        olds?.environment ?? output?.environment,
-      );
-      const nextEnvironment = normalizeEnvironment(
-        news.environment ?? output?.environment,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousEnvironment = normalizeEnvironment(olds?.environment ?? output?.environment);
+      const nextEnvironment = normalizeEnvironment(news.environment ?? output?.environment);
 
       const replace =
         (previousId !== undefined &&
@@ -952,21 +824,15 @@ export const FunctionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const functionId = yield* toId(id, olds?.functionId, output?.functionId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, functionId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, functionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -980,9 +846,7 @@ export const FunctionProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.functions ?? [])),
             Stream.filter((fn) =>
-              Object.keys(fn.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(fn.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((fn) => toAttrs(fn, env.project, env.region)),
             Stream.runCollect,
@@ -993,13 +857,8 @@ export const FunctionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const env = yield* GcpEnvironment.current;
       const functionId = yield* toId(id, news.functionId, output?.functionId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const environment = normalizeEnvironment(
-        news.environment ?? output?.environment,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const environment = normalizeEnvironment(news.environment ?? output?.environment);
       const name = resourceName(env.project, location, functionId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -1029,10 +888,7 @@ export const FunctionProvider = () =>
         serviceAccountEmail: serviceAccount,
         environmentVariables: {
           ...Object.fromEntries(
-            Object.entries(runtimeEnv).map(([key, value]) => [
-              key,
-              packEnvValue(value),
-            ]),
+            Object.entries(runtimeEnv).map(([key, value]) => [key, packEnvValue(value)]),
           ),
           ...news.serviceConfig?.environmentVariables,
         },
@@ -1057,13 +913,11 @@ export const FunctionProvider = () =>
             build: news.build,
             isExternal: news.isExternal,
           })
-          .pipe(Effect.tapError(() => identity.cleanup));
+          .pipe(Effect.onError(() => identity.cleanup));
         codeHash = bundled.codeHash;
         const deployed = current?.buildConfig?.source?.storageSource;
         const storageSource =
-          current !== undefined &&
-          output?.codeHash === codeHash &&
-          deployed !== undefined
+          current !== undefined && output?.codeHash === codeHash && deployed !== undefined
             ? deployed
             : yield* source
                 .upload({
@@ -1071,7 +925,7 @@ export const FunctionProvider = () =>
                   files: bundled.files,
                   kmsKeyName: news.kmsKeyName,
                 })
-                .pipe(Effect.tapError(() => identity.cleanup));
+                .pipe(Effect.onError(() => identity.cleanup));
         buildConfig = {
           ...news.buildConfig,
           runtime: news.buildConfig?.runtime ?? DEFAULT_NODE_RUNTIME,
@@ -1099,7 +953,7 @@ export const FunctionProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() => identity.cleanup),
+            Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
@@ -1113,38 +967,28 @@ export const FunctionProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const kmsChanged =
-        news.kmsKeyName !== undefined &&
-        (current.kmsKeyName ?? "") !== news.kmsKeyName;
+        news.kmsKeyName !== undefined && (current.kmsKeyName ?? "") !== news.kmsKeyName;
 
       const desiredBuild =
-        buildConfig !== undefined
-          ? mergeBuildConfig(buildConfig, current.buildConfig)
-          : undefined;
+        buildConfig !== undefined ? mergeBuildConfig(buildConfig, current.buildConfig) : undefined;
       const buildConfigChanged =
-        desiredBuild !== undefined &&
-        !sameBuildConfig(desiredBuild, current.buildConfig);
+        desiredBuild !== undefined && !sameBuildConfig(desiredBuild, current.buildConfig);
 
       const desiredService = serviceConfig;
       const serviceConfigChanged =
         desiredService !== undefined &&
         ((desiredService.availableMemory !== undefined &&
-          (current.serviceConfig?.availableMemory ?? "") !==
-            desiredService.availableMemory) ||
+          (current.serviceConfig?.availableMemory ?? "") !== desiredService.availableMemory) ||
           (desiredService.availableCpu !== undefined &&
-            (current.serviceConfig?.availableCpu ?? "") !==
-              desiredService.availableCpu) ||
+            (current.serviceConfig?.availableCpu ?? "") !== desiredService.availableCpu) ||
           (desiredService.timeoutSeconds !== undefined &&
-            (current.serviceConfig?.timeoutSeconds ?? 60) !==
-              desiredService.timeoutSeconds) ||
+            (current.serviceConfig?.timeoutSeconds ?? 60) !== desiredService.timeoutSeconds) ||
           (desiredService.minInstanceCount !== undefined &&
-            (current.serviceConfig?.minInstanceCount ?? 0) !==
-              desiredService.minInstanceCount) ||
+            (current.serviceConfig?.minInstanceCount ?? 0) !== desiredService.minInstanceCount) ||
           (desiredService.maxInstanceCount !== undefined &&
-            (current.serviceConfig?.maxInstanceCount ?? 0) !==
-              desiredService.maxInstanceCount) ||
+            (current.serviceConfig?.maxInstanceCount ?? 0) !== desiredService.maxInstanceCount) ||
           (desiredService.maxInstanceRequestConcurrency !== undefined &&
             (current.serviceConfig?.maxInstanceRequestConcurrency ?? 1) !==
               desiredService.maxInstanceRequestConcurrency) ||
@@ -1155,11 +999,9 @@ export const FunctionProvider = () =>
               { stripNullish: true },
             )) ||
           (desiredService.ingressSettings !== undefined &&
-            (current.serviceConfig?.ingressSettings ?? "") !==
-              desiredService.ingressSettings) ||
+            (current.serviceConfig?.ingressSettings ?? "") !== desiredService.ingressSettings) ||
           (desiredService.vpcConnector !== undefined &&
-            (current.serviceConfig?.vpcConnector ?? "") !==
-              desiredService.vpcConnector) ||
+            (current.serviceConfig?.vpcConnector ?? "") !== desiredService.vpcConnector) ||
           (desiredService.vpcConnectorEgressSettings !== undefined &&
             (current.serviceConfig?.vpcConnectorEgressSettings ?? "") !==
               desiredService.vpcConnectorEgressSettings) ||
@@ -1176,8 +1018,7 @@ export const FunctionProvider = () =>
             stable(desiredService.secretVolumes) !==
               stable(current.serviceConfig?.secretVolumes)) ||
           (desiredService.directVpcEgress !== undefined &&
-            (current.serviceConfig?.directVpcEgress ?? "") !==
-              desiredService.directVpcEgress) ||
+            (current.serviceConfig?.directVpcEgress ?? "") !== desiredService.directVpcEgress) ||
           (desiredService.directVpcNetworkInterface !== undefined &&
             stable(desiredService.directVpcNetworkInterface) !==
               stable(current.serviceConfig?.directVpcNetworkInterface)));
@@ -1204,27 +1045,25 @@ export const FunctionProvider = () =>
           eventTriggerChanged ? "eventTrigger" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation = yield* cloudfunctions.patchProjectsLocationsFunctions(
-          {
+        const operation = yield* cloudfunctions.patchProjectsLocationsFunctions({
+          name,
+          updateMask: updateMask.join(","),
+          body: {
             name,
-            updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-              kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
-              buildConfig: desiredBuild ?? current.buildConfig,
-              serviceConfig: {
-                ...current.serviceConfig,
-                ...desiredService,
-                service: undefined,
-                uri: undefined,
-                revision: undefined,
-              },
-              eventTrigger: news.eventTrigger ?? current.eventTrigger,
+            labels: desiredLabels,
+            description: news.description,
+            kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
+            buildConfig: desiredBuild ?? current.buildConfig,
+            serviceConfig: {
+              ...current.serviceConfig,
+              ...desiredService,
+              service: undefined,
+              uri: undefined,
+              revision: undefined,
             },
+            eventTrigger: news.eventTrigger ?? current.eventTrigger,
           },
-        );
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);
       }

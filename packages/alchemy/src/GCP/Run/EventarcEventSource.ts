@@ -1,10 +1,11 @@
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import * as RemovalPolicy from "../../RemovalPolicy.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   EventarcEventSource as EventarcEventSourceTag,
@@ -13,6 +14,7 @@ import {
   type EventarcEventSourceService,
 } from "../Eventarc/EventSource.ts";
 import { Trigger, type EventFilter } from "../Eventarc/Trigger.ts";
+import { bindGcpHost } from "../Host.ts";
 import { Member } from "../IAM/Member.ts";
 import {
   grantSelfInvoker,
@@ -47,19 +49,14 @@ const isStorageEvent = (props: EventarcEventSourceProps) =>
  */
 const eventDataContentType = (props: EventarcEventSourceProps) =>
   props.eventDataContentType ??
-  (hasTypePrefix(props, "google.cloud.firestore.")
-    ? "application/protobuf"
-    : undefined);
+  (hasTypePrefix(props, "google.cloud.firestore.") ? "application/protobuf" : undefined);
 
 /**
  * Decode a binary-mode CloudEvent delivery. JSON payloads are parsed,
  * `text/*` payloads stay strings, and anything else (e.g. the
  * `application/protobuf` Firestore events) is handed over as raw bytes.
  */
-const toCloudEvent = (
-  request: HttpServerRequest,
-  body: Uint8Array,
-): CloudEvent => {
+const toCloudEvent = (request: HttpServerRequest, body: Uint8Array): CloudEvent => {
   const attributes: Record<string, string> = {};
   for (const [name, value] of Object.entries(request.headers)) {
     if (name.startsWith("ce-") && typeof value === "string") {
@@ -126,45 +123,44 @@ export const EventarcEventSource = Layer.effect(
         const endpoint = hostEndpoint(host);
         const attrs = host as unknown as Record<string, Output.Output<string>>;
         const env = yield* GcpEnvironment.current;
+        // Requested through the host's own bindings, so the host's IAM sync
+        // keeps it on every redeploy instead of revoking it as out of band.
+        yield* bindGcpHost({
+          tag: "GCP.Eventarc.EventSource",
+          resource: { LogicalId: id },
+          iam: [{ role: "roles/eventarc.eventReceiver" }],
+        });
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
             yield* grantSelfInvoker(host);
-            const receiver = yield* member(`${host.LogicalId}-EventReceiver`, {
-              kind: "project",
-              name: env.project,
-              role: "roles/eventarc.eventReceiver",
-              member: Output.interpolate`serviceAccount:${endpoint.serviceAccount}`,
-            });
+            // Project-wide prerequisite shared by every Storage trigger and
+            // notification in the project: retained, never revoked on destroy.
             const storageAgent = isStorageEvent(props)
               ? yield* member(`${id}-StorageAgentPublisher`, {
                   kind: "project",
                   name: env.project,
                   role: "roles/pubsub.publisher",
-                  member: Output.fromEffect(
-                    storage
-                      .getProjectsServiceAccount({ projectId: env.project })
-                      .pipe(
-                        Effect.map(
-                          (agent) => `serviceAccount:${agent.email_address}`,
-                        ),
-                        Effect.orDie,
-                      ),
-                  ),
-                })
+                  member: `serviceAccount:${
+                    (yield* storage.getProjectsServiceAccount({
+                      projectId: env.project,
+                    })).email_address
+                  }`,
+                }).pipe(RemovalPolicy.retain())
               : undefined;
             yield* trigger(`${id}-Trigger`, {
               location: props.location ?? attrs.location,
               eventFilters: props.eventFilters as EventFilter[],
               eventDataContentType: eventDataContentType(props),
-              serviceAccount: Output.map(
-                Output.all(
-                  endpoint.serviceAccount,
-                  receiver.member,
-                  storageAgent?.member ?? receiver.member,
-                ),
-                ([email]) => email,
-              ),
+              // The host's service account resolves after the host (and its
+              // IAM, including eventReceiver) is in place.
+              serviceAccount:
+                storageAgent === undefined
+                  ? endpoint.serviceAccount
+                  : Output.map(
+                      Output.all(endpoint.serviceAccount, storageAgent.member),
+                      ([email]) => email,
+                    ),
               destination: {
                 cloudRun: {
                   service: Output.map(endpoint.invokerService, lastSegment),

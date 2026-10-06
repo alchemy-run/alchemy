@@ -1,25 +1,20 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   firestore.getProjectsDatabases({ name }).pipe(
     Effect.map((database) =>
-      database.deleteTime !== undefined
-        ? ("gone" as const)
-        : ("found" as const),
+      database.deleteTime !== undefined ? ("gone" as const) : ("found" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -45,9 +40,11 @@ test.provider(
       const page = yield* firestore.listProjectsDatabases({
         parent: `projects/${project}`,
       });
-      expect(Array.isArray(page.databases ?? [])).toEqual(true);
+      expect((page.databases ?? []).map((database) => database.name)).not.toContain(
+        `projects/${project}/databases/alchemy-missing-xxxx`,
+      );
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -70,9 +67,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.databaseId.length).toBeGreaterThanOrEqual(4);
       expect(created.location).toEqual("us-central1");
       expect(created.type).toEqual("FIRESTORE_NATIVE");
-      expect(created.deleteProtectionState).toEqual(
-        "DELETE_PROTECTION_DISABLED",
-      );
+      expect(created.deleteProtectionState).toEqual("DELETE_PROTECTION_DISABLED");
 
       const fetched = yield* firestore.getProjectsDatabases({
         name: created.name,
@@ -81,15 +76,12 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(fetched.locationId).toEqual("us-central1");
       expect(fetched.type).toEqual("FIRESTORE_NATIVE");
 
-      const ownership = yield* firestore.getProjectsDatabasesDocuments({
-        name: `${created.name}/documents/_alchemy/ownership`,
+      // Alchemy writes no data into the database.
+      const collections = yield* firestore.listCollectionIdsProjectsDatabasesDocuments({
+        parent: `${created.name}/documents`,
+        body: {},
       });
-      expect(ownership.fields?.alchemy_stack?.stringValue).toEqual(
-        expect.any(String),
-      );
-      expect(ownership.fields?.alchemy_id?.stringValue).toEqual(
-        expect.any(String),
-      );
+      expect(collections.collectionIds ?? []).toEqual([]);
 
       yield* firestore.patchProjectsDatabasesDocuments({
         name: `${created.name}/documents/users/alice`,
@@ -124,5 +116,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+    timeout: 180_000,
+  },
 );

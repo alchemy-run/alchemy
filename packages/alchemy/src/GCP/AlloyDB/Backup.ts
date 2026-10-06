@@ -19,7 +19,7 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { EncryptionConfig } from "./Cluster.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 const DEFAULT_BACKUP_TYPE = "ON_DEMAND";
 const MAX_NAME_LENGTH = 63;
@@ -52,7 +52,7 @@ export type BackupProps = {
    */
   displayName?: string;
   /**
-   * User-provided description.
+   * User-provided description. Changing it replaces the backup.
    */
   description?: string;
   /**
@@ -138,8 +138,8 @@ export type Backup = Resource<
  * An on-demand AlloyDB backup of a cluster.
  *
  * Changing `backupId`, `location`, `clusterName`, `type`,
- * `encryptionConfig`, or `tags` replaces the backup. `displayName`,
- * `description`, `labels`, and `annotations` update in place.
+ * `encryptionConfig`, `tags`, or `description` replaces the backup.
+ * `displayName`, `labels`, and `annotations` update in place.
  *
  * Creating a backup typically takes several minutes and is skipIf-gated
  * in live tests behind `GCP_TEST_ALLOYDB`.
@@ -174,21 +174,15 @@ export type Backup = Resource<
  */
 export const Backup = Resource<Backup>("GCP.AlloyDB.Backup");
 
-export class BackupNotResolved extends Data.TaggedError(
-  "GCP.AlloyDB.BackupNotResolved",
-)<{
+export class BackupNotResolved extends Data.TaggedError("GCP.AlloyDB.BackupNotResolved")<{
   name: string;
 }> {}
 
-export class BackupClusterMissing extends Data.TaggedError(
-  "GCP.AlloyDB.BackupClusterMissing",
-)<{
+export class BackupClusterMissing extends Data.TaggedError("GCP.AlloyDB.BackupClusterMissing")<{
   message: string;
 }> {}
 
-export class BackupNotReady extends Data.TaggedError(
-  "GCP.AlloyDB.BackupNotReady",
-)<{
+export class BackupNotReady extends Data.TaggedError("GCP.AlloyDB.BackupNotReady")<{
   name: string;
   state: string;
 }> {}
@@ -198,9 +192,7 @@ export class BackupFailed extends Data.TaggedError("GCP.AlloyDB.BackupFailed")<{
   state: string;
 }> {}
 
-export class BackupStillExists extends Data.TaggedError(
-  "GCP.AlloyDB.BackupStillExists",
-)<{
+export class BackupStillExists extends Data.TaggedError("GCP.AlloyDB.BackupStillExists")<{
   name: string;
 }> {}
 
@@ -211,8 +203,7 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 const normalizeType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_BACKUP_TYPE).toUpperCase();
@@ -244,22 +235,13 @@ const parseBackupName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    backupId:
-      backupsAt >= 0 && parts[backupsAt + 1]
-        ? parts[backupsAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    backupId: backupsAt >= 0 && parts[backupsAt + 1] ? parts[backupsAt + 1]! : lastSegment(name),
   };
 };
 
-const parseClusterRef = (
-  cluster: string,
-  fallbackProject: string,
-  fallbackLocation: string,
-) => {
+const parseClusterRef = (cluster: string, fallbackProject: string, fallbackLocation: string) => {
   const trimmed = cluster.trim();
   if (trimmed.length === 0) {
     return {
@@ -274,16 +256,12 @@ const parseClusterRef = (
     const clustersAt = parts.lastIndexOf("clusters");
     const locationsAt = parts.lastIndexOf("locations");
     const projectsAt = parts.lastIndexOf("projects");
-    const clusterId =
-      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "";
+    const clusterId = clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "";
     const project =
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : fallbackProject;
+      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject;
     const location = normalizeLocation(
-      (locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]
-        : undefined) ?? fallbackLocation,
+      (locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1] : undefined) ??
+        fallbackLocation,
     );
     return {
       project,
@@ -311,8 +289,7 @@ const stringMapOf = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[1].length > 0,
+      (entry): entry is [string, string] => entry[1] !== undefined && entry[1].length > 0,
     ),
   );
 
@@ -341,11 +318,9 @@ const toEncryptionConfig = (
   return { kmsKeyName };
 };
 
-const isAvailable = (state: string | undefined) =>
-  (state ?? "").toUpperCase() === "READY";
+const isAvailable = (state: string | undefined) => (state ?? "").toUpperCase() === "READY";
 
-const isFailed = (state: string | undefined) =>
-  (state ?? "").toUpperCase() === "FAILED";
+const isFailed = (state: string | undefined) => (state ?? "").toUpperCase() === "FAILED";
 
 const toAttrs = (backup: alloydb.Backup, project: string) => {
   const name = backup.name ?? "";
@@ -395,9 +370,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup
-        ? Effect.succeed(backup)
-        : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.BackupNotResolved",
@@ -428,22 +401,20 @@ const waitUntilReady = (name: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.BackupNotReady",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined
-        ? Effect.void
-        : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.BackupStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -498,33 +469,26 @@ export const BackupProvider = () =>
         olds?.clusterName ?? output?.clusterName ?? output?.clusterId,
       );
       const nextCluster = lastSegment(news.clusterName ?? previousCluster);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
       const previousType = normalizeType(olds?.type ?? output?.type);
       const nextType = normalizeType(news.type ?? output?.type);
       const previousKey =
-        olds?.encryptionConfig?.kmsKeyName ??
-        output?.encryptionConfig?.kmsKeyName ??
-        "";
+        olds?.encryptionConfig?.kmsKeyName ?? output?.encryptionConfig?.kmsKeyName ?? "";
       const nextKey = news.encryptionConfig?.kmsKeyName ?? previousKey;
       const previousTags = fingerprint(olds?.tags ?? undefined);
       const nextTags = fingerprint(news.tags ?? olds?.tags ?? undefined);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousCluster.length > 0 &&
-          nextCluster.length > 0 &&
-          previousCluster !== nextCluster) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousCluster.length > 0 && nextCluster.length > 0 && previousCluster !== nextCluster) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousKey !== nextKey ||
-        (news.tags !== undefined && previousTags !== nextTags);
+        (news.tags !== undefined && previousTags !== nextTags) ||
+        // PATCH accepts `description` but leaves it unchanged (observed live),
+        // so a new description replaces the backup.
+        (olds !== undefined && (news.description ?? "") !== (olds.description ?? ""));
 
       if (!replace) return undefined;
       return {
@@ -543,9 +507,7 @@ export const BackupProvider = () =>
         const existing = yield* getByName(output.name);
         if (existing === undefined) return undefined;
         const attrs = toAttrs(existing, env.project);
-        return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
       }
       const backupId = yield* toId(id, olds?.backupId, output?.backupId);
       const ref = parseClusterRef(
@@ -553,16 +515,12 @@ export const BackupProvider = () =>
         env.project,
         olds?.location ?? output?.location ?? env.region,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? ref.location,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? ref.location);
       const name = resourceName(env.project, location, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -578,19 +536,16 @@ export const BackupProvider = () =>
             Stream.filter(
               (backup) =>
                 !isPlaceholder(backup) &&
-                Object.keys(backup.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(backup.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((backup) => toAttrs(backup, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const backupId = yield* toId(id, news.backupId, output?.backupId);
       const ref = parseClusterRef(
@@ -600,8 +555,7 @@ export const BackupProvider = () =>
       );
       if (ref.clusterId.length === 0) {
         return yield* new BackupClusterMissing({
-          message:
-            "GCP.AlloyDB.Backup requires `clusterName` (cluster id or full resource name)",
+          message: "GCP.AlloyDB.Backup requires `clusterName` (cluster id or full resource name)",
         });
       }
       const location = normalizeLocation(news.location ?? ref.location);
@@ -620,14 +574,18 @@ export const BackupProvider = () =>
           .createProjectsLocationsBackups({
             parent,
             backupId,
-            body: toCreateBody(
-              news,
-              desiredLabels,
-              ref.clusterName,
-              backupType,
-            ),
+            body: toCreateBody(news, desiredLabels, ref.clusterName, backupType),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            // The cluster only accepts backups a few minutes after its
+            // primary instance is created.
+            Effect.retry({
+              while: (error) => error._tag === "ClusterNotReadyForBackup",
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
+            }),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          );
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -645,26 +603,16 @@ export const BackupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        news.description !== undefined &&
-        (current.description ?? "") !== news.description;
+      const observedDisplayName = current.displayName ?? output?.displayName ?? olds?.displayName;
+      const displayNameChanged = (observedDisplayName ?? "") !== (news.displayName ?? "");
       const annotationsChanged =
         news.annotations !== undefined &&
-        fingerprint(stringMapOf(current.annotations)) !==
-          fingerprint(news.annotations);
+        fingerprint(stringMapOf(current.annotations)) !== fingerprint(news.annotations);
 
-      if (
-        labelsChanged ||
-        displayNameChanged ||
-        descriptionChanged ||
-        annotationsChanged
-      ) {
+      if (labelsChanged || displayNameChanged || annotationsChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayNameChanged ? "displayName" : undefined,
-          descriptionChanged ? "description" : undefined,
           annotationsChanged ? "annotations" : undefined,
         ].filter((field): field is string => field !== undefined);
 
@@ -676,37 +624,39 @@ export const BackupProvider = () =>
               name,
               labels: desiredLabels,
               displayName: news.displayName,
-              description: news.description,
               annotations: news.annotations,
             },
           })
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      // AlloyDB omits `displayName` from backup reads (like clusters); the
+      // desired value is what was applied.
+      return toAttrs(
+        { ...current, displayName: current.displayName ?? news.displayName },
+        env.project,
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* alloydb
-        .deleteProjectsLocationsBackups({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-        );
+      const operation = yield* alloydb.deleteProjectsLocationsBackups({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 40,
+          schedule: Schedule.spaced("15 seconds"),
+        }),
+      );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),

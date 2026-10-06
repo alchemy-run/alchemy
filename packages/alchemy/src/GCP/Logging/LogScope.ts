@@ -108,8 +108,7 @@ export type LogScope = Resource<
  * **Example:** Change the description
  * ```typescript
  * const scope = yield* GCP.Logging.LogScope("App", {
- *   logScopeId: existing.logScopeId,
- *   resourceNames: existing.resourceNames,
+ *   resourceNames: ["projects/my-project"],
  *   description: "all application logs",
  * });
  * ```
@@ -119,16 +118,12 @@ export type LogScope = Resource<
  */
 export const LogScope = Resource<LogScope>("GCP.Logging.LogScope");
 
-export class LogScopeNotResolved extends Data.TaggedError(
-  "GCP.Logging.LogScopeNotResolved",
-)<{
+export class LogScopeNotResolved extends Data.TaggedError("GCP.Logging.LogScopeNotResolved")<{
   name: string;
 }> {}
 
 const parseScopeName = (name: string) => {
-  const match = name.match(
-    /^projects\/([^/]+)\/locations\/([^/]+)\/logScopes\/([^/]+)$/,
-  );
+  const match = name.match(/^projects\/([^/]+)\/locations\/([^/]+)\/logScopes\/([^/]+)$/);
   if (!match) return undefined;
   return {
     project: match[1]!,
@@ -154,16 +149,10 @@ const toId = (id: string, logScopeId: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z0-9]/.test(generated)
-      ? generated
-      : `s${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z0-9]/.test(generated) ? generated : `s${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
-const toAttrs = (
-  scope: logging.LogScope,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (scope: logging.LogScope, project: string, location: string) => {
   const logScopeId = logScopeIdOf(scope);
   const parsed = parseDescription(scope.description);
   const parsedName = parseScopeName(scope.name ?? "");
@@ -171,10 +160,7 @@ const toAttrs = (
   const resolvedProject = parsedName?.project ?? project;
   return {
     name:
-      scope.name ??
-      (logScopeId
-        ? resourceName(resolvedProject, resolvedLocation, logScopeId)
-        : ""),
+      scope.name ?? (logScopeId ? resourceName(resolvedProject, resolvedLocation, logScopeId) : ""),
     logScopeId,
     project: resolvedProject,
     location: resolvedLocation,
@@ -198,9 +184,7 @@ export const LogScopeProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.logScopeId ?? output?.logScopeId;
       const idChanged =
-        previousId !== undefined &&
-        news.logScopeId !== undefined &&
-        news.logScopeId !== previousId;
+        previousId !== undefined && news.logScopeId !== undefined && news.logScopeId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -214,8 +198,7 @@ export const LogScopeProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
       const logScopeId = yield* toId(id, olds?.logScopeId, output?.logScopeId);
-      const name =
-        output?.name ?? resourceName(env.project, location, logScopeId);
+      const name = output?.name ?? resourceName(env.project, location, logScopeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
@@ -234,9 +217,7 @@ export const LogScopeProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.logScopes ?? [])),
             Stream.filter((scope) => hasOwnershipMarker(scope.description)),
-            Stream.map((scope) =>
-              toAttrs(scope, env.project, DEFAULT_LOCATION),
-            ),
+            Stream.map((scope) => toAttrs(scope, env.project, DEFAULT_LOCATION)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           );
@@ -271,8 +252,7 @@ export const LogScopeProvider = () =>
         return yield* new LogScopeNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const resourcesChanged =
         JSON.stringify(sortedStrings(current.resourceNames)) !==
         JSON.stringify(sortedStrings(desiredResources));

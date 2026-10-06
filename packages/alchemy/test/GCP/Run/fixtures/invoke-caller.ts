@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as GCP from "@/GCP";
 import InvokeCallee from "./invoke-callee.ts";
 
 /**
@@ -16,7 +16,7 @@ export default class InvokeCaller extends GCP.Function<InvokeCaller>()(
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {
-    const callee = yield* GCP.Run.InvokeService(yield* InvokeCallee);
+    const callee = yield* GCP.Run.InvokeService(InvokeCallee);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

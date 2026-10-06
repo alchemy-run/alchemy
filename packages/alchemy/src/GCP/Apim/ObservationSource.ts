@@ -105,9 +105,7 @@ export type ObservationSource = Resource<
  * @resource
  * @category Apim
  */
-export const ObservationSource = Resource<ObservationSource>(
-  "GCP.Apim.ObservationSource",
-);
+export const ObservationSource = Resource<ObservationSource>("GCP.Apim.ObservationSource");
 
 const toGclb = (
   source: apim.GclbObservationSource | undefined,
@@ -128,11 +126,7 @@ const toGclb = (
   };
 };
 
-const toAttrs = (
-  location: string,
-  item: apim.ObservationSource,
-  project: string,
-) => {
+const toAttrs = (location: string, item: apim.ObservationSource, project: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION);
   return {
@@ -152,11 +146,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : apim
         .getProjectsLocationsObservationSources({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -169,21 +159,13 @@ const listOwned = (project: string, region: string) =>
     ),
   ).pipe(
     Effect.map((items) =>
-      items.filter((item) =>
-        hasAlchemyId(parseName(item.name ?? "", COLLECTION).id),
-      ),
+      items.filter((item) => hasAlchemyId(parseName(item.name ?? "", COLLECTION).id)),
     ),
   );
 
 export const ObservationSourceProvider = () =>
   Provider.succeed(ObservationSource, {
-    stables: [
-      "name",
-      "observationSourceId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "observationSourceId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -196,20 +178,12 @@ export const ObservationSourceProvider = () =>
         env.project,
         location,
       );
-      const desired = expandGclb(
-        news.gclbObservationSource,
-        env.project,
-        location,
-      );
+      const desired = expandGclb(news.gclbObservationSource, env.project, location);
       return replaceOnIdentity({
         previousId: olds?.observationSourceId ?? output?.observationSourceId,
         nextId:
-          news.observationSourceId ??
-          olds?.observationSourceId ??
-          output?.observationSourceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+          news.observationSourceId ?? olds?.observationSourceId ?? output?.observationSourceId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: location,
         extra: previous !== undefined && !sameJson(previous, desired),
         // MVP: one source per region, so replace must delete first.
@@ -225,12 +199,9 @@ export const ObservationSourceProvider = () =>
         output?.observationSourceId,
         "src",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, observationSourceId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, observationSourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(location, existing, env.project);
@@ -257,20 +228,9 @@ export const ObservationSourceProvider = () =>
         output?.observationSourceId,
         "src",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        observationSourceId,
-      );
-      const gclbObservationSource = expandGclb(
-        news.gclbObservationSource,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, observationSourceId);
+      const gclbObservationSource = expandGclb(news.gclbObservationSource, env.project, location);
 
       let current = yield* getByName(output?.name ?? name);
 

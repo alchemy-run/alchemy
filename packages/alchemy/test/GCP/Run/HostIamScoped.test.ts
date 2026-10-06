@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 /**
  * Grants on services without a per-resource `setIamPolicy`: BigQuery
@@ -15,10 +15,7 @@ import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const HELLO_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 
@@ -39,8 +36,8 @@ class ScopedService extends GCP.Function<ScopedService>()(
     template: { containers: [{ image: HELLO_IMAGE }] },
   },
   Effect.gen(function* () {
-    yield* GCP.BigQuery.Query(yield* Warehouse);
-    yield* GCP.Firestore.ReadWriteDatabase(yield* Docs);
+    yield* GCP.BigQuery.Query(Warehouse);
+    yield* GCP.Firestore.ReadWriteDatabase(Docs);
     return {};
   }).pipe(
     Effect.provide(GCP.BigQuery.QueryHttp),
@@ -60,8 +57,7 @@ const rolesOf = (
     .filter((binding) => (binding.members ?? []).includes(member))
     .map((binding) => ({
       role: binding.role,
-      condition: (binding.condition as { expression?: string } | undefined)
-        ?.expression,
+      condition: (binding.condition as { expression?: string } | undefined)?.expression,
     }));
 
 test.provider(
@@ -90,9 +86,7 @@ test.provider(
         body: { options: { requestedPolicyVersion: 3 } },
       });
       // bigquery.jobs.create is project-only; data access is not.
-      expect(
-        rolesOf(projectPolicy.bindings ?? [], `serviceAccount:${email}`),
-      ).toEqual(
+      expect(rolesOf(projectPolicy.bindings ?? [], `serviceAccount:${email}`)).toEqual(
         expect.arrayContaining([
           { role: "roles/bigquery.jobUser", condition: undefined },
           // Firestore has no per-database policy: a project grant scoped
@@ -103,9 +97,7 @@ test.provider(
           },
         ]),
       );
-      expect(
-        rolesOf(projectPolicy.bindings ?? [], `serviceAccount:${email}`),
-      ).toHaveLength(2);
+      expect(rolesOf(projectPolicy.bindings ?? [], `serviceAccount:${email}`)).toHaveLength(2);
 
       const dataset = yield* bigquery.getDatasets({
         projectId: out.project,
@@ -118,5 +110,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 240_000 },
 );

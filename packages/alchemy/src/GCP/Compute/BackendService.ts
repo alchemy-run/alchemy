@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_PROTOCOL = "HTTP";
 const DEFAULT_SCHEME = "EXTERNAL";
@@ -240,22 +240,12 @@ export type BackendService = Resource<
  * @resource
  * @category Compute
  */
-export const BackendService = Resource<BackendService>(
-  "GCP.Compute.BackendService",
-);
+export const BackendService = Resource<BackendService>("GCP.Compute.BackendService");
 
 export class BackendServiceNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendServiceNotResolved",
 )<{
   name: string;
-}> {}
-
-export class BackendServiceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.BackendServiceOperationFailed",
-)<{
-  operation: string | undefined;
-  status: string | undefined;
-  errors: ReadonlyArray<{ code?: string; message?: string }> | undefined;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -285,10 +275,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-): string => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>): string => {
   const packed = Object.entries(labels)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}=${value}`)
@@ -363,8 +350,7 @@ const toAttrs = (service: compute.BackendService, project: string) => {
     affinityCookieTtlSec: service.affinityCookieTtlSec,
     healthChecks: [...(service.healthChecks ?? [])],
     backends: (service.backends ?? []).map(toBackend),
-    connectionDrainingTimeoutSec:
-      service.connectionDraining?.drainingTimeoutSec,
+    connectionDrainingTimeoutSec: service.connectionDraining?.drainingTimeoutSec,
     compressionMode: service.compressionMode,
     customRequestHeaders: [...(service.customRequestHeaders ?? [])],
     customResponseHeaders: [...(service.customResponseHeaders ?? [])],
@@ -377,9 +363,7 @@ const toAttrs = (service: compute.BackendService, project: string) => {
 const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
 const backendKey = (backend: BackendServiceBackend) =>
   JSON.stringify({
@@ -406,60 +390,6 @@ const sameLogConfig = (
 ) =>
   (left?.enable ?? false) === (right?.enable ?? false) &&
   (left?.sampleRate === undefined || left.sampleRate === right?.sampleRate);
-
-const operationErrors = (operation: compute.Operation) =>
-  operation.error?.errors?.map((error) => ({
-    code: error.code,
-    message: error.message,
-  }));
-
-const isFailedOperation = (operation: compute.Operation): boolean =>
-  (operation.error?.errors?.length ?? 0) > 0 ||
-  (operation.httpErrorStatusCode !== undefined &&
-    operation.httpErrorStatusCode >= 400);
-
-const failOperation = (operation: compute.Operation) =>
-  new BackendServiceOperationFailed({
-    operation: operation.name,
-    status: operation.status,
-    errors: operationErrors(operation),
-  });
-
-const waitGlobal = (project: string, operation: compute.Operation) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations(
-        {
-          project,
-          operation: current.name,
-        },
-        { times: 18 },
-      ).pipe(
-        Effect.catchTag("GCP.Compute.OperationPending", () =>
-          Effect.succeed(current),
-        ),
-      );
-    }
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* compute
-        .getGlobalOperations({
-          project,
-          operation: current.name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    if (current.status !== "DONE" || isFailedOperation(current)) {
-      return yield* failOperation(current);
-    }
-    return current;
-  });
 
 const getByName = (project: string, name: string) =>
   compute
@@ -490,24 +420,17 @@ export const BackendServiceProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousName = olds?.name ?? output?.name;
       const nextName = news.name ?? previousName;
-      if (
-        news.name !== undefined &&
-        previousName !== undefined &&
-        news.name !== previousName
-      ) {
+      if (news.name !== undefined && previousName !== undefined && news.name !== previousName) {
         return { action: "replace" as const };
       }
       const previousScheme =
-        olds?.loadBalancingScheme ??
-        output?.loadBalancingScheme ??
-        DEFAULT_SCHEME;
+        olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? DEFAULT_SCHEME;
       const nextScheme = news.loadBalancingScheme ?? DEFAULT_SCHEME;
       if (previousScheme !== nextScheme) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            (nextName === undefined || nextName === previousName),
+            previousName !== undefined && (nextName === undefined || nextName === previousName),
         };
       }
       return undefined;
@@ -520,9 +443,7 @@ export const BackendServiceProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -545,10 +466,7 @@ export const BackendServiceProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const desiredDescription = encodeDescription(
-        news.description,
-        desiredLabels,
-      );
+      const desiredDescription = encodeDescription(news.description, desiredLabels);
       const protocol = news.protocol ?? DEFAULT_PROTOCOL;
       const loadBalancingScheme = news.loadBalancingScheme ?? DEFAULT_SCHEME;
       const timeoutSec = news.timeoutSec ?? DEFAULT_TIMEOUT_SEC;
@@ -580,12 +498,8 @@ export const BackendServiceProvider = () =>
               enableCDN,
               sessionAffinity: news.sessionAffinity,
               affinityCookieTtlSec: news.affinityCookieTtlSec,
-              healthChecks:
-                (news.healthChecks?.length ?? 0) > 0
-                  ? news.healthChecks
-                  : undefined,
-              backends:
-                desiredBackends.length > 0 ? desiredBackends : undefined,
+              healthChecks: (news.healthChecks?.length ?? 0) > 0 ? news.healthChecks : undefined,
+              backends: desiredBackends.length > 0 ? desiredBackends : undefined,
               connectionDraining:
                 news.connectionDrainingTimeoutSec !== undefined
                   ? {
@@ -605,7 +519,7 @@ export const BackendServiceProvider = () =>
             },
           })
           .pipe(
-            Effect.flatMap((operation) => waitGlobal(env.project, operation)),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current =
@@ -618,51 +532,31 @@ export const BackendServiceProvider = () =>
         return yield* new BackendServiceNotResolved({ name });
       }
 
-      const timeoutChanged =
-        (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
-      const protocolChanged =
-        (current.protocol ?? DEFAULT_PROTOCOL) !== protocol;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
+      const protocolChanged = (current.protocol ?? DEFAULT_PROTOCOL) !== protocol;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const enableCDNChanged = (current.enableCDN === true) !== enableCDN;
       const sessionAffinityChanged =
-        (current.sessionAffinity ?? "NONE") !==
-        (news.sessionAffinity ?? "NONE");
+        (current.sessionAffinity ?? "NONE") !== (news.sessionAffinity ?? "NONE");
       const affinityCookieChanged =
         news.affinityCookieTtlSec !== undefined &&
         current.affinityCookieTtlSec !== news.affinityCookieTtlSec;
-      const portNameChanged =
-        news.portName !== undefined && current.portName !== news.portName;
-      const healthChecksChanged = !sameStringList(
-        current.healthChecks,
-        news.healthChecks,
-      );
-      const backendsChanged = !sameBackends(
-        (current.backends ?? []).map(toBackend),
-        news.backends,
-      );
+      const portNameChanged = news.portName !== undefined && current.portName !== news.portName;
+      const healthChecksChanged = !sameStringList(current.healthChecks, news.healthChecks);
+      const backendsChanged = !sameBackends((current.backends ?? []).map(toBackend), news.backends);
       const drainingChanged =
         news.connectionDrainingTimeoutSec !== undefined &&
-        current.connectionDraining?.drainingTimeoutSec !==
-          news.connectionDrainingTimeoutSec;
+        current.connectionDraining?.drainingTimeoutSec !== news.connectionDrainingTimeoutSec;
       const compressionChanged =
-        news.compressionMode !== undefined &&
-        current.compressionMode !== news.compressionMode;
+        news.compressionMode !== undefined && current.compressionMode !== news.compressionMode;
       const requestHeadersChanged =
         news.customRequestHeaders !== undefined &&
-        !sameStringList(
-          current.customRequestHeaders,
-          news.customRequestHeaders,
-        );
+        !sameStringList(current.customRequestHeaders, news.customRequestHeaders);
       const responseHeadersChanged =
         news.customResponseHeaders !== undefined &&
-        !sameStringList(
-          current.customResponseHeaders,
-          news.customResponseHeaders,
-        );
+        !sameStringList(current.customResponseHeaders, news.customResponseHeaders);
       const logConfigChanged =
-        news.logConfig !== undefined &&
-        !sameLogConfig(news.logConfig, current.logConfig);
+        news.logConfig !== undefined && !sameLogConfig(news.logConfig, current.logConfig);
 
       if (
         timeoutChanged ||
@@ -716,9 +610,7 @@ export const BackendServiceProvider = () =>
             backendService: name,
             body: patch,
           })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobal(env.project, operation)),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* awaitResource(env.project, name);
         if (current === undefined) {
           return yield* new BackendServiceNotResolved({ name });
@@ -736,7 +628,7 @@ export const BackendServiceProvider = () =>
           backendService: output.name,
         })
         .pipe(
-          Effect.flatMap((operation) => waitGlobal(env.project, operation)),
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
           Effect.catchTag("NotFound", () => Effect.void),
         );
     }),

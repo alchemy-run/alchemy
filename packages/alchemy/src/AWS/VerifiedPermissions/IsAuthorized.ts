@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { PolicyStore } from "./PolicyStore.ts";
 
-export interface IsAuthorizedRequest extends Omit<
-  AVP.IsAuthorizedInput,
-  "policyStoreId"
-> {}
+export interface IsAuthorizedRequest extends Omit<AVP.IsAuthorizedInput, "policyStoreId"> {}
 export interface IsAuthorizedWithTokenRequest extends Omit<
   AVP.IsAuthorizedWithTokenInput,
   "policyStoreId"
@@ -39,10 +36,7 @@ export interface IsAuthorizedClient {
    */
   isAuthorizedWithToken(
     request: IsAuthorizedWithTokenRequest,
-  ): Effect.Effect<
-    AVP.IsAuthorizedWithTokenOutput,
-    AVP.IsAuthorizedWithTokenError
-  >;
+  ): Effect.Effect<AVP.IsAuthorizedWithTokenOutput, AVP.IsAuthorizedWithTokenError>;
   /**
    * Make up to 30 authorization decisions in one call, sharing one principal
    * or one resource across the batch.
@@ -57,10 +51,7 @@ export interface IsAuthorizedClient {
    */
   batchIsAuthorizedWithToken(
     request: BatchIsAuthorizedWithTokenRequest,
-  ): Effect.Effect<
-    AVP.BatchIsAuthorizedWithTokenOutput,
-    AVP.BatchIsAuthorizedWithTokenError
-  >;
+  ): Effect.Effect<AVP.BatchIsAuthorizedWithTokenOutput, AVP.BatchIsAuthorizedWithTokenError>;
 }
 
 /**
@@ -102,6 +93,4 @@ export interface IsAuthorized extends Binding.Service<
   "AWS.VerifiedPermissions.IsAuthorized",
   <S extends PolicyStore>(store: S) => Effect.Effect<IsAuthorizedClient>
 > {}
-export const IsAuthorized = Binding.Service<IsAuthorized>(
-  "AWS.VerifiedPermissions.IsAuthorized",
-);
+export const IsAuthorized = Binding.Service<IsAuthorized>("AWS.VerifiedPermissions.IsAuthorized");

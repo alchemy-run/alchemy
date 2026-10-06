@@ -1,26 +1,19 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zone = "us-central1-a";
 
-const waitUntilGone = (
-  projectId: string,
-  policyZone: string,
-  vmExtensionPolicy: string,
-) =>
+const waitUntilGone = (projectId: string, policyZone: string, vmExtensionPolicy: string) =>
   compute
     .getZoneVmExtensionPolicies({
       project: projectId,
@@ -55,7 +48,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -117,14 +110,10 @@ test.provider(
         }),
       );
 
-      expect(updated.vmExtensionPolicyName).toEqual(
-        created.vmExtensionPolicyName,
-      );
+      expect(updated.vmExtensionPolicyName).toEqual(created.vmExtensionPolicyName);
       expect(updated.description).toEqual("ops-agent for labeled vms");
       expect(updated.priority).toEqual(400);
-      expect(updated.extensionPolicies?.["ops-agent"]?.pinnedVersion).toEqual(
-        "2.58.0",
-      );
+      expect(updated.extensionPolicies?.["ops-agent"]?.pinnedVersion).toEqual("2.58.0");
 
       const fetchedUpdated = yield* compute.getZoneVmExtensionPolicies({
         project: updated.project,
@@ -142,5 +131,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

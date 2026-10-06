@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
+import { isTransientGcpError } from "../Errors.ts";
 import {
   alchemyLabelKeys,
   createInternalLabels,
@@ -12,7 +13,6 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
-import { isTransientGcpError } from "../Errors.ts";
 
 export const MAX_ID_LENGTH = 256;
 
@@ -30,10 +30,8 @@ export const parentOf = (name: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -44,26 +42,16 @@ export const sameJson = (left: unknown, right: unknown) =>
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
-export const parseResourceName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseResourceName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -85,23 +73,18 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const withOwnershipMetadata = (
   metadata: Record<string, string> | undefined,
   ownership: Record<string, string>,
 ) => ({ ...toLabels(metadata), ...ownership });
 
-export const encodeDataId = (
-  labels: Record<string, string>,
-  dataId: string,
-): string => `alc-${labels[alchemyLabelKeys.id] ?? "x"}-${dataId}`;
+export const encodeDataId = (labels: Record<string, string>, dataId: string): string =>
+  `alc-${labels[alchemyLabelKeys.id] ?? "x"}-${dataId}`;
 
-export const decodeDataId = (
-  dataId: string | undefined,
-): string | undefined => {
+export const decodeDataId = (dataId: string | undefined): string | undefined => {
   if (dataId === undefined) return undefined;
   if (!dataId.startsWith("alc-")) return dataId;
   const rest = dataId.slice("alc-".length);
@@ -109,8 +92,7 @@ export const decodeDataId = (
   return dash >= 0 ? rest.slice(dash + 1) : dataId;
 };
 
-export const hasOwnedDataId = (dataId: string | undefined) =>
-  (dataId ?? "").startsWith("alc-");
+export const hasOwnedDataId = (dataId: string | undefined) => (dataId ?? "").startsWith("alc-");
 
 export const toPhysicalId = (
   id: string,
@@ -126,9 +108,7 @@ export const toPhysicalId = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `h${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `h${generated}`.slice(0, maxLength);
     return next.length >= 1 ? next : "h";
   });
 
@@ -195,15 +175,10 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.Healthcare.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.Healthcare.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  _name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, _name: string) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -217,12 +192,7 @@ export const waitUntilGone = <A, E, R>(
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -231,8 +201,7 @@ export const collectPages = <
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
@@ -249,30 +218,22 @@ export const decodeHl7 = (value: string | undefined) =>
 export const listDatasets = (parent: string) =>
   parent.length === 0
     ? emptyList<healthcare.Dataset>()
-    : healthcare.listProjectsLocationsDatasets
-        .pages({ parent, pageSize: 100 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.datasets ?? [])),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () => emptyList<healthcare.Dataset>()),
-          Effect.catchTag("Forbidden", () => emptyList<healthcare.Dataset>()),
-        );
+    : healthcare.listProjectsLocationsDatasets.pages({ parent, pageSize: 100 }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.datasets ?? [])),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("NotFound", () => emptyList<healthcare.Dataset>()),
+      );
 
 export const listHl7V2Stores = (parent: string) =>
   parent.length === 0
     ? emptyList<healthcare.Hl7V2Store>()
-    : healthcare.listProjectsLocationsDatasetsHl7V2Stores
-        .pages({ parent, pageSize: 100 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.hl7V2Stores ?? [])),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () => emptyList<healthcare.Hl7V2Store>()),
-          Effect.catchTag("Forbidden", () =>
-            emptyList<healthcare.Hl7V2Store>(),
-          ),
-        );
+    : healthcare.listProjectsLocationsDatasetsHl7V2Stores.pages({ parent, pageSize: 100 }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.hl7V2Stores ?? [])),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("NotFound", () => emptyList<healthcare.Hl7V2Store>()),
+      );
 
 export const listMessages = (parent: string) =>
   parent.length === 0
@@ -280,13 +241,10 @@ export const listMessages = (parent: string) =>
     : healthcare.listProjectsLocationsDatasetsHl7V2StoresMessages
         .pages({ parent, pageSize: 100, view: "FULL" })
         .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.hl7V2Messages ?? []),
-          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.hl7V2Messages ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("NotFound", () => emptyList<healthcare.Message>()),
-          Effect.catchTag("Forbidden", () => emptyList<healthcare.Message>()),
         );
 
 // `us-central1` was the fixed default before `GCP.Region`; list paths keep
@@ -304,11 +262,9 @@ export const forEachDataset = <A, E, R>(
   Effect.gen(function* () {
     const datasets = yield* listRegionDatasets(project, region);
     const named = datasets.filter((dataset) => (dataset.name ?? "").length > 0);
-    const groups = yield* Effect.forEach(
-      named,
-      (dataset) => list(dataset.name!),
-      { concurrency: 4 },
-    );
+    const groups = yield* Effect.forEach(named, (dataset) => list(dataset.name!), {
+      concurrency: 4,
+    });
     return groups.flat();
   });
 
@@ -321,18 +277,9 @@ export const listAlchemyConsentStores = (project: string, region: string) =>
       }),
       (page) => page.consentStores,
     ),
-  ).pipe(
-    Effect.map((stores) =>
-      stores.filter((store) => hasAlchemyLabelMap(store.labels)),
-    ),
-  );
+  ).pipe(Effect.map((stores) => stores.filter((store) => hasAlchemyLabelMap(store.labels))));
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -340,10 +287,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -388,14 +332,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -405,17 +345,8 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });

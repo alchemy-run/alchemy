@@ -129,3 +129,21 @@ tears itself down.
 [Redis.Instance](/providers/gcp/redis/instance)
 
 The full list is under **Resources** in the sidebar.
+
+## Out of scope
+
+Alchemy manages infrastructure, not end-user content. APIs whose objects
+are a person's data — Gmail messages and settings, Forms, Calendar events, Drive files,
+Classroom courses, Chat messages, Tasks, Keep notes, People contacts,
+Blogger posts, YouTube videos and reports, Fitness data, Apps Script
+projects, Street View photos, Fact Check claims, and Business Profile
+listings — are deliberately not modelled as resources. Neither is
+`prodtt-sasportal`, a test-environment copy of the SAS Portal API.
+
+The advertising and marketing APIs — Analytics Admin, Display & Video 360,
+Tag Manager, Workspace Reseller, AdSense, AdSense Platform, Ad Exchange Buyer
+II, Campaign Manager 360 (DFA Reporting), and DoubleClick Bid Manager —
+are also out of scope: they act on a user's accounts and require user OAuth
+scopes, which a service account or Workload Identity host cannot hold. The
+Content API for Shopping and Apigee Registry are retired by Google and are not
+modelled.

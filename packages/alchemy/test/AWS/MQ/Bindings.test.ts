@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as mq from "@distilled.cloud/aws/mq";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MQBindingsFunctionLive, { MQBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -25,9 +25,7 @@ test.provider(
   "listUsers on a nonexistent broker fails with NotFoundException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        mq.listUsers({ BrokerId: BOGUS_BROKER_ID }),
-      );
+      const error = yield* Effect.flip(mq.listUsers({ BrokerId: BOGUS_BROKER_ID }));
       expect(error._tag).toBe("NotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:mq", "live"] },
@@ -53,9 +51,7 @@ test.provider(
   "rebootBroker on a nonexistent broker fails with NotFoundException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        mq.rebootBroker({ BrokerId: BOGUS_BROKER_ID }),
-      );
+      const error = yield* Effect.flip(mq.rebootBroker({ BrokerId: BOGUS_BROKER_ID }));
       expect(error._tag).toBe("NotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:mq", "live"] },
@@ -68,9 +64,7 @@ test.provider(
       const error = yield* Effect.flip(
         mq.promote({ BrokerId: BOGUS_BROKER_ID, Mode: "SWITCHOVER" }),
       );
-      expect(["NotFoundException", "BadRequestException"]).toContain(
-        error._tag,
-      );
+      expect(["NotFoundException", "BadRequestException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:mq", "live"] },
 );
@@ -94,9 +88,7 @@ describe(
         yield* Effect.logInfo("MQ E2E setup: destroying previous run");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "MQ E2E setup: deploying broker + Lambda (broker takes ~5-10 min)",
-        );
+        yield* Effect.logInfo("MQ E2E setup: deploying broker + Lambda (broker takes ~5-10 min)");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* MQBindingsFunction;
@@ -111,15 +103,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -136,23 +123,19 @@ describe(
       { timeout: 1_200_000 },
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "all 9 capabilities initialize in the runtime",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/bindings")) as any;
-          expect(response.bound).toHaveLength(9);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("all 9 capabilities initialize in the runtime", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/bindings")) as any;
+        expect(response.bound).toHaveLength(9);
+      }),
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "DescribeBroker reads the bound broker's state",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/broker")) as any;
-          expect(typeof response.brokerName).toBe("string");
-          expect(response.brokerState).toBe("RUNNING");
-        }),
+    test.provider.skipIf(!RUN_LIVE)("DescribeBroker reads the bound broker's state", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/broker")) as any;
+        expect(typeof response.brokerName).toBe("string");
+        expect(response.brokerState).toBe("RUNNING");
+      }),
     );
 
     test.provider.skipIf(!RUN_LIVE)(

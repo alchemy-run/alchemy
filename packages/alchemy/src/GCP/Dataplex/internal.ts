@@ -5,43 +5,21 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
-export const GENERIC_ENTRY_TYPE =
-  "projects/dataplex-types/locations/global/entryTypes/generic";
+export const GENERIC_ENTRY_TYPE = "projects/dataplex-types/locations/global/entryTypes/generic";
 
 export const RELATED_ENTRY_LINK_TYPE =
   "projects/dataplex-types/locations/global/entryLinkTypes/related";
 
-export class DataplexOperationFailed extends Data.TaggedError(
-  "GCP.Dataplex.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DataplexOperationPending extends Data.TaggedError(
-  "GCP.Dataplex.OperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class DataplexNotResolved extends Data.TaggedError(
-  "GCP.Dataplex.ResourceNotResolved",
-)<{
+export class DataplexNotResolved extends Data.TaggedError("GCP.Dataplex.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class DataplexStillExists extends Data.TaggedError(
-  "GCP.Dataplex.ResourceStillExists",
-)<{
+export class DataplexStillExists extends Data.TaggedError("GCP.Dataplex.ResourceStillExists")<{
   name: string;
 }> {}
 
@@ -51,19 +29,12 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const rfc1035 = (
-  name: string,
-  fallbackOrMax: string | number = "dataplex",
-): string => {
-  const maxLength =
-    typeof fallbackOrMax === "number" ? fallbackOrMax : MAX_NAME_LENGTH;
-  const fallback =
-    typeof fallbackOrMax === "string" ? fallbackOrMax : "dataplex";
+export const rfc1035 = (name: string, fallbackOrMax: string | number = "dataplex"): string => {
+  const maxLength = typeof fallbackOrMax === "number" ? fallbackOrMax : MAX_NAME_LENGTH;
+  const fallback = typeof fallbackOrMax === "string" ? fallbackOrMax : "dataplex";
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -102,16 +73,11 @@ export const parseName = (name: string, collection: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const orgsAt = parts.lastIndexOf("organizations");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
     // API resource names always carry a `locations/{location}` segment.
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0
-        ? parts.slice(collectionAt + 1).join("/")
-        : lastSegment(name),
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 ? parts.slice(collectionAt + 1).join("/") : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -136,9 +102,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -161,27 +126,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-const alreadyExists = (error: dataplex.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: dataplex.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: dataplex.GoogleRpcStatus | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const retryQuota = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+export const retryQuota = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "TooManyRequests",
@@ -190,83 +137,34 @@ export const retryQuota = <A, E extends { _tag: string }, R>(
     }),
   );
 
+/**
+ * Wait for a Dataplex operation; lakes, zones, and assets provision for
+ * several minutes. ALREADY_EXISTS (code 6) counts as success (create
+ * race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race) and an
+ * operation that is already gone.
+ */
 export const waitForOperation = (
   operation: dataplex.GoogleLongrunningOperation,
-  options?: {
-    notFoundOk?: boolean;
-    alreadyExistsOk?: boolean;
-    interval?: `${number} seconds`;
-    times?: number;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new DataplexOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new DataplexOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = retryQuota(
-      name.startsWith("organizations/")
-        ? dataplex.getOrganizationsLocationsOperations({ name })
-        : dataplex.getProjectsLocationsOperations({ name }),
-    );
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dataplex.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DataplexOperationPending({ operation: name }),
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      retryQuota(
+        name.startsWith("organizations/")
+          ? dataplex.getOrganizationsLocationsOperations({ name })
+          : dataplex.getProjectsLocationsOperations({ name }),
       ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new DataplexOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dataplex.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "2 seconds"),
-      }),
-    );
-  });
+    { budget: "20 minutes", interval: "2 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -274,9 +172,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new DataplexNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new DataplexNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.ResourceNotResolved",
@@ -291,9 +187,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new DataplexStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new DataplexStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.ResourceStillExists",
@@ -317,12 +211,10 @@ export const listAtLocation = <A, E, R>(
   region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
+  // Prefer the all-locations wildcard; fall back to the default region
+  // (whose error, if any, propagates).
   list(`projects/${project}/locations/-`).pipe(
-    Effect.catch(() =>
-      list(`projects/${project}/locations/${region}`).pipe(
-        Effect.orElseSucceed(() => [] as A[]),
-      ),
-    ),
+    Effect.catch(() => list(`projects/${project}/locations/${region}`)),
   );
 
 export const replaceOnIdentity = (input: {
@@ -337,8 +229,7 @@ export const replaceOnIdentity = (input: {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
     (input.nextParent ?? "") !== "" &&
-    lastSegment(input.previousParent ?? "") !==
-      lastSegment(input.nextParent ?? "") &&
+    lastSegment(input.previousParent ?? "") !== lastSegment(input.nextParent ?? "") &&
     (input.previousParent ?? "") !== (input.nextParent ?? "");
   const replace =
     (input.extra ?? false) ||
@@ -400,44 +291,6 @@ export const toPhysicalSnake = (
     );
   });
 
-const markerOf = (labels: Record<string, string>) =>
-  `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-
-export const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-): string => {
-  const marker = markerOf(labels);
-  return description ? `${marker}\n${description}` : marker;
-};
-
-export const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^\n/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseDescription(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
 export const createOwnership = (id: string) => createInternalLabels(id);
 
 export const ownedLabels = (id: string, labels: Record<string, string>) =>
@@ -447,24 +300,17 @@ export const parseResourceName = parseName;
 export const locationParent = parentOf;
 export const hasAlchemyLabelKeys = hasAlchemyLabelMap;
 export const LABELS_FILTER = "labels.alchemy-id:*";
-export const encodeOwnership = encodeDescription;
-export const parseOwnership = parseDescription;
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 export const toResourceId = (
   id: string,
   explicit: string | undefined,
   existing: string | undefined,
 ) => toPhysicalId(id, explicit, existing, "dataplex");
-export const updateMaskOf = (
-  fields: ReadonlyArray<readonly [boolean, string]>,
-): string =>
+export const updateMaskOf = (fields: ReadonlyArray<readonly [boolean, string]>): string =>
   fields
     .filter(([changed]) => changed)
     .map(([, field]) => field)
@@ -474,7 +320,7 @@ export const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error) => error._tag === "NotFound" || error._tag === "Forbidden",
+      (error) => error._tag === "NotFound",
       () => Effect.succeed([] as A[]),
     ),
   );

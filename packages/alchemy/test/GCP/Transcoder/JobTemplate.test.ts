@@ -1,21 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as transcoder from "@distilled.cloud/gcp/transcoder_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const location = "us-central1";
-
-const DISABLED_MESSAGE = "Transcoder API has not been used";
 
 const sdConfig: GCP.Transcoder.JobConfig = {
   elementaryStreams: [
@@ -75,24 +70,11 @@ const waitUntilGone = (name: string) =>
   transcoder.getProjectsLocationsJobTemplates({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
       times: 10,
     }),
-  );
-
-const probeAccess = () =>
-  GcpEnvironment.current.pipe(
-    Effect.flatMap(({ project }) =>
-      transcoder.getProjectsLocationsJobTemplates({
-        name: `projects/${project}/locations/${location}/jobTemplates/alchemy-missing-template`,
-      }),
-    ),
-    Effect.as("ok" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("ok" as const)),
-    Effect.catchTag("Forbidden", (error) => Effect.succeed(error)),
   );
 
 test.provider(
@@ -108,26 +90,14 @@ test.provider(
       const error = yield* Effect.flip(
         transcoder.getProjectsLocationsJobTemplates({ name: missingName }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain(DISABLED_MESSAGE);
-      }
-
-      const page = yield* transcoder
-        .listProjectsLocationsJobTemplates({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ jobTemplates: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.jobTemplates ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:transcoder", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -135,14 +105,6 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const access = yield* probeAccess();
-      if (access !== "ok") {
-        expect(access._tag).toEqual("Forbidden");
-        expect(access.message).toContain(DISABLED_MESSAGE);
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -174,9 +136,7 @@ test.provider(
         pageSize: 1000,
       });
       expect(
-        (listed.jobTemplates ?? []).some(
-          (template) => template.name === created.name,
-        ),
+        (listed.jobTemplates ?? []).some((template) => template.name === created.name),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -221,11 +181,9 @@ test.provider(
       const oldGone = yield* waitUntilGone(updated.name);
       expect(oldGone).toEqual("gone");
 
-      const fetchedReplace = yield* transcoder.getProjectsLocationsJobTemplates(
-        {
-          name: replaced.name,
-        },
-      );
+      const fetchedReplace = yield* transcoder.getProjectsLocationsJobTemplates({
+        name: replaced.name,
+      });
       expect(fetchedReplace.name).toEqual(replaced.name);
       expect(fetchedReplace.config?.muxStreams?.[0]?.key).toEqual("sd");
 
@@ -234,5 +192,8 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:transcoder", "live"],
+    timeout: 90_000,
+  },
 );

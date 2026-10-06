@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_LOCATION = "global";
 const MAX_NAME_LENGTH = 63;
@@ -170,19 +171,6 @@ export class DnsAuthorizationNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class DnsAuthorizationOperationFailed extends Data.TaggedError(
-  "GCP.CertificateManager.DnsAuthorizationOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DnsAuthorizationOperationPending extends Data.TaggedError(
-  "GCP.CertificateManager.DnsAuthorizationOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class DnsAuthorizationStillExists extends Data.TaggedError(
   "GCP.CertificateManager.DnsAuthorizationStillExists",
 )<{
@@ -217,16 +205,10 @@ const defaultType = (location: string): DnsAuthorizationType =>
 
 const normalizeType = (type: string | undefined, location: string) => {
   const value = (type ?? "").toUpperCase();
-  return value === "" || value === "TYPE_UNSPECIFIED"
-    ? defaultType(location)
-    : value;
+  return value === "" || value === "TYPE_UNSPECIFIED" ? defaultType(location) : value;
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  dnsAuthorizationId: string,
-) =>
+const resourceName = (project: string, location: string, dnsAuthorizationId: string) =>
   `projects/${project}/locations/${location}/dnsAuthorizations/${dnsAuthorizationId}`;
 
 const parseName = (name: string) => {
@@ -235,16 +217,11 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     dnsAuthorizationId:
-      authsAt >= 0 && parts[authsAt + 1]
-        ? parts[authsAt + 1]!
-        : lastSegment(name),
+      authsAt >= 0 && parts[authsAt + 1] ? parts[authsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -252,11 +229,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  dnsAuthorizationId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, dnsAuthorizationId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (dnsAuthorizationId !== undefined) return dnsAuthorizationId;
     if (existing !== undefined) return existing;
@@ -269,10 +242,7 @@ const toId = (
     );
   });
 
-const toAttrs = (
-  auth: certificatemanager.DnsAuthorization,
-  project: string,
-) => {
+const toAttrs = (auth: certificatemanager.DnsAuthorization, project: string) => {
   const name = auth.name ?? "";
   const parsed = parseName(name);
   const location = parsed.location;
@@ -298,103 +268,13 @@ const getByName = (name: string) =>
     .getProjectsLocationsDnsAuthorizations({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: certificatemanager.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: certificatemanager.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toUpperCase().includes("NOT_FOUND");
-
-const waitForOperation = (
-  operation: certificatemanager.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (isAlreadyExists(operation.error)) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new DnsAuthorizationOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new DnsAuthorizationOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = certificatemanager.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies certificatemanager.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DnsAuthorizationOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error || isAlreadyExists(error)) {
-          return Effect.succeed(current);
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new DnsAuthorizationOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag ===
-          "GCP.CertificateManager.DnsAuthorizationOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((auth) =>
-      auth
-        ? Effect.succeed(auth)
-        : Effect.fail(new DnsAuthorizationNotResolved({ name })),
+      auth ? Effect.succeed(auth) : Effect.fail(new DnsAuthorizationNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.DnsAuthorizationNotResolved",
+      while: (error) => error._tag === "GCP.CertificateManager.DnsAuthorizationNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -403,13 +283,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((auth) =>
-      auth === undefined
-        ? Effect.void
-        : Effect.fail(new DnsAuthorizationStillExists({ name })),
+      auth === undefined ? Effect.void : Effect.fail(new DnsAuthorizationStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.DnsAuthorizationStillExists",
+      while: (error) => error._tag === "GCP.CertificateManager.DnsAuthorizationStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -422,19 +299,14 @@ const listOwnedDnsAuthorizations = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.dnsAuthorizations ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.dnsAuthorizations ?? [])),
       Stream.filter((auth) =>
-        Object.keys(auth.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(auth.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((auth) => toAttrs(auth, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const DnsAuthorizationProvider = () =>
@@ -457,26 +329,14 @@ export const DnsAuthorizationProvider = () =>
 
       const previousId = olds?.dnsAuthorizationId ?? output?.dnsAuthorizationId;
       const nextId = news.dnsAuthorizationId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousDomain = olds?.domain ?? output?.domain;
-      const previousType = normalizeType(
-        olds?.type ?? output?.type,
-        previousLocation,
-      );
-      const nextType = normalizeType(
-        news.type ?? olds?.type ?? output?.type,
-        nextLocation,
-      );
+      const previousType = normalizeType(olds?.type ?? output?.type, previousLocation);
+      const nextType = normalizeType(news.type ?? olds?.type ?? output?.type, nextLocation);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousDomain !== undefined && news.domain !== previousDomain) ||
         previousType !== nextType;
@@ -485,9 +345,7 @@ export const DnsAuthorizationProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -499,14 +357,11 @@ export const DnsAuthorizationProvider = () =>
         output?.dnsAuthorizationId,
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, dnsAuthorizationId);
+      const name = output?.name ?? resourceName(env.project, location, dnsAuthorizationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -567,8 +422,7 @@ export const DnsAuthorizationProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
@@ -576,16 +430,15 @@ export const DnsAuthorizationProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* certificatemanager.patchProjectsLocationsDnsAuthorizations({
+        const operation = yield* certificatemanager.patchProjectsLocationsDnsAuthorizations({
+          name,
+          updateMask: updateMask.join(","),
+          body: {
             name,
-            updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

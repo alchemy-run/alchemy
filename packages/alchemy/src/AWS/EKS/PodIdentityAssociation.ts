@@ -7,8 +7,8 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PodIdentityAssociationProps {
   /**
@@ -122,9 +122,7 @@ export const PodIdentityAssociationProvider = () =>
           Effect.gen(function* () {
             const clusterNames = yield* eks.listClusters.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.clusters ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusters ?? [])),
             );
 
             const perCluster = yield* Effect.forEach(
@@ -133,9 +131,7 @@ export const PodIdentityAssociationProvider = () =>
                 eks.listPodIdentityAssociations.pages({ clusterName }).pipe(
                   Stream.runCollect,
                   Effect.map((chunk) =>
-                    Array.from(chunk).flatMap(
-                      (page) => page.associations ?? [],
-                    ),
+                    Array.from(chunk).flatMap((page) => page.associations ?? []),
                   ),
                   Effect.flatMap((summaries) =>
                     Effect.forEach(
@@ -226,9 +222,7 @@ export const PodIdentityAssociationProvider = () =>
                 tags: desiredTags,
                 clientRequestToken: yield* toClientRequestToken(id, "create"),
               })
-              .pipe(
-                Effect.catchTag("ResourceInUseException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
             state = yield* findAssociation({
               id,
@@ -272,9 +266,7 @@ export const PodIdentityAssociationProvider = () =>
           if (upsert.length > 0) {
             yield* eks.tagResource({
               resourceArn: state.associationArn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value] as const),
-              ),
+              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value] as const)),
             });
           }
           if (removed.length > 0) {
@@ -306,9 +298,7 @@ export const PodIdentityAssociationProvider = () =>
               clusterName: output.clusterName,
               associationId: output.associationId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),
@@ -316,9 +306,7 @@ export const PodIdentityAssociationProvider = () =>
 
 const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 const mapAssociation = (association: eks.PodIdentityAssociation) => ({
@@ -348,11 +336,7 @@ const readAssociationById = Effect.fn(function* ({
       clusterName,
       associationId,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
   const association = response?.association;
   if (

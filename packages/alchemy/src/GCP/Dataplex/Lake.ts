@@ -8,17 +8,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { DataplexOperationFailed, waitForOperation } from "./operations.ts";
+import { waitForOperation } from "./operations.ts";
 import {
   DataplexNotResolved,
-  DataplexStillExists,
   hasAlchemyLabelMap,
   isPendingState,
   listLakes,
@@ -134,15 +128,11 @@ export type Lake = Resource<
  */
 export const Lake = Resource<Lake>("GCP.Dataplex.Lake");
 
-export class LakeNotResolved extends Data.TaggedError(
-  "GCP.Dataplex.LakeNotResolved",
-)<{
+export class LakeNotResolved extends Data.TaggedError("GCP.Dataplex.LakeNotResolved")<{
   name: string;
 }> {}
 
-export class LakeStillExists extends Data.TaggedError(
-  "GCP.Dataplex.LakeStillExists",
-)<{
+export class LakeStillExists extends Data.TaggedError("GCP.Dataplex.LakeStillExists")<{
   name: string;
 }> {}
 
@@ -174,29 +164,9 @@ const getByName = (name: string) =>
     .getProjectsLocationsLakes({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitUntilReady = (
-  name: string,
-  operation?: dataplex.GoogleLongrunningOperation,
-) =>
+// Lakes provision a metastore-backed control plane for 2-5 minutes.
+const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
-    if (operation?.name) {
-      const currentOp = yield* dataplex
-        .getProjectsLocationsOperations({ name: operation.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(operation)),
-          Effect.catchTag("TooManyRequests", () => Effect.succeed(operation)),
-        );
-      if (
-        currentOp.done === true &&
-        currentOp.error &&
-        currentOp.error.code !== 6
-      ) {
-        return yield* new DataplexOperationFailed({
-          operation: currentOp.name ?? name,
-          message: currentOp.error.message ?? "operation failed",
-        });
-      }
-    }
     const lake = yield* getByName(name);
     if (lake === undefined) {
       return yield* new LakeNotResolved({ name });
@@ -211,7 +181,7 @@ const waitUntilReady = (
         error._tag === "GCP.Dataplex.LakeNotResolved" ||
         error._tag === "GCP.Dataplex.NotResolved" ||
         error._tag === "TooManyRequests",
-      times: 10,
+      times: 36,
       schedule: Schedule.spaced("10 seconds"),
     }),
   );
@@ -219,9 +189,7 @@ const waitUntilReady = (
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((lake) =>
-      lake === undefined
-        ? Effect.void
-        : Effect.fail(new LakeStillExists({ name })),
+      lake === undefined ? Effect.void : Effect.fail(new LakeStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakeStillExists",
@@ -239,10 +207,7 @@ export const LakeProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.lakeId ?? output?.lakeId;
       const nextId = news.lakeId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -254,9 +219,7 @@ export const LakeProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -264,18 +227,13 @@ export const LakeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const lakeId = yield* toPhysicalRfc1035(id, olds?.lakeId, output?.lakeId);
       const name = output?.name ?? resourceName(env.project, location, lakeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -289,10 +247,7 @@ export const LakeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const lakeId = yield* toPhysicalRfc1035(id, news.lakeId, output?.lakeId);
       const name = output?.name ?? resourceName(env.project, location, lakeId);
       const desiredLabels = {
@@ -312,9 +267,7 @@ export const LakeProvider = () =>
               displayName: news.displayName,
               description: news.description,
               labels: desiredLabels,
-              metastore: desiredMetastore
-                ? { service: desiredMetastore }
-                : undefined,
+              metastore: desiredMetastore ? { service: desiredMetastore } : undefined,
             },
           })
           .pipe(
@@ -325,12 +278,10 @@ export const LakeProvider = () =>
             }),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        if (created?.error?.message) {
-          return yield* new LakeNotResolved({
-            name: `${name}: ${created.error.message}`,
-          });
+        if (created !== undefined) {
+          yield* waitForOperation(created);
         }
-        current = yield* waitUntilReady(name, created);
+        current = yield* waitUntilReady(name);
       }
 
       if (current === undefined) {
@@ -340,19 +291,11 @@ export const LakeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const metastoreChanged =
-        (current.metastore?.service ?? "") !== (desiredMetastore ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const metastoreChanged = (current.metastore?.service ?? "") !== (desiredMetastore ?? "");
 
-      if (
-        labelsChanged ||
-        displayNameChanged ||
-        descriptionChanged ||
-        metastoreChanged
-      ) {
+      if (labelsChanged || displayNameChanged || descriptionChanged || metastoreChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayNameChanged ? "display_name" : undefined,
@@ -366,12 +309,10 @@ export const LakeProvider = () =>
             displayName: news.displayName,
             description: news.description,
             labels: desiredLabels,
-            metastore: desiredMetastore
-              ? { service: desiredMetastore }
-              : undefined,
+            metastore: desiredMetastore ? { service: desiredMetastore } : undefined,
           },
         });
-        yield* waitForOperation(operation, { interval: "5 seconds" });
+        yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }
 
@@ -380,16 +321,14 @@ export const LakeProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      const operation = yield* dataplex
-        .deleteProjectsLocationsLakes({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* dataplex.deleteProjectsLocationsLakes({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

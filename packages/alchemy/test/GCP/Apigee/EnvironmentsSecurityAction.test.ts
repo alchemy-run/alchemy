@@ -1,26 +1,27 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_APIGEE && !process.env.FAST;
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsEnvironmentsSecurityActions({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("ApigeeResourceNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -29,7 +30,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsEnvironmentsSecurityActions on a missing action fails with NotFound or Forbidden",
+  "getOrganizationsEnvironmentsSecurityActions on a missing action fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -42,11 +43,11 @@ test.provider(
           name: `${org}/environments/alchemy-missing/securityActions/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:apigee", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -60,15 +61,12 @@ test.provider.skipIf(!runLifecycle)(
           const environment = yield* GCP.Apigee.Environment("Runtime", {
             displayName: "runtime",
           });
-          const action = yield* GCP.Apigee.EnvironmentsSecurityAction(
-            "BlockProbe",
-            {
-              environment: environment.environmentId,
-              description: "block probe",
-              conditionConfig: { ipAddressRanges: ["192.0.2.1"] },
-              deny: { responseCode: 403 },
-            },
-          );
+          const action = yield* GCP.Apigee.EnvironmentsSecurityAction("BlockProbe", {
+            environment: environment.environmentId,
+            description: "block probe",
+            conditionConfig: { ipAddressRanges: ["192.0.2.1"] },
+            deny: { responseCode: 403 },
+          });
           return { environment, action };
         }),
       );
@@ -77,11 +75,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.action.description).toEqual("block probe");
       expect(created.action.deny?.responseCode).toEqual(403);
 
-      const fetched = yield* apigee.getOrganizationsEnvironmentsSecurityActions(
-        {
-          name: created.action.name,
-        },
-      );
+      const fetched = yield* apigee.getOrganizationsEnvironmentsSecurityActions({
+        name: created.action.name,
+      });
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("block probe");
 
@@ -91,16 +87,13 @@ test.provider.skipIf(!runLifecycle)(
             environmentId: created.environment.environmentId,
             displayName: "runtime",
           });
-          const action = yield* GCP.Apigee.EnvironmentsSecurityAction(
-            "BlockProbe",
-            {
-              environment: environment.environmentId,
-              securityActionId: created.action.securityActionId,
-              description: "block probe updated",
-              conditionConfig: { ipAddressRanges: ["192.0.2.1"] },
-              deny: { responseCode: 403 },
-            },
-          );
+          const action = yield* GCP.Apigee.EnvironmentsSecurityAction("BlockProbe", {
+            environment: environment.environmentId,
+            securityActionId: created.action.securityActionId,
+            description: "block probe updated",
+            conditionConfig: { ipAddressRanges: ["192.0.2.1"] },
+            deny: { responseCode: 403 },
+          });
           return { environment, action };
         }),
       );
@@ -113,5 +106,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.action.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:apigee", "live"], timeout: 90_000 },
 );

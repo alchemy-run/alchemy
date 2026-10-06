@@ -9,14 +9,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   expandParent,
   hasAlchemyLabelMap,
@@ -26,6 +20,8 @@ import {
   toPhysicalSnake,
   userLabels,
 } from "./helpers.ts";
+import { listLocations } from "./names.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -140,13 +136,9 @@ export class FeatureGroupsFeatureStillExists extends Data.TaggedError(
 const parentOf = (project: string, location: string, featureGroup: string) =>
   expandParent(featureGroup, project, location, "featureGroups");
 
-const resourceName = (parent: string, featureId: string) =>
-  `${parent}/features/${featureId}`;
+const resourceName = (parent: string, featureId: string) => `${parent}/features/${featureId}`;
 
-const toAttrs = (
-  feature: aiplatform.GoogleCloudAiplatformV1Feature,
-  project: string,
-) => {
+const toAttrs = (feature: aiplatform.GoogleCloudAiplatformV1Feature, project: string) => {
   const name = feature.name ?? "";
   const parsed = parseResourceName(name, "features");
   const group = parseResourceName(parsed.parent, "featureGroups");
@@ -181,8 +173,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new FeatureGroupsFeatureNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.FeatureGroupsFeatureNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupsFeatureNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -196,25 +187,21 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new FeatureGroupsFeatureStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.FeatureGroupsFeatureStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupsFeatureStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
 const listFeaturesUnder = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsFeatureGroupsFeatures
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.features ?? [])),
-      Stream.filter((feature) => hasAlchemyLabelMap(feature.labels)),
-      Stream.map((feature) => toAttrs(feature, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsFeatureGroupsFeatures.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.features ?? [])),
+    Stream.filter((feature) => hasAlchemyLabelMap(feature.labels)),
+    Stream.map((feature) => toAttrs(feature, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const FeatureGroupsFeatureProvider = () =>
   Provider.succeed(FeatureGroupsFeature, {
@@ -240,21 +227,12 @@ export const FeatureGroupsFeatureProvider = () =>
           ? previousParent
           : news.featureGroup
         : previousParent;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const parentChanged =
-        previousParent.length > 0 &&
-        lastSegment(nextParent) !== lastSegment(previousParent);
+        previousParent.length > 0 && lastSegment(nextParent) !== lastSegment(previousParent);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         parentChanged ||
         previousLocation !== nextLocation;
       if (!replace) return undefined;
@@ -263,15 +241,13 @@ export const FeatureGroupsFeatureProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const parent = parentOf(
-        env.project,
-        location,
-        olds?.featureGroup ?? output?.featureGroup ?? "",
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const parentRef = olds?.featureGroup ?? output?.featureGroup;
+      // A create interrupted before its parent resolved has nothing to find.
+      if (output?.name === undefined && typeof parentRef !== "string") {
+        return undefined;
+      }
+      const parent = parentOf(env.project, location, parentRef ?? "");
       const featureId = yield* toPhysicalSnake(
         id,
         olds?.featureId,
@@ -282,35 +258,31 @@ export const FeatureGroupsFeatureProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const groups = yield* aiplatform.listProjectsLocationsFeatureGroups
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 100,
-          })
+        const groups = yield* Stream.fromIterable(listLocations(env.region))
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.featureGroups ?? []),
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsFeatureGroups.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
             ),
+          )
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.featureGroups ?? [])),
             Stream.filter((group) => hasAlchemyLabelMap(group.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
         const nested = yield* Effect.forEach(
           groups,
-          (group) =>
-            group.name
-              ? listFeaturesUnder(group.name, env.project)
-              : Effect.succeed([]),
+          (group) => (group.name ? listFeaturesUnder(group.name, env.project) : Effect.succeed([])),
           { concurrency: 4 },
         );
         return nested.flat();
@@ -318,10 +290,7 @@ export const FeatureGroupsFeatureProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = parentOf(env.project, location, news.featureGroup);
       const featureId = yield* toPhysicalSnake(
         id,
@@ -363,21 +332,14 @@ export const FeatureGroupsFeatureProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const columnChanged =
         news.versionColumnName !== undefined &&
         (current.versionColumnName ?? "") !== news.versionColumnName;
       const contactChanged =
-        news.pointOfContact !== undefined &&
-        (current.pointOfContact ?? "") !== news.pointOfContact;
+        news.pointOfContact !== undefined && (current.pointOfContact ?? "") !== news.pointOfContact;
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        columnChanged ||
-        contactChanged
-      ) {
+      if (labelsChanged || descriptionChanged || columnChanged || contactChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,

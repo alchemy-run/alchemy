@@ -1,22 +1,18 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Persistent training clusters take 5-15 minutes to provision and tear down.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsPersistentResources({ name }).pipe(
@@ -42,27 +38,21 @@ test.provider(
           name: `${parent}/persistentResources/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsPersistentResources({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ persistentResources: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.persistentResources ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsPersistentResources({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.persistentResources ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/persistentResources/alchemy-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -92,11 +82,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.location).toEqual("us-central1");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* aiplatform.getProjectsLocationsPersistentResources(
-        {
-          name: created.name,
-        },
-      );
+      const fetched = yield* aiplatform.getProjectsLocationsPersistentResources({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
 
@@ -105,27 +93,37 @@ test.provider.skipIf(!runLifecycle)(
           return yield* GCP.AIPlatform.PersistentResource("Train", {
             persistentResourceId: created.persistentResourceId,
             location: "us-central1",
-            displayName: "alchemy-persistent-v2",
+            displayName: "alchemy-persistent",
             resourcePools: [
               {
                 id: "worker",
-                replicaCount: "1",
+                // Non-Ray persistent resources cannot be updated in place,
+                // so a replica change replaces the resource.
+                replicaCount: "2",
                 machineSpec: { machineType: "n1-standard-4" },
               },
             ],
-            labels: { env: "prod", role: "train" },
+            labels: { env: "test" },
           });
         }),
       );
 
+      // Replaced under the same id.
       expect(updated.name).toEqual(created.name);
-      expect(updated.displayName).toEqual("alchemy-persistent-v2");
-      expect(updated.labels).toMatchObject({ env: "prod", role: "train" });
+      const scaled = yield* aiplatform.getProjectsLocationsPersistentResources({
+        name: created.name,
+      });
+      expect(scaled.resourcePools?.[0]?.replicaCount).toEqual("2");
 
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  // Provisioning the worker pool takes several minutes; so does teardown.
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 2_400_000,
+    retry: 0,
+  },
 );

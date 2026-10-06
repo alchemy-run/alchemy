@@ -20,9 +20,7 @@ export const RAILWAY_ENVIRONMENT_NAME_MAX_LENGTH = 24;
 
 const clipName = (raw: string, maxLength: number) => {
   const clipped = raw.length > maxLength ? raw.slice(0, maxLength) : raw;
-  const forced = /^[a-z]/.test(clipped)
-    ? clipped
-    : `r${clipped}`.slice(0, maxLength);
+  const forced = /^[a-z]/.test(clipped) ? clipped : `r${clipped}`.slice(0, maxLength);
   return forced.replace(/-+$/g, "") || "r";
 };
 
@@ -79,25 +77,14 @@ export const sanitize = sanitizeRailwayName;
  * instance suffix. Truncated 32-char names keep that suffix (the human
  * prefix is what gets cut).
  */
-export const matchesAlchemyPhysicalName = (
-  name: string | undefined,
-): boolean => {
-  if (
-    name === undefined ||
-    name.length === 0 ||
-    name.length > RAILWAY_NAME_MAX_LENGTH
-  ) {
+export const matchesAlchemyPhysicalName = (name: string | undefined): boolean => {
+  if (name === undefined || name.length === 0 || name.length > RAILWAY_NAME_MAX_LENGTH) {
     return false;
   }
   if (!/^[a-z][a-z0-9-]*$/.test(name)) return false;
   const parts = name.split("-");
   const last = parts.at(-1) ?? "";
-  if (
-    parts.length >= 2 &&
-    last.length >= 8 &&
-    last.length <= 16 &&
-    /^[a-z2-7]+$/.test(last)
-  ) {
+  if (parts.length >= 2 && last.length >= 8 && last.length <= 16 && /^[a-z2-7]+$/.test(last)) {
     return true;
   }
   const compact = name.replaceAll("-", "");

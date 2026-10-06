@@ -1,25 +1,20 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsAuthConfigs({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -44,14 +39,17 @@ test.provider(
           name: `projects/${project}/locations/us-central1/authConfigs/alchemy-missing-auth`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
+test.provider(
   "create, update, and delete an auth config",
   (stack) =>
     Effect.gen(function* () {
@@ -100,16 +98,17 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
       expect(updated.name).toEqual(created.name);
       expect(updated.description).toEqual("updated auth");
 
-      const fetchedUpdate = yield* integrations.getProjectsLocationsAuthConfigs(
-        {
-          name: updated.name,
-        },
-      );
+      const fetchedUpdate = yield* integrations.getProjectsLocationsAuthConfigs({
+        name: updated.name,
+      });
       expect(fetchedUpdate.description).toContain("updated auth");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );

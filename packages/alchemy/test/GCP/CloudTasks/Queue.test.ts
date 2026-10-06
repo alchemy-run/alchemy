@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   cloudtasks.getProjectsLocationsQueues({ name }).pipe(
@@ -59,21 +56,11 @@ test.provider(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.retryConfig?.maxAttempts).toEqual(3);
       expect(fetched.rateLimits?.maxDispatchesPerSecond).toEqual(5);
-      const ownership = (fetched.httpTarget?.headerOverrides ?? []).map(
-        (item) => item.header?.key?.toLowerCase(),
-      );
-      expect(ownership).toEqual(
-        expect.arrayContaining([
-          "x-alchemy-stack",
-          "x-alchemy-stage",
-          "x-alchemy-id",
-        ]),
-      );
+      expect(fetched.httpTarget?.headerOverrides ?? []).toEqual([]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.CloudTasks.Queue("Jobs", {
-            queueId: created.queueId,
             location: "us-central1",
             rateLimits: {
               maxDispatchesPerSecond: 8,
@@ -120,14 +107,15 @@ test.provider(
         },
       });
       expect(task.name).toContain("/tasks/");
-      expect(task.httpRequest?.url).toEqual(
-        "https://example.com/alchemy-cloudtasks-test",
-      );
+      expect(task.httpRequest?.url).toEqual("https://example.com/alchemy-cloudtasks-test");
 
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudtasks", "live"],
+    timeout: 90_000,
+  },
 );

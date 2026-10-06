@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataform from "@distilled.cloud/gcp/dataform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -21,18 +21,16 @@ test.provider(
           name: `projects/${project}/locations/us-central1/repositories/missing/workflowInvocations/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataform", "live"], timeout: 90_000 },
 );
 
 const writeWorkspaceFile = (workspace: string, path: string, text: string) =>
   Effect.gen(function* () {
-    const contents = yield* Effect.sync(() =>
-      Buffer.from(text, "utf8").toString("base64"),
-    );
+    const contents = yield* Effect.sync(() => Buffer.from(text, "utf8").toString("base64"));
     return yield* dataform.writeFileProjectsLocationsRepositoriesWorkspaces({
       workspace,
       body: { path, contents },
@@ -52,8 +50,7 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             displayName: "invocation-repo",
             labels: { env: "test" },
-            serviceAccount:
-              "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
           });
           const workspace = yield* GCP.Dataform.RepositoriesWorkspace("Dev", {
             repository: repo.name,
@@ -92,11 +89,10 @@ test.provider.skipIf(!runLifecycle)(
         'config { type: "view" }\nSELECT 1 AS x\n',
       );
 
-      const compilation =
-        yield* dataform.createProjectsLocationsRepositoriesCompilationResults({
-          parent: created.repo.name,
-          body: { workspace: created.workspace.name },
-        });
+      const compilation = yield* dataform.createProjectsLocationsRepositoriesCompilationResults({
+        parent: created.repo.name,
+        body: { workspace: created.workspace.name },
+      });
       expect(compilation.name).toEqual(expect.any(String));
 
       const invoked = yield* stack.deploy(
@@ -106,36 +102,29 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             displayName: "invocation-repo",
             labels: { env: "test" },
-            serviceAccount:
-              "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
           });
           const workspace = yield* GCP.Dataform.RepositoriesWorkspace("Dev", {
             repository: repo.name,
             workspaceId: created.workspace.workspaceId,
           });
-          const invocation = yield* GCP.Dataform.RepositoriesWorkflowInvocation(
-            "Run",
-            {
-              repository: repo.name,
-              compilationResult: compilation.name,
-            },
-          );
+          const invocation = yield* GCP.Dataform.RepositoriesWorkflowInvocation("Run", {
+            repository: repo.name,
+            compilationResult: compilation.name,
+          });
           return { repo, workspace, invocation };
         }),
       );
 
       expect(invoked.invocation.name).toContain("/workflowInvocations/");
-      expect(invoked.invocation.compilationResult).toContain(
-        "/compilationResults/",
-      );
+      expect(invoked.invocation.compilationResult).toContain("/compilationResults/");
       expect(invoked.invocation.compilationResult).toContain(
         compilation.name?.split("/").pop() ?? "compilationResults",
       );
 
-      const fetched =
-        yield* dataform.getProjectsLocationsRepositoriesWorkflowInvocations({
-          name: invoked.invocation.name,
-        });
+      const fetched = yield* dataform.getProjectsLocationsRepositoriesWorkflowInvocations({
+        name: invoked.invocation.name,
+      });
       expect(fetched.name).toEqual(invoked.invocation.name);
 
       yield* stack.destroy();
@@ -146,5 +135,5 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataform", "live"], timeout: 180_000 },
 );

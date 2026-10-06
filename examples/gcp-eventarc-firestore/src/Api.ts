@@ -2,7 +2,7 @@ import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { LOCATION, Shop, type Order } from "./resources.ts";
+import { Shop, type Order } from "./resources.ts";
 
 /**
  * The public front door: it writes orders and does nothing else.
@@ -17,7 +17,6 @@ export default class Api extends GCP.Function<Api>()(
   "Api",
   {
     main: import.meta.url,
-    location: LOCATION,
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {
@@ -40,10 +39,7 @@ export default class Api extends GCP.Function<Api>()(
             quantity?: number;
           };
           if (!body.item) {
-            return yield* HttpServerResponse.json(
-              { error: "item is required" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "item is required" }, { status: 400 });
           }
 
           const id = crypto.randomUUID();
@@ -59,10 +55,7 @@ export default class Api extends GCP.Function<Api>()(
           return yield* HttpServerResponse.json({ id }, { status: 201 });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }),
     };
   }).pipe(Effect.provide(GCP.Firestore.WriteDatabaseHttp)),

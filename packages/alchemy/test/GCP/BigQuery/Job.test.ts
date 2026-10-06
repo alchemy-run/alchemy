@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (projectId: string, jobId: string, location: string) =>
   bigquery
@@ -62,9 +59,7 @@ test.provider(
       });
       expect(fetched.jobReference?.jobId).toEqual(created.jobId);
       expect(fetched.configuration?.labels?.env).toEqual("test");
-      expect(fetched.configuration?.labels?.["alchemy-id"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetched.configuration?.labels?.["alchemy-id"]).toEqual(expect.any(String));
       expect(fetched.configuration?.query?.query).toEqual("SELECT 1 AS n");
       expect(fetched.status?.state).toEqual("DONE");
 
@@ -92,25 +87,15 @@ test.provider(
       });
       expect(fetchedUpdate.configuration?.labels?.env).toEqual("prod");
       expect(fetchedUpdate.configuration?.labels?.role).toEqual("query");
-      expect(fetchedUpdate.configuration?.query?.query).toEqual(
-        "SELECT 2 AS n",
-      );
+      expect(fetchedUpdate.configuration?.query?.query).toEqual("SELECT 2 AS n");
 
-      const oldGone = yield* waitUntilGone(
-        created.project,
-        created.jobId,
-        created.location,
-      );
+      const oldGone = yield* waitUntilGone(created.project, created.jobId, created.location);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        updated.project,
-        updated.jobId,
-        updated.location,
-      );
+      const gone = yield* waitUntilGone(updated.project, updated.jobId, updated.location);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 90_000 },
 );

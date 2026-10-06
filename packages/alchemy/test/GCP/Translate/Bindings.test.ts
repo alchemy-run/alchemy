@@ -1,237 +1,175 @@
-import { Action } from "@/Action";
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import type * as translate from "@distilled.cloud/gcp/translate_v3";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import * as translate from "@distilled.cloud/gcp/translate_v3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { location, logLevel, currentParent } from "./common.ts";
+import * as Core from "@/Test/Core";
+import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
+import TranslateBindingsHost, {
+  Dataset,
+  EnEs,
+  glossaryName,
+  Hello,
+  modelDataset,
+} from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "TranslateBindings");
 
-test.provider(
-  "GetAdaptiveMtDataset round-trip",
-  (stack) =>
-    Effect.gen(function* () {
-      const parent = yield* currentParent;
-      yield* stack.destroy();
+let baseUrl: string;
+let hostAccount: string;
+let project: string;
+let datasetName: string;
+let modelName: string | undefined;
+let entryName: string | undefined;
 
-      const probe = yield* translate
-        .listProjectsLocationsAdaptiveMtDatasets({
-          parent,
-          pageSize: 1,
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (probe.tag === "Forbidden") {
-        expect(probe.tag).toEqual("Forbidden");
-        yield* stack.destroy();
-        return;
-      }
+/**
+ * Translation resources have no per-resource IAM policy: getters grant
+ * `roles/cloudtranslate.viewer` and translate calls
+ * `roles/cloudtranslate.user`, both on the project.
+ */
+const expectProjectGrants = Effect.gen(function* () {
+  const policy = yield* crm.getIamPolicyProjects({
+    resource: `projects/${project}`,
+    body: { options: { requestedPolicyVersion: 3 } },
+  });
+  const roles = (policy.bindings ?? [])
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
+    .map((binding) => ({ role: binding.role, condition: binding.condition }))
+    .sort((a, b) => (a.role ?? "").localeCompare(b.role ?? ""));
+  expect(roles).toEqual([
+    { role: "roles/cloudtranslate.user", condition: undefined },
+    { role: "roles/cloudtranslate.viewer", condition: undefined },
+  ]);
+});
 
-      const created = yield* stack
-        .deploy(
+describe.skipIf(!dockerAvailable)(
+  "Translate Bindings",
+  {
+    tags: ["provider:gcp", "provider:gcp:translate", "provider:gcp:run", "live"],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            return yield* GCP.Translate.AdaptiveMtDataset("BindEnEs", {
-              location,
-              sourceLanguageCode: "en",
-              targetLanguageCode: "es",
-              displayName: "bindenes",
-            });
+            const host = yield* TranslateBindingsHost;
+            const dataset = yield* Dataset;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              dataset: dataset.name,
+              project: dataset.project,
+              model: modelDataset ? (yield* EnEs).name : undefined,
+              entry: glossaryName ? (yield* Hello).name : undefined,
+            };
           }),
-        )
-        .pipe(
-          Effect.map((dataset) => ({ tag: "ok" as const, dataset })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
         );
-      if (created.tag !== "ok") {
-        expect(["Forbidden", "BadRequest"]).toContain(created.tag);
-        yield* stack.destroy();
-        return;
-      }
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        datasetName = out.dataset;
+        project = out.project;
+        modelName = out.model;
+        entryName = out.entry;
+      }),
+      { timeout: 900_000 },
+    );
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const dataset = yield* GCP.Translate.AdaptiveMtDataset("BindEnEs", {
-            datasetId: created.dataset.datasetId,
-            location,
-            sourceLanguageCode: "en",
-            targetLanguageCode: "es",
-            displayName: "bindenes",
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* dataset.name;
-              const getDataset =
-                yield* GCP.Translate.GetAdaptiveMtDataset(dataset);
-              const adaptiveTranslate =
-                yield* GCP.Translate.AdaptiveMtTranslate(dataset);
-              return Effect.fn(function* () {
-                const live = yield* getDataset();
-                const translated = yield* adaptiveTranslate({
-                  body: { content: ["hello"] },
-                }).pipe(
-                  Effect.map((result) => ({
-                    tag: "ok" as const,
-                    result,
-                  })),
-                  Effect.catchTag("BadRequest", (error) =>
-                    Effect.succeed({
-                      tag: "BadRequest" as const,
-                      message: error.message,
-                    }),
-                  ),
-                  Effect.catchTag("Forbidden", (error) =>
-                    Effect.succeed({
-                      tag: "Forbidden" as const,
-                      message: error.message,
-                    }),
-                  ),
-                );
-                return { live, translated };
-              });
-            }),
-          );
-          return { dataset, probe: yield* Probe({}) };
-        }),
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    describe("GetAdaptiveMtDataset", () => {
+      test.provider(
+        "reads the dataset as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<translate.AdaptiveMtDataset>(
+              baseUrl,
+              "getAdaptiveMtDataset",
+            );
+            expect(live.name).toEqual(datasetName);
+            expect(live.sourceLanguageCode).toEqual("en");
+            expect(live.targetLanguageCode).toEqual("es");
+            yield* expectProjectGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      expect(out.probe.live.name).toEqual(out.dataset.name);
-      expect(out.probe.live.sourceLanguageCode).toEqual("en");
-      expect(["ok", "BadRequest", "Forbidden"]).toContain(
-        out.probe.translated.tag,
+    describe("AdaptiveMtTranslate", () => {
+      test.provider(
+        "reaches the API as the host's service account (empty dataset is rejected as too small)",
+        (_stack) =>
+          Effect.gen(function* () {
+            // The dataset has no sentence pairs, so an authorized call gets
+            // the typed "fewer than 5 sentences" rejection.
+            const outcome = yield* callProbe(baseUrl, "adaptiveMtTranslate");
+            expect(outcome.ok ? "ok" : outcome.error._tag).toEqual("AdaptiveMtDatasetTooSmall");
+            yield* expectProjectGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 90_000 },
-);
-
-const runModelBindings =
-  !process.env.FAST && process.env.GCP_TEST_TRANSLATE_MODEL === "1";
-
-test.provider.skipIf(!runModelBindings)(
-  "GetModel and TranslateText invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const dataset = process.env.GCP_TEST_TRANSLATE_MODEL_DATASET ?? "";
-
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const model = yield* GCP.Translate.Model("EnEs", {
-            location,
-            dataset,
-            displayName: "enes",
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* model.name;
-              const getModel = yield* GCP.Translate.GetModel(model);
-              const translateText = yield* GCP.Translate.TranslateText(model);
-              return Effect.fn(function* () {
-                const live = yield* getModel();
-                const translated = yield* translateText({
-                  body: {
-                    contents: ["Hello, world"],
-                    targetLanguageCode: "es",
-                    sourceLanguageCode: "en",
-                    mimeType: "text/plain",
-                  },
-                }).pipe(
-                  Effect.map((result) => ({ tag: "ok" as const, result })),
-                  Effect.catchTag(
-                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
-                    (error) =>
-                      Effect.succeed({
-                        tag: error._tag,
-                        message: error.message,
-                      }),
-                  ),
-                );
-                return { live, translated };
-              });
-            }),
-          );
-          return { model, probe: yield* Probe({}) };
-        }),
+    describe.skipIf(!modelDataset)("GetModel", () => {
+      test.provider(
+        "reads the model as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<translate.Model>(baseUrl, "getModel");
+            expect(live.name).toEqual(modelName);
+            yield* expectProjectGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      expect(out.probe.live.name).toEqual(out.model.name);
-      expect([
-        "ok",
-        "Forbidden",
-        "BadRequest",
-        "NotFound",
-        "Conflict",
-      ]).toContain(out.probe.translated.tag);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
-
-const runGlossaryBindings =
-  !process.env.FAST && process.env.GCP_TEST_TRANSLATE_GLOSSARY === "1";
-
-test.provider.skipIf(!runGlossaryBindings)(
-  "GetGlossariesGlossaryEntry invokes the HTTP binding",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const glossary = process.env.GCP_TEST_TRANSLATE_GLOSSARY_NAME ?? "";
-
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const entry = yield* GCP.Translate.GlossariesGlossaryEntry("Hello", {
-            parent: glossary,
-            location,
-            description: "greeting",
-            termsPair: {
-              sourceTerm: { languageCode: "en", text: "hello" },
-              targetTerm: { languageCode: "es", text: "hola" },
-            },
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* entry.name;
-              const getEntry =
-                yield* GCP.Translate.GetGlossariesGlossaryEntry(entry);
-              return Effect.fn(function* () {
-                const live = yield* getEntry();
-                return { live };
-              });
-            }),
-          );
-          return { entry, probe: yield* Probe({}) };
-        }),
+    describe.skipIf(!modelDataset)("TranslateText", () => {
+      test.provider(
+        "translates with the model as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<translate.TranslateTextResponse>(
+              baseUrl,
+              "translateText",
+            );
+            expect(out.translations?.length).toEqual(1);
+            expect(out.translations?.[0]?.translatedText).toBeTruthy();
+            yield* expectProjectGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      expect(out.probe.live.name).toEqual(out.entry.name);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 90_000 },
+    describe.skipIf(!glossaryName)("GetGlossariesGlossaryEntry", () => {
+      test.provider(
+        "reads the glossary entry as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<translate.GlossaryEntry>(baseUrl, "getGlossaryEntry");
+            expect(live.name).toEqual(entryName);
+            expect(live.termsPair?.targetTerm?.text).toEqual("hola");
+            yield* expectProjectGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+  },
 );

@@ -10,8 +10,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_PROTECTION: kms.ImportJobProtectionLevelEnum = "SOFTWARE";
-const DEFAULT_IMPORT_METHOD: kms.ImportJobImportMethodEnum =
-  "RSA_OAEP_3072_SHA256_AES_256";
+const DEFAULT_IMPORT_METHOD: kms.ImportJobImportMethodEnum = "RSA_OAEP_3072_SHA256_AES_256";
 const MAX_NAME_LENGTH = 63;
 
 export type ImportJobProps = {
@@ -132,15 +131,11 @@ export type ImportJob = Resource<
  */
 export const ImportJob = Resource<ImportJob>("GCP.KMS.ImportJob");
 
-export class ImportJobNotResolved extends Data.TaggedError(
-  "GCP.KMS.ImportJobNotResolved",
-)<{
+export class ImportJobNotResolved extends Data.TaggedError("GCP.KMS.ImportJobNotResolved")<{
   name: string;
 }> {}
 
-export class ImportJobPending extends Data.TaggedError(
-  "GCP.KMS.ImportJobPending",
-)<{
+export class ImportJobPending extends Data.TaggedError("GCP.KMS.ImportJobPending")<{
   name: string;
   state: string;
 }> {}
@@ -154,9 +149,7 @@ const lastSegment = (value: string) => {
 const normalizeLocation = (location: string | undefined, fallback: string) =>
   lastSegment(location ?? fallback).toLowerCase();
 
-const normalizeProtection = (
-  value: string | undefined,
-): kms.ImportJobProtectionLevelEnum =>
+const normalizeProtection = (value: string | undefined): kms.ImportJobProtectionLevelEnum =>
   !value || value === "PROTECTION_LEVEL_UNSPECIFIED"
     ? DEFAULT_PROTECTION
     : (value as kms.ImportJobProtectionLevelEnum);
@@ -167,20 +160,14 @@ const parseName = (name: string, fallbackLocation: string) => {
   const keyRingsAt = parts.lastIndexOf("keyRings");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const keyRing =
-    keyRingsAt >= 0 ? parts.slice(0, keyRingsAt + 2).join("/") : "";
+  const keyRing = keyRingsAt >= 0 ? parts.slice(0, keyRingsAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     keyRing,
     importJobId:
-      importJobsAt >= 0 && parts[importJobsAt + 1]
-        ? parts[importJobsAt + 1]!
-        : lastSegment(name),
+      importJobsAt >= 0 && parts[importJobsAt + 1] ? parts[importJobsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -209,8 +196,7 @@ const resolveParent = (
   };
 };
 
-const resourceName = (parent: string, importJobId: string) =>
-  `${parent}/importJobs/${importJobId}`;
+const resourceName = (parent: string, importJobId: string) => `${parent}/importJobs/${importJobId}`;
 
 const toId = (id: string, importJobId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -225,11 +211,7 @@ const toId = (id: string, importJobId: string | undefined, existing?: string) =>
     );
   });
 
-const toAttrs = (
-  job: kms.ImportJob,
-  project: string,
-  region: string,
-): ImportJobAttrs => {
+const toAttrs = (job: kms.ImportJob, project: string, region: string): ImportJobAttrs => {
   const name = job.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -292,12 +274,6 @@ const listKeyRingsAt = (parent: string) =>
             nextPageToken: undefined,
           }),
         ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed({
-            items: [] as kms.KeyRing[],
-            nextPageToken: undefined,
-          }),
-        ),
       ),
   );
 
@@ -320,12 +296,6 @@ const listImportJobsInRing = (parent: string) =>
             nextPageToken: undefined,
           }),
         ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed({
-            items: [] as kms.ImportJob[],
-            nextPageToken: undefined,
-          }),
-        ),
       ),
   );
 
@@ -335,9 +305,7 @@ const listImportJobsAt = (locationParent: string) =>
     const pages = yield* Effect.forEach(
       rings,
       (ring) =>
-        ring.name
-          ? listImportJobsInRing(ring.name)
-          : Effect.succeed([] as kms.ImportJob[]),
+        ring.name ? listImportJobsInRing(ring.name) : Effect.succeed([] as kms.ImportJob[]),
       { concurrency: 4 },
     );
     return pages.flat();
@@ -347,39 +315,28 @@ const waitReady = (
   name: string,
 ): Effect.Effect<
   kms.ImportJob,
-  | ImportJobNotResolved
-  | ImportJobPending
-  | kms.GetProjectsLocationsKeyRingsImportJobsError,
+  ImportJobNotResolved | ImportJobPending | kms.GetProjectsLocationsKeyRingsImportJobsError,
   kms.GcpOpContext
 > => {
   const probe: Effect.Effect<
     kms.ImportJob,
-    | ImportJobNotResolved
-    | ImportJobPending
-    | kms.GetProjectsLocationsKeyRingsImportJobsError,
+    ImportJobNotResolved | ImportJobPending | kms.GetProjectsLocationsKeyRingsImportJobsError,
     kms.GcpOpContext
   > = getByName(name).pipe(
-    Effect.flatMap(
-      (
-        job,
-      ): Effect.Effect<
-        kms.ImportJob,
-        ImportJobNotResolved | ImportJobPending
-      > => {
-        if (job === undefined) {
-          return Effect.fail(new ImportJobNotResolved({ name }));
-        }
-        if (job.state === "PENDING_GENERATION") {
-          return Effect.fail(
-            new ImportJobPending({
-              name,
-              state: job.state,
-            }),
-          );
-        }
-        return Effect.succeed(job);
-      },
-    ),
+    Effect.flatMap((job): Effect.Effect<kms.ImportJob, ImportJobNotResolved | ImportJobPending> => {
+      if (job === undefined) {
+        return Effect.fail(new ImportJobNotResolved({ name }));
+      }
+      if (job.state === "PENDING_GENERATION") {
+        return Effect.fail(
+          new ImportJobPending({
+            name,
+            state: job.state,
+          }),
+        );
+      }
+      return Effect.succeed(job);
+    }),
   );
   return probe.pipe(
     Effect.retry({
@@ -413,10 +370,7 @@ export const ImportJobProvider = () =>
 
       const previousId = olds?.importJobId ?? output?.importJobId;
       const nextId = news.importJobId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
       const previousParent =
         output?.keyRing ??
@@ -429,8 +383,7 @@ export const ImportJobProvider = () =>
         news.location ?? output?.location,
         env.region,
       ).parent;
-      const parentChanged =
-        previousParent !== undefined && previousParent !== nextParent;
+      const parentChanged = previousParent !== undefined && previousParent !== nextParent;
 
       if (!idChanged && !parentChanged) return undefined;
       // Cannot delete the old job; create the replacement first.
@@ -439,11 +392,7 @@ export const ImportJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const importJobId = yield* toId(
-        id,
-        olds?.importJobId,
-        output?.importJobId,
-      );
+      const importJobId = yield* toId(id, olds?.importJobId, output?.importJobId);
       const name =
         output?.name ??
         (olds?.keyRing || output?.keyRing
@@ -479,11 +428,9 @@ export const ImportJobProvider = () =>
           const parents = (response.locations ?? [])
             .map((location) => location.name)
             .filter((name): name is string => !!name);
-          const batches = yield* Effect.forEach(
-            parents,
-            (parent) => listImportJobsAt(parent),
-            { concurrency: 4 },
-          );
+          const batches = yield* Effect.forEach(parents, (parent) => listImportJobsAt(parent), {
+            concurrency: 4,
+          });
           for (const jobs of batches) {
             for (const job of jobs) {
               found.push(toAttrs(job, env.project, env.region));
@@ -497,11 +444,7 @@ export const ImportJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const importJobId = yield* toId(
-        id,
-        news.importJobId,
-        output?.importJobId,
-      );
+      const importJobId = yield* toId(id, news.importJobId, output?.importJobId);
       const parent = resolveParent(
         env.project,
         news.keyRing,

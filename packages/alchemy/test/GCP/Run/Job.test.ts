@@ -1,5 +1,4 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
+import { spawnSync } from "node:child_process";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { expect } from "alchemy-test";
@@ -7,22 +6,17 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { spawnSync } from "node:child_process";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import MarkerJob, { MARKER_OBJECT } from "./fixtures/job.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -105,9 +99,7 @@ test.provider(
       expect(refetched.template?.template?.maxRetries).toEqual(1);
       expect(refetched.template?.template?.timeout).toEqual("120s");
       expect(refetched.template?.template?.containers?.[0]?.env).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: "STAGE", value: "prod" }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ name: "STAGE", value: "prod" })]),
       );
 
       yield* stack.destroy();
@@ -115,7 +107,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 120_000 },
 );
 
 test.provider.skipIf(!dockerAvailable)(
@@ -147,9 +139,7 @@ test.provider.skipIf(!dockerAvailable)(
               (item.succeededCount ?? 0) >= 1,
             (item) =>
               new JobRunNotReady({
-                reason: item?.completionTime
-                  ? `failed:${item.failedCount ?? 0}`
-                  : "pending",
+                reason: item?.completionTime ? `failed:${item.failedCount ?? 0}` : "pending",
               }),
           ),
           Effect.retry({
@@ -181,5 +171,5 @@ test.provider.skipIf(!dockerAvailable)(
       const gone = yield* waitUntilGone(out.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 540_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 540_000 },
 );

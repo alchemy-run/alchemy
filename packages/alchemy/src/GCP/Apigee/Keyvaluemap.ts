@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  organizationFromName,
-  toResourceId,
-} from "./names.ts";
+import { lastSegment, orgParent, organizationFromName, toResourceId } from "./names.ts";
 import {
   createInternalLabels,
   encodeOwnership,
@@ -91,26 +86,18 @@ export type Keyvaluemap = Resource<
  */
 export const Keyvaluemap = Resource<Keyvaluemap>("GCP.Apigee.Keyvaluemap");
 
-export class KeyvaluemapNotResolved extends Data.TaggedError(
-  "GCP.Apigee.KeyvaluemapNotResolved",
-)<{
+export class KeyvaluemapNotResolved extends Data.TaggedError("GCP.Apigee.KeyvaluemapNotResolved")<{
   name: string;
 }> {}
 
 const resourceName = (organization: string, mapId: string) =>
   `${orgParent(organization)}/keyvaluemaps/${mapId}`;
 
-const mapIdOf = (map: apigee.GoogleCloudApigeeV1KeyValueMap) =>
-  lastSegment(map.name ?? "");
+const mapIdOf = (map: apigee.GoogleCloudApigeeV1KeyValueMap) => lastSegment(map.name ?? "");
 
-const toAttrs = (
-  map: apigee.GoogleCloudApigeeV1KeyValueMap,
-  organization: string,
-) => {
+const toAttrs = (map: apigee.GoogleCloudApigeeV1KeyValueMap, organization: string) => {
   const mapId = mapIdOf(map);
-  const name = map.name?.includes("/")
-    ? map.name
-    : resourceName(organization, mapId);
+  const name = map.name?.includes("/") ? map.name : resourceName(organization, mapId);
   return {
     name,
     mapId,
@@ -123,14 +110,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_ENTRY}`,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const upsertOwnershipEntry = (mapName: string, marker: string) =>
   apigee
@@ -156,9 +143,7 @@ export const KeyvaluemapProvider = () =>
       const previousId = olds?.mapId ?? output?.mapId;
       const previousOrg = olds?.organization ?? output?.organization;
       if (
-        (previousId !== undefined &&
-          news.mapId !== undefined &&
-          news.mapId !== previousId) ||
+        (previousId !== undefined && news.mapId !== undefined && news.mapId !== previousId) ||
         (previousOrg !== undefined &&
           news.organization !== undefined &&
           news.organization !== previousOrg)
@@ -170,14 +155,8 @@ export const KeyvaluemapProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
-      const mapId = yield* toResourceId(
-        id,
-        olds?.mapId,
-        output?.mapId,
-        MAX_NAME_LENGTH,
-      );
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const mapId = yield* toResourceId(id, olds?.mapId, output?.mapId, MAX_NAME_LENGTH);
       const name = output?.name ?? resourceName(organization, mapId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -201,14 +180,8 @@ export const KeyvaluemapProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
-      const mapId = yield* toResourceId(
-        id,
-        news.mapId,
-        output?.mapId,
-        MAX_NAME_LENGTH,
-      );
+      const organization = news.organization ?? output?.organization ?? env.project;
+      const mapId = yield* toResourceId(id, news.mapId, output?.mapId, MAX_NAME_LENGTH);
       const name = resourceName(organization, mapId);
       const ownership = yield* createInternalLabels(id);
       const marker = encodeOwnership(ownership, undefined);
@@ -246,10 +219,7 @@ export const KeyvaluemapProvider = () =>
         });
       }
 
-      yield* upsertOwnershipEntry(
-        current.name?.includes("/") ? current.name : name,
-        marker,
-      );
+      yield* upsertOwnershipEntry(current.name?.includes("/") ? current.name : name, marker);
 
       return toAttrs(current, organization);
     }),
@@ -257,6 +227,6 @@ export const KeyvaluemapProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsKeyvaluemaps({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

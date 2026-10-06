@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getProjectsExclusions({ name }).pipe(
@@ -43,9 +40,7 @@ test.provider(
       );
 
       expect(created.exclusionId).toEqual(expect.any(String));
-      expect(created.name).toEqual(
-        `projects/${project}/exclusions/${created.exclusionId}`,
-      );
+      expect(created.name).toEqual(`projects/${project}/exclusions/${created.exclusionId}`);
       expect(created.project).toEqual(project);
       expect(created.filter).toEqual("severity=DEBUG");
       expect(created.description).toEqual("drop debug entries");
@@ -98,9 +93,7 @@ test.provider(
       );
 
       expect(replaced.exclusionId).not.toEqual(created.exclusionId);
-      expect(replaced.name).toEqual(
-        `projects/${project}/exclusions/${replaced.exclusionId}`,
-      );
+      expect(replaced.name).toEqual(`projects/${project}/exclusions/${replaced.exclusionId}`);
       expect(replaced.description).toEqual("replaced exclusion");
 
       const fetchedReplacement = yield* logging.getProjectsExclusions({
@@ -116,5 +109,5 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );

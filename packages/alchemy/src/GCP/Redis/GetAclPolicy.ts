@@ -33,14 +33,8 @@ export interface GetAclPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetAclPolicyRequest,
-    ) => Effect.Effect<
-      redis.AclPolicy,
-      redis.GetProjectsLocationsAclPoliciesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<redis.AclPolicy, redis.GetProjectsLocationsAclPoliciesError, RuntimeContext>
   >
 > {}
 
-export const GetAclPolicy = Binding.Service<GetAclPolicy>(
-  "GCP.Redis.GetAclPolicy",
-);
+export const GetAclPolicy = Binding.Service<GetAclPolicy>("GCP.Redis.GetAclPolicy");

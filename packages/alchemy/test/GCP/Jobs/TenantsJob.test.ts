@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as jobs from "@distilled.cloud/gcp/jobs_v4";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -12,7 +12,6 @@ const waitUntilGone = (name: string) =>
   jobs.getProjectsTenantsJobs({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -20,7 +19,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(!runLifecycle)(
   "getProjectsTenantsJobs on a missing job fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -32,15 +31,15 @@ test.provider(
           name: `projects/${project}/tenants/alchemy-missing/jobs/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:jobs", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(process.env.GCP_TEST_JOBS === "1")(
-  "createProjectsTenantsJobs is Forbidden when Cloud Talent Solution is disabled",
+test.provider.skipIf(runLifecycle)(
+  "createProjectsTenantsJobs fails with TalentDataPermissionRequired until onboarded",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
@@ -57,14 +56,11 @@ test.provider.skipIf(process.env.GCP_TEST_JOBS === "1")(
           },
         }),
       );
-      expect(error._tag).toEqual("Forbidden");
-      expect(error.message).toContain(
-        "Cloud Talent Solution API has not been used",
-      );
+      expect(error._tag).toEqual("TalentDataPermissionRequired");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:jobs", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -101,16 +97,14 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.job.parent).toEqual(created.tenant.name);
       expect(created.job.company).toEqual(created.company.name);
       expect(created.job.title).toEqual("Software Engineer");
-      expect(created.job.description).toEqual(
-        "Build Cloud Talent integrations.",
-      );
+      expect(created.job.description).toEqual("Build Cloud Talent integrations.");
       expect(created.job.requisitionId).toEqual("eng-001");
 
       const fetched = yield* jobs.getProjectsTenantsJobs({
         name: created.job.name,
       });
       expect(fetched.name).toEqual(created.job.name);
-      expect(fetched.description).toContain("[alchemy ");
+      expect(fetched.description).toEqual("Build Cloud Talent integrations.");
       expect(fetched.requisitionId).toContain("[alchemy ");
       expect(fetched.title).toEqual("Software Engineer");
 
@@ -151,5 +145,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.job.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:jobs", "live"], timeout: 90_000 },
 );

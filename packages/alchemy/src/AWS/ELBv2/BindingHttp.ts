@@ -81,9 +81,7 @@ export const makeTargetGroupHttpBinding = <
         options.tag,
         options.actions,
         targetGroup,
-        options.resource === "*"
-          ? "*"
-          : Output.interpolate`${targetGroup.targetGroupArn}`,
+        options.resource === "*" ? "*" : Output.interpolate`${targetGroup.targetGroupArn}`,
       );
       return Effect.fn(`${options.tag}(${targetGroup.LogicalId})`)(function* (
         request: Omit<I, "TargetGroupArn">,
@@ -131,9 +129,7 @@ export const makeLoadBalancerHttpBinding = <
         options.tag,
         options.actions,
         loadBalancer,
-        options.resource === "*"
-          ? "*"
-          : Output.interpolate`${loadBalancer.loadBalancerArn}`,
+        options.resource === "*" ? "*" : Output.interpolate`${loadBalancer.loadBalancerArn}`,
       );
       return Effect.fn(`${options.tag}(${loadBalancer.LogicalId})`)(function* (
         request?: Omit<I, "LoadBalancerArn">,
@@ -152,12 +148,7 @@ export const makeLoadBalancerHttpBinding = <
  * the deploy-time half grants `actions` on the trust-store ARN (mTLS
  * `GetTrustStore*` reads support resource-level permissions).
  */
-export const makeTrustStoreHttpBinding = <
-  I extends { TrustStoreArn?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeTrustStoreHttpBinding = <I extends { TrustStoreArn?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.ELBv2.GetTrustStoreCaCertificatesBundle`. */
   tag: string;
   /** The distilled operation; `TrustStoreArn` is injected from the store. */

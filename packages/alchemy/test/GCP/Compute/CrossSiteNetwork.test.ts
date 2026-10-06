@@ -1,21 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !!process.env.GCP_TEST_CROSS_SITE_NETWORK && !process.env.FAST;
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, crossSiteNetwork: string) =>
   compute.getCrossSiteNetworks({ project, crossSiteNetwork }).pipe(
@@ -29,53 +23,6 @@ const waitUntilGone = (project: string, crossSiteNetwork: string) =>
   );
 
 test.provider(
-  "probe insertCrossSiteNetworks entitlement",
-  () =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertCrossSiteNetworks({
-          project,
-          body: {
-            name: "alchemy-csn-probe",
-            description: "alchemy entitlement probe",
-          },
-        })
-        .pipe(
-          Effect.map((operation) => ({
-            tag: "ok" as const,
-            name: operation.name,
-          })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        if (result.name) {
-          yield* compute
-            .deleteCrossSiteNetworks({
-              project,
-              crossSiteNetwork: "alchemy-csn-probe",
-            })
-            .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        }
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
-    }).pipe(logLevel),
-  { timeout: 60_000 },
-);
-
-test.provider.skipIf(!runLifecycle)(
   "create, update, replace, and delete a cross-site network",
   (stack) =>
     Effect.gen(function* () {
@@ -108,14 +55,10 @@ test.provider.skipIf(!runLifecycle)(
           });
         }),
       );
-      expect(updated.crossSiteNetworkName).toEqual(
-        created.crossSiteNetworkName,
-      );
+      expect(updated.crossSiteNetworkName).toEqual(created.crossSiteNetworkName);
       expect(updated.description).toEqual("updated fabric");
 
-      const nextName = `r${created.crossSiteNetworkName}`
-        .slice(0, 63)
-        .replace(/-+$/, "x");
+      const nextName = `r${created.crossSiteNetworkName}`.slice(0, 63).replace(/-+$/, "x");
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Compute.CrossSiteNetwork("Backbone", {
@@ -126,18 +69,12 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(replaced.crossSiteNetworkName).toEqual(nextName);
 
-      const oldGone = yield* waitUntilGone(
-        created.project,
-        created.crossSiteNetworkName,
-      );
+      const oldGone = yield* waitUntilGone(created.project, created.crossSiteNetworkName);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
-      const gone = yield* waitUntilGone(
-        replaced.project,
-        replaced.crossSiteNetworkName,
-      );
+      const gone = yield* waitUntilGone(replaced.project, replaced.crossSiteNetworkName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

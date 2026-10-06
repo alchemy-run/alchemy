@@ -7,13 +7,9 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listAlchemyDataProducts } from "./DataProduct.ts";
 import {
   DataplexNotResolved,
   collectPages,
@@ -29,10 +25,8 @@ import {
   waitUntilExists,
   waitUntilGone,
 } from "./internal.ts";
-import { listAlchemyDataProducts } from "./DataProduct.ts";
 
-export type DataAssetAccessGroupConfig =
-  dataplex.GoogleCloudDataplexV1DataAssetAccessGroupConfig;
+export type DataAssetAccessGroupConfig = dataplex.GoogleCloudDataplexV1DataAssetAccessGroupConfig;
 
 export type DataProductsDataAssetProps = {
   /**
@@ -82,9 +76,7 @@ export type DataProductsDataAsset = Resource<
     /** Bound cloud resource. */
     resource: string;
     /** Access-group configs. */
-    accessGroupConfigs:
-      | Record<string, DataAssetAccessGroupConfig | undefined>
-      | undefined;
+    accessGroupConfigs: Record<string, DataAssetAccessGroupConfig | undefined> | undefined;
     /** Server etag. */
     etag: string | undefined;
     /** System uid. */
@@ -125,10 +117,7 @@ export const DataProductsDataAsset = Resource<DataProductsDataAsset>(
 const resourceNameOf = (parent: string, dataAssetId: string) =>
   `${parent}/dataAssets/${dataAssetId}`;
 
-const toAttrs = (
-  asset: dataplex.GoogleCloudDataplexV1DataAsset,
-  project: string,
-) => {
+const toAttrs = (asset: dataplex.GoogleCloudDataplexV1DataAsset, project: string) => {
   const name = asset.name ?? "";
   const parsed = parseName(name, "dataAssets");
   return {
@@ -150,9 +139,9 @@ const toAttrs = (
 const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : retryQuota(
-        dataplex.getProjectsLocationsDataProductsDataAssets({ name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    : retryQuota(dataplex.getProjectsLocationsDataProductsDataAssets({ name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
 
 const listAtParent = (parent: string) =>
   collectPages(
@@ -162,11 +151,8 @@ const listAtParent = (parent: string) =>
     }),
     (page) => page.dataAssets,
   ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelMap(item.labels)),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const DataProductsDataAssetProvider = () =>
@@ -205,24 +191,17 @@ export const DataProductsDataAssetProvider = () =>
         output?.dataAssetId,
         "dataasset",
       );
-      const name =
-        output?.name ??
-        (olds?.parent ? resourceNameOf(olds.parent, dataAssetId) : "");
+      const name = output?.name ?? (olds?.parent ? resourceNameOf(olds.parent, dataAssetId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const products = yield* listAlchemyDataProducts(
-          env.project,
-          env.region,
-        );
+        const products = yield* listAlchemyDataProducts(env.project, env.region);
         const pages = yield* Effect.forEach(
           products,
           (product) =>
@@ -276,31 +255,26 @@ export const DataProductsDataAssetProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const configsChanged =
-        fingerprint(current.accessGroupConfigs) !==
-        fingerprint(news.accessGroupConfigs);
+        fingerprint(current.accessGroupConfigs) !== fingerprint(news.accessGroupConfigs);
 
       if (labelsChanged || configsChanged) {
-        const operation =
-          yield* dataplex.patchProjectsLocationsDataProductsDataAssets({
+        const operation = yield* dataplex.patchProjectsLocationsDataProductsDataAssets({
+          name: current.name ?? name,
+          updateMask: [
+            labelsChanged ? "labels" : undefined,
+            configsChanged ? "accessGroupConfigs" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: [
-              labelsChanged ? "labels" : undefined,
-              configsChanged ? "accessGroupConfigs" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              accessGroupConfigs: news.accessGroupConfigs,
-            },
-          });
+            etag: current.etag,
+            labels: desiredLabels,
+            accessGroupConfigs: news.accessGroupConfigs,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
@@ -308,9 +282,10 @@ export const DataProductsDataAssetProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* dataplex
+        // No etag: the recorded one goes stale as the server settles an
+        // update ("Provided etag is out of date"), and delete is unconditional.
         .deleteProjectsLocationsDataProductsDataAssets({
           name: output.name,
-          etag: output.etag,
         })
         .pipe(
           Effect.retry({

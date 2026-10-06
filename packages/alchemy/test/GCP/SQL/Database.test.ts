@@ -1,29 +1,23 @@
-import * as GCP from "@/GCP";
-import type { StackServices } from "@/Stack";
-import * as Test from "@/Test/Alchemy";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import type { StackServices } from "@/Stack";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
-  providers: GCP.providers() as Layer.Layer<
-    GCP.ProviderRequirements,
-    never,
-    StackServices
-  >,
+  providers: GCP.providers() as Layer.Layer<GCP.ProviderRequirements, never, StackServices>,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const sqlInstance =
-  process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
+// Runs against an existing Cloud SQL instance (creating one takes well over
+// 5 minutes); set GCP_SQL_INSTANCE to its name.
+const sqlInstance = process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
 const runLifecycle = !!sqlInstance && !process.env.FAST;
 
 const waitUntilGone = (instance: string, databaseName: string) =>
@@ -37,9 +31,7 @@ const waitUntilGone = (instance: string, databaseName: string) =>
         })
         .pipe(
           Effect.as("found" as const),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (status) => status === "gone",
@@ -50,7 +42,7 @@ const waitUntilGone = (instance: string, databaseName: string) =>
   );
 
 test.provider(
-  "getDatabases on a missing instance fails with Forbidden",
+  "getDatabases on a missing instance fails with SqlInstanceNotAuthorized",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -64,43 +56,31 @@ test.provider(
         }),
       );
       // Cloud SQL hides unknown instances behind 403 rather than 404.
-      expect(error._tag).toBe("Forbidden");
+      expect(error._tag).toBe("SqlInstanceNotAuthorized");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 90_000 },
 );
 
 test.provider(
-  "lists sql databases",
+  "listDatabases on a missing instance fails with SqlInstanceNotAuthorized",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const page = yield* sqladmin.listInstances({
-        project,
-        maxResults: 10,
-      });
-      expect(Array.isArray(page.items ?? [])).toEqual(true);
-      for (const instance of page.items ?? []) {
-        if (!instance.name) continue;
-        const databases = yield* sqladmin
-          .listDatabases({
-            project,
-            instance: instance.name,
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({ items: [] as sqladmin.DatabaseList }),
-            ),
-          );
-        expect(Array.isArray(databases.items ?? [])).toEqual(true);
-      }
+      const error = yield* Effect.flip(
+        sqladmin.listDatabases({
+          project,
+          instance: "alchemy-sql-instance-does-not-exist",
+        }),
+      );
+      expect(error._tag).toBe("SqlInstanceNotAuthorized");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -137,9 +117,7 @@ test.provider.skipIf(!runLifecycle)(
         project: created.project,
         instance: created.instance,
       });
-      const isMysql = (live.databaseVersion ?? "")
-        .toUpperCase()
-        .startsWith("MYSQL");
+      const isMysql = (live.databaseVersion ?? "").toUpperCase().startsWith("MYSQL");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -173,5 +151,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.instance, created.databaseName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 120_000 },
 );

@@ -1,27 +1,35 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const location = "us-central1";
+
+// Updating a Salesforce instance that points at a placeholder org fails with
+// InternalServerError ("Unknown Error."); set
+// GCP_TEST_INTEGRATIONS_SFDC=1 when the test org ids resolve to a real
+// Salesforce org.
+const runSfdcLifecycle = !!process.env.GCP_TEST_INTEGRATIONS_SFDC;
+
+// Salesforce instances must reference at least one auth config ("Auth config
+// is not present in the request" otherwise).
+const sfdcCredential = {
+  credentialType: "USERNAME_AND_PASSWORD" as const,
+  usernameAndPassword: { username: "alchemy", password: "test-secret" },
+};
 
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsSfdcInstancesSfdcChannels({ name }).pipe(
     Effect.map((row) =>
-      (row.deleteTime ?? "").length > 0
-        ? ("gone" as const)
-        : ("found" as const),
+      (row.deleteTime ?? "").length > 0 ? ("gone" as const) : ("found" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -43,14 +51,17 @@ test.provider(
           name: `projects/${project}/locations/${location}/sfdcInstances/missing/sfdcChannels/alchemy-missing-channel`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
+test.provider.skipIf(!runSfdcLifecycle)(
   "create, update, and delete an SFDC channel",
   (stack) =>
     Effect.gen(function* () {
@@ -58,22 +69,24 @@ test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const auth = yield* GCP.Integrations.AuthConfig("SalesforceAuth", {
+            location,
+            decryptedCredential: sfdcCredential,
+          });
           const instance = yield* GCP.Integrations.SfdcInstance("Salesforce", {
+            authConfigId: [auth.authConfigId],
             location,
             displayName: "alchemy-sfdc-channel-parent",
             description: "channel parent",
             sfdcOrgId: "00Dxx0000000001",
           });
-          const channel = yield* GCP.Integrations.SfdcInstancesSfdcChannel(
-            "Events",
-            {
-              sfdcInstance: instance.name,
-              location,
-              displayName: "alchemy-channel",
-              description: "account events",
-              channelTopic: "/event/AlchemyTest__e",
-            },
-          );
+          const channel = yield* GCP.Integrations.SfdcInstancesSfdcChannel("Events", {
+            sfdcInstance: instance.name,
+            location,
+            displayName: "alchemy-channel",
+            description: "account events",
+            channelTopic: "/event/AlchemyTest__e",
+          });
           return { instance, channel };
         }),
       );
@@ -88,34 +101,36 @@ test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
       expect(created.channel.description).toEqual("account events");
       expect(created.channel.channelTopic).toEqual("/event/AlchemyTest__e");
 
-      const fetched =
-        yield* integrations.getProjectsLocationsSfdcInstancesSfdcChannels({
-          name: created.channel.name,
-        });
-      expect(fetched.name).toEqual(created.channel.name);
+      const fetched = yield* integrations.getProjectsLocationsSfdcInstancesSfdcChannels({
+        name: created.channel.name,
+      });
+      // The API echoes names keyed by project number.
+      expect(fetched.name?.split("/").slice(2)).toEqual(created.channel.name.split("/").slice(2));
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.channelTopic).toEqual("/event/AlchemyTest__e");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const auth = yield* GCP.Integrations.AuthConfig("SalesforceAuth", {
+            location,
+            decryptedCredential: sfdcCredential,
+          });
           const instance = yield* GCP.Integrations.SfdcInstance("Salesforce", {
+            authConfigId: [auth.authConfigId],
             sfdcInstanceId: created.instance.sfdcInstanceId,
             location,
             displayName: "alchemy-sfdc-channel-parent",
             description: "channel parent",
             sfdcOrgId: "00Dxx0000000001",
           });
-          const channel = yield* GCP.Integrations.SfdcInstancesSfdcChannel(
-            "Events",
-            {
-              sfdcInstance: instance.name,
-              sfdcChannelId: created.channel.sfdcChannelId,
-              location,
-              displayName: "alchemy-channel-v2",
-              description: "account events v2",
-              channelTopic: "/event/AlchemyTestV2__e",
-            },
-          );
+          const channel = yield* GCP.Integrations.SfdcInstancesSfdcChannel("Events", {
+            sfdcInstance: instance.name,
+            sfdcChannelId: created.channel.sfdcChannelId,
+            location,
+            displayName: "alchemy-channel-v2",
+            description: "account events v2",
+            channelTopic: "/event/AlchemyTestV2__e",
+          });
           return { instance, channel };
         }),
       );
@@ -130,5 +145,8 @@ test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
       const gone = yield* waitUntilGone(created.channel.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );

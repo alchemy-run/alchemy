@@ -16,6 +16,10 @@ export interface CreateJobRequest extends Omit<
  * is omitted, `templateId` is filled from the bound {@link JobTemplate}.
  * Provide {@link CreateJobHttp}.
  *
+ * Grants `roles/transcoder.editor` on the project because Transcoder has
+ * no resource-level IAM and no narrower predefined role carries
+ * `transcoder.jobs.create` (`roles/transcoder.viewer` is read-only).
+ *
  * ### Creating a Job
  * **Example:** Transcode with the bound template
  * ```typescript
@@ -39,11 +43,7 @@ export interface CreateJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: CreateJobRequest,
-    ) => Effect.Effect<
-      transcoder.Job,
-      transcoder.CreateProjectsLocationsJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<transcoder.Job, transcoder.CreateProjectsLocationsJobsError, RuntimeContext>
   >
 > {}
 

@@ -109,10 +109,9 @@ export type IntegrationsVersionsTestCases = Resource<
  * @resource
  * @category Integrations
  */
-export const IntegrationsVersionsTestCases =
-  Resource<IntegrationsVersionsTestCases>(
-    "GCP.Integrations.IntegrationsVersionsTestCases",
-  );
+export const IntegrationsVersionsTestCases = Resource<IntegrationsVersionsTestCases>(
+  "GCP.Integrations.IntegrationsVersionsTestCases",
+);
 
 export class IntegrationsVersionsTestCasesNotResolved extends Data.TaggedError(
   "GCP.Integrations.IntegrationsVersionsTestCasesNotResolved",
@@ -125,8 +124,7 @@ const expandVersion = (value: string, project: string, location: string) =>
     ? value
     : `${locationParent(project, location)}/integrations/${value}/versions/${value}`;
 
-const resourceName = (version: string, testCaseId: string) =>
-  `${version}/testCases/${testCaseId}`;
+const resourceName = (version: string, testCaseId: string) => `${version}/testCases/${testCaseId}`;
 
 const toAttrs = (
   testCase: integrations.GoogleCloudIntegrationsV1alphaTestCase,
@@ -155,11 +153,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsIntegrationsVersionsTestCases({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsIntegrationsVersionsTestCases
@@ -171,7 +165,6 @@ const listAt = (parent: string, project: string, region: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (parent: string, id: string) =>
@@ -179,34 +172,18 @@ const findOwned = (parent: string, id: string) =>
     .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.testCases ?? [])),
-      Stream.filterEffect((testCase) =>
-        ownedByAlchemy(id, testCase.description),
-      ),
+      Stream.filterEffect((testCase) => ownedByAlchemy(id, testCase.description)),
       Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
+      Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 const listWildcard = (project: string, location: string) =>
-  listAt(
-    `${locationParent(project, location)}/integrations/-/versions/-`,
-    project,
-    location,
-  );
+  listAt(`${locationParent(project, location)}/integrations/-/versions/-`, project, location);
 
 export const IntegrationsVersionsTestCasesProvider = () =>
   Provider.succeed(IntegrationsVersionsTestCases, {
-    stables: [
-      "name",
-      "testCaseId",
-      "version",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "testCaseId", "version", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -231,20 +208,9 @@ export const IntegrationsVersionsTestCasesProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const version = expandVersion(
-        olds?.version ?? output?.version ?? "",
-        env.project,
-        location,
-      );
-      const testCaseId = yield* toResourceId(
-        id,
-        olds?.testCaseId,
-        output?.testCaseId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const version = expandVersion(olds?.version ?? output?.version ?? "", env.project, location);
+      const testCaseId = yield* toResourceId(id, olds?.testCaseId, output?.testCaseId);
       const name = output?.name ?? resourceName(version, testCaseId);
       let existing = yield* getByName(name);
       if (existing === undefined && version.length > 0) {
@@ -252,9 +218,7 @@ export const IntegrationsVersionsTestCasesProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, version);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -265,16 +229,9 @@ export const IntegrationsVersionsTestCasesProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const version = expandVersion(news.version, env.project, location);
-      const testCaseId = yield* toResourceId(
-        id,
-        news.testCaseId,
-        output?.testCaseId,
-      );
+      const testCaseId = yield* toResourceId(id, news.testCaseId, output?.testCaseId);
       const name = output?.name ?? resourceName(version, testCaseId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -310,23 +267,20 @@ export const IntegrationsVersionsTestCasesProvider = () =>
       const triggerChanged = !sameText(current.triggerId, news.triggerId);
 
       if (displayChanged || descriptionChanged || triggerChanged) {
-        current =
-          yield* integrations.patchProjectsLocationsIntegrationsVersionsTestCases(
-            {
-              name: currentName,
-              updateMask: updateMaskOf(
-                displayChanged ? "display_name" : undefined,
-                descriptionChanged ? "description" : undefined,
-                triggerChanged ? "trigger_id" : undefined,
-              ),
-              body: {
-                name: currentName,
-                displayName,
-                description,
-                triggerId: news.triggerId,
-              },
-            },
-          );
+        current = yield* integrations.patchProjectsLocationsIntegrationsVersionsTestCases({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+            triggerChanged ? "trigger_id" : undefined,
+          ),
+          body: {
+            name: currentName,
+            displayName,
+            description,
+            triggerId: news.triggerId,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region, version);

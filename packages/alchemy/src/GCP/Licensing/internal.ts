@@ -1,5 +1,7 @@
 import * as licensing from "@distilled.cloud/gcp/licensing_v1";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 export const DEFAULT_PRODUCT_ID = "Google-Apps";
@@ -39,39 +41,37 @@ export const normalizeCustomerId = (value: string | undefined) => {
   if (trimmed === undefined || trimmed.length === 0) {
     return undefined;
   }
-  return trimmed.startsWith("customers/")
-    ? trimmed.slice("customers/".length)
-    : trimmed;
+  return trimmed.startsWith("customers/") ? trimmed.slice("customers/".length) : trimmed;
 };
 
+/** Optional setting from the ConfigProvider (env by default). */
+const optionalSetting = (key: string) =>
+  Effect.gen(function* () {
+    const value = Option.getOrUndefined(yield* Config.option(Config.String(key)))?.trim();
+    return value !== undefined && value.length > 0 ? value : undefined;
+  });
+
+/** Customer for `list` and the `customerId` default: `GOOGLE_LICENSE_CUSTOMER_ID`. */
 export const listCustomerId = () =>
-  normalizeCustomerId(
-    process.env.GOOGLE_LICENSE_CUSTOMER_ID ??
-      process.env.GOOGLE_WORKSPACE_CUSTOMER_ID,
-  );
+  Effect.gen(function* () {
+    return normalizeCustomerId(
+      (yield* optionalSetting("GOOGLE_LICENSE_CUSTOMER_ID")) ??
+        (yield* optionalSetting("GOOGLE_WORKSPACE_CUSTOMER_ID")),
+    );
+  });
 
-export const listProductId = () => {
-  const value = process.env.GOOGLE_LICENSE_PRODUCT_ID?.trim();
-  return value !== undefined && value.length > 0 ? value : undefined;
-};
+/** Product swept by `list`: `GOOGLE_LICENSE_PRODUCT_ID`. */
+export const listProductId = () => optionalSetting("GOOGLE_LICENSE_PRODUCT_ID");
 
-export const listSkuId = () => {
-  const value = process.env.GOOGLE_LICENSE_SKU_ID?.trim();
-  return value !== undefined && value.length > 0 ? value : undefined;
-};
+/** SKU swept by `list`: `GOOGLE_LICENSE_SKU_ID`. */
+export const listSkuId = () => optionalSetting("GOOGLE_LICENSE_SKU_ID");
 
-export const listUserId = () => {
-  const value = process.env.GOOGLE_LICENSE_USER_ID?.trim();
-  return value !== undefined && value.length > 0 ? value : undefined;
-};
+/** User whose assignments `list` returns: `GOOGLE_LICENSE_USER_ID`. */
+export const listUserId = () => optionalSetting("GOOGLE_LICENSE_USER_ID");
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
-export const getAssignment = (
-  productId: string,
-  skuId: string,
-  userId: string,
-) =>
+export const getAssignment = (productId: string, skuId: string, userId: string) =>
   productId.length === 0 || skuId.length === 0 || userId.length === 0
     ? Effect.succeed(undefined)
     : licensing
@@ -80,17 +80,9 @@ export const getAssignment = (
           skuId,
           userId,
         })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden", "Unauthorized"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-export const listAssignments = (
-  productId: string,
-  customerId: string,
-  skuId?: string,
-) => {
+export const listAssignments = (productId: string, customerId: string, skuId?: string) => {
   if (productId.length === 0 || customerId.length === 0) {
     return emptyList<licensing.LicenseAssignment>();
   }
@@ -111,9 +103,7 @@ export const listAssignments = (
     Stream.flatMap((page) => Stream.fromIterable(page.items ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden", "Unauthorized"], () =>
-      emptyList<licensing.LicenseAssignment>(),
-    ),
+    Effect.catchTag("NotFound", () => emptyList<licensing.LicenseAssignment>()),
   );
 };
 
@@ -131,11 +121,7 @@ export const findAssignment = (
     return items.find((item) => sameUser(item.userId, userId));
   });
 
-export const deleteAssignment = (
-  productId: string,
-  skuId: string,
-  userId: string,
-) =>
+export const deleteAssignment = (productId: string, skuId: string, userId: string) =>
   productId.length === 0 || skuId.length === 0 || userId.length === 0
     ? Effect.void
     : licensing
@@ -144,9 +130,4 @@ export const deleteAssignment = (
           skuId,
           userId,
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "Forbidden", "Unauthorized", "BadRequest", "Conflict"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));

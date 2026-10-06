@@ -23,9 +23,8 @@ import {
   normalizeLocation,
   ownedByAlchemy,
   parentOf,
-  parseOwnership,
   projectOf,
-  updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type SessionEntityOverrideMode =
@@ -138,16 +137,13 @@ export class AgentsSessionsEntityTypeNotResolved extends Data.TaggedError(
 const DEFAULT_ENTITY_TYPE = "sys.color";
 const DEFAULT_MODE: SessionEntityOverrideMode = "ENTITY_OVERRIDE_MODE_OVERRIDE";
 
-const sessionParent = (agent: string, sessionId: string) =>
-  `${agent}/sessions/${sessionId}`;
+const sessionParent = (agent: string, sessionId: string) => `${agent}/sessions/${sessionId}`;
 
 const resourceName = (agent: string, sessionId: string, entityTypeId: string) =>
   `${sessionParent(agent, sessionId)}/entityTypes/${entityTypeId}`;
 
 const userEntities = (
-  entities:
-    | dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntityList
-    | undefined,
+  entities: dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntityList | undefined,
 ): AgentsSessionsEntity[] =>
   (entities ?? [])
     .filter((entity) => !hasOwnershipMarker(entity.value))
@@ -168,9 +164,7 @@ const stampEntities = (
 };
 
 const ownershipText = (
-  entities:
-    | dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntityList
-    | undefined,
+  entities: dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntityList | undefined,
 ) => entities?.find((entity) => hasOwnershipMarker(entity.value))?.value;
 
 const toAttrs = (
@@ -202,34 +196,20 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, agent: string) =>
-  dialogflow.listProjectsLocationsAgentsSessionsEntityTypes
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.sessionEntityTypes ?? []),
-      ),
-      Stream.filter((entityType) =>
-        (entityType.entities ?? []).some((entity) =>
-          hasOwnershipMarker(entity.value),
-        ),
-      ),
-      Stream.map((entityType) => toAttrs(entityType, project, agent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsSessionsEntityTypes.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.sessionEntityTypes ?? [])),
+    Stream.filter((entityType) =>
+      (entityType.entities ?? []).some((entity) => hasOwnershipMarker(entity.value)),
+    ),
+    Stream.map((entityType) => toAttrs(entityType, project, agent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const AgentsSessionsEntityTypeProvider = () =>
   Provider.succeed(AgentsSessionsEntityType, {
-    stables: [
-      "name",
-      "entityTypeId",
-      "sessionId",
-      "agent",
-      "location",
-      "project",
-    ],
+    stables: ["name", "entityTypeId", "sessionId", "agent", "location", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -253,23 +233,15 @@ export const AgentsSessionsEntityTypeProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const agent = olds?.agent
-        ? expandAgent(olds.agent, env.project, location)
-        : output?.agent;
+      const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
       const sessionId = olds?.sessionId ?? output?.sessionId ?? DEFAULT_SESSION;
-      const entityTypeId =
-        olds?.entityTypeId ?? output?.entityTypeId ?? DEFAULT_ENTITY_TYPE;
+      const entityTypeId = olds?.entityTypeId ?? output?.entityTypeId ?? DEFAULT_ENTITY_TYPE;
       const name =
-        output?.name ??
-        (agent !== undefined
-          ? resourceName(agent, sessionId, entityTypeId)
-          : "");
+        output?.name ?? (agent !== undefined ? resourceName(agent, sessionId, entityTypeId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, agent);
-      return (yield* ownedByAlchemy(id, ownershipText(existing.entities)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing.entities))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -278,12 +250,7 @@ export const AgentsSessionsEntityTypeProvider = () =>
         const agents = yield* namedAgents(env.project);
         const pages = yield* Effect.forEach(
           agents,
-          (agent) =>
-            listAt(
-              sessionParent(agent.name, DEFAULT_SESSION),
-              env.project,
-              agent.name,
-            ),
+          (agent) => listAt(sessionParent(agent.name, DEFAULT_SESSION), env.project, agent.name),
           { concurrency: 4 },
         );
         return pages.flat();
@@ -291,9 +258,7 @@ export const AgentsSessionsEntityTypeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const agent = expandAgent(news.agent, env.project, location);
       const sessionId = news.sessionId ?? output?.sessionId ?? DEFAULT_SESSION;
       const entityTypeId = lastSegment(
@@ -327,25 +292,21 @@ export const AgentsSessionsEntityTypeProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      const modeChanged =
-        (current.entityOverrideMode ?? DEFAULT_MODE) !== entityOverrideMode;
-      const entitiesChanged =
-        fingerprint(current.entities) !== fingerprint(entities);
+      const modeChanged = (current.entityOverrideMode ?? DEFAULT_MODE) !== entityOverrideMode;
+      const entitiesChanged = fingerprint(current.entities) !== fingerprint(entities);
 
       if (modeChanged || entitiesChanged) {
         current =
+          // The body always carries both fields; an `entities` update mask
+          // is silently ignored by the API, so replace the whole resource.
           yield* dialogflow.patchProjectsLocationsAgentsSessionsEntityTypes({
             name: currentName,
-            updateMask: updateMaskOf(
-              modeChanged ? "entity_override_mode" : undefined,
-              entitiesChanged ? "entities" : undefined,
-            ),
             body: { ...body, name: currentName },
           });
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -353,5 +314,5 @@ export const AgentsSessionsEntityTypeProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

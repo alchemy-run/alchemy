@@ -1,5 +1,1 @@
-export {
-  DataplexOperationFailed,
-  DataplexOperationPending,
-  waitForOperation,
-} from "./internal.ts";
+export { waitForOperation } from "./internal.ts";

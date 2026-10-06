@@ -16,6 +16,10 @@ export interface ExecuteSqlRequest extends Omit<
  * phase. Provide {@link ExecuteSqlHttp}. The instance must allow the
  * Execute SQL API (`dataApiAccess: true`).
  *
+ * Grants `roles/cloudsql.instanceUser` (`cloudsql.instances.executeSql`,
+ * `get`, `login`) on the project under an IAM Condition naming only this
+ * instance.
+ *
  * ### Executing SQL
  * **Example:** Run a statement
  * ```typescript

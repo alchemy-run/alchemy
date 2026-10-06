@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const LOCATION = "us-central1";
 const PUBSUB_EVENT_TYPE = "google.cloud.pubsub.topic.v1.messagePublished";
@@ -33,9 +30,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const eventFilters: GCP.Eventarc.EventFilter[] = [
-  { attribute: "type", value: PUBSUB_EVENT_TYPE },
-];
+const eventFilters: GCP.Eventarc.EventFilter[] = [{ attribute: "type", value: PUBSUB_EVENT_TYPE }];
 
 test.provider(
   "create, update, and delete an Eventarc trigger",
@@ -76,12 +71,8 @@ test.provider(
           }),
         ]),
       );
-      expect(created.trigger.destination?.workflow).toEqual(
-        created.workflow.name,
-      );
-      expect(created.trigger.transport?.pubsub?.topic).toEqual(
-        created.topic.name,
-      );
+      expect(created.trigger.destination?.workflow).toEqual(created.workflow.name);
+      expect(created.trigger.transport?.pubsub?.topic).toEqual(created.topic.name);
 
       const fetched = yield* eventarc.getProjectsLocationsTriggers({
         name: created.trigger.name,
@@ -135,5 +126,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.trigger.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:eventarc", "live"], timeout: 120_000 },
 );

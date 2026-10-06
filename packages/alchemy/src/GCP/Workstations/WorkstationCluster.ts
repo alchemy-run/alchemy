@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -212,8 +207,8 @@ export type WorkstationCluster = Resource<
  * ### Updating a Cluster
  * **Example:** Display name and labels
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
- *   workstationClusterId: existing.workstationClusterId,
  *   displayName: "app-dev workstations v2",
  *   labels: { env: "prod", team: "platform" },
  * });
@@ -226,17 +221,12 @@ export const WorkstationCluster = Resource<WorkstationCluster>(
   "GCP.Workstations.WorkstationCluster",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  workstationClusterId: string,
-) =>
+const resourceName = (project: string, location: string, workstationClusterId: string) =>
   `projects/${project}/locations/${location}/workstationClusters/${workstationClusterId}`;
 
 const toDomain = (
   config: workstations.DomainConfig | DomainConfig | undefined,
-): DomainConfig | undefined =>
-  config === undefined ? undefined : { domain: config.domain };
+): DomainConfig | undefined => (config === undefined ? undefined : { domain: config.domain });
 
 const toGateway = (
   config: workstations.GatewayConfig | GatewayConfig | undefined,
@@ -253,11 +243,7 @@ const toPrivate = (
         allowedProjects: config.allowedProjects,
       };
 
-const toAttrs = (
-  item: workstations.WorkstationCluster,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: workstations.WorkstationCluster, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "workstationClusters", region);
   return {
@@ -303,34 +289,21 @@ const listOwned = (project: string, region: string) =>
 
 export const WorkstationClusterProvider = () =>
   Provider.succeed(WorkstationCluster, {
-    stables: [
-      "name",
-      "workstationClusterId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "workstationClusterId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousNetwork = olds?.network ?? output?.network;
       const previousSubnetwork = olds?.subnetwork ?? output?.subnetwork;
-      const previousPrivate =
-        olds?.privateClusterConfig ?? output?.privateClusterConfig;
+      const previousPrivate = olds?.privateClusterConfig ?? output?.privateClusterConfig;
       const previousDomain = olds?.domainConfig ?? output?.domainConfig;
       const previousTags = olds?.tags;
       return replaceOnIdentity({
         previousId: olds?.workstationClusterId ?? output?.workstationClusterId,
         nextId:
-          news.workstationClusterId ??
-          olds?.workstationClusterId ??
-          output?.workstationClusterId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.workstationClusterId ?? olds?.workstationClusterId ?? output?.workstationClusterId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -365,19 +338,16 @@ export const WorkstationClusterProvider = () =>
         output?.workstationClusterId,
         "cluster",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, workstationClusterId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, workstationClusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      // A resource we recorded is ours even while GCP hides its labels
+      // (clusters report none while `reconciling`), so destroy can still
+      // clean it up.
+      if (output !== undefined && output.name === existing.name) return attrs;
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -395,10 +365,7 @@ export const WorkstationClusterProvider = () =>
         output?.workstationClusterId,
         "cluster",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, workstationClusterId);
       const network = networkName(news.network, env.project);
       const subnetwork = subnetworkName(news.subnetwork, env.project, location);
@@ -431,7 +398,12 @@ export const WorkstationClusterProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -446,16 +418,19 @@ export const WorkstationClusterProvider = () =>
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.displayName, news.displayName) && "displayName",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
-        !sameText(current.workstationLaunchUrl, news.workstationLaunchUrl) &&
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
+        // Both URLs default server-side; only converge them when set.
+        news.workstationLaunchUrl !== undefined &&
+          !sameText(current.workstationLaunchUrl, news.workstationLaunchUrl) &&
           "workstationLaunchUrl",
-        !sameText(
-          current.workstationAuthorizationUrl,
-          news.workstationAuthorizationUrl,
-        ) && "workstationAuthorizationUrl",
-        fingerprint(toGateway(current.gatewayConfig)) !==
-          fingerprint(news.gatewayConfig) && "gatewayConfig",
+        news.workstationAuthorizationUrl !== undefined &&
+          !sameText(current.workstationAuthorizationUrl, news.workstationAuthorizationUrl) &&
+          "workstationAuthorizationUrl",
+        news.gatewayConfig !== undefined &&
+          fingerprint(toGateway(current.gatewayConfig)) !==
+            fingerprint(toGateway(news.gatewayConfig)) &&
+          "gatewayConfig",
         fingerprint(observedPrivate?.allowedProjects) !==
           fingerprint(news.privateClusterConfig?.allowedProjects) &&
           "privateClusterConfig.allowedProjects",
@@ -487,10 +462,7 @@ export const WorkstationClusterProvider = () =>
             }),
           );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
@@ -511,7 +483,12 @@ export const WorkstationClusterProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

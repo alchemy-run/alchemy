@@ -1,6 +1,6 @@
-import { mergeWithObservedConfig } from "@/AWS/CloudFront/Distribution";
 import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect, test } from "alchemy-test";
+import { mergeWithObservedConfig } from "@/AWS/CloudFront/Distribution";
 
 /**
  * A live distribution config as returned by `GetDistributionConfig` for a
@@ -121,10 +121,7 @@ const desired: cloudfront.DistributionConfig = {
     FunctionAssociations: {
       Quantity: 1,
       Items: [
-        {
-          FunctionARN: "arn:aws:cloudfront::123:function/deny-all",
-          EventType: "viewer-request",
-        },
+        { FunctionARN: "arn:aws:cloudfront::123:function/deny-all", EventType: "viewer-request" },
       ],
     },
   },
@@ -160,12 +157,8 @@ describe(
     test("desired values win over observed ones", () => {
       expect(merged.Enabled).toBe(false);
       expect(merged.IsIPV6Enabled).toBe(true);
-      expect(merged.Origins?.Items?.[0]?.OriginAccessControlId).toBe(
-        "OAC_DESIRED",
-      );
-      expect(merged.DefaultCacheBehavior?.FunctionAssociations?.Quantity).toBe(
-        1,
-      );
+      expect(merged.Origins?.Items?.[0]?.OriginAccessControlId).toBe("OAC_DESIRED");
+      expect(merged.DefaultCacheBehavior?.FunctionAssociations?.Quantity).toBe(1);
     });
 
     test("top-level members the desired config omits are filled from observed", () => {
@@ -190,18 +183,9 @@ describe(
     });
 
     test("nested members inside behaviors are filled (default + by PathPattern)", () => {
-      for (const behavior of [
-        merged.DefaultCacheBehavior,
-        merged.CacheBehaviors?.Items?.[0],
-      ]) {
-        expect(behavior?.TrustedSigners).toEqual({
-          Enabled: false,
-          Quantity: 0,
-        });
-        expect(behavior?.TrustedKeyGroups).toEqual({
-          Enabled: false,
-          Quantity: 0,
-        });
+      for (const behavior of [merged.DefaultCacheBehavior, merged.CacheBehaviors?.Items?.[0]]) {
+        expect(behavior?.TrustedSigners).toEqual({ Enabled: false, Quantity: 0 });
+        expect(behavior?.TrustedKeyGroups).toEqual({ Enabled: false, Quantity: 0 });
         expect(behavior?.SmoothStreaming).toBe(false);
         expect(behavior?.FieldLevelEncryptionId).toBe("");
         expect(behavior?.GrpcConfig).toEqual({ Enabled: false });
@@ -213,10 +197,7 @@ describe(
       // Desired sets CloudFrontDefaultCertificate only; the observed
       // SSLSupportMethod / MinimumProtocolVersion carry over.
       const mergedWithCert = mergeWithObservedConfig(
-        {
-          ...desired,
-          ViewerCertificate: { CloudFrontDefaultCertificate: true },
-        },
+        { ...desired, ViewerCertificate: { CloudFrontDefaultCertificate: true } },
         observed,
       );
       expect(mergedWithCert.ViewerCertificate).toEqual({
@@ -229,10 +210,7 @@ describe(
     test("desired arrays are never extended by observed items", () => {
       // Observed has one origin; a desired config that removes it must win.
       const withoutOrigins = mergeWithObservedConfig(
-        {
-          ...desired,
-          Origins: { Quantity: 0, Items: [] },
-        },
+        { ...desired, Origins: { Quantity: 0, Items: [] } },
         observed,
       );
       expect(withoutOrigins.Origins).toEqual({ Quantity: 0, Items: [] });
@@ -246,19 +224,13 @@ describe(
       const withWhitelist = {
         ...observed,
         Restrictions: {
-          GeoRestriction: {
-            RestrictionType: "whitelist",
-            Quantity: 2,
-            Items: ["US", "GB"],
-          },
+          GeoRestriction: { RestrictionType: "whitelist", Quantity: 2, Items: ["US", "GB"] },
         },
       } as cloudfront.DistributionConfig;
       const dropped = mergeWithObservedConfig(
         {
           ...desired,
-          Restrictions: {
-            GeoRestriction: { RestrictionType: "none", Quantity: 0 },
-          },
+          Restrictions: { GeoRestriction: { RestrictionType: "none", Quantity: 0 } },
         } as cloudfront.DistributionConfig,
         withWhitelist,
       );
@@ -273,12 +245,7 @@ describe(
           ...desired,
           Origins: {
             Quantity: 1,
-            Items: [
-              {
-                Id: "brand-new",
-                DomainName: "new.example.com",
-              } as cloudfront.Origin,
-            ],
+            Items: [{ Id: "brand-new", DomainName: "new.example.com" } as cloudfront.Origin],
           },
         },
         observed,

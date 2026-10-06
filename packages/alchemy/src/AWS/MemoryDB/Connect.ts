@@ -97,8 +97,6 @@ export interface Connect extends Binding.Service<
   (
     cluster: Cluster,
     options?: ConnectOptions,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
 export const Connect = Binding.Service<Connect>("AWS.MemoryDB.Connect");

@@ -19,13 +19,7 @@ import {
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
-import {
-  lastSegment,
-  locationOf,
-  locationParent,
-  parentOf,
-  toResourceId,
-} from "./ownership.ts";
+import { lastSegment, locationOf, locationParent, parentOf, toResourceId } from "./ownership.ts";
 
 export type ReasoningEnginesSessionProps = {
   /**
@@ -131,13 +125,9 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const resourceName = (parent: string, sessionId: string) =>
-  `${parent}/sessions/${sessionId}`;
+const resourceName = (parent: string, sessionId: string) => `${parent}/sessions/${sessionId}`;
 
-const toAttrs = (
-  session: aiplatform.GoogleCloudAiplatformV1Session,
-  project: string,
-) => {
+const toAttrs = (session: aiplatform.GoogleCloudAiplatformV1Session, project: string) => {
   const name = session.name ?? "";
   return {
     name,
@@ -170,8 +160,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new ReasoningEnginesSessionNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -184,45 +173,29 @@ const listEngines = (project: string, location: string) =>
       pageSize: 100,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.reasoningEngines ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.reasoningEngines ?? [])),
       Stream.map((engine) => engine.name ?? ""),
       Stream.filter((name) => name.length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
     );
 
 const listAtParent = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsReasoningEnginesSessions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
-      Stream.filter((session) =>
-        Object.keys(session.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ),
-      Stream.map((session) => toAttrs(session, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsReasoningEnginesSessions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
+    Stream.filter((session) =>
+      Object.keys(session.labels ?? {}).some((key) => key.startsWith("alchemy-")),
+    ),
+    Stream.map((session) => toAttrs(session, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const ReasoningEnginesSessionProvider = () =>
   Provider.succeed(ReasoningEnginesSession, {
-    stables: [
-      "name",
-      "sessionId",
-      "parent",
-      "location",
-      "project",
-      "userId",
-      "createTime",
-    ],
+    stables: ["name", "sessionId", "parent", "location", "project", "userId", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -247,30 +220,20 @@ export const ReasoningEnginesSessionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sessionId = yield* toResourceId(
-        id,
-        olds?.sessionId,
-        output?.sessionId,
-      );
+      const sessionId = yield* toResourceId(id, olds?.sessionId, output?.sessionId);
       const name =
-        output?.name ??
-        (olds?.parent !== undefined
-          ? resourceName(olds.parent, sessionId)
-          : "");
+        output?.name ?? (olds?.parent !== undefined ? resourceName(olds.parent, sessionId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listEngines(env.project, location),
+        const engines = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listEngines(env.project, location),
         )).flat();
         const pages = yield* Effect.forEach(
           engines,
@@ -282,11 +245,7 @@ export const ReasoningEnginesSessionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sessionId = yield* toResourceId(
-        id,
-        news.sessionId,
-        output?.sessionId,
-      );
+      const sessionId = yield* toResourceId(id, news.sessionId, output?.sessionId);
       const name = resourceName(news.parent, sessionId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -328,36 +287,32 @@ export const ReasoningEnginesSessionProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const expireChanged =
-        news.expireTime !== undefined &&
-        (current.expireTime ?? "") !== news.expireTime;
+        news.expireTime !== undefined && (current.expireTime ?? "") !== news.expireTime;
       const stateChanged =
         news.sessionState !== undefined &&
-        JSON.stringify(current.sessionState ?? {}) !==
-          JSON.stringify(news.sessionState ?? {});
+        JSON.stringify(current.sessionState ?? {}) !== JSON.stringify(news.sessionState ?? {});
 
       if (labelsChanged || displayChanged || expireChanged || stateChanged) {
-        current =
-          yield* aiplatform.patchProjectsLocationsReasoningEnginesSessions({
+        current = yield* aiplatform.patchProjectsLocationsReasoningEnginesSessions({
+          name: current.name ?? name,
+          updateMask: [
+            labelsChanged ? "labels" : undefined,
+            displayChanged ? "displayName" : undefined,
+            expireChanged ? "expireTime" : undefined,
+            stateChanged ? "sessionState" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: [
-              labelsChanged ? "labels" : undefined,
-              displayChanged ? "displayName" : undefined,
-              expireChanged ? "expireTime" : undefined,
-              stateChanged ? "sessionState" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: current.name ?? name,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              expireTime: news.expireTime,
-              sessionState: news.sessionState,
-            },
-          });
+            displayName: news.displayName,
+            labels: desiredLabels,
+            expireTime: news.expireTime,
+            sessionState: news.sessionState,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

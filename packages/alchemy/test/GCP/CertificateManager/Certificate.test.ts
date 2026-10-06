@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Self-signed RSA-2048 fixtures generated once with openssl (not at test time).
 const CERT_A = `-----BEGIN CERTIFICATE-----
@@ -154,20 +151,17 @@ test.provider(
       expect(created.sanDnsnames).toContain("alchemy-ssl-a.test");
       expect(created.expireTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* certificatemanager.getProjectsLocationsCertificates({
-          name: created.name,
-        });
+      const fetched = yield* certificatemanager.getProjectsLocationsCertificates({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("frontend tls a");
       expect(fetched.pemCertificate).toContain("BEGIN CERTIFICATE");
       expect(fetched.sanDnsnames).toContain("alchemy-ssl-a.test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -187,10 +181,9 @@ test.provider(
       expect(updated.labels).toMatchObject({ env: "prod", role: "tls" });
       expect(updated.sanDnsnames).toContain("alchemy-ssl-a.test");
 
-      const refetched =
-        yield* certificatemanager.getProjectsLocationsCertificates({
-          name: created.name,
-        });
+      const refetched = yield* certificatemanager.getProjectsLocationsCertificates({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("frontend tls b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("tls");
@@ -214,10 +207,9 @@ test.provider(
       expect(replaced.sanDnsnames).toContain("alchemy-ssl-b.test");
       expect(replaced.sanDnsnames).not.toContain("alchemy-ssl-a.test");
 
-      const replacedFetched =
-        yield* certificatemanager.getProjectsLocationsCertificates({
-          name: created.name,
-        });
+      const replacedFetched = yield* certificatemanager.getProjectsLocationsCertificates({
+        name: created.name,
+      });
       expect(replacedFetched.sanDnsnames).toContain("alchemy-ssl-b.test");
       expect(replacedFetched.description).toEqual("frontend tls c");
 
@@ -226,5 +218,8 @@ test.provider(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+    timeout: 90_000,
+  },
 );

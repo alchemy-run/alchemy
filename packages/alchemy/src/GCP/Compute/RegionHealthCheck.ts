@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,11 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type {
   GrpcHealthCheck,
@@ -28,6 +23,7 @@ import type {
   SslHealthCheck,
   TcpHealthCheck,
 } from "./HealthCheck.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_CHECK_INTERVAL = 5;
 const DEFAULT_TIMEOUT = 5;
@@ -190,24 +186,13 @@ export type RegionHealthCheck = Resource<
  * @resource
  * @category Compute
  */
-export const RegionHealthCheck = Resource<RegionHealthCheck>(
-  "GCP.Compute.RegionHealthCheck",
-);
+export const RegionHealthCheck = Resource<RegionHealthCheck>("GCP.Compute.RegionHealthCheck");
 
 export class RegionHealthCheckNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionHealthCheckNotResolved",
 )<{
   healthCheckName: string;
   region: string;
-}> {}
-
-export class RegionHealthCheckOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionHealthCheckOperationFailed",
-)<{
-  healthCheckName: string;
-  region: string;
-  operation: string;
-  message: string;
 }> {}
 
 const lastSegment = (value: string | undefined): string => {
@@ -288,9 +273,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const protocolBody = (
   type: HealthCheckType,
@@ -390,9 +373,7 @@ const asPortSpecification = (
   }
 };
 
-const asProxyHeader = (
-  value: string | undefined,
-): HealthCheckProxyHeader | undefined => {
+const asProxyHeader = (value: string | undefined): HealthCheckProxyHeader | undefined => {
   switch (value) {
     case "NONE":
     case "PROXY_V1":
@@ -403,11 +384,7 @@ const asProxyHeader = (
 };
 
 const toHttpProbe = (
-  check:
-    | compute.HTTPHealthCheck
-    | compute.HTTPSHealthCheck
-    | compute.HTTP2HealthCheck
-    | undefined,
+  check: compute.HTTPHealthCheck | compute.HTTPSHealthCheck | compute.HTTP2HealthCheck | undefined,
 ): HttpHealthCheck | undefined => {
   if (check === undefined) return undefined;
   return {
@@ -447,10 +424,7 @@ const toGrpcProbe = (
   };
 };
 
-const toAttrs = (
-  check: compute.HealthCheck,
-  project: string,
-): RegionHealthCheck["Attributes"] => {
+const toAttrs = (check: compute.HealthCheck, project: string): RegionHealthCheck["Attributes"] => {
   const parsed = parseDescription(check.description);
   return {
     healthCheckName: check.name ?? check.id ?? "",
@@ -469,10 +443,7 @@ const toAttrs = (
     sslHealthCheck: toTcpProbe(check.sslHealthCheck),
     grpcHealthCheck: toGrpcProbe(check.grpcHealthCheck),
     grpcTlsHealthCheck: toGrpcProbe(check.grpcTlsHealthCheck),
-    logConfig:
-      check.logConfig === undefined
-        ? undefined
-        : { enable: check.logConfig.enable },
+    logConfig: check.logConfig === undefined ? undefined : { enable: check.logConfig.enable },
     selfLink: check.selfLink,
     healthCheckId: check.id,
     creationTimestamp: check.creationTimestamp,
@@ -493,9 +464,7 @@ const subsetEqual = (
   return true;
 };
 
-const asRecord = (
-  value: object | undefined,
-): Record<string, unknown> | undefined => {
+const asRecord = (value: object | undefined): Record<string, unknown> | undefined => {
   if (value === undefined) return undefined;
   const record: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -523,10 +492,7 @@ const protocolConfig = (check: compute.HealthCheck, type: HealthCheckType) => {
   }
 };
 
-const needsUpdate = (
-  current: compute.HealthCheck,
-  desired: compute.HealthCheck,
-) => {
+const needsUpdate = (current: compute.HealthCheck, desired: compute.HealthCheck) => {
   const currentType = asType(current.type);
   const desiredType = asType(desired.type);
   if (currentType !== desiredType) return true;
@@ -536,15 +502,11 @@ const needsUpdate = (
   ) {
     return true;
   }
-  if (
-    (current.timeoutSec ?? DEFAULT_TIMEOUT) !==
-    (desired.timeoutSec ?? DEFAULT_TIMEOUT)
-  ) {
+  if ((current.timeoutSec ?? DEFAULT_TIMEOUT) !== (desired.timeoutSec ?? DEFAULT_TIMEOUT)) {
     return true;
   }
   if (
-    (current.healthyThreshold ?? DEFAULT_HEALTHY) !==
-    (desired.healthyThreshold ?? DEFAULT_HEALTHY)
+    (current.healthyThreshold ?? DEFAULT_HEALTHY) !== (desired.healthyThreshold ?? DEFAULT_HEALTHY)
   ) {
     return true;
   }
@@ -555,10 +517,7 @@ const needsUpdate = (
     return true;
   }
   if ((current.description ?? "") !== (desired.description ?? "")) return true;
-  if (
-    (current.logConfig?.enable === true) !==
-    (desired.logConfig?.enable === true)
-  ) {
+  if ((current.logConfig?.enable === true) !== (desired.logConfig?.enable === true)) {
     return true;
   }
   return !subsetEqual(
@@ -572,72 +531,7 @@ const getByName = (project: string, region: string, healthCheck: string) =>
     .getRegionHealthChecks({ project, region, healthCheck })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  healthCheckName: string,
-  region: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new RegionHealthCheckOperationFailed({
-        healthCheckName,
-        region,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  healthCheckName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id);
-    let current = operation;
-    if (current.status !== "DONE" && name.length > 0) {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: name,
-      });
-    }
-    if (current.status !== "DONE" && name.length > 0) {
-      current = yield* compute
-        .getRegionOperations({
-          project,
-          region,
-          operation: name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    return yield* failIfErrored(healthCheckName, region, current);
-  });
-
-const awaitResource = (
-  project: string,
-  region: string,
-  healthCheckName: string,
-) =>
+const awaitResource = (project: string, region: string, healthCheckName: string) =>
   getByName(project, region, healthCheckName).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -662,36 +556,24 @@ export const RegionHealthCheckProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.healthCheckName ?? output?.healthCheckName;
       const nextName = news.healthCheckName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
       if (nameChanged || regionChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
-      const previousType =
-        (olds !== undefined ? inferType(olds) : undefined) ?? output?.type;
+      const previousType = (olds !== undefined ? inferType(olds) : undefined) ?? output?.type;
       const nextType = inferType(news);
       if (previousType !== undefined && previousType !== nextType) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            (nextName === undefined || nextName === previousName),
+            previousName !== undefined && (nextName === undefined || nextName === previousName),
         };
       }
       return undefined;
@@ -699,15 +581,8 @@ export const RegionHealthCheckProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const healthCheckName = yield* toName(
-        id,
-        olds?.healthCheckName,
-        output?.healthCheckName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const healthCheckName = yield* toName(id, olds?.healthCheckName, output?.healthCheckName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, healthCheckName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -724,14 +599,13 @@ export const RegionHealthCheckProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.healthChecks ?? [])
               .filter(
                 (check) =>
-                  lastSegment(check.region).length > 0 &&
-                  hasOwnershipMarker(check.description),
+                  lastSegment(check.region).length > 0 && hasOwnershipMarker(check.description),
               )
               .map((check) => toAttrs(check, env.project)),
           ),
@@ -740,11 +614,7 @@ export const RegionHealthCheckProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const healthCheckName = yield* toName(
-        id,
-        news.healthCheckName,
-        output?.healthCheckName,
-      );
+      const healthCheckName = yield* toName(id, news.healthCheckName, output?.healthCheckName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(healthCheckName, news, ownership);
@@ -759,9 +629,7 @@ export const RegionHealthCheckProvider = () =>
             body: desired,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, healthCheckName, operation),
-            ),
+            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* awaitResource(env.project, region, healthCheckName);
@@ -782,11 +650,7 @@ export const RegionHealthCheckProvider = () =>
             healthCheck: healthCheckName,
             body: desired,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, healthCheckName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, healthCheckName);
         if (current === undefined) {
           return yield* new RegionHealthCheckNotResolved({
@@ -817,12 +681,9 @@ export const RegionHealthCheckProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.healthCheckName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

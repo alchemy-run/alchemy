@@ -1,13 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  normalizeRegion,
-  parseDescription,
-  runRegionOp,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +10,15 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  normalizeRegion,
+  parseDescription,
+  runRegionOp,
+  toPhysicalName,
+} from "./internal.ts";
 
 const DEFAULT_POLICY_TYPE = "BACKEND_SERVICE_POLICY";
 const DEFAULT_MIN_HEALTHY = 1;
@@ -134,10 +134,9 @@ export type RegionHealthAggregationPolicy = Resource<
  * @resource
  * @category Compute
  */
-export const RegionHealthAggregationPolicy =
-  Resource<RegionHealthAggregationPolicy>(
-    "GCP.Compute.RegionHealthAggregationPolicy",
-  );
+export const RegionHealthAggregationPolicy = Resource<RegionHealthAggregationPolicy>(
+  "GCP.Compute.RegionHealthAggregationPolicy",
+);
 
 export class RegionHealthAggregationPolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionHealthAggregationPolicyNotResolved",
@@ -146,16 +145,7 @@ export class RegionHealthAggregationPolicyNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionHealthAggregationPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionHealthAggregationPolicyOperationFailed",
-)<{
-  policyName: string;
-  operation: string;
-  message: string;
-}> {}
-
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_POLICY_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_POLICY_TYPE).toUpperCase();
 
 const toAttrs = (
   policy: compute.HealthAggregationPolicy,
@@ -169,8 +159,7 @@ const toAttrs = (
     policyType: typeOf(policy.policyType),
     description: parsed.description,
     minHealthyThreshold: policy.minHealthyThreshold ?? DEFAULT_MIN_HEALTHY,
-    healthyPercentThreshold:
-      policy.healthyPercentThreshold ?? DEFAULT_HEALTHY_PERCENT,
+    healthyPercentThreshold: policy.healthyPercentThreshold ?? DEFAULT_HEALTHY_PERCENT,
     fingerprint: policy.fingerprint,
     selfLink: policy.selfLink,
     selfLinkWithId: policy.selfLinkWithId,
@@ -202,19 +191,11 @@ const awaitResource = (project: string, region: string, policyName: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionHealthAggregationPolicyNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionHealthAggregationPolicyNotResolved",
       times: 20,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const failOp = (policyName: string, operation: string, message: string) =>
-  new RegionHealthAggregationPolicyOperationFailed({
-    policyName,
-    operation,
-    message,
-  });
 
 export const RegionHealthAggregationPolicyProvider = () =>
   Provider.succeed(RegionHealthAggregationPolicy, {
@@ -233,27 +214,17 @@ export const RegionHealthAggregationPolicyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.policyName ?? output?.policyName;
       const nextName = news.policyName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
       const previousType = typeOf(olds?.policyType ?? output?.policyType);
       const nextType = typeOf(news.policyType ?? output?.policyType);
       if (nameChanged || regionChanged || previousType !== nextType) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -261,16 +232,8 @@ export const RegionHealthAggregationPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const policyName = yield* toPhysicalName(
-        id,
-        olds?.policyName,
-        output?.policyName,
-        "policy",
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const policyName = yield* toPhysicalName(id, olds?.policyName, output?.policyName, "policy");
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, policyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -281,20 +244,16 @@ export const RegionHealthAggregationPolicyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages =
-          yield* compute.aggregatedListRegionHealthAggregationPolicies
-            .pages({
-              project: env.project,
-              maxResults: 500,
-              returnPartialSuccess: true,
-            })
-            .pipe(
-              Stream.take(8),
-              Stream.runCollect,
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed([] as never[]),
-              ),
-            );
+        const pages = yield* compute.aggregatedListRegionHealthAggregationPolicies
+          .pages({
+            project: env.project,
+            maxResults: 500,
+            returnPartialSuccess: true,
+          })
+          .pipe(
+            Stream.runCollect,
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
+          );
         return Array.from(
           pages as readonly compute.HealthAggregationPolicyAggregatedList[],
         ).flatMap((page) =>
@@ -308,20 +267,13 @@ export const RegionHealthAggregationPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const policyName = yield* toPhysicalName(
-        id,
-        news.policyName,
-        output?.policyName,
-        "policy",
-      );
+      const policyName = yield* toPhysicalName(id, news.policyName, output?.policyName, "policy");
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const policyType = typeOf(news.policyType);
-      const minHealthyThreshold =
-        news.minHealthyThreshold ?? DEFAULT_MIN_HEALTHY;
-      const healthyPercentThreshold =
-        news.healthyPercentThreshold ?? DEFAULT_HEALTHY_PERCENT;
+      const minHealthyThreshold = news.minHealthyThreshold ?? DEFAULT_MIN_HEALTHY;
+      const healthyPercentThreshold = news.healthyPercentThreshold ?? DEFAULT_HEALTHY_PERCENT;
 
       let current = yield* getByName(env.project, region, policyName);
 
@@ -340,7 +292,6 @@ export const RegionHealthAggregationPolicyProvider = () =>
               healthyPercentThreshold,
             },
           }),
-          (operation, message) => failOp(policyName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, policyName);
@@ -361,16 +312,12 @@ export const RegionHealthAggregationPolicyProvider = () =>
         patch.description = desiredDescription;
         dirty = true;
       }
-      if (
-        (current.minHealthyThreshold ?? DEFAULT_MIN_HEALTHY) !==
-        minHealthyThreshold
-      ) {
+      if ((current.minHealthyThreshold ?? DEFAULT_MIN_HEALTHY) !== minHealthyThreshold) {
         patch.minHealthyThreshold = minHealthyThreshold;
         dirty = true;
       }
       if (
-        (current.healthyPercentThreshold ?? DEFAULT_HEALTHY_PERCENT) !==
-        healthyPercentThreshold
+        (current.healthyPercentThreshold ?? DEFAULT_HEALTHY_PERCENT) !== healthyPercentThreshold
       ) {
         patch.healthyPercentThreshold = healthyPercentThreshold;
         dirty = true;
@@ -385,10 +332,8 @@ export const RegionHealthAggregationPolicyProvider = () =>
             healthAggregationPolicy: policyName,
             body: patch,
           }),
-          (operation, message) => failOp(policyName, operation, message),
         );
-        current =
-          (yield* getByName(env.project, region, policyName)) ?? current;
+        current = (yield* getByName(env.project, region, policyName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -405,7 +350,6 @@ export const RegionHealthAggregationPolicyProvider = () =>
           region,
           healthAggregationPolicy: output.policyName,
         }),
-        (operation, message) => failOp(output.policyName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

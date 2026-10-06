@@ -1,8 +1,8 @@
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const DEFAULT_ZONE = "us-central1-b";
 export const DEFAULT_STORAGE = "HDD";
@@ -22,30 +22,13 @@ export const MAX_MATERIALIZED_VIEW_ID_LENGTH = 50;
 export const MAX_AUTHORIZED_VIEW_ID_LENGTH = 50;
 export const MAX_SCHEMA_BUNDLE_ID_LENGTH = 50;
 
-export class BigtableOperationFailed extends Data.TaggedError(
-  "GCP.Bigtable.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class BigtableOperationPending extends Data.TaggedError(
-  "GCP.Bigtable.OperationPending",
-)<{
-  operation: string;
-}> {}
-
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
   return parts[parts.length - 1] || trimmed;
 };
 
-export const rfc1035 = (
-  name: string,
-  maxLength: number,
-  minLength = 1,
-): string => {
+export const rfc1035 = (name: string, maxLength: number, minLength = 1): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -85,23 +68,14 @@ export const toPhysicalId = (
 export const instanceName = (project: string, instanceId: string) =>
   `projects/${project}/instances/${instanceId}`;
 
-export const clusterName = (
-  project: string,
-  instanceId: string,
-  clusterId: string,
-) => `${instanceName(project, instanceId)}/clusters/${clusterId}`;
+export const clusterName = (project: string, instanceId: string, clusterId: string) =>
+  `${instanceName(project, instanceId)}/clusters/${clusterId}`;
 
-export const appProfileName = (
-  project: string,
-  instanceId: string,
-  appProfileId: string,
-) => `${instanceName(project, instanceId)}/appProfiles/${appProfileId}`;
+export const appProfileName = (project: string, instanceId: string, appProfileId: string) =>
+  `${instanceName(project, instanceId)}/appProfiles/${appProfileId}`;
 
-export const tableName = (
-  project: string,
-  instanceId: string,
-  tableId: string,
-) => `${instanceName(project, instanceId)}/tables/${tableId}`;
+export const tableName = (project: string, instanceId: string, tableId: string) =>
+  `${instanceName(project, instanceId)}/tables/${tableId}`;
 
 export const backupName = (
   project: string,
@@ -110,34 +84,28 @@ export const backupName = (
   backupId: string,
 ) => `${clusterName(project, instanceId, clusterId)}/backups/${backupId}`;
 
-export const logicalViewName = (
-  project: string,
-  instanceId: string,
-  logicalViewId: string,
-) => `${instanceName(project, instanceId)}/logicalViews/${logicalViewId}`;
+export const logicalViewName = (project: string, instanceId: string, logicalViewId: string) =>
+  `${instanceName(project, instanceId)}/logicalViews/${logicalViewId}`;
 
 export const materializedViewName = (
   project: string,
   instanceId: string,
   materializedViewId: string,
-) =>
-  `${instanceName(project, instanceId)}/materializedViews/${materializedViewId}`;
+) => `${instanceName(project, instanceId)}/materializedViews/${materializedViewId}`;
 
 export const authorizedViewName = (
   project: string,
   instanceId: string,
   tableId: string,
   authorizedViewId: string,
-) =>
-  `${tableName(project, instanceId, tableId)}/authorizedViews/${authorizedViewId}`;
+) => `${tableName(project, instanceId, tableId)}/authorizedViews/${authorizedViewId}`;
 
 export const schemaBundleName = (
   project: string,
   instanceId: string,
   tableId: string,
   schemaBundleId: string,
-) =>
-  `${tableName(project, instanceId, tableId)}/schemaBundles/${schemaBundleId}`;
+) => `${tableName(project, instanceId, tableId)}/schemaBundles/${schemaBundleId}`;
 
 export const parseResourceName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -162,14 +130,8 @@ export const parseResourceName = (name: string) => {
     authorizedViewId: after("authorizedViews"),
     schemaBundleId: after("schemaBundles"),
     instance: project && instanceId ? instanceName(project, instanceId) : "",
-    cluster:
-      project && instanceId && clusterId
-        ? clusterName(project, instanceId, clusterId)
-        : "",
-    table:
-      project && instanceId && tableId
-        ? tableName(project, instanceId, tableId)
-        : "",
+    cluster: project && instanceId && clusterId ? clusterName(project, instanceId, clusterId) : "",
+    table: project && instanceId && tableId ? tableName(project, instanceId, tableId) : "",
   };
 };
 
@@ -182,25 +144,15 @@ export const instanceNameOf = (project: string, instance: string) => {
 };
 
 export const instanceIdOf = (value: string) =>
-  value.includes("/instances/")
-    ? parseResourceName(value).instanceId
-    : lastSegment(value);
+  value.includes("/instances/") ? parseResourceName(value).instanceId : lastSegment(value);
 
 export const clusterIdOf = (value: string) =>
-  value.includes("/clusters/")
-    ? parseResourceName(value).clusterId
-    : lastSegment(value);
+  value.includes("/clusters/") ? parseResourceName(value).clusterId : lastSegment(value);
 
 export const tableIdOf = (value: string) =>
-  value.includes("/tables/")
-    ? parseResourceName(value).tableId
-    : lastSegment(value);
+  value.includes("/tables/") ? parseResourceName(value).tableId : lastSegment(value);
 
-export const clusterNameOf = (
-  project: string,
-  instance: string,
-  cluster: string,
-) => {
+export const clusterNameOf = (project: string, instance: string, cluster: string) => {
   if (cluster.includes("/clusters/")) {
     const parsed = parseResourceName(cluster);
     return clusterName(
@@ -212,11 +164,7 @@ export const clusterNameOf = (
   return clusterName(project, instanceIdOf(instance), lastSegment(cluster));
 };
 
-export const tableNameOf = (
-  project: string,
-  instance: string,
-  table: string,
-) => {
+export const tableNameOf = (project: string, instance: string, table: string) => {
   if (table.includes("/tables/")) {
     const parsed = parseResourceName(table);
     return tableName(
@@ -240,129 +188,56 @@ export const clusterLocation = (project: string, location: string) => {
 export const zoneOf = (location: string | undefined) =>
   lastSegment(location ?? DEFAULT_ZONE).toLowerCase();
 
-export const hasAlchemyPrefix = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyPrefix = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
-export const isAlreadyExists = (error: bigtable.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-export const isNotFoundStatus = (error: bigtable.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
+/**
+ * Wait for a Bigtable admin operation. Cluster resizes and materialized
+ * views are the slowest (several minutes). With `alreadyExistsOk`, an
+ * ALREADY_EXISTS (code 6) result counts as success (create race).
+ */
 export const waitForOperation = (
   operation: bigtable.Operation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
+  options?: { alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          isAlreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new BigtableOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new BigtableOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = bigtable.getOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<bigtable.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new BigtableOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error) {
-          if (options?.alreadyExistsOk === true && isAlreadyExists(error)) {
-            return Effect.succeed(current);
-          }
-          if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-            return Effect.succeed(current);
-          }
-          return Effect.fail(
-            new BigtableOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Bigtable.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(operation, (name) => bigtable.getOperations({ name }), {
+    budget: "20 minutes",
+  }).pipe(
+    Effect.catchIf(
+      (error) =>
+        options?.alreadyExistsOk === true &&
+        error._tag === "GCP.OperationFailed" &&
+        error.code === 6,
+      () => Effect.succeed(operation),
+    ),
+  );
 
 export const getInstanceByName = (name: string) =>
   bigtable
     .getProjectsInstances({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+
+export const collectPages = <Page, A, E, R>(
+  pages: Stream.Stream<Page, E, R>,
+  items: (page: Page) => readonly A[] | undefined,
+) =>
+  pages.pipe(
+    Stream.flatMap((page) => Stream.fromIterable(items(page) ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+  );
 
 export const listAlchemyInstances = (project: string) =>
-  bigtable
-    .listProjectsInstances({
-      parent: `projects/${project}`,
-    })
-    .pipe(
-      Effect.map((page) =>
-        (page.instances ?? []).filter((instance) =>
-          hasAlchemyPrefix(instance.labels),
-        ),
-      ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as bigtable.Instance[]),
-      ),
-    );
+  collectPages(
+    bigtable.listProjectsInstances.pages({ parent: `projects/${project}` }),
+    (page) => page.instances,
+  ).pipe(
+    Effect.map((instances) => instances.filter((instance) => hasAlchemyPrefix(instance.labels))),
+  );
 
 export const parentOwned = (instanceNameValue: string) =>
   getInstanceByName(instanceNameValue).pipe(
-    Effect.map((instance) =>
-      instance === undefined ? true : hasAlchemyPrefix(instance.labels),
-    ),
+    Effect.map((instance) => (instance === undefined ? true : hasAlchemyPrefix(instance.labels))),
   );
 
 export const listAlchemyTables = (project: string) =>
@@ -374,17 +249,16 @@ export const listAlchemyTables = (project: string) =>
     const pages = yield* Effect.forEach(
       instances,
       (instance) =>
-        bigtable
-          .listProjectsInstancesTables({
+        collectPages(
+          bigtable.listProjectsInstancesTables.pages({
             parent: instance.name,
             pageSize: 1000,
-          })
-          .pipe(
-            Effect.map((page) => page.tables ?? []),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as bigtable.Table[]),
-            ),
-          ),
+          }),
+          (page) => page.tables,
+        ).pipe(
+          // The instance was deleted between the two list calls.
+          Effect.catchTag("NotFound", () => Effect.succeed([] as bigtable.Table[])),
+        ),
       { concurrency: 4 },
     );
     return pages.flat();

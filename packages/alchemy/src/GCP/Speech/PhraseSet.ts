@@ -10,14 +10,11 @@ import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
   deletePhraseSet,
-  findOwnedPhraseSet,
   getPhraseSet,
   listOwnedPhraseSets,
   locationParent,
   markerFromPhrases,
   normalizeLocation,
-  ownedByAlchemy,
-  ownershipLabels,
   parseResourceName,
   type Phrase,
   replaceOnIdentity,
@@ -28,7 +25,6 @@ import {
   toPhysicalId,
   updateMaskOf,
   waitUntilGone,
-  withOwnershipPhrases,
 } from "./internal.ts";
 
 export type { Phrase };
@@ -50,8 +46,7 @@ export type PhraseSetProps = {
    */
   phraseSetId?: string;
   /**
-   * Phrase hints. Alchemy stamps a reserved ownership phrase and strips
-   * it from attributes. Phrase values can reference a custom class as
+   * Phrase hints. Phrase values can reference a custom class as
    * `${custom_class_id}`.
    */
   phrases?: Phrase[];
@@ -74,7 +69,7 @@ export type PhraseSet = Resource<
     project: string;
     /** Adaptation location. */
     location: string;
-    /** User phrases (Alchemy ownership phrase stripped). */
+    /** Phrase hints. */
     phrases: Phrase[];
     /** Phrase-set-level hint boost. */
     boost: number | undefined;
@@ -94,8 +89,10 @@ export type PhraseSet = Resource<
  * toward listed words and phrases, including references to custom
  * classes (`${custom_class_id}`).
  *
- * Speech-to-Text v1 phrase sets have no labels field, so Alchemy stamps
- * ownership into a reserved phrase for `list` / nuke. Location and
+ * Speech-to-Text v1 phrase sets have no labels field and Alchemy does
+ * not write ownership into the phrases (they bias recognition). A
+ * generated id identifies the set; one with an explicit id that Alchemy
+ * has no state for is reported as unowned. Location and
  * phrase set id are identity — changing either replaces the set.
  * `phrases` and `boost` update in place.
  *
@@ -120,7 +117,6 @@ export type PhraseSet = Resource<
  * **Example:** Add a phrase and change boost
  * ```typescript
  * const hints = yield* GCP.Speech.PhraseSet("Hints", {
- *   phraseSetId: existing.phraseSetId,
  *   phrases: [
  *     { value: "weather", boost: 15 },
  *     { value: "forecast" },
@@ -134,17 +130,12 @@ export type PhraseSet = Resource<
  */
 export const PhraseSet = Resource<PhraseSet>("GCP.Speech.PhraseSet");
 
-export class PhraseSetNotResolved extends Data.TaggedError(
-  "GCP.Speech.PhraseSetNotResolved",
-)<{
+export class PhraseSetNotResolved extends Data.TaggedError("GCP.Speech.PhraseSetNotResolved")<{
   name: string;
 }> {}
 
-const phraseSetNameOf = (
-  project: string,
-  location: string,
-  phraseSetId: string,
-) => resourceNameOf(project, location, "phraseSets", phraseSetId);
+const phraseSetNameOf = (project: string, location: string, phraseSetId: string) =>
+  resourceNameOf(project, location, "phraseSets", phraseSetId);
 
 const toAttrs = (phraseSet: speech.PhraseSet, project: string) => {
   const name = phraseSet.name ?? "";
@@ -152,7 +143,8 @@ const toAttrs = (phraseSet: speech.PhraseSet, project: string) => {
   return {
     name,
     phraseSetId: parsed.id,
-    project: parsed.project || project,
+    // Speech echoes names with the project number; report the project id.
+    project,
     location: parsed.location,
     phrases: stripOwnershipPhrases(phraseSet.phrases),
     boost: phraseSet.boost,
@@ -179,22 +171,15 @@ export const PhraseSetProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ??
-        phraseSetNameOf(
-          env.project,
-          location,
-          olds?.phraseSetId ?? output?.phraseSetId ?? "",
-        );
-      let existing = yield* getPhraseSet(name);
-      if (existing === undefined) {
-        existing = yield* findOwnedPhraseSet(id, env.project, name);
-      }
+      const phraseSetId = yield* toPhysicalId(id, olds?.phraseSetId, output?.phraseSetId);
+      const existing = yield* getPhraseSet(
+        output?.name ?? phraseSetNameOf(env.project, location, phraseSetId),
+      );
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, markerFromPhrases(existing.phrases)))
-        ? attrs
-        : Unowned(attrs);
+      // No labels: a generated id derives from this stack, stage, logical
+      // id and instance; an explicit id is only ours when state has it.
+      return output !== undefined || olds?.phraseSetId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -206,23 +191,12 @@ export const PhraseSetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
-      const ownership = yield* ownershipLabels(id);
-      const phraseSetId = yield* toPhysicalId(
-        id,
-        news.phraseSetId,
-        output?.phraseSetId,
-      );
-      const phrases = withOwnershipPhrases(news.phrases, ownership);
-      const name =
-        output?.name ?? phraseSetNameOf(env.project, location, phraseSetId);
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
+      const phraseSetId = yield* toPhysicalId(id, news.phraseSetId, output?.phraseSetId);
+      const phrases = news.phrases ?? [];
+      const name = output?.name ?? phraseSetNameOf(env.project, location, phraseSetId);
 
       let current = yield* getPhraseSet(name);
-      if (current === undefined) {
-        current = yield* findOwnedPhraseSet(id, env.project, name);
-      }
 
       if (current === undefined) {
         const created = yield* speech
@@ -255,7 +229,8 @@ export const PhraseSetProvider = () =>
 
       const currentName = current.name ?? name;
       const updateMask = updateMaskOf(
-        samePhrases(stripOwnershipPhrases(current.phrases), news.phrases)
+        markerFromPhrases(current.phrases) === undefined &&
+          samePhrases(current.phrases, news.phrases)
           ? undefined
           : "phrases",
         sameNumber(current.boost, news.boost) ? undefined : "boost",

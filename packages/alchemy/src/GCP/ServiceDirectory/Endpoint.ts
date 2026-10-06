@@ -169,10 +169,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const normalizeOptional = (value: string | undefined) =>
   value === undefined || value === "" ? undefined : value;
@@ -187,29 +185,18 @@ const parseName = (name: string, defaultLocation: string) => {
   const namespacesAt = parts.lastIndexOf("namespaces");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const namespace =
-    namespacesAt >= 0 ? parts.slice(0, namespacesAt + 2).join("/") : "";
-  const service =
-    servicesAt >= 0 ? parts.slice(0, servicesAt + 2).join("/") : "";
+  const namespace = namespacesAt >= 0 ? parts.slice(0, namespacesAt + 2).join("/") : "";
+  const service = servicesAt >= 0 ? parts.slice(0, servicesAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     namespace,
-    namespaceId:
-      namespacesAt >= 0 && parts[namespacesAt + 1]
-        ? parts[namespacesAt + 1]!
-        : "",
+    namespaceId: namespacesAt >= 0 && parts[namespacesAt + 1] ? parts[namespacesAt + 1]! : "",
     service,
-    serviceId:
-      servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "",
+    serviceId: servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "",
     endpointId:
-      endpointsAt >= 0 && parts[endpointsAt + 1]
-        ? parts[endpointsAt + 1]!
-        : lastSegment(name),
+      endpointsAt >= 0 && parts[endpointsAt + 1] ? parts[endpointsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -222,9 +209,7 @@ const resolveParent = (
 ) => {
   if (service.includes("/")) {
     const parsed = parseName(
-      service.includes("/endpoints/")
-        ? service
-        : `${service.replace(/\/+$/, "")}/endpoints/_`,
+      service.includes("/endpoints/") ? service : `${service.replace(/\/+$/, "")}/endpoints/_`,
       region,
     );
     return {
@@ -262,23 +247,16 @@ const parentKey = (
   return `${resolved.location}/${lastSegment(resolved.namespace)}/${lastSegment(resolved.parent)}`;
 };
 
-const resourceName = (parent: string, endpointId: string) =>
-  `${parent}/endpoints/${endpointId}`;
+const resourceName = (parent: string, endpointId: string) => `${parent}/endpoints/${endpointId}`;
 
 const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(annotations));
 
-const hasAlchemyAnnotation = (
-  annotations: Record<string, string | undefined> | null | undefined,
-) =>
-  Object.keys(annotations ?? {}).some((key) =>
-    key.startsWith(ALCHEMY_LABEL_PREFIX),
-  );
+const hasAlchemyAnnotation = (annotations: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(annotations ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
-const hasAlchemyNamespaceLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyNamespaceLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const toId = (id: string, endpointId: string | undefined, existing?: string) =>
@@ -292,17 +270,10 @@ const toId = (id: string, endpointId: string | undefined, existing?: string) =>
       forbiddenPrefixes: ["gcp"],
     });
     const named = /^[a-z]/.test(generated) ? generated : `e${generated}`;
-    return named
-      .replace(/-+$/g, "")
-      .slice(0, MAX_ENDPOINT_ID_LENGTH)
-      .replace(/-+$/g, "");
+    return named.replace(/-+$/g, "").slice(0, MAX_ENDPOINT_ID_LENGTH).replace(/-+$/g, "");
   });
 
-const toAttrs = (
-  endpoint: servicedirectory.Endpoint,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (endpoint: servicedirectory.Endpoint, project: string, region: string) => {
   const name = endpoint.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -326,16 +297,14 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const deleteByName = (name: string) =>
-  servicedirectory
-    .deleteProjectsLocationsNamespacesServicesEndpoints({ name })
-    .pipe(
-      Effect.retry({
-        while: (error) => error._tag === "Conflict",
-        times: 8,
-        schedule: Schedule.spaced("1 second"),
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+  servicedirectory.deleteProjectsLocationsNamespacesServicesEndpoints({ name }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "Conflict",
+      times: 8,
+      schedule: Schedule.spaced("1 second"),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 
 const paginate = <A, E, R>(
   fetch: (
@@ -345,12 +314,11 @@ const paginate = <A, E, R>(
   Effect.gen(function* () {
     const found: A[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response = yield* fetch(pageToken);
       found.push(...response.items);
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
   });
 
@@ -369,7 +337,7 @@ const listNamespacesAt = (parent: string) =>
           ),
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as servicedirectory.Namespace[],
             nextPageToken: undefined,
@@ -391,7 +359,7 @@ const listServicesAt = (parent: string) =>
           items: response.services ?? [],
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as servicedirectory.Service[],
             nextPageToken: undefined,
@@ -413,7 +381,7 @@ const listEndpointsAt = (parent: string) =>
           items: response.endpoints ?? [],
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as servicedirectory.Endpoint[],
             nextPageToken: undefined,
@@ -437,7 +405,7 @@ const listLocations = (project: string) =>
             .filter((name): name is string => !!name),
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as string[],
             nextPageToken: undefined,
@@ -448,25 +416,14 @@ const listLocations = (project: string) =>
 
 export const EndpointProvider = () =>
   Provider.succeed(Endpoint, {
-    stables: [
-      "name",
-      "endpointId",
-      "service",
-      "namespace",
-      "project",
-      "location",
-      "uid",
-    ],
+    stables: ["name", "endpointId", "service", "namespace", "project", "location", "uid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.endpointId ?? output?.endpointId;
       const nextId = news.endpointId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
       const previousParent = parentKey(
         olds?.service ?? output?.service,
@@ -481,13 +438,9 @@ export const EndpointProvider = () =>
         env.region,
       );
       const parentChanged =
-        previousParent !== undefined &&
-        nextParent !== undefined &&
-        previousParent !== nextParent;
+        previousParent !== undefined && nextParent !== undefined && previousParent !== nextParent;
 
-      const previousNetwork = normalizeOptional(
-        olds?.network ?? output?.network,
-      );
+      const previousNetwork = normalizeOptional(olds?.network ?? output?.network);
       const nextNetwork = normalizeOptional(news.network ?? previousNetwork);
       const networkChanged = previousNetwork !== nextNetwork;
 
@@ -515,9 +468,7 @@ export const EndpointProvider = () =>
       );
       const name =
         output?.name ??
-        (parent !== undefined
-          ? resourceName(parent.parent, endpointId)
-          : undefined);
+        (parent !== undefined ? resourceName(parent.parent, endpointId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -586,10 +537,7 @@ export const EndpointProvider = () =>
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        normalizeOptional(current.network) !== desiredNetwork
-      ) {
+      if (current !== undefined && normalizeOptional(current.network) !== desiredNetwork) {
         yield* deleteByName(current.name ?? name);
         current = undefined;
       }
@@ -615,10 +563,7 @@ export const EndpointProvider = () =>
       }
 
       const observedAnnotations = tagRecord(current.annotations);
-      const { upsert, removed } = diffLabels(
-        observedAnnotations,
-        desiredAnnotations,
-      );
+      const { upsert, removed } = diffLabels(observedAnnotations, desiredAnnotations);
       const annotationsChanged = upsert.length > 0 || removed.length > 0;
       const addressChanged = (current.address ?? "") !== (desiredAddress ?? "");
       const portChanged = (current.port ?? DEFAULT_PORT) !== desiredPort;
@@ -631,19 +576,16 @@ export const EndpointProvider = () =>
         ]
           .filter((field): field is string => field !== undefined)
           .join(",");
-        current =
-          yield* servicedirectory.patchProjectsLocationsNamespacesServicesEndpoints(
-            {
-              name,
-              updateMask,
-              body: {
-                name,
-                annotations: desiredAnnotations,
-                address: desiredAddress,
-                port: desiredPort,
-              },
-            },
-          );
+        current = yield* servicedirectory.patchProjectsLocationsNamespacesServicesEndpoints({
+          name,
+          updateMask,
+          body: {
+            name,
+            annotations: desiredAnnotations,
+            address: desiredAddress,
+            port: desiredPort,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);

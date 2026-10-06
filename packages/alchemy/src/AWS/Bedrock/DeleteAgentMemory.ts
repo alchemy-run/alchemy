@@ -48,10 +48,7 @@ export interface DeleteAgentMemory extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteAgentMemoryRequest,
-    ) => Effect.Effect<
-      bedrock.DeleteAgentMemoryResponse,
-      bedrock.DeleteAgentMemoryError
-    >
+    ) => Effect.Effect<bedrock.DeleteAgentMemoryResponse, bedrock.DeleteAgentMemoryError>
   >
 > {}
 export const DeleteAgentMemory = Binding.Service<DeleteAgentMemory>(

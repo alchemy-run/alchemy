@@ -15,6 +15,9 @@ export interface GetPhraseSetRequest extends Omit<
  * Bind this operation to a {@link PhraseSet} in a Function/Action init
  * phase. Provide {@link GetPhraseSetHttp}.
  *
+ * Grants `roles/speech.client` on the project because Speech-to-Text has no
+ * resource-level IAM.
+ *
  * ### Reading a Phrase Set
  * **Example:** Read the bound phrase set
  * ```typescript
@@ -33,14 +36,8 @@ export interface GetPhraseSet extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetPhraseSetRequest,
-    ) => Effect.Effect<
-      speech.PhraseSet,
-      speech.GetProjectsLocationsPhraseSetsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<speech.PhraseSet, speech.GetProjectsLocationsPhraseSetsError, RuntimeContext>
   >
 > {}
 
-export const GetPhraseSet = Binding.Service<GetPhraseSet>(
-  "GCP.Speech.GetPhraseSet",
-);
+export const GetPhraseSet = Binding.Service<GetPhraseSet>("GCP.Speech.GetPhraseSet");

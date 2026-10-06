@@ -1,23 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const waitUntilGone = (
-  projectId: string,
-  datasetId: string,
-  routineId: string,
-) =>
+const waitUntilGone = (projectId: string, datasetId: string, routineId: string) =>
   bigquery
     .getRoutines({
       projectId,
@@ -147,12 +140,8 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.project,
-        created.datasetId,
-        created.routineId,
-      );
+      const gone = yield* waitUntilGone(created.project, created.datasetId, created.routineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 90_000 },
 );

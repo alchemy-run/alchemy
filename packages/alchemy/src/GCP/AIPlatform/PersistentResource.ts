@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
@@ -92,15 +87,19 @@ export type PersistentResourceProps = {
   location?: string;
   /**
    * Display name (max 128 UTF-8 characters). Defaults to the resource id.
+   * Changing it replaces the resource.
    */
   displayName?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Changing them replaces the resource.
    */
   labels?: Record<string, string>;
   /**
    * Resource pools. At least one pool is required. Pool machine specs
-   * are immutable — changing them replaces the resource.
+   * are immutable — changing them replaces the resource. Replica counts
+   * update in place only for Ray clusters (`raySpec`); GCP rejects updates
+   * to other persistent resources, so a replica change replaces them.
    */
   resourcePools?: ResourcePool[];
   /**
@@ -186,9 +185,7 @@ export type PersistentResource = Resource<
  * @resource
  * @category AIPlatform
  */
-export const PersistentResource = Resource<PersistentResource>(
-  "GCP.AIPlatform.PersistentResource",
-);
+export const PersistentResource = Resource<PersistentResource>("GCP.AIPlatform.PersistentResource");
 
 export class PersistentResourceNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.PersistentResourceNotResolved",
@@ -239,9 +236,7 @@ const toAttrs = (
     labels: userLabels(resource.labels),
     state: resource.state,
     network: resource.network,
-    resourcePoolIds: (resource.resourcePools ?? []).map(
-      (pool) => pool.id ?? "",
-    ),
+    resourcePoolIds: (resource.resourcePools ?? []).map((pool) => pool.id ?? ""),
     createTime: resource.createTime,
     updateTime: resource.updateTime,
     startTime: resource.startTime,
@@ -256,9 +251,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (
-        resource,
-      ): resource is aiplatform.GoogleCloudAiplatformV1PersistentResource =>
+      (resource): resource is aiplatform.GoogleCloudAiplatformV1PersistentResource =>
         resource !== undefined,
       () => new AiPlatformNotResolved({ name }),
     ),
@@ -278,54 +271,56 @@ const waitUntilGone = (name: string) =>
     Effect.asVoid,
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.StillExists",
-      times: 10,
+      // Tearing down the cluster takes several minutes.
+      times: 75,
       schedule: Schedule.spaced("8 seconds"),
     }),
   );
 
 export const PersistentResourceProvider = () =>
   Provider.succeed(PersistentResource, {
-    stables: [
-      "name",
-      "persistentResourceId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "persistentResourceId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.persistentResourceId ?? output?.persistentResourceId;
+      const previousId = olds?.persistentResourceId ?? output?.persistentResourceId;
       const nextId = news.persistentResourceId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const networkChanged =
-        (news.network ?? olds?.network ?? "") !== (olds?.network ?? "");
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const networkChanged = (news.network ?? olds?.network ?? "") !== (olds?.network ?? "");
       const machineChanged =
+        olds !== undefined && machineKey(news.resourcePools) !== machineKey(olds.resourcePools);
+      // PATCH only accepts `resource_pools.replica_count`; `display_name` and
+      // `labels` are rejected ("Unrecognized path"), so changing them
+      // replaces the resource.
+      const displayNameChanged =
+        olds !== undefined && (news.displayName ?? "") !== (olds.displayName ?? "");
+      const labelsChanged =
         olds !== undefined &&
-        machineKey(news.resourcePools) !== machineKey(olds.resourcePools);
+        JSON.stringify(Object.entries(news.labels ?? {}).sort()) !==
+          JSON.stringify(Object.entries(olds.labels ?? {}).sort());
+      // GCP only updates Ray-cluster persistent resources ("Currently we only
+      // support the update function on Ray cluster"); any other resource is
+      // replaced when its replica counts change.
+      const replicasChanged =
+        olds !== undefined &&
+        news.raySpec === undefined &&
+        JSON.stringify((news.resourcePools ?? []).map((p) => p.replicaCount)) !==
+          JSON.stringify((olds.resourcePools ?? []).map((p) => p.replicaCount));
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        replicasChanged ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (olds !== undefined && networkChanged) ||
-        machineChanged;
+        machineChanged ||
+        displayNameChanged ||
+        labelsChanged;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -336,42 +331,29 @@ export const PersistentResourceProvider = () =>
         olds?.persistentResourceId,
         output?.persistentResourceId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, resourceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, resourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) =>
-            collectPages(
-              aiplatform.listProjectsLocationsPersistentResources.pages({
-                parent: locationParent(env.project, location),
-                pageSize: 100,
-              }),
-            ).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
+        const pages = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          collectPages(
+            aiplatform.listProjectsLocationsPersistentResources.pages({
+              parent: locationParent(env.project, location),
+              pageSize: 100,
+            }),
+          ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.persistentResources ?? [])
             .filter((resource) =>
-              Object.keys(resource.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(resource.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             )
             .map((resource) => toAttrs(resource, env.project)),
         );
@@ -384,10 +366,7 @@ export const PersistentResourceProvider = () =>
         news.persistentResourceId,
         output?.persistentResourceId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, resourceId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -403,12 +382,8 @@ export const PersistentResourceProvider = () =>
                     imageUri: news.raySpec.imageUri,
                     resourcePoolImages: news.raySpec.resourcePoolImages,
                     headNodeResourcePoolId: news.raySpec.headNodeResourcePoolId,
-                    rayLogsSpec: news.raySpec.rayLogsDisabled
-                      ? { disabled: true }
-                      : undefined,
-                    rayMetricSpec: news.raySpec.rayMetricsDisabled
-                      ? { disabled: true }
-                      : undefined,
+                    rayLogsSpec: news.raySpec.rayLogsDisabled ? { disabled: true } : undefined,
+                    rayMetricSpec: news.raySpec.rayMetricsDisabled ? { disabled: true } : undefined,
                   }
                 : undefined,
               serviceAccountSpec: news.serviceAccountSpec,
@@ -436,8 +411,7 @@ export const PersistentResourceProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
-        const createdName =
-          resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
+        const createdName = resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
         current = yield* waitUntilExists(createdName);
       }
 
@@ -446,29 +420,32 @@ export const PersistentResourceProvider = () =>
       }
 
       const observedName = current.name ?? name;
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayChanged = (current.displayName ?? "") !== displayName;
-      const poolsChanged = !jsonEqual(current.resourcePools, resourcePools);
+      // Reads fill in server defaults (disk spec, used replicas), and a pool's
+      // machine spec is immutable (a change replaces), so only replica counts
+      // are compared and patched.
+      const replicaCounts = (
+        pools: ReadonlyArray<{ id?: string; replicaCount?: string }> | undefined,
+      ) =>
+        Object.fromEntries(
+          (pools ?? []).map((pool, index) => [
+            pool.id ?? String(index),
+            String(pool.replicaCount ?? ""),
+          ]),
+        );
+      const poolsChanged = !jsonEqual(
+        replicaCounts(current.resourcePools),
+        replicaCounts(resourcePools),
+      );
 
-      if (labelsChanged || displayChanged || poolsChanged) {
-        const updateMask = [
-          labelsChanged ? "labels" : undefined,
-          displayChanged ? "display_name" : undefined,
-          poolsChanged ? "resource_pools" : undefined,
-        ].filter((field): field is string => field !== undefined);
-        const patched =
-          yield* aiplatform.patchProjectsLocationsPersistentResources({
-            name: observedName,
-            updateMask: updateMask.join(","),
-            body: {
-              name: observedName,
-              displayName,
-              labels: desiredLabels,
-              resourcePools,
-            },
-          });
+      // Display name and labels are create-only; `diff` replaces the resource
+      // when they change.
+      // Only Ray clusters accept updates; `diff` replaces other resources.
+      if (poolsChanged && news.raySpec !== undefined) {
+        const patched = yield* aiplatform.patchProjectsLocationsPersistentResources({
+          name: observedName,
+          updateMask: "resource_pools.replica_count",
+          body: { name: observedName, resourcePools },
+        });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);
       }
@@ -480,6 +457,15 @@ export const PersistentResourceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // A PROVISIONING resource rejects deletes ("is being created thus can
+      // not be deleted now"), so wait for provisioning to settle first.
+      yield* getByName(output.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (resource) => resource?.state !== "PROVISIONING",
+          times: 60,
+        }),
+      );
       const operation = yield* aiplatform
         .deleteProjectsLocationsPersistentResources({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));

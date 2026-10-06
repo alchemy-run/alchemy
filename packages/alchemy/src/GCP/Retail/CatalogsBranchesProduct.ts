@@ -8,23 +8,14 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_BRANCH,
   MAX_PRODUCT_ID_LENGTH,
   branchName,
-  encodeOwnership,
-  encodeOwnershipLine,
   expandCatalog,
-  listProjectCatalogs,
-  listProducts,
   normalizeBranch,
   normalizeLocation,
-  ownershipLabels,
   parentOf,
-  parseOwnership,
   parseResourceName,
-  productHasOwnership,
   productIdOf,
-  productOwnedByAlchemy,
   replaceOnIdentity,
   sameJson,
   sameStringList,
@@ -82,8 +73,7 @@ export type CatalogsBranchesProductProps = {
    */
   title?: string;
   /**
-   * Product description (max 5,000 characters). Products have no labels
-   * field, so Alchemy stamps ownership into this field for `list` / nuke.
+   * Product description (max 5,000 characters).
    */
   description?: string;
   /**
@@ -96,12 +86,7 @@ export type CatalogsBranchesProductProps = {
    * Product type. Immutable.
    * @default "PRIMARY"
    */
-  type?:
-    | "TYPE_UNSPECIFIED"
-    | "PRIMARY"
-    | "VARIANT"
-    | "COLLECTION"
-    | (string & {});
+  type?: "TYPE_UNSPECIFIED" | "PRIMARY" | "VARIANT" | "COLLECTION" | (string & {});
   /**
    * Canonical product URI.
    */
@@ -134,8 +119,7 @@ export type CatalogsBranchesProductProps = {
    */
   images?: ProductImage[];
   /**
-   * Custom tags (used for recommendation filters). Alchemy also stamps a
-   * compact ownership marker into this list.
+   * Custom tags (used for recommendation filters).
    */
   tags?: string[];
   /**
@@ -166,7 +150,7 @@ export type CatalogsBranchesProduct = Resource<
     location: string;
     /** Title. */
     title: string | undefined;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Description. */
     description: string | undefined;
     /** Categories. */
     categories: string[];
@@ -184,7 +168,7 @@ export type CatalogsBranchesProduct = Resource<
     priceInfo: ProductPriceInfo | undefined;
     /** Images. */
     images: ProductImage[];
-    /** Custom tags with Alchemy ownership markers stripped. */
+    /** Custom tags. */
     tags: string[];
     /** GTIN. */
     gtin: string | undefined;
@@ -196,8 +180,8 @@ export type CatalogsBranchesProduct = Resource<
 /**
  * A Retail product under a catalog branch.
  *
- * Products have no labels field, so Alchemy stamps ownership into
- * `description` (and a compact marker in `tags`) for `list` / nuke.
+ * Without labels, ownership rests on the deterministic id: `read` reports a
+ * resource it finds without prior state as unowned (adopt it with `--adopt`).
  * Catalog, location, branch, product id, and type are immutable. Title,
  * description, categories, price, and tags update in place.
  *
@@ -237,10 +221,7 @@ const priceInfoOf = (
       };
 
 const imagesOf = (
-  images:
-    | readonly retail.GoogleCloudRetailV2Image[]
-    | readonly ProductImage[]
-    | undefined,
+  images: readonly retail.GoogleCloudRetailV2Image[] | readonly ProductImage[] | undefined,
 ): ProductImage[] =>
   (images ?? [])
     .filter((image) => (image.uri ?? "").length > 0)
@@ -250,18 +231,9 @@ const imagesOf = (
       width: image.width,
     }));
 
-const userTags = (tags: readonly string[] | undefined) =>
-  (tags ?? []).filter(
-    (tag) => !tag.includes("[alc ") && !tag.includes("[alchemy "),
-  );
-
-const toAttrs = (
-  product: retail.GoogleCloudRetailV2Product,
-  project: string,
-) => {
+const toAttrs = (product: retail.GoogleCloudRetailV2Product, project: string) => {
   const name = product.name ?? "";
   const parsed = parseResourceName(name, "products");
-  const ownership = parseOwnership(product.description);
   return {
     name,
     productId: product.id ?? parsed.id,
@@ -270,7 +242,7 @@ const toAttrs = (
     project: parsed.project || project,
     location: parsed.location,
     title: product.title,
-    description: ownership.text,
+    description: product.description,
     categories: [...(product.categories ?? [])],
     type: product.type,
     uri: product.uri,
@@ -279,7 +251,7 @@ const toAttrs = (
     availability: product.availability,
     priceInfo: priceInfoOf(product.priceInfo),
     images: imagesOf(product.images),
-    tags: userTags(product.tags),
+    tags: [...(product.tags ?? [])],
     gtin: product.gtin,
   };
 };
@@ -290,7 +262,7 @@ const resourceName = (catalog: string, branchId: string, productId: string) =>
 const toBody = (
   news: CatalogsBranchesProductProps,
   productId: string,
-  description: string,
+  description: string | undefined,
   tags: string[],
 ): retail.GoogleCloudRetailV2Product => ({
   id: productId,
@@ -316,30 +288,9 @@ const getByName = (name: string) =>
         .getProjectsLocationsCatalogsBranchesProducts({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const findOwned = (id: string, parent: string, hinted?: string) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const products = yield* listProducts(parent);
-    for (const product of products) {
-      if (yield* productOwnedByAlchemy(id, product)) return product;
-    }
-    return undefined as retail.GoogleCloudRetailV2Product | undefined;
-  });
-
 export const CatalogsBranchesProductProvider = () =>
   Provider.succeed(CatalogsBranchesProduct, {
-    stables: [
-      "name",
-      "productId",
-      "catalog",
-      "branchId",
-      "project",
-      "location",
-      "type",
-    ],
+    stables: ["name", "productId", "catalog", "branchId", "project", "location", "type"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -365,9 +316,7 @@ export const CatalogsBranchesProductProvider = () =>
         (previousBranch !== undefined &&
           nextBranch !== undefined &&
           previousBranch !== nextBranch) ||
-        (previousType !== undefined &&
-          nextType !== undefined &&
-          previousType !== nextType)
+        (previousType !== undefined && nextType !== undefined && previousType !== nextType)
       ) {
         return (
           identity ?? {
@@ -382,40 +331,30 @@ export const CatalogsBranchesProductProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const catalog = olds?.catalog ?? output?.catalog;
-      const branchId = olds?.branchId ?? output?.branchId ?? DEFAULT_BRANCH;
-      const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : catalog !== undefined
-            ? yield* findOwned(id, branchName(catalog, branchId))
-            : undefined;
+      const branchId = normalizeBranch(olds?.branchId ?? output?.branchId);
+      const productId = yield* toPhysical(
+        id,
+        olds?.productId,
+        output?.productId,
+        productIdOf,
+        MAX_PRODUCT_ID_LENGTH,
+      );
+      const name =
+        output?.name ??
+        (catalog !== undefined
+          ? resourceName(
+              expandCatalog(catalog, env.project, normalizeLocation(output?.location)),
+              branchId,
+              productId,
+            )
+          : undefined);
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* productOwnedByAlchemy(id, existing))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const catalogs = yield* listProjectCatalogs(env.project, env.region);
-        const pages = yield* Effect.forEach(
-          catalogs,
-          (catalog) =>
-            catalog.name
-              ? listProducts(branchName(catalog.name, DEFAULT_BRANCH)).pipe(
-                  Effect.map((products) =>
-                    products
-                      .filter(productHasOwnership)
-                      .map((product) => toAttrs(product, env.project)),
-                  ),
-                )
-              : Effect.succeed([]),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -431,18 +370,11 @@ export const CatalogsBranchesProductProvider = () =>
       );
       const parent = branchName(catalog, branchId);
       const name = resourceName(catalog, branchId, productId);
-      const ownership = yield* ownershipLabels(id);
-      const description = encodeOwnership(ownership, news.description);
-      const tags = [
-        encodeOwnershipLine(ownership, undefined, 1000),
-        ...(news.tags ?? []),
-      ];
+      const description = news.description;
+      const tags = news.tags ?? [];
       const body = toBody(news, productId, description, tags);
 
-      let current = yield* findOwned(id, parent, output?.name);
-      if (current === undefined) {
-        current = yield* getByName(name);
-      }
+      let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* retail
@@ -469,15 +401,11 @@ export const CatalogsBranchesProductProvider = () =>
           : "categories",
         sameText(current.uri, news.uri) ? undefined : "uri",
         sameStringList(current.brands, news.brands) ? undefined : "brands",
-        sameText(current.languageCode, news.languageCode)
-          ? undefined
-          : "language_code",
+        sameText(current.languageCode, news.languageCode) ? undefined : "language_code",
         sameText(current.availability, news.availability ?? "IN_STOCK")
           ? undefined
           : "availability",
-        sameJson(priceInfoOf(current.priceInfo), news.priceInfo)
-          ? undefined
-          : "price_info",
+        sameJson(priceInfoOf(current.priceInfo), news.priceInfo) ? undefined : "price_info",
         sameJson(imagesOf(current.images), news.images) ? undefined : "images",
         sameStringList(current.tags, tags) ? undefined : "tags",
         sameText(current.gtin, news.gtin) ? undefined : "gtin",

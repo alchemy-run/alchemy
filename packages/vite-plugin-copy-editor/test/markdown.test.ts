@@ -3,22 +3,15 @@ import { markdownDialect, markdownRuns } from "../src/markdown.ts";
 import { applyRuns } from "../src/text.ts";
 
 const edit = (md: string, before: string[], after: string[], options = {}) =>
-  applyRuns(
-    md,
-    markdownRuns(md, 0, md.length, options),
-    markdownDialect(options),
-    {
-      before,
-      after,
-    },
-  );
+  applyRuns(md, markdownRuns(md, 0, md.length, options), markdownDialect(options), {
+    before,
+    after,
+  });
 
 describe("markdownRuns", () => {
   test("splits at inline syntax the way it renders", () => {
     const md = "Use `foo` with **bold** and [a link](/x) or _em_.";
-    const runs = markdownRuns(md, 0, md.length).map((r) =>
-      md.slice(r.start, r.end),
-    );
+    const runs = markdownRuns(md, 0, md.length).map((r) => md.slice(r.start, r.end));
     expect(runs.filter(Boolean)).toEqual([
       "Use ",
       "foo",
@@ -41,9 +34,7 @@ describe("markdownRuns", () => {
   test("treats bare URLs as generated text", () => {
     const md = "see https://alchemy.run/docs. now";
     const runs = markdownRuns(md, 0, md.length);
-    expect(runs.find((r) => r.kind === "locked")?.expected).toBe(
-      "https://alchemy.run/docs",
-    );
+    expect(runs.find((r) => r.kind === "locked")?.expected).toBe("https://alchemy.run/docs");
   });
 });
 
@@ -98,21 +89,13 @@ describe("markdown edits", () => {
   test("rejects edits to generated text", () => {
     const md = "see https://alchemy.run now";
     expect(() =>
-      edit(
-        md,
-        ["see ", "https://alchemy.run", " now"],
-        ["see ", "https://x.dev", " now"],
-      ),
+      edit(md, ["see ", "https://alchemy.run", " now"], ["see ", "https://x.dev", " now"]),
     ).toThrow(/generated/);
   });
 
   test("edits inside a code span", () => {
     const md = "run `bun dev` first";
-    const out = edit(
-      md,
-      ["run ", "bun dev", " first"],
-      ["run ", "bun start", " first"],
-    );
+    const out = edit(md, ["run ", "bun dev", " first"], ["run ", "bun start", " first"]);
     expect(out).toBe("run `bun start` first");
   });
 });

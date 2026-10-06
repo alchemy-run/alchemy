@@ -39,16 +39,16 @@ export const CreateWorkspaceServiceAccountTokenHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(
-        `AWS.Grafana.CreateWorkspaceServiceAccountToken(${workspace.LogicalId})`,
-      )(function* (request: CreateWorkspaceServiceAccountTokenRequest) {
-        return yield* op({
-          name: request.name,
-          serviceAccountId: request.serviceAccountId,
-          secondsToLive: toWireSeconds(request.timeToLive)!,
-          workspaceId: yield* workspaceId,
-        });
-      });
+      return Effect.fn(`AWS.Grafana.CreateWorkspaceServiceAccountToken(${workspace.LogicalId})`)(
+        function* (request: CreateWorkspaceServiceAccountTokenRequest) {
+          return yield* op({
+            name: request.name,
+            serviceAccountId: request.serviceAccountId,
+            secondsToLive: toWireSeconds(request.timeToLive)!,
+            workspaceId: yield* workspaceId,
+          });
+        },
+      );
     });
   }),
 );

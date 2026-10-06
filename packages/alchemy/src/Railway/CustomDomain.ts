@@ -1,22 +1,16 @@
-import { withEnvironmentConfigLock } from "./transient.ts";
-import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-} from "./GraphQL.ts";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
-import {
-  Railway,
-  type CustomDomain as RailwayCustomDomain,
-} from "@distilled.cloud/railway";
+import { Railway, type CustomDomain as RailwayCustomDomain } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { waitUntilDeleted, projectServices as fetchProjectServices } from "./GraphQL.ts";
 import { matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
 const domainFields = <E>(domain: Query<RailwayCustomDomain, E>) => ({
   id: domain.id,
@@ -41,11 +35,10 @@ const readCustomDomain = Query.fn((id: string, projectId: string) =>
   domainFields(Railway.customDomain({ id, projectId })),
 );
 
-const readCustomDomains = Query.fn(
-  (projectId: string, environmentId: string, serviceId: string) =>
-    Railway.domains({ environmentId, projectId, serviceId }).customDomains.pipe(
-      Query.map(domainFields),
-    ),
+const readCustomDomains = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
+  Railway.domains({ environmentId, projectId, serviceId }).customDomains.pipe(
+    Query.map(domainFields),
+  ),
 );
 
 const customDomainCreate = Query.fn(
@@ -63,9 +56,7 @@ const customDomainUpdate = Query.fn(
     Railway.customDomainUpdate(input),
 );
 
-const customDomainDelete = Query.fn((id: string) =>
-  Railway.customDomainDelete({ id }),
-);
+const customDomainDelete = Query.fn((id: string) => Railway.customDomainDelete({ id }));
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -79,10 +70,7 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * band. `projectId` is optional when the environment carries it (a
  * `Railway.Project`).
  */
-export type CustomDomainService = {
-  readonly serviceId: string;
-  readonly projectId?: string;
-};
+export type CustomDomainService = { readonly serviceId: string; readonly projectId?: string };
 
 /**
  * Environment identity a custom domain is created in. Accepts a
@@ -220,18 +208,14 @@ export type CustomDomain = Resource<
  */
 export const CustomDomain = Resource<CustomDomain>("Railway.CustomDomain");
 
-export class CustomDomainNotCreated extends Data.TaggedError(
-  "Railway.CustomDomainNotCreated",
-)<{
+export class CustomDomainNotCreated extends Data.TaggedError("Railway.CustomDomainNotCreated")<{
   domain: string;
   serviceId: string;
 }> {}
 
 export class CustomDomainServiceMissing extends Data.TaggedError(
   "Railway.CustomDomainServiceMissing",
-)<{
-  domain: string;
-}> {}
+)<{ domain: string }> {}
 
 const serviceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
@@ -261,9 +245,7 @@ const environmentIdOf = (value: unknown): string | undefined => {
 };
 
 const isGone = (domain: CloudDomain | undefined) =>
-  domain === undefined ||
-  domain.deletedAt != null ||
-  domain.syncStatus === "DELETED";
+  domain === undefined || domain.deletedAt != null || domain.syncStatus === "DELETED";
 
 const toAttrs = (
   domain: CloudDomain,
@@ -294,18 +276,10 @@ const getById = (customDomainId: string, projectId: string) =>
     Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
-const listServiceDomains = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
+const listServiceDomains = (projectId: string, environmentId: string, serviceId: string) =>
   readCustomDomains(projectId, environmentId, serviceId).pipe(
-    Effect.map((customDomains) =>
-      customDomains.filter((domain) => !isGone(domain)),
-    ),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed([] as ReadonlyArray<CloudDomain>),
-    ),
+    Effect.map((customDomains) => customDomains.filter((domain) => !isGone(domain))),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as ReadonlyArray<CloudDomain>)),
   );
 
 const findByDomain = (
@@ -316,9 +290,7 @@ const findByDomain = (
 ) =>
   listServiceDomains(projectId, environmentId, serviceId).pipe(
     Effect.map((domains) =>
-      domains.find(
-        (item) => item.domain.toLowerCase() === domain.toLowerCase(),
-      ),
+      domains.find((item) => item.domain.toLowerCase() === domain.toLowerCase()),
     ),
   );
 
@@ -355,55 +327,33 @@ const waitUntilGone = (customDomainId: string, projectId: string) =>
   waitUntilDeleted(
     "CustomDomain",
     customDomainId,
-    getById(customDomainId, projectId).pipe(
-      Effect.map((domain) => domain === undefined),
-    ),
+    getById(customDomainId, projectId).pipe(Effect.map((domain) => domain === undefined)),
   );
 
 export const CustomDomainProvider = () =>
   Provider.succeed(CustomDomain, {
-    stables: [
-      "customDomainId",
-      "serviceId",
-      "projectId",
-      "environmentId",
-      "domain",
-    ],
+    stables: ["customDomainId", "serviceId", "projectId", "environmentId", "domain"],
     nuke: { dependsOn: ["Railway.Project"] },
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const live = yield* fetchProjectServices(
-            project.projectId,
-            (service) => ({
-              id: service.id,
-              name: service.name,
-              deletedAt: service.deletedAt,
-            }),
-          ).pipe(
-            Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
-          );
+          const live = yield* fetchProjectServices(project.projectId, (service) => ({
+            id: service.id,
+            name: service.name,
+            deletedAt: service.deletedAt,
+          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
           const services = (live ?? []).filter(
-            (service) =>
-              service.deletedAt == null &&
-              matchesAlchemyPhysicalName(service.name),
+            (service) => service.deletedAt == null && matchesAlchemyPhysicalName(service.name),
           );
           const envIds = yield* projectEnvironmentIds(project);
           const nested = yield* Effect.forEach(services, (service) =>
             Effect.forEach(envIds, (environmentId) =>
-              listServiceDomains(
-                project.projectId,
-                environmentId,
-                service.id,
-              ).pipe(
+              listServiceDomains(project.projectId, environmentId, service.id).pipe(
                 Effect.map((domains) =>
                   domains.map((domain) =>
-                    toAttrs(domain, {
-                      projectId: project.projectId,
-                      environmentId,
-                    }),
+                    toAttrs(domain, { projectId: project.projectId, environmentId }),
                   ),
                 ),
               ),
@@ -419,18 +369,13 @@ export const CustomDomainProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const serviceId = serviceIdOf(news.service);
-      const serviceChanged =
-        serviceId !== undefined && serviceId !== output.serviceId;
+      const serviceChanged = serviceId !== undefined && serviceId !== output.serviceId;
       const environmentId = environmentIdOf(news.environment);
       const environmentChanged =
         environmentId !== undefined && environmentId !== output.environmentId;
-      const domainChanged =
-        news.domain.toLowerCase() !== output.domain.toLowerCase();
+      const domainChanged = news.domain.toLowerCase() !== output.domain.toLowerCase();
       if (serviceChanged || environmentChanged || domainChanged) {
-        return {
-          action: "replace" as const,
-          deleteFirst: !domainChanged,
-        };
+        return { action: "replace" as const, deleteFirst: !domainChanged };
       }
       return undefined;
     }),
@@ -438,12 +383,8 @@ export const CustomDomainProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const serviceId = output?.serviceId ?? serviceIdOf(olds?.service) ?? "";
       const projectId =
-        output?.projectId ??
-        projectIdOf(olds?.service) ??
-        projectIdOf(olds?.environment) ??
-        "";
-      const environmentId =
-        output?.environmentId ?? environmentIdOf(olds?.environment) ?? "";
+        output?.projectId ?? projectIdOf(olds?.service) ?? projectIdOf(olds?.environment) ?? "";
+      const environmentId = output?.environmentId ?? environmentIdOf(olds?.environment) ?? "";
       const domain = output?.domain ?? olds?.domain;
       if (
         serviceId.length === 0 ||
@@ -469,12 +410,8 @@ export const CustomDomainProvider = () =>
       const props = news ?? ({} as CustomDomainProps);
       const serviceId = serviceIdOf(props.service) ?? output?.serviceId ?? "";
       const projectId =
-        projectIdOf(props.service) ??
-        projectIdOf(props.environment) ??
-        output?.projectId ??
-        "";
-      const environmentId =
-        environmentIdOf(props.environment) ?? output?.environmentId ?? "";
+        projectIdOf(props.service) ?? projectIdOf(props.environment) ?? output?.projectId ?? "";
+      const environmentId = environmentIdOf(props.environment) ?? output?.environmentId ?? "";
       const domain = props.domain ?? output?.domain ?? "";
       if (serviceId.length === 0 || projectId.length === 0) {
         return yield* new CustomDomainServiceMissing({ domain });
@@ -496,50 +433,33 @@ export const CustomDomainProvider = () =>
           output?.serviceId !== serviceId ||
           output?.environmentId !== environmentId)
       ) {
-        current = yield* observe({
-          projectId,
-          environmentId,
-          serviceId,
-          domain,
-        });
+        current = yield* observe({ projectId, environmentId, serviceId, domain });
       }
 
       if (current === undefined) {
         const ensureDomain = Effect.gen(function* () {
           // A previous attempt may have created the hostname before its response failed.
-          const observed = yield* observe({
-            projectId,
-            environmentId,
-            serviceId,
-            domain,
-          });
+          const observed = yield* observe({ projectId, environmentId, serviceId, domain });
           if (observed !== undefined) return observed;
           return yield* customDomainCreate({
             domain,
             environmentId,
             projectId,
             serviceId,
-            ...(props.targetPort !== undefined
-              ? { targetPort: props.targetPort }
-              : {}),
+            ...(props.targetPort !== undefined ? { targetPort: props.targetPort } : {}),
           }).pipe(
             Effect.catchTag(
               ["RailwayCustomDomainCreateFailed", "RailwayValidationError"],
               (failure) =>
                 observe({ projectId, environmentId, serviceId, domain }).pipe(
                   Effect.flatMap((found) =>
-                    found !== undefined
-                      ? Effect.succeed(found)
-                      : Effect.fail(failure),
+                    found !== undefined ? Effect.succeed(found) : Effect.fail(failure),
                   ),
                 ),
             ),
           );
         });
-        current = yield* withEnvironmentConfigLock(
-          environmentId,
-          ensureDomain,
-        ).pipe(
+        current = yield* withEnvironmentConfigLock(environmentId, ensureDomain).pipe(
           Effect.retry({
             while: (error) => error._tag === "RailwayCustomDomainCreateFailed",
             times: 8,
@@ -560,9 +480,7 @@ export const CustomDomainProvider = () =>
           id: current.id,
           targetPort: desiredPort,
         });
-        current =
-          (yield* getById(current.id, current.projectId ?? projectId)) ??
-          current;
+        current = (yield* getById(current.id, current.projectId ?? projectId)) ?? current;
       }
 
       return toAttrs(current, { projectId, environmentId });

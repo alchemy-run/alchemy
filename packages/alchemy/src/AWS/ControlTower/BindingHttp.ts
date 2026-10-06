@@ -20,10 +20,7 @@ import type { LandingZone } from "./LandingZone.ts";
  */
 
 /** The Control Tower resources that resource-scoped bindings can target. */
-export type ControlTowerBindable =
-  | EnabledControl
-  | EnabledBaseline
-  | LandingZone;
+export type ControlTowerBindable = EnabledControl | EnabledBaseline | LandingZone;
 
 /**
  * Build the implementation effect for a resource-scoped capability: the
@@ -65,22 +62,20 @@ export const makeControlTowerHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ControlTower.${options.capability}(${resource}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [options.identifier(resource)],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ControlTower.${options.capability}(${resource}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: [options.identifier(resource)],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.ControlTower.${options.capability}(${resource.LogicalId})`,
-      )(function* (request?: Omit<I, K>) {
+      return Effect.fn(`AWS.ControlTower.${options.capability}(${resource.LogicalId})`)(function* (
+        request?: Omit<I, K>,
+      ) {
         return yield* op({
           ...request,
           [options.requestKey]: yield* Identifier,
@@ -95,12 +90,7 @@ export const makeControlTowerHttpBinding = <
  * APIs). The deploy-time half grants `iamActions` on `Resource: ["*"]`
  * because these operations are not resource-scoped.
  */
-export const makeControlTowerAccountHttpBinding = <
-  I extends object,
-  A,
-  E,
-  R,
->(options: {
+export const makeControlTowerAccountHttpBinding = <I extends object, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"ListBaselines"`.
@@ -122,22 +112,18 @@ export const makeControlTowerAccountHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ControlTower.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ControlTower.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.ControlTower.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.ControlTower.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

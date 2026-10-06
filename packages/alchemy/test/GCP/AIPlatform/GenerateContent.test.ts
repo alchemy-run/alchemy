@@ -1,8 +1,8 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -17,8 +17,7 @@ test.provider(
           const Probe = Action(
             "Probe",
             Effect.gen(function* () {
-              const global =
-                yield* GCP.AIPlatform.GenerateContent("gemini-2.5-flash");
+              const global = yield* GCP.AIPlatform.GenerateContent("gemini-2.5-flash");
               const regional = yield* GCP.AIPlatform.GenerateContent({
                 model: "gemini-2.5-flash",
                 location: "us-central1",
@@ -54,5 +53,8 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 120_000,
+  },
 );

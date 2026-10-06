@@ -1,25 +1,19 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const SHARED_SECRET = "alchemy-test-shared-secret";
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  vpnTunnelName: string,
-) =>
+const waitUntilGone = (project: string, region: string, vpnTunnelName: string) =>
   compute.getVpnTunnels({ project, region, vpnTunnel: vpnTunnelName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
@@ -38,16 +32,13 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const gateway = yield* GCP.Compute.VpnGateway("Gateway", {
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
           });
           const router = yield* GCP.Compute.Router("Edge", {
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             bgp: { asn: 64514 },
           });
           const peer = yield* GCP.Compute.ExternalVpnGateway("Peer", {
@@ -65,7 +56,7 @@ test.provider(
             description: "ha vpn tunnel",
             labels: { env: "test" },
           });
-          return { network, gateway, router, peer, tunnel };
+          return { gateway, router, peer, tunnel };
         }),
       );
 
@@ -81,9 +72,7 @@ test.provider(
         expect.stringContaining(created.peer.externalVpnGatewayName),
       );
       expect(created.tunnel.peerExternalGatewayInterface).toEqual(0);
-      expect(created.tunnel.router).toEqual(
-        expect.stringContaining(created.router.routerName),
-      );
+      expect(created.tunnel.router).toEqual(expect.stringContaining(created.router.routerName));
       expect(created.tunnel.ikeVersion).toEqual(2);
       expect(created.tunnel.sharedSecretHash).toEqual(expect.any(String));
 
@@ -96,33 +85,25 @@ test.provider(
       expect(fetched.description).toEqual("ha vpn tunnel");
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
-      expect(fetched.vpnGateway).toEqual(
-        expect.stringContaining(created.gateway.vpnGatewayName),
-      );
+      expect(fetched.vpnGateway).toEqual(expect.stringContaining(created.gateway.vpnGatewayName));
       expect(fetched.vpnGatewayInterface).toEqual(0);
       expect(fetched.peerExternalGateway).toEqual(
         expect.stringContaining(created.peer.externalVpnGatewayName),
       );
-      expect(fetched.router).toEqual(
-        expect.stringContaining(created.router.routerName),
-      );
+      expect(fetched.router).toEqual(expect.stringContaining(created.router.routerName));
       expect(fetched.ikeVersion).toEqual(2);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const gateway = yield* GCP.Compute.VpnGateway("Gateway", {
             vpnGatewayName: created.gateway.vpnGatewayName,
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
           });
           const router = yield* GCP.Compute.Router("Edge", {
             routerName: created.router.routerName,
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             bgp: { asn: 64514 },
           });
           const peer = yield* GCP.Compute.ExternalVpnGateway("Peer", {
@@ -142,13 +123,11 @@ test.provider(
             description: "ha vpn tunnel",
             labels: { env: "prod", role: "vpn" },
           });
-          return { network, gateway, router, peer, tunnel };
+          return { gateway, router, peer, tunnel };
         }),
       );
 
-      expect(updated.tunnel.vpnTunnelName).toEqual(
-        created.tunnel.vpnTunnelName,
-      );
+      expect(updated.tunnel.vpnTunnelName).toEqual(created.tunnel.vpnTunnelName);
       expect(updated.tunnel.vpnTunnelId).toEqual(created.tunnel.vpnTunnelId);
       expect(updated.tunnel.labels).toMatchObject({
         env: "prod",
@@ -173,5 +152,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 240_000 },
 );

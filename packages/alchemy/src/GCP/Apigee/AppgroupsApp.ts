@@ -10,12 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  fromAttributes,
-  toAttributes,
-  userAttributeList,
-  type Attribute,
-} from "./ownership.ts";
-import {
   lastSegment,
   orgParent,
   resolveOrgId,
@@ -23,6 +17,7 @@ import {
   sortedStrings,
   toPhysicalId,
 } from "./operations.ts";
+import { fromAttributes, toAttributes, userAttributeList, type Attribute } from "./ownership.ts";
 
 const MAX_NAME_LENGTH = 255;
 
@@ -140,11 +135,8 @@ export class AppgroupsAppNotResolved extends Data.TaggedError(
 const groupParent = (organizationId: string, appgroup: string) =>
   `${orgParent(organizationId)}/appgroups/${lastSegment(appgroup)}`;
 
-const resourceName = (
-  organizationId: string,
-  appgroup: string,
-  appId: string,
-) => `${groupParent(organizationId, appgroup)}/apps/${appId}`;
+const resourceName = (organizationId: string, appgroup: string, appId: string) =>
+  `${groupParent(organizationId, appgroup)}/apps/${appId}`;
 
 const toAttrs = (
   app: apigee.GoogleCloudApigeeV1AppGroupApp,
@@ -176,7 +168,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAppgroupsApps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const AppgroupsAppProvider = () =>
   Provider.succeed(AppgroupsApp, {
@@ -194,16 +186,11 @@ export const AppgroupsAppProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.appId ?? output?.appId;
-      const previousGroup = olds?.appgroup
-        ? lastSegment(olds.appgroup)
-        : output?.appgroupId;
+      const previousGroup = olds?.appgroup ? lastSegment(olds.appgroup) : output?.appgroupId;
       const previousOrg = olds?.organizationId ?? output?.organizationId;
       if (
-        (previousId !== undefined &&
-          news.appId !== undefined &&
-          news.appId !== previousId) ||
-        (previousGroup !== undefined &&
-          lastSegment(news.appgroup) !== previousGroup) ||
+        (previousId !== undefined && news.appId !== undefined && news.appId !== previousId) ||
+        (previousGroup !== undefined && lastSegment(news.appgroup) !== previousGroup) ||
         (previousOrg !== undefined &&
           news.organizationId !== undefined &&
           news.organizationId !== previousOrg)
@@ -216,21 +203,11 @@ export const AppgroupsAppProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        olds?.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
-      const appgroupId = lastSegment(
-        olds?.appgroup ?? output?.appgroupId ?? "",
-      );
+        olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
+      const appgroupId = lastSegment(olds?.appgroup ?? output?.appgroupId ?? "");
       if (appgroupId.length === 0) return undefined;
-      const appId = yield* toPhysicalId(
-        id,
-        olds?.appId,
-        output?.appId,
-        MAX_NAME_LENGTH,
-      );
-      const name =
-        output?.name ?? resourceName(organizationId, appgroupId, appId);
+      const appId = yield* toPhysicalId(id, olds?.appId, output?.appId, MAX_NAME_LENGTH);
+      const name = output?.name ?? resourceName(organizationId, appgroupId, appId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, organizationId, appgroupId);
@@ -250,15 +227,11 @@ export const AppgroupsAppProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.appGroups ?? [])),
             Stream.filter(
-              (group) =>
-                fromAttributes(group.attributes).labels["alchemy-id"] !==
-                undefined,
+              (group) => fromAttributes(group.attributes).labels["alchemy-id"] !== undefined,
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed([])),
           );
         const apps = [];
         for (const group of groups) {
@@ -270,22 +243,14 @@ export const AppgroupsAppProvider = () =>
               pageSize: 1000,
             })
             .pipe(
-              Stream.flatMap((item) =>
-                Stream.fromIterable(item.appGroupApps ?? []),
-              ),
+              Stream.flatMap((item) => Stream.fromIterable(item.appGroupApps ?? [])),
               Stream.filter(
-                (app) =>
-                  fromAttributes(app.attributes).labels["alchemy-id"] !==
-                  undefined,
+                (app) => fromAttributes(app.attributes).labels["alchemy-id"] !== undefined,
               ),
-              Stream.map((app) =>
-                toAttrs(app, env.project, organizationId, appgroupId),
-              ),
+              Stream.map((app) => toAttrs(app, env.project, organizationId, appgroupId)),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed([]),
-              ),
+              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed([])),
             );
           apps.push(...page);
         }
@@ -295,16 +260,9 @@ export const AppgroupsAppProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        news.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        news.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const appgroupId = lastSegment(news.appgroup);
-      const appId = yield* toPhysicalId(
-        id,
-        news.appId,
-        output?.appId,
-        MAX_NAME_LENGTH,
-      );
+      const appId = yield* toPhysicalId(id, news.appId, output?.appId, MAX_NAME_LENGTH);
       const name = resourceName(organizationId, appgroupId, appId);
       const ownership = yield* createInternalLabels(id);
       const desiredAttributes = toAttributes(ownership, news.attributes);
@@ -336,10 +294,7 @@ export const AppgroupsAppProvider = () =>
 
       const needsUpdate =
         (current.callbackUrl ?? "") !== (news.callbackUrl ?? "") ||
-        !sameJson(
-          sortedStrings(current.apiProducts),
-          sortedStrings(news.apiProducts),
-        ) ||
+        !sameJson(sortedStrings(current.apiProducts), sortedStrings(news.apiProducts)) ||
         !sameJson(sortedStrings(current.scopes), sortedStrings(news.scopes)) ||
         !sameJson(current.attributes ?? [], desiredAttributes);
 
@@ -363,6 +318,6 @@ export const AppgroupsAppProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsAppgroupsApps({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

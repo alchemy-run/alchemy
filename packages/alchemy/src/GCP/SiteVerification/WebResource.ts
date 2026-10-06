@@ -139,21 +139,22 @@ export type WebResource = Resource<
  * ```
  *
  * ### Updating Owners
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Delegate a co-owner
  * ```typescript
  * const site = yield* GCP.SiteVerification.WebResource("Docs", {
- *   identifier: existing.identifier,
+ *   identifier: "https://www.example.com/",
  *   siteType: "SITE",
- *   owners: [...existing.owners, "teammate@example.com"],
+ *   owners: ["admin@example.com", "teammate@example.com"],
  * });
  * ```
  *
  * @resource
  * @category SiteVerification
  */
-export const WebResource = Resource<WebResource>(
-  "GCP.SiteVerification.WebResource",
-);
+export const WebResource = Resource<WebResource>("GCP.SiteVerification.WebResource");
 
 export class WebResourceNotResolved extends Data.TaggedError(
   "GCP.SiteVerification.WebResourceNotResolved",
@@ -185,10 +186,7 @@ const desiredMethod = (
   news: WebResourceProps,
   siteType: string,
   outputMethod: string | undefined,
-) =>
-  news.verificationMethod ??
-  outputMethod ??
-  defaultVerificationMethod(siteType);
+) => news.verificationMethod ?? outputMethod ?? defaultVerificationMethod(siteType);
 
 export const WebResourceProvider = () =>
   Provider.succeed(WebResource, {
@@ -210,9 +208,7 @@ export const WebResourceProvider = () =>
         news.identifier !== undefined &&
         !sameText(news.identifier, previousId) &&
         !sameText(
-          news.identifier.endsWith("/")
-            ? news.identifier
-            : `${news.identifier}/`,
+          news.identifier.endsWith("/") ? news.identifier : `${news.identifier}/`,
           previousId,
         )
       ) {
@@ -241,9 +237,7 @@ export const WebResourceProvider = () =>
         env.project,
         olds?.verificationMethod ?? output?.verificationMethod,
       );
-      return foundById || hasOwnershipMarker(existing.site?.identifier)
-        ? attrs
-        : Unowned(attrs);
+      return foundById || hasOwnershipMarker(existing.site?.identifier) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -264,11 +258,7 @@ export const WebResourceProvider = () =>
         news.identifier,
         output?.identifier,
       );
-      const verificationMethod = desiredMethod(
-        news,
-        siteType,
-        output?.verificationMethod,
-      );
+      const verificationMethod = desiredMethod(news, siteType, output?.verificationMethod);
 
       let current = yield* getWebResource(output?.webResourceId);
       if (current === undefined) {
@@ -284,11 +274,7 @@ export const WebResourceProvider = () =>
               owners: news.owners,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findWebResource(identifier, siteType),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findWebResource(identifier, siteType)));
         current = created ?? undefined;
       }
 
@@ -296,10 +282,7 @@ export const WebResourceProvider = () =>
         return yield* new WebResourceNotResolved({ identifier, siteType });
       }
 
-      if (
-        news.owners !== undefined &&
-        !sameOwners(current.owners, news.owners)
-      ) {
+      if (news.owners !== undefined && !sameOwners(current.owners, news.owners)) {
         const pathId = toPathId(current.id ?? output?.webResourceId);
         current = yield* siteVerification.updateWebResource({
           id: pathId,

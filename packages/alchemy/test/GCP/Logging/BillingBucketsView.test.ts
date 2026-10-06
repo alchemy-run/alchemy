@@ -1,19 +1,22 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as cloudbilling from "@distilled.cloud/gcp/cloudbilling_v1";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { GcpEnvironment } from "@/GCP/Environment";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
+// Billing-account-scoped: set GOOGLE_BILLING_ACCOUNT when the credentials
+// administer the billing account (the testing service account does not).
+const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT?.trim().replace(
+  /^billingAccounts\//,
+  "",
 );
+const account = billingAccountId ?? "";
+
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getBillingAccountsLocationsBucketsViews({ name }).pipe(
@@ -26,76 +29,29 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const billingAccountId = () =>
-  Effect.gen(function* () {
-    const { project } = yield* GcpEnvironment.current;
-
-    return yield* cloudbilling
-      .getBillingInfoProjects({ name: `projects/${project}` })
-      .pipe(
-        Effect.map(
-          (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
-        ),
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
-      );
-  });
-
-test.provider(
-  "getBillingAccountsLocationsBucketsViews on a missing view fails with NotFound or Forbidden",
+test.provider.skipIf(!billingAccountId)(
+  "getBillingAccountsLocationsBucketsViews on a missing view fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const account = (yield* billingAccountId()) || "000000-000000-000000";
       const error = yield* Effect.flip(
         logging.getBillingAccountsLocationsBucketsViews({
           name: `billingAccounts/${account}/locations/global/buckets/_Default/views/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(!billingAccountId)(
   "create, update, replace, and delete a billing bucket view",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const account = yield* billingAccountId();
-      if (account.length === 0) {
-        const error = yield* Effect.flip(
-          logging.createBillingAccountsLocationsBucketsViews({
-            parent:
-              "billingAccounts/000000-000000-000000/locations/global/buckets/_Default",
-            viewId: "alchemy-probe",
-            body: { description: "probe" },
-          }),
-        );
-        expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      const access = yield* logging
-        .listBillingAccountsLocationsBuckets({
-          parent: `billingAccounts/${account}/locations/-`,
-          pageSize: 1,
-        })
-        .pipe(
-          Effect.as("ok" as const),
-          Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-            Effect.succeed(error._tag),
-          ),
-        );
-      if (access !== "ok") {
-        expect(["Forbidden", "NotFound"]).toContain(access);
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -146,9 +102,7 @@ test.provider(
       );
 
       expect(updated.view.name).toEqual(created.view.name);
-      expect(updated.view.filter).toEqual(
-        'resource.type = "gce_instance" AND severity>=ERROR',
-      );
+      expect(updated.view.filter).toEqual('resource.type = "gce_instance" AND severity>=ERROR');
 
       const last = created.view.viewId.at(-1) ?? "a";
       const nextViewId = `${created.view.viewId.slice(0, -1)}${last === "z" ? "0" : "z"}`;
@@ -183,5 +137,5 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.view.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );

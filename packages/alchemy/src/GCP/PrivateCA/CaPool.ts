@@ -17,6 +17,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TIER = "DEVOPS";
@@ -185,28 +186,11 @@ export type CaPool = Resource<
  */
 export const CaPool = Resource<CaPool>("GCP.PrivateCA.CaPool");
 
-export class CaPoolNotResolved extends Data.TaggedError(
-  "GCP.PrivateCA.CaPoolNotResolved",
-)<{
+export class CaPoolNotResolved extends Data.TaggedError("GCP.PrivateCA.CaPoolNotResolved")<{
   name: string;
 }> {}
 
-export class CaPoolOperationFailed extends Data.TaggedError(
-  "GCP.PrivateCA.CaPoolOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CaPoolOperationPending extends Data.TaggedError(
-  "GCP.PrivateCA.CaPoolOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class CaPoolStillExists extends Data.TaggedError(
-  "GCP.PrivateCA.CaPoolStillExists",
-)<{
+export class CaPoolStillExists extends Data.TaggedError("GCP.PrivateCA.CaPoolStillExists")<{
   name: string;
 }> {}
 
@@ -227,8 +211,7 @@ const rfc1035 = (name: string): string => {
   return next.length > 0 ? next : "ca-pool";
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 const normalizeTier = (tier: string | undefined) => {
   const value = (tier ?? DEFAULT_TIER).toUpperCase();
@@ -244,14 +227,9 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    caPoolId:
-      poolsAt >= 0 && parts[poolsAt + 1]
-        ? parts[poolsAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    caPoolId: poolsAt >= 0 && parts[poolsAt + 1] ? parts[poolsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -293,15 +271,10 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 const encodingOf = (value: string | undefined) => {
-  if (
-    value === undefined ||
-    value === "" ||
-    value === "ENCODING_FORMAT_UNSPECIFIED"
-  ) {
+  if (value === undefined || value === "" || value === "ENCODING_FORMAT_UNSPECIFIED") {
     return undefined;
   }
   return value;
@@ -332,9 +305,7 @@ const toEncryptionSpec = (
   return { cloudKmsKey };
 };
 
-const toIssuancePolicy = (
-  policy: IssuancePolicy | undefined,
-): IssuancePolicy | undefined => {
+const toIssuancePolicy = (policy: IssuancePolicy | undefined): IssuancePolicy | undefined => {
   if (policy === undefined) return undefined;
   const next = canonical(policy);
   return next === undefined ? undefined : (next as IssuancePolicy);
@@ -361,93 +332,29 @@ const getByName = (name: string) =>
     .getProjectsLocationsCaPools({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: privateca.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: privateca.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: privateca.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-const waitForOperation = (
-  operation: privateca.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new CaPoolOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CaPoolOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = privateca.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies privateca.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new CaPoolOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new CaPoolOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.PrivateCA.CaPoolOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
+/**
+ * Wait for a Certificate Authority Service operation; CA creation and
+ * activation take a few minutes. ALREADY_EXISTS (code 6) counts as success
+ * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
+ * and an operation that is already gone.
+ */
+const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(operation, (name) => privateca.getProjectsLocationsOperations({ name }), {
+    budget: "15 minutes",
+  }).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool
-        ? Effect.succeed(pool)
-        : Effect.fail(new CaPoolNotResolved({ name })),
+      pool ? Effect.succeed(pool) : Effect.fail(new CaPoolNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CaPoolNotResolved",
@@ -459,9 +366,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined
-        ? Effect.void
-        : Effect.fail(new CaPoolStillExists({ name })),
+      pool === undefined ? Effect.void : Effect.fail(new CaPoolStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CaPoolStillExists",
@@ -479,15 +384,12 @@ const listOwnedCaPools = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.caPools ?? [])),
       Stream.filter((pool) =>
-        Object.keys(pool.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(pool.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((pool) => toAttrs(pool, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateBody = (
@@ -522,14 +424,9 @@ export const CaPoolProvider = () =>
 
       const previousId = olds?.caPoolId ?? output?.caPoolId;
       const nextId = news.caPoolId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location ?? env.region,
       );
@@ -539,46 +436,30 @@ export const CaPoolProvider = () =>
       const nextTier = normalizeTier(news.tier ?? olds?.tier ?? output?.tier);
       const tierChanged = previousTier !== nextTier;
 
-      const previousKey =
-        olds?.encryptionSpec?.cloudKmsKey ??
-        output?.encryptionSpec?.cloudKmsKey;
+      const previousKey = olds?.encryptionSpec?.cloudKmsKey ?? output?.encryptionSpec?.cloudKmsKey;
       const nextKey = news.encryptionSpec?.cloudKmsKey ?? previousKey;
-      const encryptionChanged =
-        news.encryptionSpec !== undefined && previousKey !== nextKey;
+      const encryptionChanged = news.encryptionSpec !== undefined && previousKey !== nextKey;
 
-      if (
-        !idChanged &&
-        !locationChanged &&
-        !tierChanged &&
-        !encryptionChanged
-      ) {
+      if (!idChanged && !locationChanged && !tierChanged && !encryptionChanged) {
         return undefined;
       }
 
       return {
         action: "replace" as const,
         deleteFirst:
-          !idChanged &&
-          !locationChanged &&
-          previousId !== undefined &&
-          nextId === previousId,
+          !idChanged && !locationChanged && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const caPoolId = yield* toId(id, olds?.caPoolId, output?.caPoolId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, caPoolId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, caPoolId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -590,9 +471,7 @@ export const CaPoolProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const caPoolId = yield* toId(id, news.caPoolId, output?.caPoolId);
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, caPoolId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -639,8 +518,7 @@ export const CaPoolProvider = () =>
       const desiredIssuance = toIssuancePolicy(news.issuancePolicy);
       const issuanceChanged =
         news.issuancePolicy !== undefined &&
-        fingerprint(desiredIssuance) !==
-          fingerprint(toIssuancePolicy(current.issuancePolicy));
+        fingerprint(desiredIssuance) !== fingerprint(toIssuancePolicy(current.issuancePolicy));
 
       if (labelsChanged || publishingChanged || issuanceChanged) {
         const updateMask = [
@@ -671,16 +549,14 @@ export const CaPoolProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* privateca
-        .deleteProjectsLocationsCaPools({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* privateca.deleteProjectsLocationsCaPools({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

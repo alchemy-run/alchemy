@@ -6,6 +6,9 @@ import { StopInstance } from "./StopInstance.ts";
 /**
  * HTTP implementation of {@link StopInstance}.
  *
+ * Grants `roles/compute.instanceAdmin.v1` on the bound instance only,
+ * because no narrower predefined role contains `compute.instances.stop`.
+ *
  * @layer
  * @provides GCP.Compute.StopInstance
  */
@@ -13,7 +16,6 @@ export const StopInstanceHttp = Layer.effect(
   StopInstance,
   makeInstanceHttpBinding({
     tag: "GCP.Compute.StopInstance",
-    // No narrower predefined role contains compute.instances.stop.
     iam: { role: "roles/compute.instanceAdmin.v1", on: "compute.instance" },
     operation: compute.stopInstances,
   }),

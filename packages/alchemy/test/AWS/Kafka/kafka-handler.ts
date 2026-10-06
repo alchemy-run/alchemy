@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 export class KafkaTestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
@@ -128,9 +128,8 @@ export default KafkaTestFunction.make(
                 Effect.catchTag("NotFoundException", () => Effect.void),
               ),
             ),
-            Effect.catchTag(
-              ["BadRequestException", "TopicExistsException"],
-              (e) => Effect.succeed({ created: false, error: e._tag }),
+            Effect.catchTag(["BadRequestException", "TopicExistsException"], (e) =>
+              Effect.succeed({ created: false, error: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(outcome);

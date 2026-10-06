@@ -124,10 +124,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toAttrs = (
-  board: aiplatform.GoogleCloudAiplatformV1Tensorboard,
-  project: string,
-) => {
+const toAttrs = (board: aiplatform.GoogleCloudAiplatformV1Tensorboard, project: string) => {
   const name = board.name ?? "";
   return {
     name,
@@ -158,9 +155,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((board) =>
-      board
-        ? Effect.succeed(board)
-        : Effect.fail(new TensorboardNotResolved({ name })),
+      board ? Effect.succeed(board) : Effect.fail(new TensorboardNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.TensorboardNotResolved",
@@ -170,39 +165,25 @@ const waitUntilExists = (name: string) =>
   );
 
 const listAt = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsTensorboards
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.tensorboards ?? [])),
-      Stream.filter((board) =>
-        Object.keys(board.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ),
-      Stream.map((board) => toAttrs(board, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsTensorboards.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tensorboards ?? [])),
+    Stream.filter((board) =>
+      Object.keys(board.labels ?? {}).some((key) => key.startsWith("alchemy-")),
+    ),
+    Stream.map((board) => toAttrs(board, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
-const findByDisplayName = (
-  parent: string,
-  displayName: string,
-  project: string,
-) =>
-  aiplatform.listProjectsLocationsTensorboards
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.tensorboards ?? [])),
-      Stream.filter((board) => board.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? toAttrs(option.value, project) : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-    );
+const findByDisplayName = (parent: string, displayName: string, project: string) =>
+  aiplatform.listProjectsLocationsTensorboards.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tensorboards ?? [])),
+    Stream.filter((board) => board.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? toAttrs(option.value, project) : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const TensorboardProvider = () =>
   Provider.succeed(Tensorboard, {
@@ -215,14 +196,9 @@ export const TensorboardProvider = () =>
       if (previousLocation !== undefined && previousLocation !== nextLocation) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousKey =
-        olds?.encryptionSpec?.kmsKeyName ?? output?.encryptionSpec?.kmsKeyName;
+      const previousKey = olds?.encryptionSpec?.kmsKeyName ?? output?.encryptionSpec?.kmsKeyName;
       const nextKey = news.encryptionSpec?.kmsKeyName;
-      if (
-        previousKey !== undefined &&
-        nextKey !== undefined &&
-        previousKey !== nextKey
-      ) {
+      if (previousKey !== undefined && nextKey !== undefined && previousKey !== nextKey) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -235,23 +211,15 @@ export const TensorboardProvider = () =>
         if (output?.name !== undefined) return undefined;
         const location = olds?.location ?? output?.location ?? env.region;
         const parent = locationParent(env.project, location);
-        const match = yield* findByDisplayName(
-          parent,
-          olds?.displayName ?? "",
-          env.project,
-        );
+        const match = yield* findByDisplayName(parent, olds?.displayName ?? "", env.project);
         if (match === undefined) return undefined;
         const fetched = yield* getByName(match.name);
         if (fetched === undefined) return undefined;
         const attrs = toAttrs(fetched, env.project);
-        return (yield* hasAlchemyLabels(id, tagRecord(fetched.labels)))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* hasAlchemyLabels(id, tagRecord(fetched.labels))) ? attrs : Unowned(attrs);
       }
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -270,8 +238,7 @@ export const TensorboardProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const displayName =
-        news.displayName ?? output?.displayName ?? lastSegment(id);
+      const displayName = news.displayName ?? output?.displayName ?? lastSegment(id);
       const desiredDefault = news.isDefault === true;
       const encryptionSpec = news.encryptionSpec?.kmsKeyName
         ? { kmsKeyName: news.encryptionSpec.kmsKeyName }
@@ -296,18 +263,13 @@ export const TensorboardProvider = () =>
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
           });
-          const createdName =
-            resourceNameFromOperation(done) ?? output?.name ?? "";
+          const createdName = resourceNameFromOperation(done) ?? output?.name ?? "";
           if (createdName.length > 0) {
             current = yield* waitUntilExists(createdName);
           }
         }
         if (current === undefined) {
-          const match = yield* findByDisplayName(
-            parent,
-            displayName,
-            env.project,
-          );
+          const match = yield* findByDisplayName(parent, displayName, env.project);
           if (match !== undefined) {
             current = yield* getByName(match.name);
           }
@@ -325,16 +287,10 @@ export const TensorboardProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const defaultChanged = (current.isDefault === true) !== desiredDefault;
 
-      if (
-        labelsChanged ||
-        displayChanged ||
-        descriptionChanged ||
-        defaultChanged
-      ) {
+      if (labelsChanged || displayChanged || descriptionChanged || defaultChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayChanged ? "displayName" : undefined,

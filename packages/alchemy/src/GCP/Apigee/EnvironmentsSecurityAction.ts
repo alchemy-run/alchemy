@@ -196,11 +196,7 @@ export class EnvironmentsSecurityActionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organizationId: string,
-  environmentId: string,
-  securityActionId: string,
-) =>
+const resourceName = (organizationId: string, environmentId: string, securityActionId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/securityActions/${securityActionId}`;
 
 const conditionOf = (
@@ -265,9 +261,7 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  missingToUndefined(
-    apigee.getOrganizationsEnvironmentsSecurityActions({ name }),
-  );
+  missingToUndefined(apigee.getOrganizationsEnvironmentsSecurityActions({ name }));
 
 const toBody = (
   news: EnvironmentsSecurityActionProps,
@@ -290,13 +284,7 @@ const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
 export const EnvironmentsSecurityActionProvider = () =>
   Provider.succeed(EnvironmentsSecurityAction, {
-    stables: [
-      "name",
-      "securityActionId",
-      "organizationId",
-      "environmentId",
-      "createTime",
-    ],
+    stables: ["name", "securityActionId", "organizationId", "environmentId", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -310,8 +298,7 @@ export const EnvironmentsSecurityActionProvider = () =>
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -327,18 +314,14 @@ export const EnvironmentsSecurityActionProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
       const securityActionId = yield* toResourceId(
         id,
         olds?.securityActionId,
         output?.securityActionId,
         { maxLength: MAX_NAME_LENGTH, rfc1035: true },
       );
-      const name =
-        output?.name ??
-        resourceName(organizationId, environmentId, securityActionId);
+      const name = output?.name ?? resourceName(organizationId, environmentId, securityActionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organizationId, environmentId);
@@ -351,27 +334,18 @@ export const EnvironmentsSecurityActionProvider = () =>
         const environments = yield* listProjectEnvironments();
         const found: EnvironmentsSecurityAction["Attributes"][] = [];
         for (const item of environments) {
-          const actions =
-            yield* apigee.listOrganizationsEnvironmentsSecurityActions
-              .pages({ parent: item.parent, pageSize: 100 })
-              .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.securityActions ?? []),
-                ),
-                Stream.filter((action) =>
-                  hasOwnershipMarker(action.description),
-                ),
-                Stream.map((action) =>
-                  toAttrs(action, item.organizationId, item.environmentId),
-                ),
-                Stream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed(
-                    [] as EnvironmentsSecurityAction["Attributes"][],
-                  ),
-                ),
-              );
+          const actions = yield* apigee.listOrganizationsEnvironmentsSecurityActions
+            .pages({ parent: item.parent, pageSize: 100 })
+            .pipe(
+              Stream.flatMap((page) => Stream.fromIterable(page.securityActions ?? [])),
+              Stream.filter((action) => hasOwnershipMarker(action.description)),
+              Stream.map((action) => toAttrs(action, item.organizationId, item.environmentId)),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+                Effect.succeed([] as EnvironmentsSecurityAction["Attributes"][]),
+              ),
+            );
           found.push(...actions);
         }
         return found;
@@ -388,11 +362,7 @@ export const EnvironmentsSecurityActionProvider = () =>
         { maxLength: MAX_NAME_LENGTH, rfc1035: true },
       );
       const parent = environmentNameOf(organizationId, environmentId);
-      const name = resourceName(
-        organizationId,
-        environmentId,
-        securityActionId,
-      );
+      const name = resourceName(organizationId, environmentId, securityActionId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const desiredState = news.state ?? DEFAULT_STATE;
@@ -414,17 +384,12 @@ export const EnvironmentsSecurityActionProvider = () =>
         return yield* new EnvironmentsSecurityActionNotResolved({ name });
       }
 
-      const descriptionChanged = !sameText(
-        current.description,
-        desiredDescription,
-      );
+      const descriptionChanged = !sameText(current.description, desiredDescription);
       const stateChanged = !sameText(current.state, desiredState);
       const conditionChanged =
-        jsonOf(conditionOf(current.conditionConfig)) !==
-        jsonOf(news.conditionConfig);
+        jsonOf(conditionOf(current.conditionConfig)) !== jsonOf(news.conditionConfig);
       const denyChanged = jsonOf(current.deny) !== jsonOf(news.deny);
-      const allowChanged =
-        (current.allow !== undefined) !== (news.allow === true);
+      const allowChanged = (current.allow !== undefined) !== (news.allow === true);
       const flagChanged = jsonOf(current.flag) !== jsonOf(news.flag);
       const expireChanged = !sameText(current.expireTime, news.expireTime);
       const proxiesChanged = !sameList(current.apiProxies, news.apiProxies);
@@ -463,6 +428,6 @@ export const EnvironmentsSecurityActionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsEnvironmentsSecurityActions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

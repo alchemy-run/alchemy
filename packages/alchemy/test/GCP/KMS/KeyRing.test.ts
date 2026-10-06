@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import { KEY_RING_ID } from "./common.ts";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { KEY_RING_ID } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloud KMS KeyRings cannot be deleted. Reuse a constant id so re-runs
 // observe the existing ring instead of leaking a new one every pass.
@@ -41,6 +38,7 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
     }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"] },
 );
 
 test.provider(
@@ -110,12 +108,10 @@ test.provider(
 
       yield* stack.destroy();
 
-      const stillThere = yield* kms
-        .getProjectsLocationsKeyRings({ name: replaced.name })
-        .pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        );
+      const stillThere = yield* kms.getProjectsLocationsKeyRings({ name: replaced.name }).pipe(
+        Effect.as("found" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      );
       expect(stillThere).toEqual("found");
 
       const gone = yield* waitUntilGone(
@@ -123,5 +119,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 90_000 },
 );

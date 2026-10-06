@@ -9,16 +9,9 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  MAX_MODEL_DISPLAY_NAME_LENGTH,
   MAX_MODEL_ID_LENGTH,
-  encodeOwnershipLine,
   expandCatalog,
-  listModels,
-  listProjectCatalogs,
   normalizeLocation,
-  ownedByAlchemy,
-  ownershipLabels,
-  parseOwnership,
   parseResourceName,
   replaceOnIdentity,
   sameText,
@@ -48,9 +41,8 @@ export type CatalogsModelProps = {
    */
   modelId?: string;
   /**
-   * Human-readable name (max 1,024 characters). Models have no labels
-   * field, so Alchemy stamps ownership into this field for `list` / nuke.
-   * Display name is set at create time and is not updated in place.
+   * Human-readable name (max 1,024 characters). Display name is set at create
+   * time and is not updated in place.
    */
   displayName?: string;
   /**
@@ -67,11 +59,7 @@ export type CatalogsModelProps = {
    * Training state. Synced via pause/resume after create.
    * @default "PAUSED"
    */
-  trainingState?:
-    | "TRAINING_STATE_UNSPECIFIED"
-    | "PAUSED"
-    | "TRAINING"
-    | (string & {});
+  trainingState?: "TRAINING_STATE_UNSPECIFIED" | "PAUSED" | "TRAINING" | (string & {});
   /**
    * Periodic tuning state. Patchable.
    */
@@ -105,7 +93,7 @@ export type CatalogsModel = Resource<
     project: string;
     /** Location id. */
     location: string;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** Display name. */
     displayName: string | undefined;
     /** Model type. */
     type: string | undefined;
@@ -133,11 +121,11 @@ export type CatalogsModel = Resource<
 /**
  * A Retail recommendation model on a catalog.
  *
- * Models have no labels field, so Alchemy stamps ownership into
- * `displayName` for `list` / nuke. Parent, model id, type, and
- * optimization objective are immutable. `filteringOption` and
- * `periodicTuningState` patch in place; `trainingState` is synced with
- * pause/resume.
+ * Without labels, ownership rests on the deterministic id: `read` reports a
+ * resource it finds without prior state as unowned (adopt it with `--adopt`).
+ * Parent, model id, type, and optimization objective are immutable.
+ * `filteringOption` and `periodicTuningState` patch in place; `trainingState`
+ * is synced with pause/resume.
  *
  * Creating a model requires Retail Recommendations and enough catalog
  * and user-event data. Create is a long-running operation.
@@ -155,9 +143,7 @@ export type CatalogsModel = Resource<
  * @resource
  * @category Retail
  */
-export const CatalogsModel = Resource<CatalogsModel>(
-  "GCP.Retail.CatalogsModel",
-);
+export const CatalogsModel = Resource<CatalogsModel>("GCP.Retail.CatalogsModel");
 
 export class CatalogsModelNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsModelNotResolved",
@@ -168,14 +154,13 @@ export class CatalogsModelNotResolved extends Data.TaggedError(
 const toAttrs = (model: retail.GoogleCloudRetailV2Model, project: string) => {
   const name = model.name ?? "";
   const parsed = parseResourceName(name, "models");
-  const ownership = parseOwnership(model.displayName);
   return {
     name,
     modelId: parsed.id,
     catalog: parsed.catalog,
     project: parsed.project || project,
     location: parsed.location,
-    displayName: ownership.text,
+    displayName: model.displayName,
     type: model.type,
     optimizationObjective: model.optimizationObjective,
     trainingState: model.trainingState,
@@ -188,8 +173,7 @@ const toAttrs = (model: retail.GoogleCloudRetailV2Model, project: string) => {
   };
 };
 
-const resourceName = (catalog: string, modelId: string) =>
-  `${catalog}/models/${modelId}`;
+const resourceName = (catalog: string, modelId: string) => `${catalog}/models/${modelId}`;
 
 const getByName = (name: string) =>
   name.length === 0
@@ -197,19 +181,6 @@ const getByName = (name: string) =>
     : retail
         .getProjectsLocationsCatalogsModels({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const findOwned = (id: string, catalog: string, hinted?: string) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const models = yield* listModels(catalog);
-    for (const model of models) {
-      if (yield* ownedByAlchemy(id, model.displayName)) return model;
-    }
-    return undefined as retail.GoogleCloudRetailV2Model | undefined;
-  });
 
 const refresh = (name: string) =>
   getByName(name).pipe(
@@ -226,15 +197,7 @@ const refresh = (name: string) =>
 
 export const CatalogsModelProvider = () =>
   Provider.succeed(CatalogsModel, {
-    stables: [
-      "name",
-      "modelId",
-      "catalog",
-      "project",
-      "location",
-      "type",
-      "createTime",
-    ],
+    stables: ["name", "modelId", "catalog", "project", "location", "type", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -247,8 +210,7 @@ export const CatalogsModelProvider = () =>
       );
       const previousType = olds?.type ?? output?.type;
       const nextType = news.type ?? previousType;
-      const previousObjective =
-        olds?.optimizationObjective ?? output?.optimizationObjective;
+      const previousObjective = olds?.optimizationObjective ?? output?.optimizationObjective;
       const nextObjective = news.optimizationObjective ?? previousObjective;
       const identity = replaceOnIdentity({
         previousId: olds?.modelId ?? output?.modelId,
@@ -258,9 +220,7 @@ export const CatalogsModelProvider = () =>
       });
       if (
         identity !== undefined ||
-        (previousType !== undefined &&
-          nextType !== undefined &&
-          previousType !== nextType) ||
+        (previousType !== undefined && nextType !== undefined && previousType !== nextType) ||
         (previousObjective !== undefined &&
           nextObjective !== undefined &&
           previousObjective !== nextObjective)
@@ -278,43 +238,28 @@ export const CatalogsModelProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const catalog = olds?.catalog ?? output?.catalog;
-      const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : catalog !== undefined
-            ? yield* findOwned(id, catalog)
-            : undefined;
+      const modelId = yield* toPhysical(
+        id,
+        olds?.modelId,
+        output?.modelId,
+        (name) => slugNoDigits(name, MAX_MODEL_ID_LENGTH),
+        MAX_MODEL_ID_LENGTH,
+      );
+      const name =
+        output?.name ??
+        (catalog !== undefined
+          ? resourceName(
+              expandCatalog(catalog, env.project, normalizeLocation(output?.location)),
+              modelId,
+            )
+          : undefined);
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const catalogs = yield* listProjectCatalogs(env.project, env.region);
-        const pages = yield* Effect.forEach(
-          catalogs,
-          (catalog) =>
-            catalog.name
-              ? listModels(catalog.name).pipe(
-                  Effect.map((models) =>
-                    models
-                      .filter(
-                        (model) =>
-                          Object.keys(parseOwnership(model.displayName).labels)
-                            .length > 0,
-                      )
-                      .map((model) => toAttrs(model, env.project)),
-                  ),
-                )
-              : Effect.succeed([]),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -328,19 +273,11 @@ export const CatalogsModelProvider = () =>
         MAX_MODEL_ID_LENGTH,
       );
       const name = resourceName(catalog, modelId);
-      const ownership = yield* ownershipLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? modelId,
-        MAX_MODEL_DISPLAY_NAME_LENGTH,
-      );
+      const displayName = news.displayName ?? modelId;
       const type = news.type ?? "recommended-for-you";
       const desiredTraining = news.trainingState ?? "PAUSED";
 
-      let current = yield* findOwned(id, catalog, output?.name);
-      if (current === undefined) {
-        current = yield* getByName(name);
-      }
+      let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
         const operation = yield* retail
@@ -373,9 +310,7 @@ export const CatalogsModelProvider = () =>
         );
         if (current === undefined) {
           current = yield* refresh(name).pipe(
-            Effect.catchTag("GCP.Retail.CatalogsModelNotResolved", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("GCP.Retail.CatalogsModelNotResolved", () => Effect.succeed(undefined)),
           );
         }
       }
@@ -386,9 +321,7 @@ export const CatalogsModelProvider = () =>
 
       const resource = current.name ?? name;
       const mask = updateMaskOf(
-        sameText(current.filteringOption, news.filteringOption)
-          ? undefined
-          : "filtering_option",
+        sameText(current.filteringOption, news.filteringOption) ? undefined : "filtering_option",
         sameText(current.periodicTuningState, news.periodicTuningState)
           ? undefined
           : "periodic_tuning_state",
@@ -411,10 +344,7 @@ export const CatalogsModelProvider = () =>
           name: resource,
           body: {},
         });
-      } else if (
-        desiredTraining === "TRAINING" &&
-        observedTraining !== "TRAINING"
-      ) {
+      } else if (desiredTraining === "TRAINING" && observedTraining !== "TRAINING") {
         current = yield* retail.resumeProjectsLocationsCatalogsModels({
           name: resource,
           body: {},

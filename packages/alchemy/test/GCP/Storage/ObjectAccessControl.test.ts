@@ -1,21 +1,18 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const ENTITY = "user-alchemy-gcp-testing-83661@appspot.gserviceaccount.com";
 const OBJECT_NAME = "hello.txt";
@@ -41,20 +38,13 @@ const uploadObject = (bucketName: string, object: string, body: string) =>
       `?uploadType=media&name=${encodeURIComponent(object)}`;
     const response = yield* client.execute(
       HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeader(
-          "Authorization",
-          `Bearer ${Redacted.value(creds.accessToken)}`,
-        ),
+        HttpClientRequest.setHeader("Authorization", `Bearer ${Redacted.value(creds.accessToken)}`),
         HttpClientRequest.bodyUint8Array(bytes, "text/plain"),
       ),
     );
     if (response.status < 200 || response.status >= 300) {
-      const text = yield* response.text.pipe(
-        Effect.catch(() => Effect.succeed("")),
-      );
-      return yield* Effect.fail(
-        new Error(`object upload failed: ${response.status} ${text}`),
-      );
+      const text = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
+      return yield* Effect.fail(new Error(`object upload failed: ${response.status} ${text}`));
     }
   });
 
@@ -133,12 +123,8 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.bucketName,
-        OBJECT_NAME,
-        ENTITY,
-      );
+      const gone = yield* waitUntilGone(created.bucketName, OBJECT_NAME, ENTITY);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 90_000 },
 );

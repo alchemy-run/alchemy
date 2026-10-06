@@ -12,7 +12,6 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { listLocations } from "./names.ts";
 import {
   hasAlchemyLabelKeys,
   isJobTerminal,
@@ -22,6 +21,7 @@ import {
   rfc1035,
   userLabels,
 } from "./internal.ts";
+import { listLocations } from "./names.ts";
 
 export type TuningJobProps = {
   /**
@@ -129,9 +129,7 @@ export type TuningJob = Resource<
  */
 export const TuningJob = Resource<TuningJob>("GCP.AIPlatform.TuningJob");
 
-export class TuningJobNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.TuningJobNotResolved",
-)<{
+export class TuningJobNotResolved extends Data.TaggedError("GCP.AIPlatform.TuningJobNotResolved")<{
   name: string;
 }> {}
 
@@ -147,10 +145,7 @@ const toDisplayName = (id: string, existing?: string) =>
     );
   });
 
-const toAttrs = (
-  job: aiplatform.GoogleCloudAiplatformV1TuningJob,
-  project: string,
-) => {
+const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1TuningJob, project: string) => {
   const name = job.name ?? "";
   const parsed = parseResourceName(name, "tuningJobs");
   return {
@@ -167,9 +162,7 @@ const toAttrs = (
     startTime: job.startTime,
     endTime: job.endTime,
     updateTime: job.updateTime,
-    error: job.error
-      ? { code: job.error.code, message: job.error.message }
-      : undefined,
+    error: job.error ? { code: job.error.code, message: job.error.message } : undefined,
   };
 };
 
@@ -180,34 +173,20 @@ const getByName = (name: string) =>
 
 const listJobs = (project: string, region: string) => {
   const collect = (parent: string) =>
-    aiplatform.listProjectsLocationsTuningJobs
-      .pages({ parent, pageSize: 1000 })
-      .pipe(
-        Stream.flatMap((page) => Stream.fromIterable(page.tuningJobs ?? [])),
-        Stream.filter((job) => hasAlchemyLabelKeys(job.labels)),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    aiplatform.listProjectsLocationsTuningJobs.pages({ parent, pageSize: 100 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.tuningJobs ?? [])),
+      Stream.filter((job) => hasAlchemyLabelKeys(job.labels)),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
-  return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () => fallback),
-    Effect.catchTag("Forbidden", () =>
-      fallback.pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      ),
-    ),
-  );
+  // Vertex AI has no `locations/-` wildcard; scan known locations.
+  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
-const findOwned = (
-  id: string,
-  project: string,
-  region: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, region: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
@@ -224,11 +203,7 @@ const cancelJob = (name: string) =>
   Effect.gen(function* () {
     const existing = yield* getByName(name);
     if (existing === undefined) return;
-    if (
-      !isJobTerminal(
-        typeof existing.state === "string" ? existing.state : undefined,
-      )
-    ) {
+    if (!isJobTerminal(typeof existing.state === "string" ? existing.state : undefined)) {
       yield* aiplatform
         .cancelProjectsLocationsTuningJobs({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
@@ -236,21 +211,15 @@ const cancelJob = (name: string) =>
         Effect.filterOrFail(
           (job) =>
             job === undefined ||
-            isJobTerminal(
-              typeof job.state === "string" ? job.state : undefined,
-            ),
+            isJobTerminal(typeof job.state === "string" ? job.state : undefined),
           () => new TuningJobNotResolved({ name }),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.AIPlatform.TuningJobNotResolved",
+          while: (error) => error._tag === "GCP.AIPlatform.TuningJobNotResolved",
           times: 8,
           schedule: Schedule.spaced("4 seconds"),
         }),
-        Effect.catchTag(
-          "GCP.AIPlatform.TuningJobNotResolved",
-          () => Effect.void,
-        ),
+        Effect.catchTag("GCP.AIPlatform.TuningJobNotResolved", () => Effect.void),
       );
     }
   });
@@ -262,10 +231,7 @@ export const TuningJobProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -278,17 +244,10 @@ export const TuningJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* findOwned(
-        id,
-        env.project,
-        env.region,
-        output?.name,
-      );
+      const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -300,13 +259,9 @@ export const TuningJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const tunedModelDisplayName =
-        news.tunedModelDisplayName ??
-        (yield* toDisplayName(id, output?.tuningJobId));
+        news.tunedModelDisplayName ?? (yield* toDisplayName(id, output?.tuningJobId));
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -330,11 +285,7 @@ export const TuningJobProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, env.project, env.region),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)));
         current = created ?? undefined;
       }
 

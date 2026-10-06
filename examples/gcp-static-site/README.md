@@ -51,11 +51,10 @@ out of scope for this example.
 
 ## Deploy
 
-Requires GCP credentials (`GOOGLE_PROJECT_ID` plus
-`GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_ACCESS_TOKEN`). No Docker.
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`. No Docker needed.
 
 ```sh
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 ```sh
@@ -71,7 +70,7 @@ block `allUsers` grants.
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack, fetches `index.html`, `styles.css`, `docs/index.html`
@@ -83,5 +82,5 @@ destroys the stack and checks the bucket is gone.
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```

@@ -1,24 +1,20 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   resourcemanager.getTagKeys({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    // A deleted TagKey answers 403 "... (or it may not exist)".
+    Effect.catchTag("TagKeyNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -51,8 +47,7 @@ test.provider(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.shortName).toEqual(created.shortName);
-      expect(fetched.description).toContain("alchemy-id=");
-      expect(fetched.description).toContain("deployment environment");
+      expect(fetched.description).toEqual("deployment environment");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -71,8 +66,7 @@ test.provider(
       const fetchedUpdate = yield* resourcemanager.getTagKeys({
         name: updated.name,
       });
-      expect(fetchedUpdate.description).toContain("prod vs staging");
-      expect(fetchedUpdate.description).toContain("alchemy-id=");
+      expect(fetchedUpdate.description).toEqual("prod vs staging");
 
       const last = created.shortName.at(-1) ?? "a";
       const nextShortName = `${created.shortName.slice(0, -1)}${last === "z" ? "0" : "z"}`;
@@ -95,7 +89,7 @@ test.provider(
         name: replaced.name,
       });
       expect(fetchedReplace.shortName).toEqual(nextShortName);
-      expect(fetchedReplace.description).toContain("replaced key");
+      expect(fetchedReplace.description).toEqual("replaced key");
 
       const oldGone = yield* waitUntilGone(created.name);
       expect(oldGone).toEqual("gone");
@@ -105,5 +99,8 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+    timeout: 90_000,
+  },
 );

@@ -18,6 +18,7 @@ import {
   tableNameOf,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type InstancesTablesSchemaBundleProps = {
@@ -104,10 +105,9 @@ export type InstancesTablesSchemaBundle = Resource<
  * @resource
  * @category Bigtable
  */
-export const InstancesTablesSchemaBundle =
-  Resource<InstancesTablesSchemaBundle>(
-    "GCP.Bigtable.InstancesTablesSchemaBundle",
-  );
+export const InstancesTablesSchemaBundle = Resource<InstancesTablesSchemaBundle>(
+  "GCP.Bigtable.InstancesTablesSchemaBundle",
+);
 
 export class SchemaBundleNotResolved extends Data.TaggedError(
   "GCP.Bigtable.SchemaBundleNotResolved",
@@ -121,15 +121,11 @@ export class SchemaBundleStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toId = (
-  id: string,
-  schemaBundleId: string | undefined,
-  existing?: string,
-) => toPhysicalId(id, schemaBundleId, existing, MAX_SCHEMA_BUNDLE_ID_LENGTH);
+const toId = (id: string, schemaBundleId: string | undefined, existing?: string) =>
+  toPhysicalId(id, schemaBundleId, existing, MAX_SCHEMA_BUNDLE_ID_LENGTH);
 
-const descriptorsOf = (
-  schema: bigtable.ProtoSchema | { protoDescriptors?: string } | undefined,
-) => schema?.protoDescriptors ?? "";
+const descriptorsOf = (schema: bigtable.ProtoSchema | { protoDescriptors?: string } | undefined) =>
+  schema?.protoDescriptors ?? "";
 
 const toAttrs = (bundle: bigtable.SchemaBundle, project: string) => {
   const name = bundle.name ?? "";
@@ -150,18 +146,12 @@ const toAttrs = (bundle: bigtable.SchemaBundle, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTablesSchemaBundles({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bundle) =>
-      bundle
-        ? Effect.succeed(bundle)
-        : Effect.fail(new SchemaBundleNotResolved({ name })),
+      bundle ? Effect.succeed(bundle) : Effect.fail(new SchemaBundleNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.SchemaBundleNotResolved",
@@ -173,9 +163,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bundle) =>
-      bundle === undefined
-        ? Effect.void
-        : Effect.fail(new SchemaBundleStillExists({ name })),
+      bundle === undefined ? Effect.void : Effect.fail(new SchemaBundleStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.SchemaBundleStillExists",
@@ -186,15 +174,7 @@ const waitUntilGone = (name: string) =>
 
 export const InstancesTablesSchemaBundleProvider = () =>
   Provider.succeed(InstancesTablesSchemaBundle, {
-    stables: [
-      "name",
-      "schemaBundleId",
-      "table",
-      "tableId",
-      "instance",
-      "instanceId",
-      "project",
-    ],
+    stables: ["name", "schemaBundleId", "table", "tableId", "instance", "instanceId", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -204,14 +184,10 @@ export const InstancesTablesSchemaBundleProvider = () =>
         olds?.instance ?? output?.instance ?? output?.instanceId ?? "",
       );
       const nextInstance = instanceIdOf(news.instance);
-      const previousTable = tableIdOf(
-        olds?.table ?? output?.table ?? output?.tableId ?? "",
-      );
+      const previousTable = tableIdOf(olds?.table ?? output?.table ?? output?.tableId ?? "");
       const nextTable = tableIdOf(news.table);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance) ||
         (previousTable.length > 0 && previousTable !== nextTable)
       ) {
@@ -222,11 +198,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const schemaBundleId = yield* toId(
-        id,
-        olds?.schemaBundleId,
-        output?.schemaBundleId,
-      );
+      const schemaBundleId = yield* toId(id, olds?.schemaBundleId, output?.schemaBundleId);
       const instanceRef = olds?.instance ?? output?.instance;
       const tableRef = olds?.table ?? output?.table;
       const name =
@@ -251,17 +223,15 @@ export const InstancesTablesSchemaBundleProvider = () =>
         const pages = yield* Effect.forEach(
           tables,
           (table) =>
-            bigtable
-              .listProjectsInstancesTablesSchemaBundles({
+            collectPages(
+              bigtable.listProjectsInstancesTablesSchemaBundles.pages({
                 parent: table.name,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.schemaBundles ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.SchemaBundle[]),
-                ),
-              ),
+              }),
+              (page) => page.schemaBundles,
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([] as bigtable.SchemaBundle[])),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((bundle) => toAttrs(bundle, env.project));
@@ -269,11 +239,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const schemaBundleId = yield* toId(
-        id,
-        news.schemaBundleId,
-        output?.schemaBundleId,
-      );
+      const schemaBundleId = yield* toId(id, news.schemaBundleId, output?.schemaBundleId);
       const parent = tableNameOf(env.project, news.instance, news.table);
       const name = `${parent}/schemaBundles/${schemaBundleId}`;
       const ignoreWarnings = news.ignoreWarnings ?? true;
@@ -326,7 +292,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

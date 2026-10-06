@@ -1,7 +1,6 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -106,9 +105,7 @@ export interface ConfigurationProps {
  * Cloudflare before Alchemy first patched them. `null` records a block
  * that was absent at capture time.
  */
-export type ConfigurationSnapshot = Partial<
-  Record<ConfigurationBlockKey, unknown>
->;
+export type ConfigurationSnapshot = Partial<Record<ConfigurationBlockKey, unknown>>;
 
 export interface ConfigurationAttributes {
   /** Account that owns the Gateway configuration singleton. */
@@ -226,8 +223,7 @@ export const ConfigurationProvider = () =>
       // blocks at adoption time become the restore target.
       const managed = managedKeys(olds?.settings ?? {});
       const initialSettings =
-        output?.initialSettings ??
-        captureBlocks(observed.settings ?? {}, managed);
+        output?.initialSettings ?? captureBlocks(observed.settings ?? {}, managed);
       return toAttributes(acct, observed, initialSettings);
     }),
 
@@ -238,10 +234,7 @@ export const ConfigurationProvider = () =>
 
       // 1. Observe — the singleton always exists; read its live state.
       const observed = yield* zeroTrust.getGatewayConfiguration({ accountId });
-      const observedSettings = (observed.settings ?? {}) as Record<
-        string,
-        unknown
-      >;
+      const observedSettings = (observed.settings ?? {}) as Record<string, unknown>;
 
       // 2. Capture — pre-management values for every managed block,
       //    restored on destroy. Blocks newly managed by this update are
@@ -255,9 +248,7 @@ export const ConfigurationProvider = () =>
       // 3. Sync — patch only when a declared block diverges from the
       //    observed state; skip the API entirely on a no-op. PATCH
       //    replaces each provided block wholly and leaves the rest alone.
-      const dirty = managed.some(
-        (key) => !subsetEquals(desired[key], observedSettings[key]),
-      );
+      const dirty = managed.some((key) => !subsetEquals(desired[key], observedSettings[key]));
       if (!dirty) {
         return toAttributes(accountId, observed, initialSettings);
       }
@@ -281,10 +272,7 @@ export const ConfigurationProvider = () =>
       // Observe — restore only the blocks that still diverge from their
       // captured pre-management value (idempotent re-delete).
       const observed = yield* zeroTrust.getGatewayConfiguration({ accountId });
-      const observedSettings = (observed.settings ?? {}) as Record<
-        string,
-        unknown
-      >;
+      const observedSettings = (observed.settings ?? {}) as Record<string, unknown>;
       const restore: Record<string, unknown> = {};
       for (const key of managed) {
         const initial = sanitizeBlock(initialSettings[key]);
@@ -304,18 +292,13 @@ export const ConfigurationProvider = () =>
       if (Object.keys(restore).length === 0) return;
       yield* zeroTrust.patchGatewayConfiguration({
         accountId,
-        settings:
-          restore as zeroTrust.PatchGatewayConfigurationRequest["settings"],
+        settings: restore as zeroTrust.PatchGatewayConfigurationRequest["settings"],
       });
     }),
   });
 
-const managedKeys = (
-  settings: ConfigurationSettings,
-): ConfigurationBlockKey[] =>
-  (Object.keys(settings) as ConfigurationBlockKey[]).filter(
-    (key) => settings[key] !== undefined,
-  );
+const managedKeys = (settings: ConfigurationSettings): ConfigurationBlockKey[] =>
+  (Object.keys(settings) as ConfigurationBlockKey[]).filter((key) => settings[key] !== undefined);
 
 /**
  * Capture the observed value of each managed block (read-only fields
@@ -382,11 +365,7 @@ const sanitizeBlock = (block: unknown): unknown => {
  */
 const subsetEquals = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return true;
-  if (
-    desired !== null &&
-    typeof desired === "object" &&
-    !Array.isArray(desired)
-  ) {
+  if (desired !== null && typeof desired === "object" && !Array.isArray(desired)) {
     if (observed === null || observed === undefined) return false;
     if (typeof observed !== "object" || Array.isArray(observed)) return false;
     return Object.entries(desired as Record<string, unknown>).every(([k, v]) =>
@@ -409,10 +388,7 @@ const deepEquals = (a: unknown, b: unknown): boolean => {
     const bk = Object.keys(b as Record<string, unknown>);
     if (ak.length !== bk.length) return false;
     return ak.every((k) =>
-      deepEquals(
-        (a as Record<string, unknown>)[k],
-        (b as Record<string, unknown>)[k],
-      ),
+      deepEquals((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
     );
   }
   return false;

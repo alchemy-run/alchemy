@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -32,7 +29,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -47,14 +44,11 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             type: "FIRESTORE_NATIVE",
           });
-          const schedule = yield* GCP.Firestore.DatabasesBackupSchedule(
-            "Nightly",
-            {
-              database: database.name,
-              retention: "604800s",
-              dailyRecurrence: true,
-            },
-          );
+          const schedule = yield* GCP.Firestore.DatabasesBackupSchedule("Nightly", {
+            database: database.name,
+            retention: "604800s",
+            dailyRecurrence: true,
+          });
           return { database, schedule };
         }),
       );
@@ -78,14 +72,11 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             type: "FIRESTORE_NATIVE",
           });
-          const schedule = yield* GCP.Firestore.DatabasesBackupSchedule(
-            "Nightly",
-            {
-              database: database.name,
-              retention: "1209600s",
-              dailyRecurrence: true,
-            },
-          );
+          const schedule = yield* GCP.Firestore.DatabasesBackupSchedule("Nightly", {
+            database: database.name,
+            retention: "1209600s",
+            dailyRecurrence: true,
+          });
           return { database, schedule };
         }),
       );
@@ -100,5 +91,8 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+    timeout: 180_000,
+  },
 );

@@ -121,10 +121,9 @@ export type ProductsSfdcInstancesSfdcChannel = Resource<
  * @resource
  * @category Integrations
  */
-export const ProductsSfdcInstancesSfdcChannel =
-  Resource<ProductsSfdcInstancesSfdcChannel>(
-    "GCP.Integrations.ProductsSfdcInstancesSfdcChannel",
-  );
+export const ProductsSfdcInstancesSfdcChannel = Resource<ProductsSfdcInstancesSfdcChannel>(
+  "GCP.Integrations.ProductsSfdcInstancesSfdcChannel",
+);
 
 export class ProductsSfdcInstancesSfdcChannelNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsSfdcInstancesSfdcChannelNotResolved",
@@ -132,12 +131,7 @@ export class ProductsSfdcInstancesSfdcChannelNotResolved extends Data.TaggedErro
   name: string;
 }> {}
 
-const expandInstance = (
-  value: string,
-  project: string,
-  location: string,
-  product: string,
-) =>
+const expandInstance = (value: string, project: string, location: string, product: string) =>
   value.includes("/sfdcInstances/")
     ? value
     : `${productParent(project, location, product)}/sfdcInstances/${value}`;
@@ -174,11 +168,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsProductsSfdcInstancesSfdcChannels({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsSfdcInstancesSfdcChannels
@@ -190,7 +180,6 @@ const listAt = (parent: string, project: string, region: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (parent: string, id: string) =>
@@ -200,32 +189,21 @@ const findOwned = (parent: string, id: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.sfdcChannels ?? [])),
       Stream.filterEffect((channel) => ownedByAlchemy(id, channel.description)),
       Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
+      Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
-const listOwnedChannels = (
-  project: string,
-  location: string,
-  product: string,
-) =>
+const listOwnedChannels = (project: string, location: string, product: string) =>
   Effect.gen(function* () {
     const parent = productParent(project, location, product);
-    const instances =
-      yield* integrations.listProjectsLocationsProductsSfdcInstances
-        .pages({ parent, pageSize: 100 })
-        .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.sfdcInstances ?? []),
-          ),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+    const instances = yield* integrations.listProjectsLocationsProductsSfdcInstances
+      .pages({ parent, pageSize: 100 })
+      .pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.sfdcInstances ?? [])),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("NotFound", () => Effect.succeed([])),
+      );
     const nested = yield* Effect.forEach(
       instances,
       (instance) =>
@@ -272,10 +250,7 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const product = normalizeProduct(olds?.product ?? output?.product);
       const sfdcInstance = expandInstance(
         olds?.sfdcInstance ?? output?.sfdcInstance ?? "",
@@ -283,11 +258,7 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
         location,
         product,
       );
-      const sfdcChannelId = yield* toResourceId(
-        id,
-        olds?.sfdcChannelId,
-        output?.sfdcChannelId,
-      );
+      const sfdcChannelId = yield* toResourceId(id, olds?.sfdcChannelId, output?.sfdcChannelId);
       const name = output?.name ?? resourceName(sfdcInstance, sfdcChannelId);
       let existing = yield* getByName(name);
       if (existing === undefined && sfdcInstance.length > 0) {
@@ -295,41 +266,21 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, sfdcInstance);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listOwnedChannels(
-          env.project,
-          env.region,
-          DEFAULT_PRODUCT,
-        );
+        return yield* listOwnedChannels(env.project, env.region, DEFAULT_PRODUCT);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const product = normalizeProduct(
-        news.product ?? output?.product ?? DEFAULT_PRODUCT,
-      );
-      const sfdcInstance = expandInstance(
-        news.sfdcInstance,
-        env.project,
-        location,
-        product,
-      );
-      const sfdcChannelId = yield* toResourceId(
-        id,
-        news.sfdcChannelId,
-        output?.sfdcChannelId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const product = normalizeProduct(news.product ?? output?.product ?? DEFAULT_PRODUCT);
+      const sfdcInstance = expandInstance(news.sfdcInstance, env.project, location, product);
+      const sfdcChannelId = yield* toResourceId(id, news.sfdcChannelId, output?.sfdcChannelId);
       const name = output?.name ?? resourceName(sfdcInstance, sfdcChannelId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -366,23 +317,20 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
       const topicChanged = !sameText(current.channelTopic, news.channelTopic);
 
       if (displayChanged || descriptionChanged || topicChanged) {
-        current =
-          yield* integrations.patchProjectsLocationsProductsSfdcInstancesSfdcChannels(
-            {
-              name: currentName,
-              updateMask: updateMaskOf(
-                displayChanged ? "display_name" : undefined,
-                descriptionChanged ? "description" : undefined,
-                topicChanged ? "channel_topic" : undefined,
-              ),
-              body: {
-                name: currentName,
-                displayName,
-                description,
-                channelTopic: news.channelTopic,
-              },
-            },
-          );
+        current = yield* integrations.patchProjectsLocationsProductsSfdcInstancesSfdcChannels({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+            topicChanged ? "channel_topic" : undefined,
+          ),
+          body: {
+            name: currentName,
+            displayName,
+            description,
+            channelTopic: news.channelTopic,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region, sfdcInstance);

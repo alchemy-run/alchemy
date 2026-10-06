@@ -9,11 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const backoff = Schedule.min([
@@ -324,9 +320,7 @@ export type TransferConfig = Resource<
  * @resource
  * @category BigQueryDataTransfer
  */
-export const TransferConfig = Resource<TransferConfig>(
-  "GCP.BigQueryDataTransfer.TransferConfig",
-);
+export const TransferConfig = Resource<TransferConfig>("GCP.BigQueryDataTransfer.TransferConfig");
 
 export class TransferConfigNotResolved extends Data.TaggedError(
   "GCP.BigQueryDataTransfer.TransferConfigNotResolved",
@@ -340,11 +334,9 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -352,14 +344,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     transferConfigId:
-      configsAt >= 0 && parts[configsAt + 1]
-        ? parts[configsAt + 1]!
-        : lastSegment(name),
+      configsAt >= 0 && parts[configsAt + 1] ? parts[configsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -369,8 +357,7 @@ const encodeDisplayName = (
 ): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
   const trimmed = displayName?.replace(/[\r\n]+/g, " ").trim();
-  const combined =
-    trimmed && trimmed.length > 0 ? `${marker} ${trimmed}` : marker;
+  const combined = trimmed && trimmed.length > 0 ? `${marker} ${trimmed}` : marker;
   return combined.slice(0, 1024);
 };
 
@@ -397,14 +384,10 @@ const parseDisplayName = (
 };
 
 const hasOwnershipMarker = (displayName: string | undefined): boolean =>
-  Object.keys(parseDisplayName(displayName).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDisplayName(displayName).labels).some((key) => key.startsWith("alchemy-"));
 
 const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -455,24 +438,14 @@ const toScheduleOptionsV2 = (
       : compact({
           pubsubSubscription: options.eventDrivenSchedule.pubsubSubscription,
         });
-  const manual =
-    options.manualSchedule === undefined
-      ? undefined
-      : ({} as Record<string, never>);
-  if (
-    timeBased === undefined &&
-    eventDriven === undefined &&
-    manual === undefined
-  ) {
+  const manual = options.manualSchedule === undefined ? undefined : ({} as Record<string, never>);
+  if (timeBased === undefined && eventDriven === undefined && manual === undefined) {
     return undefined;
   }
   return compact({
-    timeBasedSchedule:
-      timeBased && Object.keys(timeBased).length > 0 ? timeBased : undefined,
+    timeBasedSchedule: timeBased && Object.keys(timeBased).length > 0 ? timeBased : undefined,
     eventDrivenSchedule:
-      eventDriven && Object.keys(eventDriven).length > 0
-        ? eventDriven
-        : undefined,
+      eventDriven && Object.keys(eventDriven).length > 0 ? eventDriven : undefined,
     manualSchedule: manual,
   });
 };
@@ -500,11 +473,7 @@ const toMetadataDestination = (
   return { dataplexConfiguration: { entryGroup } };
 };
 
-const toAttrs = (
-  config: bqdt.TransferConfig,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (config: bqdt.TransferConfig, project: string, location: string) => {
   const name = config.name ?? "";
   const parsed = parseName(name);
   const { displayName } = parseDisplayName(config.displayName);
@@ -549,13 +518,10 @@ const listAt = (parent: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.take(10),
       Stream.flatMap((page) => Stream.fromIterable(page.transferConfigs ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as bqdt.TransferConfig[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as bqdt.TransferConfig[])),
     );
 
 const findOwned = Effect.fn(function* (
@@ -567,10 +533,7 @@ const findOwned = Effect.fn(function* (
   for (const config of configs) {
     const { labels } = parseDisplayName(config.displayName);
     if (!(yield* hasAlchemyLabels(id, labels))) continue;
-    if (
-      dataSourceId !== undefined &&
-      (config.dataSourceId ?? "") !== dataSourceId
-    ) {
+    if (dataSourceId !== undefined && (config.dataSourceId ?? "") !== dataSourceId) {
       continue;
     }
     if (config.name === undefined) continue;
@@ -580,10 +543,7 @@ const findOwned = Effect.fn(function* (
   return undefined;
 });
 
-const toBody = (
-  news: TransferConfigProps,
-  displayName: string,
-): bqdt.TransferConfig =>
+const toBody = (news: TransferConfigProps, displayName: string): bqdt.TransferConfig =>
   compact({
     displayName,
     dataSourceId: news.dataSourceId,
@@ -601,9 +561,7 @@ const toBody = (
     metadataDestination: news.metadataDestination,
   }) as bqdt.TransferConfig;
 
-const retryTransient = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryTransient = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "NotFound" || error._tag === "Conflict",
@@ -619,32 +577,22 @@ const listLocationParents = (project: string, region: string) =>
       pageSize: 100,
     })
     .pipe(
-      Stream.take(10),
       Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
       Stream.map((location) => location.name),
       Stream.filter((name): name is string => !!name && name.length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([parentOf(project, region)]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([parentOf(project, region)])),
     );
 
 export const TransferConfigProvider = () =>
   Provider.succeed(TransferConfig, {
-    stables: [
-      "name",
-      "transferConfigId",
-      "project",
-      "location",
-      "dataSourceId",
-    ],
+    stables: ["name", "transferConfigId", "project", "location", "dataSourceId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation =
-        typeof news.location === "string" ? news.location : undefined;
+      const nextLocation = typeof news.location === "string" ? news.location : undefined;
       if (
         previousLocation !== undefined &&
         nextLocation !== undefined &&
@@ -654,8 +602,7 @@ export const TransferConfigProvider = () =>
       }
 
       const previousSource = olds?.dataSourceId ?? output?.dataSourceId;
-      const nextSource =
-        typeof news.dataSourceId === "string" ? news.dataSourceId : undefined;
+      const nextSource = typeof news.dataSourceId === "string" ? news.dataSourceId : undefined;
       if (
         previousSource !== undefined &&
         nextSource !== undefined &&
@@ -668,9 +615,7 @@ export const TransferConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const parent = parentOf(env.project, location);
       const existing =
         output?.name !== undefined
@@ -678,10 +623,7 @@ export const TransferConfigProvider = () =>
           : yield* findOwned(parent, id, olds?.dataSourceId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseDisplayName(existing.displayName).labels,
-      ))
+      return (yield* hasAlchemyLabels(id, parseDisplayName(existing.displayName).labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -691,14 +633,8 @@ export const TransferConfigProvider = () =>
         const env = yield* GcpEnvironment.current;
         const parents = yield* listLocationParents(env.project, env.region);
         const unique =
-          parents.length > 0
-            ? [...new Set(parents)]
-            : [parentOf(env.project, env.region)];
-        const pages = yield* Effect.forEach(
-          unique,
-          (parent) => listAt(parent),
-          { concurrency: 4 },
-        );
+          parents.length > 0 ? [...new Set(parents)] : [parentOf(env.project, env.region)];
+        const pages = yield* Effect.forEach(unique, (parent) => listAt(parent), { concurrency: 4 });
         return pages
           .flat()
           .filter((config) => hasOwnershipMarker(config.displayName))
@@ -707,20 +643,14 @@ export const TransferConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output, olds }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = parentOf(env.project, location);
       const ownership = yield* createInternalLabels(id);
       const desiredDisplayName = encodeDisplayName(ownership, news.displayName);
       const desiredDisabled = news.disabled === true;
-      const desiredBody = toBody(
-        { ...news, disabled: desiredDisabled },
-        desiredDisplayName,
-      );
+      const desiredBody = toBody({ ...news, disabled: desiredDisabled }, desiredDisplayName);
 
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
       if (current === undefined) {
         current = yield* findOwned(parent, id, news.dataSourceId);
       }
@@ -734,11 +664,7 @@ export const TransferConfigProvider = () =>
             authorizationCode: news.authorizationCode,
             body: desiredBody,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(parent, id, news.dataSourceId),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id, news.dataSourceId)));
         current = created ?? undefined;
       }
 
@@ -753,19 +679,13 @@ export const TransferConfigProvider = () =>
       if ((current.displayName ?? "") !== desiredDisplayName) {
         mask.push("displayName");
       }
-      if (
-        (current.destinationDatasetId ?? "") !==
-        (news.destinationDatasetId ?? "")
-      ) {
+      if ((current.destinationDatasetId ?? "") !== (news.destinationDatasetId ?? "")) {
         mask.push("destinationDatasetId");
       }
       if (!jsonEqual(canonParams(current.params), canonParams(news.params))) {
         mask.push("params");
       }
-      if (
-        news.schedule !== undefined &&
-        (current.schedule ?? "") !== news.schedule
-      ) {
+      if (news.schedule !== undefined && (current.schedule ?? "") !== news.schedule) {
         mask.push("schedule");
       }
       if (
@@ -779,10 +699,7 @@ export const TransferConfigProvider = () =>
       }
       if (
         news.scheduleOptionsV2 !== undefined &&
-        !jsonEqual(
-          toScheduleOptionsV2(current.scheduleOptionsV2) ?? null,
-          news.scheduleOptionsV2,
-        )
+        !jsonEqual(toScheduleOptionsV2(current.scheduleOptionsV2) ?? null, news.scheduleOptionsV2)
       ) {
         mask.push("scheduleOptionsV2");
       }
@@ -854,15 +771,13 @@ export const TransferConfigProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* bqdt
-        .deleteProjectsLocationsTransferConfigs({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* bqdt.deleteProjectsLocationsTransferConfigs({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

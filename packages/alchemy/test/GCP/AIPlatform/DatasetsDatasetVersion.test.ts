@@ -1,22 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getDatasetsDatasetVersions({ name }).pipe(
@@ -39,21 +32,23 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getDatasetsDatasetVersions({
-          name: `${parent}/datasets/alchemy-aiplatform-missing/datasetVersions/0`,
+          name: `${parent}/datasets/1234567890123456789/datasetVersions/0`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
 );
 
 const imageDataset = {
   location: "us-central1",
   displayName: "version-parent",
-  metadataSchemaUri:
-    "gs://google-cloud-aiplatform/schema/dataset/metadata/image_1.0.0.yaml",
+  metadataSchemaUri: "gs://google-cloud-aiplatform/schema/dataset/metadata/image_1.0.0.yaml",
   metadata: {},
   labels: { env: "test" },
   savedQueries: [
@@ -64,37 +59,51 @@ const imageDataset = {
   ],
 };
 
-test.provider.skipIf(!runLifecycle)(
-  "create, update, and delete a dataset version",
+test.provider(
+  "creating a version of a dataset without data items fails with GCP.OperationFailed",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack
-        .deploy(
+      const error = yield* Effect.flip(
+        stack.deploy(
           Effect.gen(function* () {
-            const dataset = yield* GCP.AIPlatform.Dataset(
-              "Samples",
-              imageDataset,
-            );
+            const dataset = yield* GCP.AIPlatform.Dataset("Samples", imageDataset);
             const version = yield* GCP.AIPlatform.DatasetsDatasetVersion("V1", {
               dataset: dataset.name,
               displayName: "v1",
             });
             return { dataset, version };
           }),
-        )
-        .pipe(
-          Effect.catchTag("GCP.AIPlatform.OperationFailed", (error) => {
-            expect(error.message).toMatch(/no data item|saved queries|TABLE/i);
-            return Effect.succeed(undefined);
-          }),
-        );
+        ),
+      );
+      expect(error._tag).toEqual("GCP.OperationFailed");
 
-      if (created === undefined) {
-        yield* stack.destroy();
-        return;
-      }
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 600_000,
+  },
+);
+
+// Set GCP_TEST_AIPLATFORM_DATASET_VERSION on a project where this succeeds to run the full lifecycle.
+test.provider.skipIf(!process.env.GCP_TEST_AIPLATFORM_DATASET_VERSION)(
+  "create, update, and delete a dataset version",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const dataset = yield* GCP.AIPlatform.Dataset("Samples", imageDataset);
+          const version = yield* GCP.AIPlatform.DatasetsDatasetVersion("V1", {
+            dataset: dataset.name,
+            displayName: "v1",
+          });
+          return { dataset, version };
+        }),
+      );
 
       expect(created.version.name).toContain("/datasetVersions/");
       expect(created.version.dataset).toEqual(created.dataset.name);
@@ -127,5 +136,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.version.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 120_000,
+  },
 );

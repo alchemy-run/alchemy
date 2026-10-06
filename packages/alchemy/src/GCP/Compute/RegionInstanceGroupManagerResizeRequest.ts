@@ -1,13 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  normalizeRegion,
-  parseDescription,
-  runRegionOp,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +10,15 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  normalizeRegion,
+  parseDescription,
+  runRegionOp,
+  toPhysicalName,
+} from "./internal.ts";
 
 export type RegionInstanceGroupManagerResizeRequestDuration = {
   /** Whole seconds. */
@@ -58,9 +58,10 @@ export type RegionInstanceGroupManagerResizeRequestProps = {
   description?: string;
   /**
    * Requested run duration for VMs created by this request. At the end of
-   * the duration the instance is deleted. Immutable.
+   * the duration the instance is deleted. Compute requires it on insert.
+   * Immutable.
    */
-  requestedRunDuration?: RegionInstanceGroupManagerResizeRequestDuration;
+  requestedRunDuration: RegionInstanceGroupManagerResizeRequestDuration;
 };
 
 export type RegionInstanceGroupManagerResizeRequest = Resource<
@@ -80,9 +81,7 @@ export type RegionInstanceGroupManagerResizeRequest = Resource<
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
     /** Requested run duration, if set. */
-    requestedRunDuration:
-      | RegionInstanceGroupManagerResizeRequestDuration
-      | undefined;
+    requestedRunDuration: RegionInstanceGroupManagerResizeRequestDuration | undefined;
     /** Current request state. */
     state: string | undefined;
     /** Server-defined URL. */
@@ -116,6 +115,7 @@ export type RegionInstanceGroupManagerResizeRequest = Resource<
  *   {
  *     instanceGroupManager: manager.managerName,
  *     resizeBy: 1,
+ *     requestedRunDuration: { seconds: "3600" },
  *     description: "burst capacity",
  *   },
  * );
@@ -147,14 +147,6 @@ export class RegionInstanceGroupManagerResizeRequestNotResolved extends Data.Tag
   requestName: string;
   instanceGroupManager: string;
   region: string;
-}> {}
-
-export class RegionInstanceGroupManagerResizeRequestOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionInstanceGroupManagerResizeRequestOperationFailed",
-)<{
-  requestName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const managerNameOf = (value: string) => lastSegment(value);
@@ -217,19 +209,11 @@ const awaitResource = (
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.Compute.RegionInstanceGroupManagerResizeRequestNotResolved",
+        error._tag === "GCP.Compute.RegionInstanceGroupManagerResizeRequestNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
-
-const failOp = (requestName: string, operation: string, message: string) =>
-  new RegionInstanceGroupManagerResizeRequestOperationFailed({
-    requestName,
-    operation,
-    message,
-  });
 
 const needsCancel = (state: string | undefined) => {
   const current = (state ?? "").toUpperCase();
@@ -253,34 +237,23 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.requestName ?? output?.requestName;
       const nextName = news.requestName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const previousManager = managerNameOf(
         olds?.instanceGroupManager ?? output?.instanceGroupManager ?? "",
       );
       const nextManager = managerNameOf(news.instanceGroupManager);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
-      const managerChanged =
-        previousManager.length > 0 && previousManager !== nextManager;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
+      const managerChanged = previousManager.length > 0 && previousManager !== nextManager;
       const resizeChanged =
         (olds?.resizeBy ?? output?.resizeBy) !== undefined &&
         news.resizeBy !== (olds?.resizeBy ?? output?.resizeBy);
       if (nameChanged || regionChanged || managerChanged || resizeChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -294,20 +267,12 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
         output?.requestName,
         "resize",
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const instanceGroupManager = managerNameOf(
         olds?.instanceGroupManager ?? output?.instanceGroupManager ?? "",
       );
       if (instanceGroupManager.length === 0) return undefined;
-      const existing = yield* getByName(
-        env.project,
-        region,
-        instanceGroupManager,
-        requestName,
-      );
+      const existing = yield* getByName(env.project, region, instanceGroupManager, requestName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, instanceGroupManager);
       const { labels } = parseDescription(existing.description);
@@ -324,11 +289,8 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         const managers = Array.from(
           pages as readonly compute.InstanceGroupManagerAggregatedList[],
@@ -343,29 +305,25 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
               }));
           }),
         );
-        const listed: RegionInstanceGroupManagerResizeRequest["Attributes"][] =
-          [];
+        const listed: RegionInstanceGroupManagerResizeRequest["Attributes"][] = [];
         for (const manager of managers) {
-          const chunk =
-            yield* compute.listRegionInstanceGroupManagerResizeRequests
-              .items({
-                project: env.project,
-                region: manager.region,
-                instanceGroupManager: manager.name,
-                maxResults: 500,
-                returnPartialSuccess: true,
-              })
-              .pipe(
-                Stream.filter((item) => hasOwnershipMarker(item.description)),
-                Stream.map((item) => toAttrs(item, env.project, manager.name)),
-                Stream.runCollect,
-                Effect.map((items) => Array.from(items)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed(
-                    [] as RegionInstanceGroupManagerResizeRequest["Attributes"][],
-                  ),
-                ),
-              );
+          const chunk = yield* compute.listRegionInstanceGroupManagerResizeRequests
+            .items({
+              project: env.project,
+              region: manager.region,
+              instanceGroupManager: manager.name,
+              maxResults: 500,
+              returnPartialSuccess: true,
+            })
+            .pipe(
+              Stream.filter((item) => hasOwnershipMarker(item.description)),
+              Stream.map((item) => toAttrs(item, env.project, manager.name)),
+              Stream.runCollect,
+              Effect.map((items) => Array.from(items)),
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as RegionInstanceGroupManagerResizeRequest["Attributes"][]),
+              ),
+            );
           listed.push(...chunk);
         }
         return listed;
@@ -384,12 +342,7 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        instanceGroupManager,
-        requestName,
-      );
+      let current = yield* getByName(env.project, region, instanceGroupManager, requestName);
 
       if (current === undefined) {
         yield* runRegionOp(
@@ -406,15 +359,9 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
               requestedRunDuration: news.requestedRunDuration,
             },
           }),
-          (operation, message) => failOp(requestName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        current = yield* awaitResource(
-          env.project,
-          region,
-          instanceGroupManager,
-          requestName,
-        );
+        current = yield* awaitResource(env.project, region, instanceGroupManager, requestName);
       }
 
       if (current === undefined) {
@@ -448,8 +395,6 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
             instanceGroupManager,
             resizeRequest: output.requestName,
           }),
-          (operation, message) =>
-            failOp(output.requestName, operation, message),
           { ignoreNotFound: true },
         ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       }
@@ -462,7 +407,6 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
           instanceGroupManager,
           resizeRequest: output.requestName,
         }),
-        (operation, message) => failOp(output.requestName, operation, message),
         { ignoreNotFound: true },
       ).pipe(
         Effect.retry({

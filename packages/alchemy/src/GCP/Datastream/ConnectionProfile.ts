@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -43,8 +38,7 @@ export type SpannerProfile = ds.SpannerProfile;
 export type GcsProfile = ds.GcsProfile;
 export type BigQueryProfile = ds.BigQueryProfile;
 export type SalesforceProfile = ds.SalesforceProfile;
-export type SalesforceMarketingCloudProfile =
-  ds.SalesforceMarketingCloudProfile;
+export type SalesforceMarketingCloudProfile = ds.SalesforceMarketingCloudProfile;
 export type ServiceNowProfile = ds.ServiceNowProfile;
 export type DataverseProfile = ds.DataverseProfile;
 export type ForwardSshTunnelConnectivity = ds.ForwardSshTunnelConnectivity;
@@ -202,9 +196,7 @@ export type ConnectionProfile = Resource<
     /** Salesforce profile (secrets omitted). */
     salesforceProfile: SalesforceProfile | undefined;
     /** Salesforce Marketing Cloud profile (secrets omitted). */
-    salesforceMarketingCloudProfile:
-      | SalesforceMarketingCloudProfile
-      | undefined;
+    salesforceMarketingCloudProfile: SalesforceMarketingCloudProfile | undefined;
     /** ServiceNow profile (secrets omitted). */
     serviceNowProfile: ServiceNowProfile | undefined;
     /** Dataverse profile (secrets omitted). */
@@ -275,15 +267,9 @@ export type ConnectionProfile = Resource<
  * @resource
  * @category Datastream
  */
-export const ConnectionProfile = Resource<ConnectionProfile>(
-  "GCP.Datastream.ConnectionProfile",
-);
+export const ConnectionProfile = Resource<ConnectionProfile>("GCP.Datastream.ConnectionProfile");
 
-const resourceName = (
-  project: string,
-  location: string,
-  connectionProfileId: string,
-) =>
+const resourceName = (project: string, location: string, connectionProfileId: string) =>
   `${locationParent(project, location)}/connectionProfiles/${connectionProfileId}`;
 
 const kindOf = (value: {
@@ -348,14 +334,12 @@ const publicPostgresSsl = (ssl: PostgresqlSslConfig | undefined) =>
     : {
         serverVerification: ssl.serverVerification
           ? {
-              serverCertificateHostname:
-                ssl.serverVerification.serverCertificateHostname,
+              serverCertificateHostname: ssl.serverVerification.serverCertificateHostname,
             }
           : undefined,
         serverAndClientVerification: ssl.serverAndClientVerification
           ? {
-              serverCertificateHostname:
-                ssl.serverAndClientVerification.serverCertificateHostname,
+              serverCertificateHostname: ssl.serverAndClientVerification.serverCertificateHostname,
             }
           : undefined,
       };
@@ -365,8 +349,7 @@ const publicOracleSsl = (ssl: OracleSslConfig | undefined) =>
     ? undefined
     : {
         caCertificateSet: ssl.caCertificateSet,
-        serverCertificateDistinguishedName:
-          ssl.serverCertificateDistinguishedName,
+        serverCertificateDistinguishedName: ssl.serverCertificateDistinguishedName,
       };
 
 const publicSqlServerSsl = (ssl: SqlServerSslConfig | undefined) =>
@@ -477,8 +460,7 @@ const publicSalesforce = (salesforce: SalesforceProfile | undefined) =>
         userCredentials: salesforce.userCredentials
           ? {
               username: salesforce.userCredentials.username,
-              secretManagerStoredPassword:
-                salesforce.userCredentials.secretManagerStoredPassword,
+              secretManagerStoredPassword: salesforce.userCredentials.secretManagerStoredPassword,
               secretManagerStoredSecurityToken:
                 salesforce.userCredentials.secretManagerStoredSecurityToken,
             }
@@ -487,8 +469,7 @@ const publicSalesforce = (salesforce: SalesforceProfile | undefined) =>
           ? {
               clientId: salesforce.oauth2ClientCredentials.clientId,
               secretManagerStoredClientSecret:
-                salesforce.oauth2ClientCredentials
-                  .secretManagerStoredClientSecret,
+                salesforce.oauth2ClientCredentials.secretManagerStoredClientSecret,
             }
           : undefined,
       };
@@ -501,9 +482,7 @@ const publicSfmc = (profile: SalesforceMarketingCloudProfile | undefined) =>
         oauthClientCredentials: profile.oauthClientCredentials
           ? {
               clientId: profile.oauthClientCredentials.clientId,
-              clientSecret: publicSecret(
-                profile.oauthClientCredentials.clientSecret,
-              ),
+              clientSecret: publicSecret(profile.oauthClientCredentials.clientSecret),
             }
           : undefined,
       };
@@ -522,9 +501,7 @@ const publicServiceNow = (profile: ServiceNowProfile | undefined) =>
         oauthClientCredentials: profile.oauthClientCredentials
           ? {
               clientId: profile.oauthClientCredentials.clientId,
-              clientSecret: publicSecret(
-                profile.oauthClientCredentials.clientSecret,
-              ),
+              clientSecret: publicSecret(profile.oauthClientCredentials.clientSecret),
             }
           : undefined,
       };
@@ -538,9 +515,7 @@ const publicDataverse = (profile: DataverseProfile | undefined) =>
         oauthClientCredentials: profile.oauthClientCredentials
           ? {
               clientId: profile.oauthClientCredentials.clientId,
-              clientSecret: publicSecret(
-                profile.oauthClientCredentials.clientSecret,
-              ),
+              clientSecret: publicSecret(profile.oauthClientCredentials.clientSecret),
             }
           : undefined,
       };
@@ -562,18 +537,11 @@ const publicPrivateConnectivity = (
   value?.privateConnection === undefined
     ? undefined
     : {
-        privateConnection: privateConnectionOf(
-          value.privateConnection,
-          project,
-          location,
-        ),
+        privateConnection: privateConnectionOf(value.privateConnection, project, location),
       };
 
-const secretChanged = (
-  newsHasSecret: boolean,
-  publicPrevious: unknown,
-  publicNext: unknown,
-) => newsHasSecret || fingerprint(publicPrevious) !== fingerprint(publicNext);
+const secretChanged = (newsHasSecret: boolean, publicPrevious: unknown, publicNext: unknown) =>
+  newsHasSecret || fingerprint(publicPrevious) !== fingerprint(publicNext);
 
 const mysqlHasSecret = (mysql: MysqlProfile | undefined) =>
   mysql?.password !== undefined ||
@@ -584,10 +552,8 @@ const mysqlHasSecret = (mysql: MysqlProfile | undefined) =>
 const postgresqlHasSecret = (postgresql: PostgresqlProfile | undefined) =>
   postgresql?.password !== undefined ||
   postgresql?.sslConfig?.serverVerification?.caCertificate !== undefined ||
-  postgresql?.sslConfig?.serverAndClientVerification?.caCertificate !==
-    undefined ||
-  postgresql?.sslConfig?.serverAndClientVerification?.clientCertificate !==
-    undefined ||
+  postgresql?.sslConfig?.serverAndClientVerification?.caCertificate !== undefined ||
+  postgresql?.sslConfig?.serverAndClientVerification?.clientCertificate !== undefined ||
   postgresql?.sslConfig?.serverAndClientVerification?.clientKey !== undefined;
 
 const oracleHasSecret = (oracle: OracleProfile | undefined) =>
@@ -598,8 +564,7 @@ const oracleHasSecret = (oracle: OracleProfile | undefined) =>
 
 const sqlServerHasSecret = (sqlserver: SqlServerProfile | undefined) =>
   sqlserver?.password !== undefined ||
-  sqlserver?.sslConfig?.encryptionAndServerValidation?.caCertificate !==
-    undefined;
+  sqlserver?.sslConfig?.encryptionAndServerValidation?.caCertificate !== undefined;
 
 const mongodbHasSecret = (mongodb: MongodbProfile | undefined) =>
   mongodb?.password !== undefined ||
@@ -625,11 +590,7 @@ const dataverseHasSecret = (profile: DataverseProfile | undefined) =>
 const sshHasSecret = (ssh: ForwardSshTunnelConnectivity | undefined) =>
   ssh?.password !== undefined || ssh?.privateKey !== undefined;
 
-const toAttrs = (
-  profile: ds.ConnectionProfile,
-  project: string,
-  locationHint: string,
-) => {
+const toAttrs = (profile: ds.ConnectionProfile, project: string, locationHint: string) => {
   const name = profile.name ?? "";
   const parsed = parseName(name, "connectionProfiles", locationHint);
   return {
@@ -648,14 +609,10 @@ const toAttrs = (
     gcsProfile: profile.gcsProfile,
     bigqueryProfile: emptyMessage(profile.bigqueryProfile),
     salesforceProfile: publicSalesforce(profile.salesforceProfile),
-    salesforceMarketingCloudProfile: publicSfmc(
-      profile.salesforceMarketingCloudProfile,
-    ),
+    salesforceMarketingCloudProfile: publicSfmc(profile.salesforceMarketingCloudProfile),
     serviceNowProfile: publicServiceNow(profile.serviceNowProfile),
     dataverseProfile: publicDataverse(profile.dataverseProfile),
-    staticServiceIpConnectivity: emptyMessage(
-      profile.staticServiceIpConnectivity,
-    ),
+    staticServiceIpConnectivity: emptyMessage(profile.staticServiceIpConnectivity),
     forwardSshConnectivity: publicForwardSsh(profile.forwardSshConnectivity),
     privateConnectivity: profile.privateConnectivity,
     satisfiesPzi: profile.satisfiesPzi,
@@ -680,36 +637,18 @@ const listOwned = (project: string, region: string) =>
         pageSize: 1000,
       }),
       (page) => page.connectionProfiles,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    ),
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels)))),
   );
 
-const connectivityOf = (
-  news: ConnectionProfileProps,
-  project: string,
-  location: string,
-) => ({
+const connectivityOf = (news: ConnectionProfileProps, project: string, location: string) => ({
   staticServiceIpConnectivity: emptyMessage(news.staticServiceIpConnectivity),
   forwardSshConnectivity: news.forwardSshConnectivity,
-  privateConnectivity: publicPrivateConnectivity(
-    news.privateConnectivity,
-    project,
-    location,
-  ),
+  privateConnectivity: publicPrivateConnectivity(news.privateConnectivity, project, location),
 });
 
 export const ConnectionProfileProvider = () =>
   Provider.succeed(ConnectionProfile, {
-    stables: [
-      "name",
-      "connectionProfileId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "connectionProfileId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -725,25 +664,18 @@ export const ConnectionProfileProvider = () =>
         bigqueryProfile: olds?.bigqueryProfile ?? output?.bigqueryProfile,
         salesforceProfile: olds?.salesforceProfile ?? output?.salesforceProfile,
         salesforceMarketingCloudProfile:
-          olds?.salesforceMarketingCloudProfile ??
-          output?.salesforceMarketingCloudProfile,
+          olds?.salesforceMarketingCloudProfile ?? output?.salesforceMarketingCloudProfile,
         serviceNowProfile: olds?.serviceNowProfile ?? output?.serviceNowProfile,
         dataverseProfile: olds?.dataverseProfile ?? output?.dataverseProfile,
       });
       const nextKind = kindOf(news) || previousKind;
-      const previousSpanner =
-        olds?.spannerProfile?.database ?? output?.spannerProfile?.database;
+      const previousSpanner = olds?.spannerProfile?.database ?? output?.spannerProfile?.database;
       const nextSpanner = news.spannerProfile?.database ?? previousSpanner;
       return replaceOnIdentity({
         previousId: olds?.connectionProfileId ?? output?.connectionProfileId,
         nextId:
-          news.connectionProfileId ??
-          olds?.connectionProfileId ??
-          output?.connectionProfileId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.connectionProfileId ?? olds?.connectionProfileId ?? output?.connectionProfileId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -765,19 +697,12 @@ export const ConnectionProfileProvider = () =>
         output?.connectionProfileId,
         "profile",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, connectionProfileId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectionProfileId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -795,10 +720,7 @@ export const ConnectionProfileProvider = () =>
         output?.connectionProfileId,
         "profile",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, connectionProfileId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -827,7 +749,7 @@ export const ConnectionProfileProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* ds
+        yield* ds
           .createProjectsLocationsConnectionProfiles({
             parent: locationParent(env.project, location),
             connectionProfileId,
@@ -835,8 +757,17 @@ export const ConnectionProfileProvider = () =>
             validateOnly: news.validateOnly,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        yield* settleOperation(created);
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.flatMap((created) => settleOperation(created)),
+            // Datastream intermittently fails the create operation with
+            // INTERNAL ("an internal error has occurred") under load.
+            Effect.retry({
+              while: (error) => error._tag === "GCP.OperationFailed" && error.code === 13,
+              times: 4,
+              schedule: Schedule.exponential("5 seconds"),
+            }),
+          );
         current = yield* waitUntilExists(getByName(name), name);
       }
 
@@ -932,8 +863,7 @@ export const ConnectionProfileProvider = () =>
         );
       const privateChanged =
         news.privateConnectivity !== undefined &&
-        fingerprint(current.privateConnectivity) !==
-          fingerprint(desiredPrivate);
+        fingerprint(current.privateConnectivity) !== fingerprint(desiredPrivate);
       const mask = fieldMask([
         labelsChanged && "labels",
         displayNameChanged && "displayName",
@@ -964,14 +894,12 @@ export const ConnectionProfileProvider = () =>
         if (gcsChanged) patch.gcsProfile = news.gcsProfile;
         if (salesforceChanged) patch.salesforceProfile = news.salesforceProfile;
         if (sfmcChanged) {
-          patch.salesforceMarketingCloudProfile =
-            news.salesforceMarketingCloudProfile;
+          patch.salesforceMarketingCloudProfile = news.salesforceMarketingCloudProfile;
         }
         if (serviceNowChanged) patch.serviceNowProfile = news.serviceNowProfile;
         if (dataverseChanged) patch.dataverseProfile = news.dataverseProfile;
         if (staticChanged) {
-          patch.staticServiceIpConnectivity =
-            connectivity.staticServiceIpConnectivity;
+          patch.staticServiceIpConnectivity = connectivity.staticServiceIpConnectivity;
         }
         if (sshChanged) {
           patch.forwardSshConnectivity = connectivity.forwardSshConnectivity;
@@ -987,10 +915,7 @@ export const ConnectionProfileProvider = () =>
           body: patch,
         });
         yield* settleOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, location);
@@ -1007,23 +932,12 @@ export const ConnectionProfileProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Conflict"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)),
         );
-      yield* settleOperation(operation, {
-        notFoundOk: true,
-        times: 18,
-        interval: "3 seconds",
-      });
+      yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getByName(output.name), output.name, {
         times: 15,
         interval: "2 seconds",
-      }).pipe(
-        Effect.catchTag(
-          "GCP.Datastream.ResourceStillExists",
-          () => Effect.void,
-        ),
-      );
+      }).pipe(Effect.catchTag("GCP.Datastream.ResourceStillExists", () => Effect.void));
     }),
   });

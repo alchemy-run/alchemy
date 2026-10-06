@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionDiskProps = {
   /**
@@ -187,37 +187,22 @@ export type RegionDisk = Resource<
  */
 export const RegionDisk = Resource<RegionDisk>("GCP.Compute.RegionDisk");
 
-export class RegionDiskNotResolved extends Data.TaggedError(
-  "GCP.Compute.RegionDiskNotResolved",
-)<{
+export class RegionDiskNotResolved extends Data.TaggedError("GCP.Compute.RegionDiskNotResolved")<{
   diskName: string;
   region: string;
 }> {}
 
-export class RegionDiskOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionDiskOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class RegionDiskNotReady extends Data.TaggedError(
-  "GCP.Compute.RegionDiskNotReady",
-)<{
+export class RegionDiskNotReady extends Data.TaggedError("GCP.Compute.RegionDiskNotReady")<{
   diskName: string;
   status: string;
 }> {}
 
-export class RegionDiskFailed extends Data.TaggedError(
-  "GCP.Compute.RegionDiskFailed",
-)<{
+export class RegionDiskFailed extends Data.TaggedError("GCP.Compute.RegionDiskFailed")<{
   diskName: string;
   status: string;
 }> {}
 
-export class RegionDiskStillExists extends Data.TaggedError(
-  "GCP.Compute.RegionDiskStillExists",
-)<{
+export class RegionDiskStillExists extends Data.TaggedError("GCP.Compute.RegionDiskStillExists")<{
   diskName: string;
   status: string;
 }> {}
@@ -243,17 +228,11 @@ const parseSizeGb = (value: string | undefined): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const normalizeReplicaZones = (
-  region: string,
-  zones: readonly string[] | undefined,
-): string[] => {
-  const raw =
-    zones && zones.length > 0 ? zones : [`${region}-a`, `${region}-b`];
+const normalizeReplicaZones = (region: string, zones: readonly string[] | undefined): string[] => {
+  const raw = zones && zones.length > 0 ? zones : [`${region}-a`, `${region}-b`];
   return [
     ...new Set(
-      raw
-        .map((zone) => lastSegment(zone))
-        .filter((zone): zone is string => zone !== undefined),
+      raw.map((zone) => lastSegment(zone)).filter((zone): zone is string => zone !== undefined),
     ),
   ].sort();
 };
@@ -262,8 +241,7 @@ const replicaZoneUrls = (project: string, zones: readonly string[]) =>
   zones.map((zone) => `projects/${project}/zones/${zone}`);
 
 const replicaZonesEqual = (left: readonly string[], right: readonly string[]) =>
-  left.length === right.length &&
-  left.every((zone, index) => zone === right[index]);
+  left.length === right.length && left.every((zone, index) => zone === right[index]);
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -305,79 +283,6 @@ const getByName = (project: string, region: string, disk: string) =>
     .getRegionDisks({ project, region, disk })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const waitRegionOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName === undefined) {
-      return yield* new RegionDiskOperationFailed({
-        operation: "",
-        message: "region operation is missing a name",
-      });
-    }
-
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations(
-        {
-          project,
-          region,
-          operation: operationName,
-        },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations(
-        {
-          project,
-          region,
-          operation: operationName,
-        },
-        { times: 10 },
-      ).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-
-    const errors = current.error?.errors ?? [];
-    const codes = operationCodes(current);
-    if (
-      codes.includes("alreadyExists") ||
-      codes.includes("RESOURCE_ALREADY_EXISTS")
-    ) {
-      return current;
-    }
-    if (errors.length > 0 || current.status !== "DONE") {
-      return yield* new RegionDiskOperationFailed({
-        operation: operationName,
-        message:
-          errors
-            .map((item) => item.message ?? item.code ?? "unknown")
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-      });
-    }
-    return current;
-  });
-
 const waitDiskReady = (project: string, region: string, diskName: string) =>
   getByName(project, region, diskName).pipe(
     Effect.flatMap((disk) =>
@@ -386,8 +291,7 @@ const waitDiskReady = (project: string, region: string, diskName: string) =>
         : Effect.succeed(disk),
     ),
     Effect.filterOrFail(
-      (disk): disk is compute.Disk =>
-        disk !== undefined && disk.status === "READY",
+      (disk): disk is compute.Disk => disk !== undefined && disk.status === "READY",
       (disk) =>
         new RegionDiskNotReady({
           diskName,
@@ -443,16 +347,9 @@ export const RegionDiskProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
-      const previousType =
-        lastSegment(olds?.type) ?? lastSegment(output?.type) ?? DEFAULT_TYPE;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
+      const previousType = lastSegment(olds?.type) ?? lastSegment(output?.type) ?? DEFAULT_TYPE;
       const nextType = lastSegment(news.type) ?? DEFAULT_TYPE;
       const previousName = olds?.diskName ?? output?.diskName;
       const nextName = news.diskName ?? previousName;
@@ -468,15 +365,11 @@ export const RegionDiskProvider = () =>
         previousRegion !== nextRegion ||
         previousType !== nextType ||
         !replicaZonesEqual(previousReplicas, nextReplicas) ||
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         (olds?.sourceImage ?? undefined) !== (news.sourceImage ?? undefined) ||
-        (olds?.sourceSnapshot ?? undefined) !==
-          (news.sourceSnapshot ?? undefined) ||
+        (olds?.sourceSnapshot ?? undefined) !== (news.sourceSnapshot ?? undefined) ||
         (olds?.sourceDisk ?? undefined) !== (news.sourceDisk ?? undefined) ||
-        (olds?.architecture ?? undefined) !==
-          (news.architecture ?? undefined) ||
+        (olds?.architecture ?? undefined) !== (news.architecture ?? undefined) ||
         (olds?.physicalBlockSizeBytes ?? undefined) !==
           (news.physicalBlockSizeBytes ?? undefined) ||
         (olds?.enableConfidentialCompute ?? undefined) !==
@@ -487,25 +380,18 @@ export const RegionDiskProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName === previousName &&
-          previousRegion === nextRegion,
+          previousName !== undefined && nextName === previousName && previousRegion === nextRegion,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const diskName = yield* toName(id, olds?.diskName, output?.diskName);
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, diskName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -524,9 +410,7 @@ export const RegionDiskProvider = () =>
             (scoped?.disks ?? [])
               .filter((disk) => disk.region !== undefined)
               .filter((disk) =>
-                Object.keys(disk.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(disk.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((disk) => toAttrs(disk, env.project)),
           ),
@@ -572,9 +456,7 @@ export const RegionDiskProvider = () =>
                   ? String(news.physicalBlockSizeBytes)
                   : undefined,
               provisionedIops:
-                news.provisionedIops !== undefined
-                  ? String(news.provisionedIops)
-                  : undefined,
+                news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
               provisionedThroughput:
                 news.provisionedThroughput !== undefined
                   ? String(news.provisionedThroughput)
@@ -584,7 +466,9 @@ export const RegionDiskProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitRegionOperation(env.project, region, inserted);
+          yield* waitRegionOperation(env.project, region, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitDiskReady(env.project, region, diskName);
       }
@@ -629,15 +513,13 @@ export const RegionDiskProvider = () =>
         return yield* new RegionDiskNotResolved({ diskName, region });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const iopsChanged =
         news.provisionedIops !== undefined &&
         String(news.provisionedIops) !== (current.provisionedIops ?? "");
       const throughputChanged =
         news.provisionedThroughput !== undefined &&
-        String(news.provisionedThroughput) !==
-          (current.provisionedThroughput ?? "");
+        String(news.provisionedThroughput) !== (current.provisionedThroughput ?? "");
 
       if (descriptionChanged || iopsChanged || throughputChanged) {
         const updated = yield* compute.updateRegionDisks({
@@ -654,9 +536,7 @@ export const RegionDiskProvider = () =>
           body: {
             description: news.description,
             provisionedIops:
-              news.provisionedIops !== undefined
-                ? String(news.provisionedIops)
-                : undefined,
+              news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
             provisionedThroughput:
               news.provisionedThroughput !== undefined
                 ? String(news.provisionedThroughput)
@@ -683,14 +563,9 @@ export const RegionDiskProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (deleted !== undefined) {
-        yield* waitRegionOperation(output.project, output.region, deleted).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof RegionDiskOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitRegionOperation(output.project, output.region, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitDiskGone(output.project, output.region, output.diskName);
     }),

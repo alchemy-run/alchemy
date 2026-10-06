@@ -1,27 +1,35 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const location = "us-central1";
+
+// Updating a Salesforce instance that points at a placeholder org fails with
+// InternalServerError ("Unknown Error."); set
+// GCP_TEST_INTEGRATIONS_SFDC=1 when the test org ids resolve to a real
+// Salesforce org.
+const runSfdcLifecycle = !!process.env.GCP_TEST_INTEGRATIONS_SFDC;
+
+// Salesforce instances must reference at least one auth config ("Auth config
+// is not present in the request" otherwise).
+const sfdcCredential = {
+  credentialType: "USERNAME_AND_PASSWORD" as const,
+  usernameAndPassword: { username: "alchemy", password: "test-secret" },
+};
 
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsSfdcInstances({ name }).pipe(
     Effect.map((row) =>
-      (row.deleteTime ?? "").length > 0
-        ? ("gone" as const)
-        : ("found" as const),
+      (row.deleteTime ?? "").length > 0 ? ("gone" as const) : ("found" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -43,14 +51,17 @@ test.provider(
           name: `projects/${project}/locations/${location}/sfdcInstances/alchemy-missing-sfdc`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
+test.provider.skipIf(!runSfdcLifecycle)(
   "create, update, and delete an SFDC instance",
   (stack) =>
     Effect.gen(function* () {
@@ -59,7 +70,12 @@ test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const auth = yield* GCP.Integrations.AuthConfig("SalesforceAuth", {
+            location,
+            decryptedCredential: sfdcCredential,
+          });
           return yield* GCP.Integrations.SfdcInstance("Salesforce", {
+            authConfigId: [auth.authConfigId],
             location,
             displayName: "alchemy-sfdc",
             description: "production salesforce",
@@ -81,13 +97,19 @@ test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
       const fetched = yield* integrations.getProjectsLocationsSfdcInstances({
         name: created.name,
       });
-      expect(fetched.name).toEqual(created.name);
+      // The API echoes names keyed by project number.
+      expect(fetched.name?.split("/").slice(2)).toEqual(created.name.split("/").slice(2));
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.sfdcOrgId).toEqual("00Dxx0000000001");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const auth = yield* GCP.Integrations.AuthConfig("SalesforceAuth", {
+            location,
+            decryptedCredential: sfdcCredential,
+          });
           return yield* GCP.Integrations.SfdcInstance("Salesforce", {
+            authConfigId: [auth.authConfigId],
             sfdcInstanceId: created.sfdcInstanceId,
             location,
             displayName: "alchemy-sfdc-v2",
@@ -107,5 +129,8 @@ test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );

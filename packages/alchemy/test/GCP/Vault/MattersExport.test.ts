@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vault from "@distilled.cloud/gcp/vault_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   runAccountLifecycle,
@@ -18,7 +18,6 @@ const waitUntilGone = (matterId: string, exportId: string) =>
   vault.getMattersExports({ matterId, exportId }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -38,11 +37,11 @@ test.provider(
           exportId: "alchemy-missing-export",
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:vault", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
@@ -61,11 +60,11 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:vault", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runAccountLifecycle)(
@@ -105,11 +104,8 @@ test.provider.skipIf(!runAccountLifecycle)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.exported.matterId,
-        created.exported.exportId,
-      );
+      const gone = yield* waitUntilGone(created.exported.matterId, created.exported.exportId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:vault", "live"], timeout: 90_000 },
 );

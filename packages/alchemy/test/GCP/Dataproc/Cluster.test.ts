@@ -1,26 +1,20 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_DATAPROC && !process.env.FAST;
+// Cluster create + update + delete takes ~8 minutes (observed 475s).
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
-const waitUntilGone = (
-  projectId: string,
-  region: string,
-  clusterName: string,
-) =>
+const waitUntilGone = (projectId: string, region: string, clusterName: string) =>
   dataproc.getProjectsRegionsClusters({ projectId, region, clusterName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
@@ -32,7 +26,7 @@ const waitUntilGone = (
   );
 
 test.provider(
-  "getProjectsRegionsClusters on a missing cluster fails with NotFound or Forbidden",
+  "getProjectsRegionsClusters on a missing cluster fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -45,22 +39,11 @@ test.provider(
           clusterName: "alchemy-dataproc-missing",
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Dataproc API has not been used");
-      } else {
-        const page = yield* dataproc.listProjectsRegionsClusters({
-          projectId: project,
-          region: "us-central1",
-          pageSize: 10,
-        });
-        expect(Array.isArray(page.clusters ?? [])).toEqual(true);
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -123,12 +106,11 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.project,
-        created.region,
-        created.clusterName,
-      );
+      const gone = yield* waitUntilGone(created.project, created.region, created.clusterName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+    timeout: 1_800_000,
+  },
 );

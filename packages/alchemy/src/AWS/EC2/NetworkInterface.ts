@@ -3,24 +3,22 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { RegionID } from "../Region.ts";
 import type { Providers } from "../Providers.ts";
+import type { RegionID } from "../Region.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type NetworkInterfaceId<ID extends string = string> = `eni-${ID}`;
-export const NetworkInterfaceId = <ID extends string>(
-  id: ID,
-): ID & NetworkInterfaceId<ID> => `eni-${id}` as ID & NetworkInterfaceId<ID>;
+export const NetworkInterfaceId = <ID extends string>(id: ID): ID & NetworkInterfaceId<ID> =>
+  `eni-${id}` as ID & NetworkInterfaceId<ID>;
 
 export type NetworkInterfaceArn =
   `arn:aws:ec2:${RegionID}:${AccountID}:network-interface/${NetworkInterfaceId}`;
@@ -191,9 +189,7 @@ export interface NetworkInterface extends Resource<
  *
  * @resource
  */
-export const NetworkInterface = Resource<NetworkInterface>(
-  "AWS.EC2.NetworkInterface",
-);
+export const NetworkInterface = Resource<NetworkInterface>("AWS.EC2.NetworkInterface");
 
 export const NetworkInterfaceProvider = () =>
   Provider.effect(
@@ -211,10 +207,7 @@ export const NetworkInterfaceProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
-          if (
-            olds.subnetId !== news.subnetId ||
-            olds.privateIpAddress !== news.privateIpAddress
-          ) {
+          if (olds.subnetId !== news.subnetId || olds.privateIpAddress !== news.privateIpAddress) {
             return { action: "replace" };
           }
         }),
@@ -261,22 +254,14 @@ export const NetworkInterfaceProvider = () =>
               DryRun: false,
             });
             eni = created.NetworkInterface!;
-            yield* session.note(
-              `Network interface created: ${eni.NetworkInterfaceId}`,
-            );
-            eni = yield* waitForNetworkInterface(
-              eni.NetworkInterfaceId!,
-              session,
-            );
+            yield* session.note(`Network interface created: ${eni.NetworkInterfaceId}`);
+            eni = yield* waitForNetworkInterface(eni.NetworkInterfaceId!, session);
           }
 
           const eniId = eni.NetworkInterfaceId! as NetworkInterfaceId;
 
           // 3. SYNC — description, security groups, source/dest check.
-          if (
-            news.description !== undefined &&
-            news.description !== (eni.Description ?? "")
-          ) {
+          if (news.description !== undefined && news.description !== (eni.Description ?? "")) {
             yield* ec2.modifyNetworkInterfaceAttribute({
               NetworkInterfaceId: eniId,
               Description: { Value: news.description },
@@ -305,9 +290,7 @@ export const NetworkInterfaceProvider = () =>
               SourceDestCheck: { Value: desiredSourceDestCheck },
               DryRun: false,
             });
-            yield* session.note(
-              `Updated source/dest check: ${desiredSourceDestCheck}`,
-            );
+            yield* session.note(`Updated source/dest check: ${desiredSourceDestCheck}`);
           }
 
           // 3b. SYNC TAGS — diff against observed cloud tags.
@@ -342,9 +325,7 @@ export const NetworkInterfaceProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const chunk = yield* ec2.describeNetworkInterfaces
-              .pages({})
-              .pipe(Stream.runCollect);
+            const chunk = yield* ec2.describeNetworkInterfaces.pages({}).pipe(Stream.runCollect);
             return Array.from(chunk).flatMap((page) =>
               (page.NetworkInterfaces ?? []).map((n) =>
                 toNetworkInterfaceAttributes(n, region, accountId),
@@ -362,22 +343,14 @@ export const NetworkInterfaceProvider = () =>
             })
             .pipe(
               Effect.tapError(Effect.logDebug),
-              Effect.catchTag(
-                "InvalidNetworkInterfaceID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () => Effect.void),
               // A just-detached interface can briefly report InUse — retry
               // until the attachment fully clears.
               Effect.retry({
                 while: (e) => e._tag === "InvalidNetworkInterface.InUse",
-                schedule: Schedule.max([
-                  Schedule.fixed(3000),
-                  Schedule.recurs(20),
-                ]).pipe(
+                schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(20)]).pipe(
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `Waiting for interface to detach... (attempt ${attempt + 1})`,
-                    ),
+                    session.note(`Waiting for interface to detach... (attempt ${attempt + 1})`),
                   ),
                 ),
               }),
@@ -415,9 +388,7 @@ const toNetworkInterfaceAttributes = (
   };
 };
 
-class NetworkInterfacePending extends Data.TaggedError(
-  "NetworkInterfacePending",
-)<{
+class NetworkInterfacePending extends Data.TaggedError("NetworkInterfacePending")<{
   networkInterfaceId: string;
   status: string;
 }> {}
@@ -425,19 +396,14 @@ class NetworkInterfacePending extends Data.TaggedError(
 /**
  * Wait for the network interface to reach an `available` (or in-use) status.
  */
-const waitForNetworkInterface = (
-  networkInterfaceId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForNetworkInterface = (networkInterfaceId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeNetworkInterfaces({
       NetworkInterfaceIds: [networkInterfaceId],
     });
     const eni = result.NetworkInterfaces?.[0];
     if (!eni) {
-      return yield* Effect.fail(
-        new Error(`Network interface ${networkInterfaceId} not found`),
-      );
+      return yield* Effect.fail(new Error(`Network interface ${networkInterfaceId} not found`));
     }
     if (eni.Status === "available" || eni.Status === "in-use") {
       return eni;
@@ -455,9 +421,7 @@ const waitForNetworkInterface = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for network interface... (${(attempt + 1) * 2}s)`,
-              )
+            ? session.note(`Waiting for network interface... (${(attempt + 1) * 2}s)`)
             : Effect.void,
         ),
       ),

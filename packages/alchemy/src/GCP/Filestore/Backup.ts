@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_SHARE_NAME,
@@ -167,11 +162,13 @@ export type Backup = Resource<
  * ```
  *
  * ### Updating a Backup
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Description and labels
  * ```typescript
  * const backup = yield* GCP.Filestore.Backup("Nightly", {
  *   sourceInstance: nfs.name,
- *   backupId: existing.backupId,
  *   description: "nightly backup v2",
  *   labels: { env: "prod", team: "storage" },
  * });
@@ -182,20 +179,14 @@ export type Backup = Resource<
  */
 export const Backup = Resource<Backup>("GCP.Filestore.Backup");
 
-export class BackupSourceMissing extends Data.TaggedError(
-  "GCP.Filestore.BackupSourceMissing",
-)<{
+export class BackupSourceMissing extends Data.TaggedError("GCP.Filestore.BackupSourceMissing")<{
   message: string;
 }> {}
 
 const resourceName = (project: string, location: string, backupId: string) =>
   `projects/${project}/locations/${location}/backups/${backupId}`;
 
-const parseInstanceRef = (
-  value: string,
-  fallbackProject: string,
-  fallbackLocation: string,
-) => {
+const parseInstanceRef = (value: string, fallbackProject: string, fallbackLocation: string) => {
   const trimmed = value.trim();
   if (trimmed.includes("/")) {
     const parsed = parseName(trimmed, "instances", DEFAULT_ZONE);
@@ -218,12 +209,7 @@ const parseInstanceRef = (
     project: fallbackProject,
     location,
     instanceId,
-    instanceName: expandParent(
-      instanceId,
-      fallbackProject,
-      location,
-      "instances",
-    ),
+    instanceName: expandParent(instanceId, fallbackProject, location, "instances"),
   };
 };
 
@@ -231,8 +217,7 @@ const backupLocationOf = (
   newsLocation: string | undefined,
   outputLocation: string | undefined,
   instanceLocation: string,
-) =>
-  normalizeLocation(newsLocation ?? outputLocation, regionOf(instanceLocation));
+) => normalizeLocation(newsLocation ?? outputLocation, regionOf(instanceLocation));
 
 const toAttrs = (backup: file.Backup, project: string, region: string) => {
   const name = backup.name ?? "";
@@ -259,11 +244,7 @@ const toAttrs = (backup: file.Backup, project: string, region: string) => {
 
 const isPlaceholder = (backup: file.Backup) => {
   const name = backup.name ?? "";
-  return (
-    name.length === 0 ||
-    name.endsWith("/backups/-") ||
-    name.endsWith("/backups/")
-  );
+  return name.length === 0 || name.endsWith("/backups/-") || name.endsWith("/backups/");
 };
 
 const getByName = (name: string) =>
@@ -298,9 +279,7 @@ export const BackupProvider = () =>
       const nextInstance = parseInstanceRef(
         news.sourceInstance,
         env.project,
-        news.instanceLocation ??
-          olds?.instanceLocation ??
-          previousInstance.location,
+        news.instanceLocation ?? olds?.instanceLocation ?? previousInstance.location,
       );
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
@@ -311,8 +290,7 @@ export const BackupProvider = () =>
         olds?.location ?? output?.location,
         nextInstance.location,
       );
-      const previousShare =
-        olds?.sourceFileShare ?? output?.sourceFileShare ?? DEFAULT_SHARE_NAME;
+      const previousShare = olds?.sourceFileShare ?? output?.sourceFileShare ?? DEFAULT_SHARE_NAME;
       const nextShare = news.sourceFileShare ?? previousShare;
       const previousKey = olds?.kmsKey ?? output?.kmsKey ?? "";
       const nextKey = news.kmsKey ?? previousKey;
@@ -335,25 +313,13 @@ export const BackupProvider = () =>
         env.project,
         olds?.instanceLocation ?? output?.location ?? DEFAULT_ZONE,
       );
-      const location = backupLocationOf(
-        olds?.location,
-        output?.location,
-        instance.location,
-      );
-      const backupId = yield* toPhysicalId(
-        id,
-        olds?.backupId,
-        output?.backupId,
-        "backup",
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, backupId);
+      const location = backupLocationOf(olds?.location, output?.location, instance.location);
+      const backupId = yield* toPhysicalId(id, olds?.backupId, output?.backupId, "backup");
+      const name = output?.name ?? resourceName(env.project, location, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined || isPlaceholder(existing)) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -384,17 +350,8 @@ export const BackupProvider = () =>
         env.project,
         news.instanceLocation ?? DEFAULT_ZONE,
       );
-      const location = backupLocationOf(
-        news.location,
-        output?.location,
-        instance.location,
-      );
-      const backupId = yield* toPhysicalId(
-        id,
-        news.backupId,
-        output?.backupId,
-        "backup",
-      );
+      const location = backupLocationOf(news.location, output?.location, instance.location);
+      const backupId = yield* toPhysicalId(id, news.backupId, output?.backupId, "backup");
       const name = resourceName(env.project, location, backupId);
       const sourceFileShare = news.sourceFileShare ?? DEFAULT_SHARE_NAME;
       const desiredLabels = {
@@ -405,10 +362,7 @@ export const BackupProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current !== undefined && isDeletingState(current.state)) {
-        yield* waitUntilGone(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        yield* waitUntilGone(getByName(current.name ?? name), current.name ?? name);
         current = undefined;
       }
 
@@ -450,8 +404,7 @@ export const BackupProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.description ?? "") !== (news.description ?? "") &&
-          "description",
+        (current.description ?? "") !== (news.description ?? "") && "description",
       ]);
 
       if (mask.length > 0) {
@@ -480,16 +433,14 @@ export const BackupProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name || output.name.includes("//")) return;
-      const operation = yield* file
-        .deleteProjectsLocationsBackups({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* file.deleteProjectsLocationsBackups({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

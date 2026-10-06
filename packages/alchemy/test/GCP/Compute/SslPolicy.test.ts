@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, sslPolicyName: string) =>
   compute.getSslPolicies({ project, sslPolicy: sslPolicyName }).pipe(
@@ -66,11 +63,9 @@ test.provider(
         project: created.project,
         maxResults: 500,
       });
-      expect(
-        (listed.items ?? []).some(
-          (policy) => policy.name === created.sslPolicyName,
-        ),
-      ).toEqual(true);
+      expect((listed.items ?? []).some((policy) => policy.name === created.sslPolicyName)).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -110,9 +105,7 @@ test.provider(
 
       expect(customized.sslPolicyName).toEqual(created.sslPolicyName);
       expect(customized.profile).toEqual("CUSTOM");
-      expect(customized.customFeatures.sort()).toEqual(
-        [...CUSTOM_FEATURES].sort(),
-      );
+      expect(customized.customFeatures.sort()).toEqual([...CUSTOM_FEATURES].sort());
       expect(customized.description).toEqual("custom ciphers");
 
       const afterCustom = yield* compute.getSslPolicies({
@@ -120,14 +113,12 @@ test.provider(
         sslPolicy: customized.sslPolicyName,
       });
       expect(afterCustom.profile).toEqual("CUSTOM");
-      expect([...(afterCustom.customFeatures ?? [])].sort()).toEqual(
-        [...CUSTOM_FEATURES].sort(),
-      );
+      expect([...(afterCustom.customFeatures ?? [])].sort()).toEqual([...CUSTOM_FEATURES].sort());
 
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.project, created.sslPolicyName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

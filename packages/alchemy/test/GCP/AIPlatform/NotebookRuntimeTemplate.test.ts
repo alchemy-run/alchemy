@@ -1,22 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsNotebookRuntimeTemplates({ name }).pipe(
@@ -42,30 +35,24 @@ test.provider(
           name: `${parent}/notebookRuntimeTemplates/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsNotebookRuntimeTemplates({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ notebookRuntimeTemplates: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.notebookRuntimeTemplates ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsNotebookRuntimeTemplates({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.notebookRuntimeTemplates ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/notebookRuntimeTemplates/alchemy-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a notebook runtime template",
   (stack) =>
     Effect.gen(function* () {
@@ -89,10 +76,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.description).toEqual("colab default");
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsNotebookRuntimeTemplates({
-          name: created.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsNotebookRuntimeTemplates({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
 
@@ -101,23 +87,26 @@ test.provider.skipIf(!runLifecycle)(
           return yield* GCP.AIPlatform.NotebookRuntimeTemplate("Runtime", {
             notebookRuntimeTemplateId: created.notebookRuntimeTemplateId,
             location: "us-central1",
-            displayName: "alchemy-colab",
-            description: "colab default v2",
+            displayName: "alchemy-colab-v2",
+            description: "colab default",
             machineSpec: { machineType: "e2-standard-4" },
             networkSpec: { enableInternetAccess: true },
-            labels: { env: "prod", role: "notebook" },
+            labels: { env: "test" },
           });
         }),
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.description).toEqual("colab default v2");
-      expect(updated.labels).toMatchObject({ env: "prod", role: "notebook" });
+      expect(updated.displayName).toEqual("alchemy-colab-v2");
+      expect(updated.labels).toMatchObject({ env: "test" });
 
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 180_000,
+  },
 );

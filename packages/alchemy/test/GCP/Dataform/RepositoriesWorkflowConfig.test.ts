@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataform from "@distilled.cloud/gcp/dataform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -19,11 +19,11 @@ test.provider(
           name: `projects/${project}/locations/us-central1/repositories/missing/workflowConfigs/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataform", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -42,23 +42,17 @@ test.provider(
             labels: { env: "test" },
             serviceAccount,
           });
-          const release = yield* GCP.Dataform.RepositoriesReleaseConfig(
-            "Release",
-            {
-              repository: repo.name,
-              gitCommitish: "main",
-              disabled: true,
-            },
-          );
-          const workflow = yield* GCP.Dataform.RepositoriesWorkflowConfig(
-            "Hourly",
-            {
-              repository: repo.name,
-              releaseConfig: release.name,
-              disabled: true,
-              invocationConfig: { serviceAccount },
-            },
-          );
+          const release = yield* GCP.Dataform.RepositoriesReleaseConfig("Release", {
+            repository: repo.name,
+            gitCommitish: "main",
+            disabled: true,
+          });
+          const workflow = yield* GCP.Dataform.RepositoriesWorkflowConfig("Hourly", {
+            repository: repo.name,
+            releaseConfig: release.name,
+            disabled: true,
+            invocationConfig: { serviceAccount },
+          });
           return { repo, release, workflow };
         }),
       );
@@ -67,10 +61,9 @@ test.provider(
       expect(created.workflow.releaseConfig).toEqual(created.release.name);
       expect(created.workflow.disabled).toEqual(true);
 
-      const fetched =
-        yield* dataform.getProjectsLocationsRepositoriesWorkflowConfigs({
-          name: created.workflow.name,
-        });
+      const fetched = yield* dataform.getProjectsLocationsRepositoriesWorkflowConfigs({
+        name: created.workflow.name,
+      });
       expect(fetched.name).toEqual(created.workflow.name);
       expect(fetched.releaseConfig).toEqual(created.release.name);
 
@@ -85,26 +78,20 @@ test.provider(
             labels: { env: "test" },
             serviceAccount,
           });
-          const release = yield* GCP.Dataform.RepositoriesReleaseConfig(
-            "Release",
-            {
-              repository: repo.name,
-              releaseConfigId: created.release.releaseConfigId,
-              gitCommitish: "main",
-              disabled: true,
-            },
-          );
-          const workflow = yield* GCP.Dataform.RepositoriesWorkflowConfig(
-            "Hourly",
-            {
-              repository: repo.name,
-              workflowConfigId: created.workflow.workflowConfigId,
-              releaseConfig: release.name,
-              disabled: true,
-              timeZone: "UTC",
-              invocationConfig: { serviceAccount },
-            },
-          );
+          const release = yield* GCP.Dataform.RepositoriesReleaseConfig("Release", {
+            repository: repo.name,
+            releaseConfigId: created.release.releaseConfigId,
+            gitCommitish: "main",
+            disabled: true,
+          });
+          const workflow = yield* GCP.Dataform.RepositoriesWorkflowConfig("Hourly", {
+            repository: repo.name,
+            workflowConfigId: created.workflow.workflowConfigId,
+            releaseConfig: release.name,
+            disabled: true,
+            timeZone: "UTC",
+            invocationConfig: { serviceAccount },
+          });
           return { repo, release, workflow };
         }),
       );
@@ -120,5 +107,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataform", "live"], timeout: 120_000 },
 );

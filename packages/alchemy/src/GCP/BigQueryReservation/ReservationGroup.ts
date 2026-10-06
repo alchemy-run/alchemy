@@ -92,17 +92,10 @@ export class ReservationGroupNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  reservationGroupId: string,
-) =>
+const resourceName = (project: string, location: string, reservationGroupId: string) =>
   `projects/${project}/locations/${location}/reservationGroups/${reservationGroupId}`;
 
-const toAttrs = (
-  current: bigqueryreservation.ReservationGroup,
-  project: string,
-) => {
+const toAttrs = (current: bigqueryreservation.ReservationGroup, project: string) => {
   const name = current.name ?? "";
   const parsed = parseResourceName(name, "reservationGroups");
   return {
@@ -125,15 +118,12 @@ const listOwnedAt = (project: string, location: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.reservationGroups ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.reservationGroups ?? [])),
       Stream.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? ""))),
       Stream.map((item) => toAttrs(item, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const ReservationGroupProvider = () =>
@@ -145,29 +135,18 @@ export const ReservationGroupProvider = () =>
       const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.reservationGroupId ?? output?.reservationGroupId;
-      const nextId = yield* toResourceId(
-        id,
-        news.reservationGroupId,
-        previousId,
-      );
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const nextId = yield* toResourceId(id, news.reservationGroupId, previousId);
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
 
       const replace =
-        (previousId !== undefined && nextId !== previousId) ||
-        previousLocation !== nextLocation;
+        (previousId !== undefined && nextId !== previousId) || previousLocation !== nextLocation;
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -178,17 +157,12 @@ export const ReservationGroupProvider = () =>
         olds?.reservationGroupId,
         output?.reservationGroupId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, reservationGroupId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, reservationGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, lastSegment(existing.name ?? "")))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, lastSegment(existing.name ?? ""))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -213,9 +187,7 @@ export const ReservationGroupProvider = () =>
         news.reservationGroupId,
         output?.reservationGroupId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, reservationGroupId);
       const parent = parentOf(env.project, location);
 

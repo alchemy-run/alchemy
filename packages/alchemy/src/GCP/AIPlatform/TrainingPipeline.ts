@@ -26,10 +26,8 @@ import {
 } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 
-export type TrainingPipelineEncryptionSpec =
-  aiplatform.GoogleCloudAiplatformV1EncryptionSpec;
-export type TrainingPipelineInputDataConfig =
-  aiplatform.GoogleCloudAiplatformV1InputDataConfig;
+export type TrainingPipelineEncryptionSpec = aiplatform.GoogleCloudAiplatformV1EncryptionSpec;
+export type TrainingPipelineInputDataConfig = aiplatform.GoogleCloudAiplatformV1InputDataConfig;
 export type TrainingPipelineModel = aiplatform.GoogleCloudAiplatformV1Model;
 
 export type TrainingPipelineProps = {
@@ -175,9 +173,7 @@ export type TrainingPipeline = Resource<
  * @resource
  * @category AIPlatform
  */
-export const TrainingPipeline = Resource<TrainingPipeline>(
-  "GCP.AIPlatform.TrainingPipeline",
-);
+export const TrainingPipeline = Resource<TrainingPipeline>("GCP.AIPlatform.TrainingPipeline");
 
 export class TrainingPipelineNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TrainingPipelineNotResolved",
@@ -191,21 +187,14 @@ export class TrainingPipelineStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  trainingPipelineId: string,
-) =>
+const resourceName = (project: string, location: string, trainingPipelineId: string) =>
   `projects/${project}/locations/${location}/trainingPipelines/${trainingPipelineId}`;
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toAttrs = (
-  pipeline: aiplatform.GoogleCloudAiplatformV1TrainingPipeline,
-  project: string,
-) => {
+const toAttrs = (pipeline: aiplatform.GoogleCloudAiplatformV1TrainingPipeline, project: string) => {
   const name = pipeline.name ?? "";
   const parsed = parseName(name, "trainingPipelines");
   return {
@@ -238,42 +227,32 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string) =>
-  aiplatform.listProjectsLocationsTrainingPipelines
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.trainingPipelines ?? []),
-      ),
-      Stream.take(500),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsTrainingPipelines.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.trainingPipelines ?? [])),
+    Stream.take(500),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (id: string, parent: string) =>
   Effect.gen(function* () {
     const expected = yield* createInternalLabels(id);
     const pipelines = yield* listAt(parent);
     return pipelines.find((pipeline) =>
-      Object.entries(expected).every(
-        ([key, value]) => (pipeline.labels ?? {})[key] === value,
-      ),
+      Object.entries(expected).every(([key, value]) => (pipeline.labels ?? {})[key] === value),
     );
   });
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pipeline) =>
-      pipeline === undefined
-        ? Effect.void
-        : Effect.fail(new TrainingPipelineStillExists({ name })),
+      pipeline === undefined ? Effect.void : Effect.fail(new TrainingPipelineStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.TrainingPipelineStillExists",
-      times: 10,
-      schedule: Schedule.spaced("2 seconds"),
+      while: (error) => error._tag === "GCP.AIPlatform.TrainingPipelineStillExists",
+      times: 30,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 
@@ -296,34 +275,18 @@ const toBody = (
 
 export const TrainingPipelineProvider = () =>
   Provider.succeed(TrainingPipeline, {
-    stables: [
-      "name",
-      "trainingPipelineId",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "trainingPipelineId", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.trainingPipelineId ?? output?.trainingPipelineId;
       const nextId = news.trainingPipelineId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const definitionChanged =
-        (olds?.trainingTaskDefinition ?? output?.trainingTaskDefinition) !==
-          undefined &&
+        (olds?.trainingTaskDefinition ?? output?.trainingTaskDefinition) !== undefined &&
         news.trainingTaskDefinition !==
           (olds?.trainingTaskDefinition ?? output?.trainingTaskDefinition);
       if (idChanged || previousLocation !== nextLocation || definitionChanged) {
@@ -334,49 +297,39 @@ export const TrainingPipelineProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const trainingPipelineId = yield* toPhysicalId(
-        id,
-        olds?.trainingPipelineId,
-        output?.trainingPipelineId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      // Pipeline ids are server-assigned numbers, so only a recorded name
+      // or a caller-supplied id can be fetched directly.
+      const trainingPipelineId = olds?.trainingPipelineId ?? output?.trainingPipelineId;
       const name =
-        output?.name ?? resourceName(env.project, location, trainingPipelineId);
+        output?.name ??
+        (trainingPipelineId !== undefined
+          ? resourceName(env.project, location, trainingPipelineId)
+          : undefined);
       const existing =
-        (yield* getByName(name)) ??
+        (name !== undefined ? yield* getByName(name) : undefined) ??
         (yield* findOwned(id, parentOf(env.project, location)));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pipelines = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listAt(parentOf(env.project, location)),
+        const pipelines = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listAt(parentOf(env.project, location)),
         )).flat();
         return pipelines
           .filter((pipeline) =>
-            Object.keys(pipeline.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
-            ),
+            Object.keys(pipeline.labels ?? {}).some((key) => key.startsWith("alchemy-")),
           )
           .map((pipeline) => toAttrs(pipeline, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = parentOf(env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -384,16 +337,11 @@ export const TrainingPipelineProvider = () =>
       };
       const displayName =
         news.displayName ??
-        (yield* toPhysicalId(
-          id,
-          news.trainingPipelineId,
-          output?.trainingPipelineId,
-        ));
+        (yield* toPhysicalId(id, news.trainingPipelineId, output?.trainingPipelineId));
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(id, parent));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(id, parent));
 
       if (current === undefined) {
         const created = yield* aiplatform
@@ -416,30 +364,46 @@ export const TrainingPipelineProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const name = output.name;
-      yield* aiplatform
-        .cancelProjectsLocationsTrainingPipelines({ name, body: {} })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.catchTag("BadRequest", () => Effect.void),
-          Effect.catchTag("Conflict", () => Effect.void),
-          Effect.catchTag("Forbidden", () => Effect.void),
-        );
-      const operation = yield* aiplatform
-        .deleteProjectsLocationsTrainingPipelines({ name })
-        .pipe(
-          Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "BadRequest",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-          Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-        );
+      // Custom training runs in a backing CustomJob that outlives the
+      // pipeline; remember it so it can be deleted too.
+      const metadata = (yield* getByName(name))?.trainingTaskMetadata;
+      const backingJob =
+        metadata !== null && typeof metadata === "object" && "backingCustomJob" in metadata
+          ? (metadata as { backingCustomJob?: unknown }).backingCustomJob
+          : undefined;
+      yield* aiplatform.cancelProjectsLocationsTrainingPipelines({ name, body: {} }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.catchTag("BadRequest", () => Effect.void),
+        Effect.catchTag("Conflict", () => Effect.void),
+      );
+      // Delete is rejected until the cancellation reaches a terminal state,
+      // which can take a couple of minutes.
+      const operation = yield* aiplatform.deleteProjectsLocationsTrainingPipelines({ name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
+          times: 24,
+          schedule: Schedule.spaced("10 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(name);
+      if (typeof backingJob === "string" && backingJob.length > 0) {
+        const jobDelete = yield* aiplatform
+          .deleteProjectsLocationsCustomJobs({ name: backingJob })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "BadRequest",
+              times: 8,
+              schedule: Schedule.spaced("3 seconds"),
+            }),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
+        if (jobDelete !== undefined) {
+          yield* waitForOperation(jobDelete, { notFoundOk: true });
+        }
+      }
     }),
   });

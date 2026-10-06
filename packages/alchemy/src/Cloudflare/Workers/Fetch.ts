@@ -1,13 +1,13 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Url from "effect/http/Url";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
@@ -72,10 +72,7 @@ export const FetchBinding = Layer.effect(
 const doFetch = (
   fetcher: runtime.Fetcher,
   request: HttpClientRequest.HttpClientRequest,
-): Effect.Effect<
-  HttpClientResponse.HttpClientResponse,
-  HttpClientError.RequestError
-> => {
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.RequestError> => {
   const urlResult = Url.make(
     request.url,
     request.urlParams,

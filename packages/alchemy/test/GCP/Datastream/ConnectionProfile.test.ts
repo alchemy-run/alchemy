@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datastream from "@distilled.cloud/gcp/datastream_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  LOCATION,
-  logLevel,
-  currentProject,
-  runLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { LOCATION, logLevel, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -25,11 +19,14 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/connectionProfiles/alchemy-missing-profile`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -82,10 +79,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.displayName).toEqual("bq-dest-v2");
       expect(updated.labels).toMatchObject({ env: "prod", team: "datastream" });
 
-      const fetchedUpdate =
-        yield* datastream.getProjectsLocationsConnectionProfiles({
-          name: updated.name,
-        });
+      const fetchedUpdate = yield* datastream.getProjectsLocationsConnectionProfiles({
+        name: updated.name,
+      });
       expect(fetchedUpdate.displayName).toEqual("bq-dest-v2");
       expect(fetchedUpdate.labels?.team).toEqual("datastream");
 
@@ -97,5 +93,8 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+    timeout: 300_000,
+  },
 );

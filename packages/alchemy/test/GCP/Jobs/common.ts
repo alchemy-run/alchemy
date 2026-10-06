@@ -1,18 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import { MinimumLogLevel } from "effect/References";
 import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Cloud Talent Solution is entitlement-gated. Live create returns Forbidden:
-// "Cloud Talent Solution API has not been used in project 457525637530
-// before or it is disabled."
-export const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_JOBS === "1";
+// Cloud Talent Solution needs a console-only data-permission opt-in
+// (GCP_TEST_TALENT_ONBOARDED=1). Without it, every call except deletes fails
+// with `BadRequest: Service must be permitted to access job and behavioral
+// data to improve common machine learning models ...`.
+export const runLifecycle = !!process.env.GCP_TEST_TALENT_ONBOARDED;
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));

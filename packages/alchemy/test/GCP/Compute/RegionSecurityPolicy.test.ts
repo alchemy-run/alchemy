@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 
@@ -26,10 +23,8 @@ const waitUntilGone = (project: string, securityPolicy: string) =>
     }),
   );
 
-const ruleAt = (
-  rules: compute.SecurityPolicyRule[] | undefined,
-  priority: number,
-) => (rules ?? []).find((rule) => rule.priority === priority);
+const ruleAt = (rules: compute.SecurityPolicyRule[] | undefined, priority: number) =>
+  (rules ?? []).find((rule) => rule.priority === priority);
 
 test.provider(
   "create, update, and delete a regional security policy",
@@ -87,9 +82,7 @@ test.provider(
         maxResults: 500,
       });
       expect(
-        (listed.items ?? []).some(
-          (policy) => policy.name === created.securityPolicyName,
-        ),
+        (listed.items ?? []).some((policy) => policy.name === created.securityPolicyName),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -132,9 +125,10 @@ test.provider(
       expect(updated.labels).toMatchObject({ env: "prod", role: "waf" });
       expect(updated.advancedOptionsConfig?.jsonParsing).toEqual("STANDARD");
       expect(updated.advancedOptionsConfig?.logLevel).toEqual("VERBOSE");
-      expect(
-        ruleAt(updated.rules, 1000)?.match?.config?.srcIpRanges?.sort(),
-      ).toEqual(["8.8.8.8/32", "9.9.9.0/24"]);
+      expect(ruleAt(updated.rules, 1000)?.match?.config?.srcIpRanges?.sort()).toEqual([
+        "8.8.8.8/32",
+        "9.9.9.0/24",
+      ]);
 
       const fetchedUpdate = yield* compute.getRegionSecurityPolicies({
         project: updated.project,
@@ -144,17 +138,12 @@ test.provider(
       expect(fetchedUpdate.description).toEqual("updated armor");
       expect(fetchedUpdate.labels?.env).toEqual("prod");
       expect(fetchedUpdate.labels?.role).toEqual("waf");
-      expect(fetchedUpdate.advancedOptionsConfig?.jsonParsing).toEqual(
-        "STANDARD",
-      );
+      expect(fetchedUpdate.advancedOptionsConfig?.jsonParsing).toEqual("STANDARD");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.project,
-        created.securityPolicyName,
-      );
+      const gone = yield* waitUntilGone(created.project, created.securityPolicyName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

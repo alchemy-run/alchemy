@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   bigqueryreservation.getProjectsLocationsReservations({ name }).pipe(
@@ -39,17 +36,20 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page = yield* bigqueryreservation.listProjectsLocationsReservations(
-        {
-          parent: `projects/${project}/locations/us-central1`,
-          pageSize: 10,
-        },
+      const page = yield* bigqueryreservation.listProjectsLocationsReservations({
+        parent: `projects/${project}/locations/us-central1`,
+        pageSize: 10,
+      });
+      expect((page.reservations ?? []).map((item) => item.name?.split("/").pop())).not.toContain(
+        "alchemy-bq-reservation-missing",
       );
-      expect(Array.isArray(page.reservations ?? [])).toEqual(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -77,26 +77,20 @@ test.provider(
       expect(created.ignoreIdleSlots).toEqual(false);
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* bigqueryreservation.getProjectsLocationsReservations({
-          name: created.name,
-        });
+      const fetched = yield* bigqueryreservation.getProjectsLocationsReservations({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.edition).toEqual("ENTERPRISE");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
-      const listed =
-        yield* bigqueryreservation.listProjectsLocationsReservations({
-          parent: `projects/${created.project}/locations/${created.location}`,
-        });
-      expect(
-        (listed.reservations ?? []).some((item) => item.name === created.name),
-      ).toEqual(true);
+      const listed = yield* bigqueryreservation.listProjectsLocationsReservations({
+        parent: `projects/${created.project}/locations/${created.location}`,
+      });
+      expect((listed.reservations ?? []).some((item) => item.name === created.name)).toEqual(true);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -117,10 +111,9 @@ test.provider(
       expect(updated.concurrency).toEqual("1");
       expect(updated.labels).toMatchObject({ env: "prod", role: "slots" });
 
-      const refetched =
-        yield* bigqueryreservation.getProjectsLocationsReservations({
-          name: created.name,
-        });
+      const refetched = yield* bigqueryreservation.getProjectsLocationsReservations({
+        name: created.name,
+      });
       expect(refetched.ignoreIdleSlots ?? false).toEqual(false);
       expect(refetched.concurrency).toEqual("1");
       expect(refetched.labels?.env).toEqual("prod");
@@ -131,5 +124,8 @@ test.provider(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+    timeout: 90_000,
+  },
 );

@@ -1,21 +1,21 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_DATAPLEX_DATA_DOMAIN === "1";
+// Data domains are allowlisted: the testing project gets Forbidden
+// "Permission 'dataplex.dataDomains.get' denied". Set
+// GCP_TEST_DATAPLEX_DATA_DOMAIN=1 on an allowlisted project.
+const runLifecycle = process.env.GCP_TEST_DATAPLEX_DATA_DOMAIN === "1";
 
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsDataDomainsBindings({ name }).pipe(
@@ -40,11 +40,11 @@ test.provider(
           name: `projects/${project}/locations/us-central1/dataDomains/alchemy-missing/bindings/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual(runLifecycle ? "NotFound" : "Forbidden");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 90_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -90,6 +90,6 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { timeout: 120_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

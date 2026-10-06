@@ -127,9 +127,7 @@ export type IndexEndpoint = Resource<
  * @resource
  * @category AIPlatform
  */
-export const IndexEndpoint = Resource<IndexEndpoint>(
-  "GCP.AIPlatform.IndexEndpoint",
-);
+export const IndexEndpoint = Resource<IndexEndpoint>("GCP.AIPlatform.IndexEndpoint");
 
 export class IndexEndpointNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.IndexEndpointNotResolved",
@@ -143,10 +141,7 @@ export class IndexEndpointStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  endpoint: aiplatform.GoogleCloudAiplatformV1IndexEndpoint,
-  project: string,
-) => {
+const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1IndexEndpoint, project: string) => {
   const name = endpoint.name ?? "";
   return {
     name,
@@ -173,31 +168,17 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listPage = (parent: string, filter?: string) =>
-  aiplatform.listProjectsLocationsIndexEndpoints
-    .pages({ parent, pageSize: 100, filter })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.indexEndpoints ?? []),
-      ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1IndexEndpoint[]),
-      ),
-    );
-
-const findOwned = (
-  project: string,
-  location: string,
-  labels: Record<string, string>,
-) =>
-  listPage(
-    `projects/${project}/locations/${location}`,
-    alchemyIdFilter(labels),
-  ).pipe(
-    Effect.map(
-      (items) =>
-        items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined,
+  aiplatform.listProjectsLocationsIndexEndpoints.pages({ parent, pageSize: 100, filter }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.indexEndpoints ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1IndexEndpoint[]),
     ),
+  );
+
+const findOwned = (project: string, location: string, labels: Record<string, string>) =>
+  listPage(`projects/${project}/locations/${location}`, alchemyIdFilter(labels)).pipe(
+    Effect.map((items) => items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined),
   );
 
 const waitUntilExists = (name: string) =>
@@ -208,8 +189,7 @@ const waitUntilExists = (name: string) =>
       () => new IndexEndpointNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.IndexEndpointNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.IndexEndpointNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -223,8 +203,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.IndexEndpointStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.IndexEndpointStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -232,22 +211,12 @@ const waitUntilGone = (name: string) =>
 
 export const IndexEndpointProvider = () =>
   Provider.succeed(IndexEndpoint, {
-    stables: [
-      "name",
-      "indexEndpointId",
-      "project",
-      "location",
-      "network",
-      "createTime",
-    ],
+    stables: ["name", "indexEndpointId", "project", "location", "network", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -268,20 +237,14 @@ export const IndexEndpointProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const ownership = yield* createInternalLabels(id);
       const existing =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(env.project, location, ownership));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(env.project, location, ownership));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -289,8 +252,7 @@ export const IndexEndpointProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listPage(`projects/${env.project}/locations/${location}`),
+          (location) => listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         return pages
@@ -301,15 +263,8 @@ export const IndexEndpointProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -317,9 +272,7 @@ export const IndexEndpointProvider = () =>
       const publicEndpointEnabled = news.publicEndpointEnabled ?? true;
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ??
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
         (yield* findOwned(env.project, location, desiredLabels));
 
       if (current === undefined) {
@@ -357,8 +310,7 @@ export const IndexEndpointProvider = () =>
       }
 
       const name = current.name;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const displayChanged = (current.displayName ?? "") !== displayName;
       const labelsChanged = labelsDiffer(current.labels, desiredLabels);
 

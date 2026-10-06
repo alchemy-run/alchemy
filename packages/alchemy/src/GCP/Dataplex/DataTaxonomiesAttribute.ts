@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -160,9 +155,9 @@ export type DataTaxonomiesAttribute = Resource<
  * ### Updating a Data Attribute
  * **Example:** Description and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const attr = yield* GCP.Dataplex.DataTaxonomiesAttribute("Pii", {
  *   dataTaxonomy: taxonomy.name,
- *   dataAttributeId: existing.dataAttributeId,
  *   description: "personally identifiable",
  *   labels: { env: "prod", class: "restricted" },
  * });
@@ -199,10 +194,7 @@ const resolveParent = (
 const resourceName = (parent: string, dataAttributeId: string) =>
   `${parent}/attributes/${dataAttributeId}`;
 
-const toAttrs = (
-  attribute: dataplex.GoogleCloudDataplexV1DataAttribute,
-  project: string,
-) => {
+const toAttrs = (attribute: dataplex.GoogleCloudDataplexV1DataAttribute, project: string) => {
   const name = attribute.name ?? "";
   const parsed = parseName(name, "attributes");
   const taxonomy = parseName(parsed.parent, "dataTaxonomies");
@@ -228,9 +220,9 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  retryQuota(
-    dataplex.getProjectsLocationsDataTaxonomiesAttributes({ name }),
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  retryQuota(dataplex.getProjectsLocationsDataTaxonomiesAttributes({ name })).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const listAttributesUnder = (parent: string, project: string) =>
   collectPages(
@@ -241,12 +233,9 @@ const listAttributesUnder = (parent: string, project: string) =>
     (page) => page.dataAttributes,
   ).pipe(
     Effect.map((items) =>
-      items
-        .filter((item) => hasAlchemyLabelMap(item.labels))
-        .map((item) => toAttrs(item, project)),
+      items.filter((item) => hasAlchemyLabelMap(item.labels)).map((item) => toAttrs(item, project)),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const DataTaxonomiesAttributeProvider = () =>
@@ -266,21 +255,14 @@ export const DataTaxonomiesAttributeProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataAttributeId ?? output?.dataAttributeId,
-        nextId:
-          news.dataAttributeId ??
-          olds?.dataAttributeId ??
-          output?.dataAttributeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.dataAttributeId ?? olds?.dataAttributeId ?? output?.dataAttributeId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         previousParent: olds?.dataTaxonomy ?? output?.dataTaxonomy,
-        nextParent:
-          news.dataTaxonomy ?? olds?.dataTaxonomy ?? output?.dataTaxonomy,
+        nextParent: news.dataTaxonomy ?? olds?.dataTaxonomy ?? output?.dataTaxonomy,
       });
     }),
 
@@ -298,41 +280,29 @@ export const DataTaxonomiesAttributeProvider = () =>
         output?.dataAttributeId,
         "attribute",
       );
-      const name =
-        output?.name ?? resourceName(resolved.parent, dataAttributeId);
+      const name = output?.name ?? resourceName(resolved.parent, dataAttributeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const taxonomies = yield* listAtLocation(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              dataplex.listProjectsLocationsDataTaxonomies.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.dataTaxonomies,
-            ).pipe(
-              Effect.map((items) =>
-                items.filter((item) => hasAlchemyLabelMap(item.labels)),
-              ),
-            ),
+        const taxonomies = yield* listAtLocation(env.project, env.region, (parent) =>
+          collectPages(
+            dataplex.listProjectsLocationsDataTaxonomies.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.dataTaxonomies,
+          ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels)))),
         );
         const nested = yield* Effect.forEach(
           taxonomies,
           (taxonomy) =>
-            taxonomy.name
-              ? listAttributesUnder(taxonomy.name, env.project)
-              : Effect.succeed([]),
+            taxonomy.name ? listAttributesUnder(taxonomy.name, env.project) : Effect.succeed([]),
           { concurrency: 4 },
         );
         return nested.flat();
@@ -391,21 +361,16 @@ export const DataTaxonomiesAttributeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const parentChanged =
-        news.parentId !== undefined &&
-        (current.parentId ?? "") !== news.parentId;
+        news.parentId !== undefined && (current.parentId ?? "") !== news.parentId;
       const resourceAccessChanged =
         news.resourceAccessSpec !== undefined &&
-        fingerprint(news.resourceAccessSpec) !==
-          fingerprint(current.resourceAccessSpec);
+        fingerprint(news.resourceAccessSpec) !== fingerprint(current.resourceAccessSpec);
       const dataAccessChanged =
         news.dataAccessSpec !== undefined &&
-        fingerprint(news.dataAccessSpec) !==
-          fingerprint(current.dataAccessSpec);
+        fingerprint(news.dataAccessSpec) !== fingerprint(current.dataAccessSpec);
 
       if (
         labelsChanged ||
@@ -435,17 +400,13 @@ export const DataTaxonomiesAttributeProvider = () =>
               description: news.description,
               displayName: news.displayName,
               parentId: news.parentId ?? current.parentId,
-              resourceAccessSpec:
-                news.resourceAccessSpec ?? current.resourceAccessSpec,
+              resourceAccessSpec: news.resourceAccessSpec ?? current.resourceAccessSpec,
               dataAccessSpec: news.dataAccessSpec ?? current.dataAccessSpec,
             },
           }),
         );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
@@ -458,8 +419,7 @@ export const DataTaxonomiesAttributeProvider = () =>
         })
         .pipe(
           Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "TooManyRequests",
+            while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),

@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
@@ -100,9 +95,7 @@ export type LakesZoneProps = {
    * the zone.
    * @default "SINGLE_REGION"
    */
-  locationType?:
-    | dataplex.GoogleCloudDataplexV1ZoneResourceSpecLocationTypeEnum
-    | (string & {});
+  locationType?: dataplex.GoogleCloudDataplexV1ZoneResourceSpecLocationTypeEnum | (string & {});
   /**
    * User-friendly display name.
    */
@@ -192,26 +185,20 @@ export type LakesZone = Resource<
  */
 export const LakesZone = Resource<LakesZone>("GCP.Dataplex.LakesZone");
 
-export class LakesZoneNotResolved extends Data.TaggedError(
-  "GCP.Dataplex.LakesZoneNotResolved",
-)<{
+export class LakesZoneNotResolved extends Data.TaggedError("GCP.Dataplex.LakesZoneNotResolved")<{
   name: string;
 }> {}
 
-export class LakesZoneStillExists extends Data.TaggedError(
-  "GCP.Dataplex.LakesZoneStillExists",
-)<{
+export class LakesZoneStillExists extends Data.TaggedError("GCP.Dataplex.LakesZoneStillExists")<{
   name: string;
 }> {}
 
 const lakeOf = (lake: string, project: string, location: string) =>
   expandParent(lake, project, location, "lakes");
 
-const resourceName = (lake: string, zoneId: string) =>
-  `${lake}/zones/${zoneId}`;
+const resourceName = (lake: string, zoneId: string) => `${lake}/zones/${zoneId}`;
 
-const desiredType = (type: string | undefined) =>
-  (type ?? DEFAULT_TYPE).toUpperCase();
+const desiredType = (type: string | undefined) => (type ?? DEFAULT_TYPE).toUpperCase();
 
 const desiredLocationType = (value: string | undefined) =>
   (value ?? DEFAULT_LOCATION_TYPE).toUpperCase();
@@ -271,7 +258,8 @@ const waitUntilReady = (name: string) =>
         error._tag === "GCP.Dataplex.LakesZoneNotResolved" ||
         error._tag === "GCP.Dataplex.NotResolved" ||
         error._tag === "TooManyRequests",
-      times: 10,
+      // Lakes provision a metastore-backed control plane for 2-5 minutes.
+      times: 36,
       schedule: Schedule.spaced("10 seconds"),
     }),
   );
@@ -279,9 +267,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((zone) =>
-      zone === undefined
-        ? Effect.void
-        : Effect.fail(new LakesZoneStillExists({ name })),
+      zone === undefined ? Effect.void : Effect.fail(new LakesZoneStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakesZoneStillExists",
@@ -311,22 +297,15 @@ export const LakesZoneProvider = () =>
       const nextId = news.zoneId ?? previousId;
       const previousLake = olds?.lake ?? output?.lake;
       const nextLake = news.lake ?? previousLake;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const previousType = desiredType(olds?.type ?? output?.type);
       const nextType = desiredType(news.type ?? previousType);
-      const previousLocationType = desiredLocationType(
-        olds?.locationType ?? output?.locationType,
-      );
-      const nextLocationType = desiredLocationType(
-        news.locationType ?? previousLocationType,
-      );
+      const previousLocationType = desiredLocationType(olds?.locationType ?? output?.locationType);
+      const nextLocationType = desiredLocationType(news.locationType ?? previousLocationType);
       if (
         replaceIfChanged(previousId, nextId) ||
         replaceIfChanged(previousLake, nextLake) ||
@@ -348,23 +327,14 @@ export const LakesZoneProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const lake = lakeOf(
-        olds?.lake ?? output?.lake ?? "",
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const lake = lakeOf(olds?.lake ?? output?.lake ?? "", env.project, location);
       const zoneId = yield* toPhysicalRfc1035(id, olds?.zoneId, output?.zoneId);
       const name = output?.name ?? resourceName(lake, zoneId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -379,10 +349,7 @@ export const LakesZoneProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const lake = lakeOf(news.lake, env.project, location);
       const zoneId = yield* toPhysicalRfc1035(id, news.zoneId, output?.zoneId);
       const name = output?.name ?? resourceName(lake, zoneId);
@@ -411,6 +378,9 @@ export const LakesZoneProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          yield* waitForOperation(created);
+        }
         current = yield* waitUntilReady(name);
       }
 
@@ -421,19 +391,11 @@ export const LakesZoneProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const discoveryChanged =
-        fingerprint(current.discoverySpec) !== fingerprint(desiredDiscovery);
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const discoveryChanged = fingerprint(current.discoverySpec) !== fingerprint(desiredDiscovery);
 
-      if (
-        labelsChanged ||
-        displayNameChanged ||
-        descriptionChanged ||
-        discoveryChanged
-      ) {
+      if (labelsChanged || displayNameChanged || descriptionChanged || discoveryChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayNameChanged ? "display_name" : undefined,
@@ -450,7 +412,7 @@ export const LakesZoneProvider = () =>
             discoverySpec: desiredDiscovery,
           },
         });
-        yield* waitForOperation(operation, { interval: "5 seconds" });
+        yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }
 

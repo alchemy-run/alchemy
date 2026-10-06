@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,19 +9,16 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_CAPABILITY = "NO_SLA";
 
 export type InterconnectGroupIntent = compute.InterconnectGroupIntent;
-export type InterconnectGroupInterconnectMap =
-  compute.InterconnectGroupInterconnectMap;
+export type InterconnectGroupInterconnectMap = compute.InterconnectGroupInterconnectMap;
 
 export type InterconnectGroupProps = {
   /**
@@ -117,22 +113,12 @@ export type InterconnectGroup = Resource<
  * @resource
  * @category Compute
  */
-export const InterconnectGroup = Resource<InterconnectGroup>(
-  "GCP.Compute.InterconnectGroup",
-);
+export const InterconnectGroup = Resource<InterconnectGroup>("GCP.Compute.InterconnectGroup");
 
 export class InterconnectGroupNotResolved extends Data.TaggedError(
   "GCP.Compute.InterconnectGroupNotResolved",
 )<{
   interconnectGroupName: string;
-}> {}
-
-export class InterconnectGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InterconnectGroupOperationFailed",
-)<{
-  interconnectGroupName: string;
-  operation: string;
-  message: string;
 }> {}
 
 export class InterconnectGroupStillExists extends Data.TaggedError(
@@ -202,9 +188,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const capabilityOf = (intent: InterconnectGroupIntent | undefined) =>
   (intent?.topologyCapability ?? DEFAULT_CAPABILITY).toUpperCase();
@@ -214,10 +198,7 @@ const interconnectUrl = (project: string, value: string) => {
   return `projects/${project}/global/interconnects/${value}`;
 };
 
-const membersKey = (
-  project: string,
-  members: InterconnectGroupInterconnectMap | undefined,
-) =>
+const membersKey = (project: string, members: InterconnectGroupInterconnectMap | undefined) =>
   Object.entries(members ?? {})
     .map(([key, value]) => {
       const url = value?.interconnect;
@@ -264,102 +245,20 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  interconnectGroupName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new InterconnectGroupOperationFailed({
-        interconnectGroupName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, interconnectGroup: string) =>
   compute
     .getInterconnectGroups({ project, interconnectGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  interconnectGroupName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new InterconnectGroupOperationFailed({
-        interconnectGroupName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(interconnectGroupName, current, options);
-    return current;
-  });
 
 const awaitResource = (project: string, interconnectGroupName: string) =>
   getByName(project, interconnectGroupName).pipe(
     Effect.flatMap((group) =>
       group !== undefined
         ? Effect.succeed(group)
-        : Effect.fail(
-            new InterconnectGroupNotResolved({ interconnectGroupName }),
-          ),
+        : Effect.fail(new InterconnectGroupNotResolved({ interconnectGroupName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectGroupNotResolved",
+      while: (error) => error._tag === "GCP.Compute.InterconnectGroupNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -370,20 +269,14 @@ const waitUntilGone = (project: string, interconnectGroupName: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(
-            new InterconnectGroupStillExists({ interconnectGroupName }),
-          ),
+        : Effect.fail(new InterconnectGroupStillExists({ interconnectGroupName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectGroupStillExists",
+      while: (error) => error._tag === "GCP.Compute.InterconnectGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.InterconnectGroupStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.InterconnectGroupStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -394,7 +287,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, operation, interconnectGroupName, options),
+      waitGlobalOperation(project, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -415,14 +310,9 @@ export const InterconnectGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.interconnectGroupName ?? output?.interconnectGroupName;
+      const previousName = olds?.interconnectGroupName ?? output?.interconnectGroupName;
       const nextName = news.interconnectGroupName ?? previousName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -456,7 +346,7 @@ export const InterconnectGroupProvider = () =>
             Stream.map((group) => toAttrs(group, env.project)),
             Stream.runCollect,
             Effect.map((items) => Array.from(items)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as InterconnectGroup["Attributes"][]),
             ),
           );
@@ -491,8 +381,8 @@ export const InterconnectGroupProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, interconnectGroupName, {
-                ignoreAlreadyExists: true,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -500,14 +390,11 @@ export const InterconnectGroupProvider = () =>
         current = yield* awaitResource(env.project, interconnectGroupName);
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const intentChanged =
-        capabilityOf(current.intent) !== capabilityOf(intent);
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const intentChanged = capabilityOf(current.intent) !== capabilityOf(intent);
       const membersChanged =
         news.interconnects !== undefined &&
-        membersKey(env.project, current.interconnects) !==
-          membersKey(env.project, interconnects);
+        membersKey(env.project, current.interconnects) !== membersKey(env.project, interconnects);
 
       if (descriptionChanged || intentChanged || membersChanged) {
         yield* runOp(
@@ -522,14 +409,11 @@ export const InterconnectGroupProvider = () =>
               description: desiredDescription,
               intent,
               interconnects:
-                news.interconnects !== undefined
-                  ? interconnects
-                  : current.interconnects,
+                news.interconnects !== undefined ? interconnects : current.interconnects,
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, interconnectGroupName)) ?? current;
+        current = (yield* getByName(env.project, interconnectGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -546,8 +430,8 @@ export const InterconnectGroupProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, operation, output.interconnectGroupName, {
-              ignoreNotFound: true,
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),

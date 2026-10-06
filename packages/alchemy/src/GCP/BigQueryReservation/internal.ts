@@ -9,9 +9,8 @@ import {
 
 export const MAX_NAME_LENGTH = 64;
 
-/** Locations swept by `list`: every location, the stack region, and the multi-regions. */
-export const listLocations = (region: string) =>
-  Array.from(new Set(["-", region, "US", "EU"]));
+/** Locations swept by `list`: the stack region and the multi-regions (the API has no `locations/-` wildcard). */
+export const listLocations = (region: string) => Array.from(new Set([region, "US", "EU"]));
 const OWNER_PREFIX = "alch---";
 
 export const lastSegment = (value: string) => {
@@ -39,21 +38,15 @@ export const parseResourceName = (
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     resourceId:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
 export const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const sanitizeIdPart = (value: string) => {
   const cleaned = sanitizeLabelValue(value)
@@ -71,15 +64,10 @@ const ensureId = (value: string) => {
     .slice(0, MAX_NAME_LENGTH)
     .replace(/-+$/g, "");
   if (cleaned.length === 0) return "alchx";
-  return /^[a-z]/.test(cleaned)
-    ? cleaned
-    : `a${cleaned}`.slice(0, MAX_NAME_LENGTH);
+  return /^[a-z]/.test(cleaned) ? cleaned : `a${cleaned}`.slice(0, MAX_NAME_LENGTH);
 };
 
-export const encodeOwnershipId = (
-  labels: Record<string, string>,
-  extra?: string,
-): string => {
+export const encodeOwnershipId = (labels: Record<string, string>, extra?: string): string => {
   let stack = sanitizeIdPart(labels[alchemyLabelKeys.stack] ?? "x");
   let stage = sanitizeIdPart(labels[alchemyLabelKeys.stage] ?? "x");
   let id = sanitizeIdPart(labels[alchemyLabelKeys.id] ?? "x");
@@ -118,14 +106,10 @@ export const parseOwnershipId = (
 
 export const hasOwnershipMarker = (resourceId: string | undefined) =>
   (resourceId ?? "").startsWith("alch-") &&
-  Object.keys(parseOwnershipId(resourceId).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnershipId(resourceId).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, resourceId: string | undefined) =>
   Effect.gen(function* () {
@@ -150,11 +134,7 @@ export const ownedByAlchemy = (id: string, resourceId: string | undefined) =>
     );
   });
 
-export const toResourceId = (
-  id: string,
-  requested: string | undefined,
-  existing?: string,
-) =>
+export const toResourceId = (id: string, requested: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     const labels = yield* createInternalLabels(id);
     if (requested !== undefined && requested.length > 0) {

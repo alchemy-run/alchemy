@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 const zone = "us-central1-a";
@@ -50,10 +47,7 @@ const waitUntilGone = (packetMirroringName: string) =>
     ),
   );
 
-const waitOp = (
-  operation: compute.Operation,
-  scope: "global" | "region" | "zone",
-) => {
+const waitOp = (operation: compute.Operation, scope: "global" | "region" | "zone") => {
   if (operation.status === "DONE") return Effect.succeed(operation);
   const name = lastSegment(operation.name);
   if (name.length === 0) return Effect.succeed(operation);
@@ -66,9 +60,7 @@ const waitOp = (
             ? compute.getZoneOperations({ project, zone, operation: name })
             : compute.getRegionOperations({ project, region, operation: name });
       return poll.pipe(
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed({ status: "DONE" } as compute.Operation),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed({ status: "DONE" } as compute.Operation)),
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           until: (op) => op.status === "DONE",
@@ -214,8 +206,7 @@ const ensureCollector = () =>
       forwardingRule: names.forwardingRule,
     });
     return {
-      network:
-        network.selfLink ?? `projects/${project}/global/networks/default`,
+      network: network.selfLink ?? `projects/${project}/global/networks/default`,
       forwardingRule:
         forwardingRule.selfLink ??
         `projects/${project}/regions/${region}/forwardingRules/${names.forwardingRule}`,
@@ -258,13 +249,11 @@ const deleteCollector = () =>
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.catchTag("Conflict", () => Effect.void),
       );
-    yield* compute
-      .deleteHealthChecks({ project, healthCheck: names.healthCheck })
-      .pipe(
-        Effect.flatMap((operation) => waitOp(operation, "global")),
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
-      );
+    yield* compute.deleteHealthChecks({ project, healthCheck: names.healthCheck }).pipe(
+      Effect.flatMap((operation) => waitOp(operation, "global")),
+      Effect.catchTag("NotFound", () => Effect.void),
+      Effect.catchTag("Conflict", () => Effect.void),
+    );
   });
 
 test.provider(
@@ -293,9 +282,7 @@ test.provider(
       expect(created.enable).toEqual(true);
       expect(created.priority).toEqual(1000);
       expect(created.network).toEqual(expect.stringContaining("networks/"));
-      expect(created.collectorIlb).toEqual(
-        expect.stringContaining(names.forwardingRule),
-      );
+      expect(created.collectorIlb).toEqual(expect.stringContaining(names.forwardingRule));
       expect(created.mirroredResources.tags).toEqual(["alchemy-pm"]);
 
       const fetched = yield* compute.getPacketMirrorings({
@@ -308,9 +295,7 @@ test.provider(
       expect(fetched.description).toContain("test capture");
       expect(fetched.enable).toEqual("TRUE");
       expect(fetched.mirroredResources?.tags).toEqual(["alchemy-pm"]);
-      expect(fetched.collectorIlb?.url).toEqual(
-        expect.stringContaining(names.forwardingRule),
-      );
+      expect(fetched.collectorIlb?.url).toEqual(expect.stringContaining(names.forwardingRule));
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -383,5 +368,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.packetMirroringName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, Effect.ensuring(deleteCollector().pipe(Effect.ignore))),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
 );

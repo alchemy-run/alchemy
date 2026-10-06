@@ -1,25 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   crm.getTagValues({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    // A deleted TagValue answers 403 "... (or it may not exist)".
+    Effect.catchTag("TagValueNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -27,11 +23,10 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const nextShortName = (name: string) =>
-  name.length < 256 ? `${name}x` : `${name.slice(0, 255)}x`;
+const nextShortName = (name: string) => (name.length < 256 ? `${name}x` : `${name.slice(0, 255)}x`);
 
 test.provider(
-  "getTagValues on a missing value fails with a typed client error",
+  "getTagValues on a missing value fails with TagValueNotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -41,11 +36,14 @@ test.provider(
           name: "tagValues/999999999999",
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("TagValueNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -80,8 +78,7 @@ test.provider(
       expect(fetched.name).toEqual(created.value.name);
       expect(fetched.shortName).toEqual(created.value.shortName);
       expect(fetched.parent).toEqual(created.key.name);
-      expect(fetched.description).toContain("[alchemy ");
-      expect(fetched.description).toContain("production");
+      expect(fetched.description).toEqual("production");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -104,8 +101,7 @@ test.provider(
       const fetchedUpdate = yield* crm.getTagValues({
         name: created.value.name,
       });
-      expect(fetchedUpdate.description).toContain("production workloads");
-      expect(fetchedUpdate.description).toContain("alchemy-id=");
+      expect(fetchedUpdate.description).toEqual("production workloads");
 
       const replacedShortName = nextShortName(created.value.shortName);
       const replaced = yield* stack.deploy(
@@ -134,5 +130,8 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+    timeout: 90_000,
+  },
 );

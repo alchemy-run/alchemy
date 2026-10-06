@@ -1,21 +1,17 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const remoteUri =
-  process.env.GCP_CLOUDBUILD_REMOTE_URI ??
-  "https://github.com/octocat/Hello-World.git";
+  process.env.GCP_CLOUDBUILD_REMOTE_URI ?? "https://github.com/octocat/Hello-World.git";
 const standingConnection = process.env.GCP_CLOUDBUILD_CONNECTION;
 const runLifecycle = !!standingConnection && !process.env.FAST;
 
@@ -65,12 +61,10 @@ test.provider(
       expect(readError._tag).toBe("NotFound");
 
       const writeError = yield* Effect.flip(
-        cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories(
-          {
-            repository: missingRepositoryName,
-            body: {},
-          },
-        ),
+        cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories({
+          repository: missingRepositoryName,
+          body: {},
+        }),
       );
       expect(writeError._tag).toBe("NotFound");
 
@@ -84,7 +78,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -117,7 +114,10 @@ test.provider(
       const gone = yield* waitUntilConnectionGone(connection.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -143,51 +143,42 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.remoteUri).toEqual(remoteUri);
       expect(created.annotations).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* cloudbuild.getProjectsLocationsConnectionsRepositories({
-          name: created.name,
-        });
+      const fetched = yield* cloudbuild.getProjectsLocationsConnectionsRepositories({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.remoteUri).toEqual(remoteUri);
       expect(fetched.annotations?.env).toEqual("test");
       expect(fetched.annotations?.["alchemy-id"]).toEqual(expect.any(String));
 
-      const listed =
-        yield* cloudbuild.listProjectsLocationsConnectionsRepositories({
-          parent: created.connection,
-        });
+      const listed = yield* cloudbuild.listProjectsLocationsConnectionsRepositories({
+        parent: created.connection,
+      });
       expect(
-        (listed.repositories ?? []).some(
-          (repository) => repository.name === created.name,
-        ),
+        (listed.repositories ?? []).some((repository) => repository.name === created.name),
       ).toEqual(true);
 
-      const readToken =
-        yield* cloudbuild.accessReadTokenProjectsLocationsConnectionsRepositories(
-          {
-            repository: created.name,
-            body: {},
-          },
-        );
+      const readToken = yield* cloudbuild.accessReadTokenProjectsLocationsConnectionsRepositories({
+        repository: created.name,
+        body: {},
+      });
       expect(readToken.token).toEqual(expect.any(String));
       expect((readToken.token ?? "").length).toBeGreaterThan(0);
 
       const writeToken =
-        yield* cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories(
-          {
-            repository: created.name,
-            body: {},
-          },
-        );
+        yield* cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories({
+          repository: created.name,
+          body: {},
+        });
       expect(writeToken.token).toEqual(expect.any(String));
       expect((writeToken.token ?? "").length).toBeGreaterThan(0);
 
-      const refs =
-        yield* cloudbuild.fetchGitRefsProjectsLocationsConnectionsRepositories({
-          repository: created.name,
-          refType: "BRANCH",
-        });
-      expect(Array.isArray(refs.refNames ?? [])).toEqual(true);
+      const refs = yield* cloudbuild.fetchGitRefsProjectsLocationsConnectionsRepositories({
+        repository: created.name,
+        refType: "BRANCH",
+      });
+      // Every repository has at least its default branch.
+      expect(refs.refNames?.length ?? 0).toBeGreaterThan(0);
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
@@ -207,10 +198,9 @@ test.provider.skipIf(!runLifecycle)(
         role: "source",
       });
 
-      const fetchedReplace =
-        yield* cloudbuild.getProjectsLocationsConnectionsRepositories({
-          name: replaced.name,
-        });
+      const fetchedReplace = yield* cloudbuild.getProjectsLocationsConnectionsRepositories({
+        name: replaced.name,
+      });
       expect(fetchedReplace.annotations?.env).toEqual("prod");
       expect(fetchedReplace.annotations?.role).toEqual("source");
 
@@ -219,5 +209,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilRepositoryGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+    timeout: 90_000,
+  },
 );

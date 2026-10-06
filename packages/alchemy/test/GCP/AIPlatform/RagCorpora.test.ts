@@ -1,22 +1,22 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// New projects must switch RAG Engine to Serverless mode first; otherwise
+// create fails with BadRequest "For new projects, using Spanner mode with
+// RAG Engine in us-central1, us-east1, and us-east4 is restricted to only
+// allowlisted projects." Set GCP_TEST_AIPLATFORM_RAG=1 once the project's
+// RagEngineConfig is Serverless.
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_AIPLATFORM_RAG;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsRagCorpora({ name }).pipe(
@@ -39,30 +39,45 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsRagCorpora({
-          name: `${parent}/ragCorpora/alchemy-missing`,
+          name: `${parent}/ragCorpora/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsRagCorpora({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ ragCorpora: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.ragCorpora ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsRagCorpora({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.ragCorpora ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/ragCorpora/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider.skipIf(runLifecycle)(
+  "createProjectsLocationsRagCorpora is rejected until RAG Engine is Serverless",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+      const error = yield* Effect.flip(
+        aiplatform.createProjectsLocationsRagCorpora({
+          parent: `projects/${project}/locations/us-central1`,
+          body: { displayName: "alchemy-rag-probe" },
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
+      expect(String(error.message)).toContain("Spanner mode");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -110,5 +125,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 180_000,
+  },
 );

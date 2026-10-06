@@ -16,6 +16,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 // A zone, not a region: `GCP.Region` has no zone and a regional default would triple node count.
@@ -38,9 +39,7 @@ export type NodePoolAutoscaling = {
   /** Maximum nodes across all zones. */
   totalMaxNodeCount?: number;
   /** Scale-up location policy (`BALANCED`, `ANY`). */
-  locationPolicy?:
-    | container.NodePoolAutoscalingLocationPolicyEnum
-    | (string & {});
+  locationPolicy?: container.NodePoolAutoscalingLocationPolicyEnum | (string & {});
   /** Allow NAP to delete this pool. */
   autoprovisioned?: boolean;
 };
@@ -302,9 +301,7 @@ export type NodePool = Resource<
  */
 export const NodePool = Resource<NodePool>("GCP.Container.NodePool");
 
-export class NodePoolNotResolved extends Data.TaggedError(
-  "GCP.Container.NodePoolNotResolved",
-)<{
+export class NodePoolNotResolved extends Data.TaggedError("GCP.Container.NodePoolNotResolved")<{
   name: string;
 }> {}
 
@@ -314,9 +311,7 @@ export class NodePoolClusterMissing extends Data.TaggedError(
   message: string;
 }> {}
 
-export class NodePoolNotReady extends Data.TaggedError(
-  "GCP.Container.NodePoolNotReady",
-)<{
+export class NodePoolNotReady extends Data.TaggedError("GCP.Container.NodePoolNotReady")<{
   name: string;
   status: string;
 }> {}
@@ -328,15 +323,7 @@ export class NodePoolOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-export class NodePoolOperationPending extends Data.TaggedError(
-  "GCP.Container.NodePoolOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class NodePoolStillExists extends Data.TaggedError(
-  "GCP.Container.NodePoolStillExists",
-)<{
+export class NodePoolStillExists extends Data.TaggedError("GCP.Container.NodePoolStillExists")<{
   name: string;
 }> {}
 
@@ -365,12 +352,8 @@ const rfc1035 = (name: string): string => {
 const clusterNameOf = (project: string, location: string, clusterId: string) =>
   `projects/${project}/locations/${location}/clusters/${clusterId}`;
 
-const resourceName = (
-  project: string,
-  location: string,
-  clusterId: string,
-  nodePoolId: string,
-) => `${clusterNameOf(project, location, clusterId)}/nodePools/${nodePoolId}`;
+const resourceName = (project: string, location: string, clusterId: string, nodePoolId: string) =>
+  `${clusterNameOf(project, location, clusterId)}/nodePools/${nodePoolId}`;
 
 const parseName = (name: string) => {
   const idx = name.indexOf("projects/");
@@ -378,21 +361,19 @@ const parseName = (name: string) => {
   const parts = path.split("/").filter((part) => part.length > 0);
   const poolsAt = parts.lastIndexOf("nodePools");
   const clustersAt = parts.lastIndexOf("clusters");
-  const locationsAt = parts.lastIndexOf("locations");
+  // `selfLink` spells the location as `zones/{zone}` (zonal clusters) or
+  // `regions/{region}`; resource names use `locations/{location}`.
+  const locationsAt = Math.max(
+    parts.lastIndexOf("locations"),
+    parts.lastIndexOf("zones"),
+    parts.lastIndexOf("regions"),
+  );
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    clusterId:
-      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
-    nodePoolId:
-      poolsAt >= 0 && parts[poolsAt + 1]
-        ? parts[poolsAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    clusterId: clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
+    nodePoolId: poolsAt >= 0 && parts[poolsAt + 1] ? parts[poolsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -403,9 +384,7 @@ const parseClusterRef = (
 ) => {
   const trimmed = cluster.trim();
   if (trimmed.includes("/clusters/") || trimmed.includes("projects/")) {
-    const parsed = parseName(
-      trimmed.includes("/nodePools/") ? trimmed : `${trimmed}/nodePools/_`,
-    );
+    const parsed = parseName(trimmed.includes("/nodePools/") ? trimmed : `${trimmed}/nodePools/_`);
     return {
       project: parsed.project || fallbackProject,
       location: normalizeLocation(parsed.location || fallbackLocation),
@@ -441,10 +420,7 @@ const sameStringMap = (
   const a = stringMap(left);
   const b = stringMap(right);
   const keys = Object.keys(a);
-  return (
-    keys.length === Object.keys(b).length &&
-    keys.every((key) => a[key] === b[key])
-  );
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 };
 
 const taintKey = (taint: NodePoolTaint) =>
@@ -506,9 +482,7 @@ const toAttrs = (
 ) => {
   const selfLink = pool.selfLink ?? "";
   const parsed = parseName(
-    selfLink.length > 0
-      ? selfLink
-      : resourceName(project, location, clusterId, pool.name ?? ""),
+    selfLink.length > 0 ? selfLink : resourceName(project, location, clusterId, pool.name ?? ""),
   );
   const nodePoolId = pool.name || parsed.nodePoolId;
   const resolvedProject = parsed.project || project;
@@ -516,24 +490,16 @@ const toAttrs = (
   const resolvedCluster = parsed.clusterId || clusterId;
   const config = pool.config;
   return {
-    name: resourceName(
-      resolvedProject,
-      resolvedLocation,
-      resolvedCluster,
-      nodePoolId,
-    ),
+    name: resourceName(resolvedProject, resolvedLocation, resolvedCluster, nodePoolId),
     nodePoolId,
     clusterId: resolvedCluster,
-    clusterName: clusterNameOf(
-      resolvedProject,
-      resolvedLocation,
-      resolvedCluster,
-    ),
+    clusterName: clusterNameOf(resolvedProject, resolvedLocation, resolvedCluster),
     project: resolvedProject,
     location: resolvedLocation,
     status: pool.status,
     version: pool.version,
-    nodeCount: pool.initialNodeCount ?? DEFAULT_NODE_COUNT,
+    // The API omits a zero count.
+    nodeCount: pool.initialNodeCount ?? 0,
     machineType: config?.machineType,
     diskSizeGb: config?.diskSizeGb,
     diskType: config?.diskType,
@@ -580,91 +546,34 @@ const operationResourceName = (
   return `projects/${project}/locations/${loc}/operations/${lastSegment(raw)}`;
 };
 
-const operationErrorText = (operation: container.Operation) =>
-  operation.error?.message ??
-  operation.statusMessage ??
-  operation.detail ??
-  "operation failed";
-
-const isAlreadyExists = (operation: container.Operation) => {
-  if (operation.error?.code === 6) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("already exists") || text.includes("alreadyexist");
-};
-
-const isNotFoundOperation = (operation: container.Operation) => {
-  if (operation.error?.code === 5) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("not found") || text.includes("notfound");
-};
-
+/**
+ * Wait for a GKE node-pool operation (create/delete takes several
+ * minutes). ALREADY_EXISTS (code 6) counts as success (create race); with
+ * `notFoundOk`, so does NOT_FOUND (code 5, delete race) and an operation
+ * that is already gone.
+ */
 const waitForOperation = (
   project: string,
   location: string,
   operation: container.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operationResourceName(project, location, operation);
-    if (name.length === 0 || name.endsWith("/operations/")) {
-      return yield* new NodePoolOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const failIfErrored = (current: container.Operation) => {
-      const ignore =
-        isAlreadyExists(current) ||
-        (options?.notFoundOk === true && isNotFoundOperation(current));
-      return current.error && !ignore
-        ? Effect.fail(
-            new NodePoolOperationFailed({
-              operation: name,
-              message: operationErrorText(current),
-            }),
-          )
-        : Effect.succeed(current);
-    };
-
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(operation);
-    }
-
-    const getOperation = container.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                status: "DONE",
-              } satisfies container.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        () => new NodePoolOperationPending({ operation: name }),
-      ),
-      Effect.flatMap(failIfErrored),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Container.NodePoolOperationPending",
-        // Node pool create/delete takes several minutes.
-        times: 60,
-        schedule: Schedule.spaced("10 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    {
+      ...operation,
+      name: operationResourceName(project, location, operation),
+    },
+    (name) => container.getProjectsLocationsOperations({ name }),
+    { budget: "20 minutes", interval: "10 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -693,9 +602,7 @@ const waitUntilReady = (name: string) =>
       (pool) =>
         new NodePoolOperationFailed({
           operation: name,
-          message:
-            pool.statusMessage ??
-            `node pool is in ${pool.status ?? "STATUS_UNSPECIFIED"}`,
+          message: pool.statusMessage ?? `node pool is in ${pool.status ?? "STATUS_UNSPECIFIED"}`,
         }),
     ),
     Effect.filterOrFail(
@@ -722,9 +629,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined
-        ? Effect.void
-        : Effect.fail(new NodePoolStillExists({ name })),
+      pool === undefined ? Effect.void : Effect.fail(new NodePoolStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.NodePoolStillExists",
@@ -734,9 +639,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const retryConflict = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryConflict = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -749,6 +652,7 @@ const toCreatePool = (
   news: NodePoolProps,
   nodePoolId: string,
   desiredLabels: Record<string, string>,
+  workloadIdentity: boolean,
 ): container.NodePool => ({
   name: nodePoolId,
   initialNodeCount: news.nodeCount ?? DEFAULT_NODE_COUNT,
@@ -767,29 +671,24 @@ const toCreatePool = (
     serviceAccount: news.serviceAccount,
     localSsdCount: news.localSsdCount,
     bootDiskKmsKey: news.bootDiskKmsKey,
-    workloadMetadataConfig: { mode: "GKE_METADATA" },
+    // GKE rejects GKE_METADATA on clusters without Workload Identity.
+    workloadMetadataConfig: workloadIdentity ? { mode: "GKE_METADATA" } : undefined,
   },
   autoscaling: news.autoscaling,
   management: news.management,
   version: news.version,
   locations: news.nodeLocations,
   maxPodsConstraint:
-    news.maxPodsPerNode !== undefined
-      ? { maxPodsPerNode: String(news.maxPodsPerNode) }
-      : undefined,
+    news.maxPodsPerNode !== undefined ? { maxPodsPerNode: String(news.maxPodsPerNode) } : undefined,
   upgradeSettings: news.upgradeSettings,
 });
 
-const poolLabels = (pool: container.NodePool) =>
-  tagRecord(pool.config?.resourceLabels);
+const poolLabels = (pool: container.NodePool) => tagRecord(pool.config?.resourceLabels);
 
 const systemLabels = (labels: Record<string, string>) =>
-  Object.fromEntries(
-    Object.entries(labels).filter(([key]) => key.startsWith("goog-")),
-  );
+  Object.fromEntries(Object.entries(labels).filter(([key]) => key.startsWith("goog-")));
 
-const shortName = (value: string | undefined, fallback: string) =>
-  lastSegment(value ?? fallback);
+const shortName = (value: string | undefined, fallback: string) => lastSegment(value ?? fallback);
 
 const desiredManagement = (
   news: NodePoolManagement,
@@ -801,15 +700,7 @@ const desiredManagement = (
 
 export const NodePoolProvider = () =>
   Provider.succeed(NodePool, {
-    stables: [
-      "name",
-      "nodePoolId",
-      "clusterId",
-      "clusterName",
-      "project",
-      "location",
-      "selfLink",
-    ],
+    stables: ["name", "nodePoolId", "clusterId", "clusterName", "project", "location", "selfLink"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -819,24 +710,17 @@ export const NodePoolProvider = () =>
 
       const previousId = olds?.nodePoolId ?? output?.nodePoolId;
       const nextId = news.nodePoolId ?? previousId;
-      const previousCluster = lastSegment(
-        olds?.cluster ?? output?.clusterId ?? "",
-      );
+      const previousCluster = lastSegment(olds?.cluster ?? output?.clusterId ?? "");
       const nextCluster = lastSegment(
-        parseClusterRef(news.cluster, "", news.location ?? output?.location)
-          .clusterId,
+        parseClusterRef(news.cluster, "", news.location ?? output?.location).clusterId,
       );
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
       const nextLocation = normalizeLocation(
-        parseClusterRef(news.cluster, "", news.location ?? output?.location)
-          .location,
+        parseClusterRef(news.cluster, "", news.location ?? output?.location).location,
       );
       const previousSpot = olds?.spot === true || output?.spot === true;
       const nextSpot = news.spot === true;
-      const previousPreemptible =
-        olds?.preemptible === true || output?.preemptible === true;
+      const previousPreemptible = olds?.preemptible === true || output?.preemptible === true;
       const nextPreemptible = news.preemptible === true;
       const previousSa = olds?.serviceAccount ?? "";
       const nextSa = news.serviceAccount ?? previousSa;
@@ -850,23 +734,16 @@ export const NodePoolProvider = () =>
       const nextScopes = news.oauthScopes ?? previousScopes;
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousCluster.length > 0 &&
-          nextCluster.length > 0 &&
-          previousCluster !== nextCluster) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousCluster.length > 0 && nextCluster.length > 0 && previousCluster !== nextCluster) ||
         previousLocation !== nextLocation ||
         previousSpot !== nextSpot ||
         previousPreemptible !== nextPreemptible ||
         previousSa !== nextSa ||
         previousKms !== nextKms ||
         previousSsds !== nextSsds ||
-        (previousPods !== undefined &&
-          nextPods !== undefined &&
-          previousPods !== nextPods) ||
-        (news.oauthScopes !== undefined &&
-          !sameStrings(previousScopes, nextScopes));
+        (previousPods !== undefined && nextPods !== undefined && previousPods !== nextPods) ||
+        (news.oauthScopes !== undefined && !sameStrings(previousScopes, nextScopes));
 
       if (!replace) return undefined;
       return {
@@ -882,20 +759,23 @@ export const NodePoolProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const nodePoolId = yield* toId(id, olds?.nodePoolId, output?.nodePoolId);
-      const ref = parseClusterRef(
-        olds?.cluster ?? output?.clusterName ?? output?.clusterId ?? "",
-        env.project,
-        olds?.location ?? output?.location,
-      );
+      const clusterRef =
+        (typeof olds?.cluster === "string" ? olds.cluster : undefined) ??
+        output?.clusterName ??
+        output?.clusterId ??
+        "";
+      // A pool whose cluster never resolved (e.g. the cluster create failed)
+      // was never created and cannot be looked up.
+      if (output?.name === undefined && clusterRef.trim().length === 0) {
+        return undefined;
+      }
+      const ref = parseClusterRef(clusterRef, env.project, olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(ref.project, ref.location, ref.clusterId, nodePoolId);
+        output?.name ?? resourceName(ref.project, ref.location, ref.clusterId, nodePoolId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, ref.project, ref.location, ref.clusterId);
-      return (yield* hasAlchemyLabels(id, poolLabels(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, poolLabels(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -907,11 +787,6 @@ export const NodePoolProvider = () =>
           })
           .pipe(
             Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                clusters: [],
-              } satisfies container.ListClustersResponse),
-            ),
-            Effect.catchTag("Forbidden", () =>
               Effect.succeed({
                 clusters: [],
               } satisfies container.ListClustersResponse),
@@ -930,9 +805,7 @@ export const NodePoolProvider = () =>
               ),
           );
           const project = parsed.project || env.project;
-          const location = normalizeLocation(
-            cluster.location ?? parsed.location,
-          );
+          const location = normalizeLocation(cluster.location ?? parsed.location);
           const clusterId = cluster.name || parsed.clusterId;
           const nested = cluster.nodePools;
           const pools =
@@ -944,12 +817,7 @@ export const NodePoolProvider = () =>
                   })
                   .pipe(
                     Effect.map((response) => response.nodePools ?? []),
-                    Effect.catchTag("NotFound", () =>
-                      Effect.succeed([] as container.NodePool[]),
-                    ),
-                    Effect.catchTag("Forbidden", () =>
-                      Effect.succeed([] as container.NodePool[]),
-                    ),
+                    Effect.catchTag("NotFound", () => Effect.succeed([] as container.NodePool[])),
                   );
           for (const pool of pools) {
             if (
@@ -968,22 +836,12 @@ export const NodePoolProvider = () =>
       const env = yield* GcpEnvironment.current;
       if (news.cluster === undefined || news.cluster.length === 0) {
         return yield* new NodePoolClusterMissing({
-          message:
-            "GCP.Container.NodePool requires `cluster` (cluster id or full resource name).",
+          message: "GCP.Container.NodePool requires `cluster` (cluster id or full resource name).",
         });
       }
-      const ref = parseClusterRef(
-        news.cluster,
-        env.project,
-        news.location ?? output?.location,
-      );
+      const ref = parseClusterRef(news.cluster, env.project, news.location ?? output?.location);
       const nodePoolId = yield* toId(id, news.nodePoolId, output?.nodePoolId);
-      const name = resourceName(
-        ref.project,
-        ref.location,
-        ref.clusterId,
-        nodePoolId,
-      );
+      const name = resourceName(ref.project, ref.location, ref.clusterId, nodePoolId);
       const parent = clusterNameOf(ref.project, ref.location, ref.clusterId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -997,12 +855,16 @@ export const NodePoolProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
+        const cluster = yield* container
+          .getProjectsLocationsClusters({ name: parent })
+          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        const workloadIdentity = (cluster?.workloadIdentityConfig?.workloadPool ?? "").length > 0;
         const created = yield* retryConflict(
           container
             .createProjectsLocationsClustersNodePools({
               parent,
               body: {
-                nodePool: toCreatePool(news, nodePoolId, desiredLabels),
+                nodePool: toCreatePool(news, nodePoolId, desiredLabels, workloadIdentity),
               },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
@@ -1033,39 +895,27 @@ export const NodePoolProvider = () =>
       const nextLabels = { ...systemLabels(observedLabels), ...desiredLabels };
       const { upsert, removed } = diffLabels(observedLabels, nextLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const observedMachine = shortName(
-        live.config?.machineType,
-        DEFAULT_MACHINE_TYPE,
-      );
-      const machineChanged =
-        observedMachine.toLowerCase() !== machineType.toLowerCase();
+      const observedMachine = shortName(live.config?.machineType, DEFAULT_MACHINE_TYPE);
+      const machineChanged = observedMachine.toLowerCase() !== machineType.toLowerCase();
       const observedDiskSize = live.config?.diskSizeGb ?? DEFAULT_DISK_SIZE_GB;
       const diskSizeChanged = observedDiskSize !== diskSizeGb;
-      const observedDiskType = shortName(
-        live.config?.diskType,
-        DEFAULT_DISK_TYPE,
-      ).toLowerCase();
+      const observedDiskType = shortName(live.config?.diskType, DEFAULT_DISK_TYPE).toLowerCase();
       const diskTypeChanged = observedDiskType !== diskType.toLowerCase();
       const imageChanged =
-        news.imageType !== undefined &&
-        (live.config?.imageType ?? "") !== news.imageType;
-      const versionChanged =
-        news.version !== undefined && (live.version ?? "") !== news.version;
+        news.imageType !== undefined && (live.config?.imageType ?? "") !== news.imageType;
+      const versionChanged = news.version !== undefined && (live.version ?? "") !== news.version;
       const nodeLabelsChanged =
         news.nodeLabels !== undefined &&
         !sameStringMap(stringMap(live.config?.labels), news.nodeLabels);
       const tagsChanged =
-        news.tags !== undefined &&
-        !sameStrings(live.config?.tags ?? [], news.tags);
+        news.tags !== undefined && !sameStrings(live.config?.tags ?? [], news.tags);
       const taintsChanged =
-        news.taints !== undefined &&
-        !sameTaints(live.config?.taints, news.taints);
+        news.taints !== undefined && !sameTaints(live.config?.taints, news.taints);
       const upgradeChanged =
         news.upgradeSettings !== undefined &&
         upgradeKey(live.upgradeSettings) !== upgradeKey(news.upgradeSettings);
       const locationsChanged =
-        news.nodeLocations !== undefined &&
-        !sameStrings(live.locations ?? [], news.nodeLocations);
+        news.nodeLocations !== undefined && !sameStrings(live.locations ?? [], news.nodeLocations);
 
       const configChanged =
         labelsChanged ||
@@ -1136,10 +986,7 @@ export const NodePoolProvider = () =>
       }
 
       if (news.management !== undefined) {
-        const nextManagement = desiredManagement(
-          news.management,
-          live.management,
-        );
+        const nextManagement = desiredManagement(news.management, live.management);
         if (managementKey(live.management) !== managementKey(nextManagement)) {
           const managed = yield* retryConflict(
             container.setManagementProjectsLocationsClustersNodePools({
@@ -1152,12 +999,8 @@ export const NodePoolProvider = () =>
       }
 
       const autoscalingOn =
-        news.autoscaling?.enabled === true ||
-        live.autoscaling?.enabled === true;
-      if (
-        !autoscalingOn &&
-        (live.initialNodeCount ?? DEFAULT_NODE_COUNT) !== nodeCount
-      ) {
+        news.autoscaling?.enabled === true || live.autoscaling?.enabled === true;
+      if (!autoscalingOn && (live.initialNodeCount ?? 0) !== nodeCount) {
         const resized = yield* retryConflict(
           container.setSizeProjectsLocationsClustersNodePools({
             name,

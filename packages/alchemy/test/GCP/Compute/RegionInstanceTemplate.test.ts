@@ -1,26 +1,19 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 
-const waitUntilGone = (
-  projectId: string,
-  regionName: string,
-  templateName: string,
-) =>
+const waitUntilGone = (projectId: string, regionName: string, templateName: string) =>
   compute
     .getRegionInstanceTemplates({
       project: projectId,
@@ -54,8 +47,7 @@ test.provider(
               {
                 boot: true,
                 autoDelete: true,
-                sourceImage:
-                  "projects/debian-cloud/global/images/family/debian-12",
+                sourceImage: "projects/debian-cloud/global/images/family/debian-12",
                 diskSizeGb: 10,
               },
             ],
@@ -78,9 +70,7 @@ test.provider(
       expect(fetched.name).toEqual(created.templateName);
       expect(fetched.properties?.machineType).toEqual("e2-micro");
       expect(fetched.properties?.labels?.env).toEqual("test");
-      expect(fetched.properties?.labels?.["alchemy-id"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetched.properties?.labels?.["alchemy-id"]).toEqual(expect.any(String));
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -93,8 +83,7 @@ test.provider(
               {
                 boot: true,
                 autoDelete: true,
-                sourceImage:
-                  "projects/debian-cloud/global/images/family/debian-12",
+                sourceImage: "projects/debian-cloud/global/images/family/debian-12",
                 diskSizeGb: 10,
               },
             ],
@@ -120,5 +109,5 @@ test.provider(
       const gone = yield* waitUntilGone(project, region, created.templateName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

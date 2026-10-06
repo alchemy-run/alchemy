@@ -1,20 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle = !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   privateca.getProjectsLocationsCertificateTemplates({ name }).pipe(
@@ -46,14 +41,16 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.certificateTemplates ?? [])).toEqual(true);
+      expect((page.certificateTemplates ?? []).map((template) => template.name)).not.toContain(
+        `projects/${project}/locations/us-central1/certificateTemplates/alchemy-template-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:privateca", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, replace, and delete a certificate template",
   (stack) =>
     Effect.gen(function* () {
@@ -93,32 +90,22 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.description).toEqual("leaf tls a");
       expect(created.maximumLifetime).toEqual("86400s");
       expect(created.labels).toMatchObject({ env: "test" });
-      expect(created.identityConstraints?.allowSubjectPassthrough).toEqual(
-        true,
-      );
-      expect(
-        created.identityConstraints?.allowSubjectAltNamesPassthrough,
-      ).toEqual(true);
-      expect(created.passthroughExtensions?.knownExtensions).toContain(
-        "EXTENDED_KEY_USAGE",
-      );
+      expect(created.identityConstraints?.allowSubjectPassthrough).toEqual(true);
+      expect(created.identityConstraints?.allowSubjectAltNamesPassthrough).toEqual(true);
+      expect(created.passthroughExtensions?.knownExtensions).toContain("EXTENDED_KEY_USAGE");
       expect(created.predefinedValues?.caOptions?.isCa).toEqual(false);
       expect(created.createTime).toEqual(expect.any(String));
 
-      const fetched = yield* privateca.getProjectsLocationsCertificateTemplates(
-        {
-          name: created.name,
-        },
-      );
+      const fetched = yield* privateca.getProjectsLocationsCertificateTemplates({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("leaf tls a");
       expect(fetched.maximumLifetime).toEqual("86400s");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -153,20 +140,15 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toEqual("leaf tls b");
       expect(updated.maximumLifetime).toEqual("172800s");
       expect(updated.labels).toMatchObject({ env: "prod", role: "tls" });
-      expect(
-        updated.identityConstraints?.allowSubjectAltNamesPassthrough,
-      ).toEqual(false);
+      expect(updated.identityConstraints?.allowSubjectAltNamesPassthrough).toEqual(false);
       expect(updated.passthroughExtensions?.knownExtensions).toEqual(
         expect.arrayContaining(["BASE_KEY_USAGE", "EXTENDED_KEY_USAGE"]),
       );
-      expect(
-        updated.predefinedValues?.keyUsage?.extendedKeyUsage?.clientAuth,
-      ).toEqual(true);
+      expect(updated.predefinedValues?.keyUsage?.extendedKeyUsage?.clientAuth).toEqual(true);
 
-      const refetched =
-        yield* privateca.getProjectsLocationsCertificateTemplates({
-          name: created.name,
-        });
+      const refetched = yield* privateca.getProjectsLocationsCertificateTemplates({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("leaf tls b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("tls");
@@ -189,16 +171,13 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(replaced.location).toEqual("us-east1");
-      expect(replaced.certificateTemplateId).toEqual(
-        created.certificateTemplateId,
-      );
+      expect(replaced.certificateTemplateId).toEqual(created.certificateTemplateId);
       expect(replaced.name).not.toEqual(created.name);
       expect(replaced.name).toContain("/locations/us-east1/");
 
-      const fetchedReplacement =
-        yield* privateca.getProjectsLocationsCertificateTemplates({
-          name: replaced.name,
-        });
+      const fetchedReplacement = yield* privateca.getProjectsLocationsCertificateTemplates({
+        name: replaced.name,
+      });
       expect(fetchedReplacement.name).toEqual(replaced.name);
       expect(fetchedReplacement.labels?.env).toEqual("prod");
 
@@ -210,5 +189,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:privateca", "live"],
+    timeout: 120_000,
+  },
 );

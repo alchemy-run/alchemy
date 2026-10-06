@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   certificatemanager.getProjectsLocationsCertificateMaps({ name }).pipe(
@@ -48,18 +45,15 @@ test.provider(
       expect(created.gclbTargets).toEqual([]);
       expect(created.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* certificatemanager.getProjectsLocationsCertificateMaps({
-          name: created.name,
-        });
+      const fetched = yield* certificatemanager.getProjectsLocationsCertificateMaps({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("frontend map a");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -76,10 +70,9 @@ test.provider(
       expect(updated.description).toEqual("frontend map b");
       expect(updated.labels).toMatchObject({ env: "prod", role: "tls" });
 
-      const refetched =
-        yield* certificatemanager.getProjectsLocationsCertificateMaps({
-          name: created.name,
-        });
+      const refetched = yield* certificatemanager.getProjectsLocationsCertificateMaps({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("frontend map b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("tls");
@@ -89,5 +82,8 @@ test.provider(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+    timeout: 90_000,
+  },
 );

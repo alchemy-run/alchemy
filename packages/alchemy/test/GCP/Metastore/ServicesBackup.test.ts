@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as metastore from "@distilled.cloud/gcp/metastore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "getProjectsLocationsServicesBackups on a missing backup fails with a typed tag",
@@ -25,23 +22,11 @@ test.provider(
           name: `projects/${project}/locations/us-central1/services/alchemy-missing-service/backups/alchemy-missing-backup`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* metastore
-        .listProjectsLocationsServicesBackups({
-          parent: `projects/${project}/locations/-/services/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ backups: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.backups ?? [])).toEqual(true);
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:metastore", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -61,17 +46,9 @@ test.provider(
           }),
         ),
       );
-      expect([
-        "BadRequest",
-        "NotFound",
-        "Forbidden",
-        "GCP.Metastore.OperationFailed",
-        "GCP.Metastore.ResourceFailed",
-        "GCP.Metastore.ResourceNotReady",
-        "GCP.Metastore.ResourceNotResolved",
-      ]).toContain(error._tag);
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:metastore", "live"], timeout: 90_000 },
 );

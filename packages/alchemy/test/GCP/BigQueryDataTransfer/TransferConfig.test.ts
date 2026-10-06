@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bqdt from "@distilled.cloud/gcp/bigquerydatatransfer_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const LOCATION = "us-central1";
 
@@ -41,15 +38,12 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page = yield* bqdt.listProjectsLocationsTransferConfigs({
-        parent: `projects/${project}/locations/${LOCATION}`,
-        pageSize: 10,
-      });
-      expect(Array.isArray(page.transferConfigs ?? [])).toEqual(true);
-
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:bigquerydatatransfer", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -148,5 +142,8 @@ test.provider(
       const gone = yield* waitUntilGone(updated.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:bigquerydatatransfer", "live"],
+    timeout: 120_000,
+  },
 );

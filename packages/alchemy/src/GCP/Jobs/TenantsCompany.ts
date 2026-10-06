@@ -47,9 +47,7 @@ export type TenantsCompanyProps = {
    */
   externalId?: string;
   /**
-   * Display name, for example `"Google LLC"`. Cloud Talent companies
-   * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * Display name shown to job seekers, for example `"Google LLC"`.
    */
   displayName?: string;
   /**
@@ -133,8 +131,9 @@ export type TenantsCompany = Resource<
  * A Cloud Talent Solution company — the hiring entity that owns job
  * postings.
  *
- * Companies have no labels field, so Alchemy stamps ownership into
- * `displayName` and `externalId` for `list` / nuke. Parent tenant and
+ * Companies have no labels field, so Alchemy stamps ownership into the
+ * client-side `externalId` for `list` / nuke (never into the
+ * seeker-visible display name). Parent tenant and
  * company id are identity — changing either replaces the company.
  * Display name, URIs, size, and related fields update in place.
  *
@@ -150,11 +149,13 @@ export type TenantsCompany = Resource<
  * ```
  *
  * ### Updating a Company
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Rename and set headquarters
  * ```typescript
  * const company = yield* GCP.Jobs.TenantsCompany("Labs", {
  *   parent: tenant.name,
- *   companyId: existing.companyId,
  *   displayName: "Acme Research",
  *   headquartersAddress: "Mountain View, CA",
  * });
@@ -163,9 +164,7 @@ export type TenantsCompany = Resource<
  * @resource
  * @category Jobs
  */
-export const TenantsCompany = Resource<TenantsCompany>(
-  "GCP.Jobs.TenantsCompany",
-);
+export const TenantsCompany = Resource<TenantsCompany>("GCP.Jobs.TenantsCompany");
 
 export class TenantsCompanyNotResolved extends Data.TaggedError(
   "GCP.Jobs.TenantsCompanyNotResolved",
@@ -173,8 +172,7 @@ export class TenantsCompanyNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toParent = (project: string, parent: string) =>
-  tenantNameOf(project, parent);
+const toParent = (project: string, parent: string) => tenantNameOf(project, parent);
 
 const toAttrs = (company: jobs.Company, project: string) => {
   const name = company.name ?? "";
@@ -215,13 +213,9 @@ export const TenantsCompanyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = toParent(
-        env.project,
-        olds?.parent ?? output?.parent ?? "",
-      );
+      const parent = toParent(env.project, olds?.parent ?? output?.parent ?? "");
       const name =
-        output?.name ??
-        companyNameOf(parent, olds?.companyId ?? output?.companyId ?? "");
+        output?.name ?? companyNameOf(parent, olds?.companyId ?? output?.companyId ?? "");
       let existing = yield* getCompany(name);
       if (existing === undefined) {
         existing = yield* findOwnedCompany(parent, id);
@@ -245,26 +239,11 @@ export const TenantsCompanyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = toParent(env.project, news.parent);
       const ownership = yield* ownershipLabels(id);
-      const clientId = yield* toGeneratedName(
-        id,
-        news.externalId,
-        output?.externalId,
-      );
-      const display = yield* toGeneratedName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
-      const externalId = encodeOwnershipLine(
-        ownership,
-        clientId,
-        MAX_EXTERNAL_ID_LENGTH,
-      );
-      const displayName = encodeOwnershipLine(
-        ownership,
-        display,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const clientId = yield* toGeneratedName(id, news.externalId, output?.externalId);
+      const display = yield* toGeneratedName(id, news.displayName, output?.displayName);
+      const externalId = encodeOwnershipLine(ownership, clientId, MAX_EXTERNAL_ID_LENGTH);
+      // Shown to job seekers, so no ownership marker (externalId has it).
+      const displayName = display.slice(0, MAX_DISPLAY_NAME_LENGTH);
       const name = output?.name ?? companyNameOf(parent, news.companyId ?? "");
 
       let current = yield* getCompany(name);
@@ -286,13 +265,10 @@ export const TenantsCompanyProvider = () =>
               size: news.size,
               hiringAgency: news.hiringAgency === true ? true : undefined,
               eeoText: news.eeoText,
-              keywordSearchableJobCustomAttributes:
-                news.keywordSearchableJobCustomAttributes,
+              keywordSearchableJobCustomAttributes: news.keywordSearchableJobCustomAttributes,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => findOwnedCompany(parent, id)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwnedCompany(parent, id)));
         current = created ?? undefined;
       }
 
@@ -308,26 +284,16 @@ export const TenantsCompanyProvider = () =>
         currentValue: string | undefined,
         next: string | undefined,
         field: string,
-      ) =>
-        next === undefined || sameText(currentValue, next) ? undefined : field;
+      ) => (next === undefined || sameText(currentValue, next) ? undefined : field);
       const updateMask = updateMaskOf(
         sameText(current.externalId, externalId) ? undefined : "externalId",
         sameText(current.displayName, displayName) ? undefined : "displayName",
         optionalText(current.websiteUri, news.websiteUri, "websiteUri"),
-        optionalText(
-          current.careerSiteUri,
-          news.careerSiteUri,
-          "careerSiteUri",
-        ),
+        optionalText(current.careerSiteUri, news.careerSiteUri, "careerSiteUri"),
         optionalText(current.imageUri, news.imageUri, "imageUri"),
-        optionalText(
-          current.headquartersAddress,
-          news.headquartersAddress,
-          "headquartersAddress",
-        ),
+        optionalText(current.headquartersAddress, news.headquartersAddress, "headquartersAddress"),
         optionalText(current.size, news.size, "size"),
-        news.hiringAgency !== undefined &&
-          !sameBoolean(current.hiringAgency, desiredHiring)
+        news.hiringAgency !== undefined && !sameBoolean(current.hiringAgency, desiredHiring)
           ? "hiringAgency"
           : undefined,
         optionalText(current.eeoText, news.eeoText, "eeoText"),
@@ -355,8 +321,7 @@ export const TenantsCompanyProvider = () =>
             size: news.size,
             hiringAgency: desiredHiring,
             eeoText: news.eeoText ?? "",
-            keywordSearchableJobCustomAttributes:
-              news.keywordSearchableJobCustomAttributes ?? [],
+            keywordSearchableJobCustomAttributes: news.keywordSearchableJobCustomAttributes ?? [],
           },
         });
       }

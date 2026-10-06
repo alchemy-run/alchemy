@@ -1,22 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent } from "./parent.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
-const location = "us-central1";
+const runLifecycle = !process.env.FAST;
+// Non-global Dialogflow CX locations need the {region}-dialogflow host, which
+// distilled does not route to yet; the global location works everywhere.
+const location = "global";
 const agentDisplayName = "alch-df-atrg";
 
 const waitUntilGone = (name: string) =>
@@ -42,11 +41,14 @@ test.provider(
           name: `projects/${project}/locations/${location}/agents/missing/transitionRouteGroups/missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 90_000 },
+    }).pipe(logLevel, quotaTolerant),
+  {
+    tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -62,22 +64,19 @@ test.provider.skipIf(!runLifecycle)(
       yield* Effect.gen(function* () {
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* GCP.Dialogflow.AgentsTransitionRouteGroup(
-              "Fallback",
-              {
-                agent: agentName,
-                location,
-                displayName: "g1",
-                transitionRoutes: [
-                  {
-                    condition: "true",
-                    triggerFulfillment: {
-                      messages: [{ text: { text: ["ok"] } }],
-                    },
+            return yield* GCP.Dialogflow.AgentsTransitionRouteGroup("Fallback", {
+              agent: agentName,
+              location,
+              displayName: "g1",
+              transitionRoutes: [
+                {
+                  condition: "true",
+                  triggerFulfillment: {
+                    messages: [{ text: { text: ["ok"] } }],
                   },
-                ],
-              },
-            );
+                },
+              ],
+            });
           }),
         );
 
@@ -88,46 +87,44 @@ test.provider.skipIf(!runLifecycle)(
         expect(created.displayName).toEqual("g1");
         expect(created.transitionRoutes[0]?.condition).toEqual("true");
 
-        const fetched =
-          yield* dialogflow.getProjectsLocationsAgentsTransitionRouteGroups({
-            name: created.name,
-          });
+        const fetched = yield* dialogflow.getProjectsLocationsAgentsTransitionRouteGroups({
+          name: created.name,
+        });
         expect(fetched.name).toEqual(created.name);
         expect(fetched.displayName).toContain("[alc ");
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* GCP.Dialogflow.AgentsTransitionRouteGroup(
-              "Fallback",
-              {
-                agent: agentName,
-                location,
-                transitionRouteGroupId: created.transitionRouteGroupId,
-                displayName: "g2",
-                transitionRoutes: [
-                  {
-                    condition: "true",
-                    triggerFulfillment: {
-                      messages: [{ text: { text: ["sorry"] } }],
-                    },
+            return yield* GCP.Dialogflow.AgentsTransitionRouteGroup("Fallback", {
+              agent: agentName,
+              location,
+              transitionRouteGroupId: created.transitionRouteGroupId,
+              displayName: "g2",
+              transitionRoutes: [
+                {
+                  condition: "true",
+                  triggerFulfillment: {
+                    messages: [{ text: { text: ["sorry"] } }],
                   },
-                ],
-              },
-            );
+                },
+              ],
+            });
           }),
         );
 
         expect(updated.name).toEqual(created.name);
         expect(updated.displayName).toEqual("g2");
         expect(
-          updated.transitionRoutes[0]?.triggerFulfillment?.messages?.[0]?.text
-            ?.text?.[0],
+          updated.transitionRoutes[0]?.triggerFulfillment?.messages?.[0]?.text?.text?.[0],
         ).toEqual("sorry");
 
         yield* stack.destroy();
         const gone = yield* waitUntilGone(created.name);
         expect(gone).toEqual("gone");
       }).pipe(Effect.ensuring(deleteAgent(agentName)));
-    }).pipe(logLevel),
-  { timeout: 120_000 },
+    }).pipe(logLevel, quotaTolerant),
+  {
+    tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+    timeout: 120_000,
+  },
 );

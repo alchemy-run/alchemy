@@ -1,22 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsHyperparameterTuningJobs({ name }).pipe(
@@ -45,7 +38,7 @@ const trialJobSpec = {
       machineSpec: { machineType: "n1-standard-4" },
       replicaCount: "1",
       containerSpec: {
-        imageUri: "gcr.io/cloud-aiplatform/training/tf-cpu.2-8:latest",
+        imageUri: "us-docker.pkg.dev/vertex-ai/training/tf-cpu.2-12.py310:latest",
         command: ["echo", "ok"],
       },
     },
@@ -62,33 +55,27 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsHyperparameterTuningJobs({
-          name: `${parent}/hyperparameterTuningJobs/alchemy-missing`,
+          name: `${parent}/hyperparameterTuningJobs/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsHyperparameterTuningJobs({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ hyperparameterTuningJobs: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.hyperparameterTuningJobs ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsHyperparameterTuningJobs({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.hyperparameterTuningJobs ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/hyperparameterTuningJobs/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and delete a hyperparameter tuning job",
   (stack) =>
     Effect.gen(function* () {
@@ -112,10 +99,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.location).toEqual("us-central1");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsHyperparameterTuningJobs({
-          name: created.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsHyperparameterTuningJobs({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       yield* stack.destroy();
@@ -123,5 +109,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 180_000,
+  },
 );

@@ -2,6 +2,7 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -97,15 +98,11 @@ export type Snapshot = Resource<
  */
 export const Snapshot = Resource<Snapshot>("GCP.PubSub.Snapshot");
 
-export class SnapshotNotResolved extends Data.TaggedError(
-  "GCP.PubSub.SnapshotNotResolved",
-)<{
+export class SnapshotNotResolved extends Data.TaggedError("GCP.PubSub.SnapshotNotResolved")<{
   name: string;
 }> {}
 
-export class SnapshotStillExists extends Data.TaggedError(
-  "GCP.PubSub.SnapshotStillExists",
-)<{
+export class SnapshotStillExists extends Data.TaggedError("GCP.PubSub.SnapshotStillExists")<{
   name: string;
 }> {}
 
@@ -198,9 +195,7 @@ export const SnapshotProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.snapshotId ?? output?.snapshotId;
       const nameChanged =
-        news.snapshotId !== undefined &&
-        previousId !== undefined &&
-        news.snapshotId !== previousId;
+        news.snapshotId !== undefined && previousId !== undefined && news.snapshotId !== previousId;
       const previousSubscription = olds?.subscription;
       const subscriptionChanged =
         previousSubscription !== undefined &&
@@ -224,35 +219,33 @@ export const SnapshotProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const page = yield* pubsub.listProjectsSnapshots({
-          project: `projects/${env.project}`,
-          pageSize: 1000,
-        });
-        return (page.snapshots ?? [])
-          .filter((snapshot) =>
-            Object.keys(snapshot.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
+        return yield* pubsub.listProjectsSnapshots
+          .pages({
+            project: `projects/${env.project}`,
+            pageSize: 1000,
+          })
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.snapshots ?? [])),
+            Stream.filter((snapshot) =>
+              Object.keys(snapshot.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
-          )
-          .map((snapshot) => toAttrs(snapshot, env.project));
+            Stream.map((snapshot) => toAttrs(snapshot, env.project)),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const snapshotId = yield* toId(id, news.snapshotId, output?.snapshotId);
       const name = resourceName(env.project, snapshotId);
-      const subscriptionName = subscriptionNameOf(
-        env.project,
-        news.subscription,
-      );
+      const subscriptionName = subscriptionNameOf(env.project, news.subscription);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

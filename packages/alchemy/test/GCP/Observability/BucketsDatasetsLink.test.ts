@@ -1,26 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as observability from "@distilled.cloud/gcp/observability_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-// Observability API is entitlement-gated on the default testing project.
-// Live create returns Forbidden: "Observability API has not been used in
-// project alchemy-gcp-testing-83661 before or it is disabled." Link
-// create is also an LRO that provisions a BigQuery linked dataset. Set
-// GCP_TEST_OBSERVABILITY=1 on an entitled project to run the lifecycle.
-const entitled = process.env.GCP_TEST_OBSERVABILITY === "1";
-const runLifecycle = entitled && !process.env.FAST;
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   observability.getProjectsLocationsBucketsDatasetsLinks({ name }).pipe(
@@ -33,44 +22,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const findSpansDataset = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
-  const defaultDataset = `projects/${project}/locations/us-central1/buckets/_Trace/datasets/Spans`;
-  const locations = ["us-central1", "global", "-"] as const;
-  for (const location of locations) {
-    const buckets = yield* observability
-      .listProjectsLocationsBuckets({
-        parent: `projects/${project}/locations/${location}`,
-        pageSize: 100,
-      })
-      .pipe(
-        Effect.map((page) => page.buckets ?? []),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed([] as observability.Bucket[]),
-        ),
-      );
-    for (const bucket of buckets) {
-      if (!bucket.name) continue;
-      const datasets = yield* observability
-        .listProjectsLocationsBucketsDatasets({
-          parent: bucket.name,
-          pageSize: 100,
-        })
-        .pipe(
-          Effect.map((page) => page.datasets ?? []),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed([] as observability.Dataset[]),
-          ),
-        );
-      const spans = datasets.find((dataset) =>
-        (dataset.name ?? "").endsWith("/datasets/Spans"),
-      );
-      if (spans?.name) return spans.name;
-      if (datasets[0]?.name) return datasets[0].name;
-    }
-  }
-  return defaultDataset;
-});
+// The `_Trace` bucket and its `Spans` dataset only exist once the project
+// stores trace data in Observability; until then create fails with
+// BadRequest ("Unable to create link; parent bucket of … is not found").
+// Set GCP_TEST_OBSERVABILITY_DATASET to an existing dataset name.
+const spansDataset = process.env.GCP_TEST_OBSERVABILITY_DATASET;
 
 test.provider(
   "getProjectsLocationsBucketsDatasetsLinks on a missing link fails with a typed tag",
@@ -85,24 +41,49 @@ test.provider(
           name: `${defaultDataset}/links/alchemy-missing-link`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Observability API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:observability", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider.skipIf(!!spansDataset)(
+  "createProjectsLocationsBucketsDatasetsLinks without trace storage fails with BadRequest",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+
+      const error = yield* Effect.flip(
+        observability.createProjectsLocationsBucketsDatasetsLinks({
+          parent: `projects/${project}/locations/us-central1/buckets/_Trace/datasets/Spans`,
+          linkId: "alchemy_probe_link",
+          body: {},
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
+      expect(error.message).toContain("parent bucket");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:observability", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider.skipIf(!spansDataset)(
   "create, update, and delete an observability dataset link",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const dataset = yield* findSpansDataset;
+      const dataset = spansDataset!;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -122,10 +103,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.description).toEqual("bigquery analytics");
       expect(created.displayName).toEqual("Trace analytics");
 
-      const fetched =
-        yield* observability.getProjectsLocationsBucketsDatasetsLinks({
-          name: created.name,
-        });
+      const fetched = yield* observability.getProjectsLocationsBucketsDatasetsLinks({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("bigquery analytics");
@@ -145,10 +125,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toEqual("updated analytics");
       expect(updated.displayName).toEqual("Updated traces");
 
-      const fetchedUpdate =
-        yield* observability.getProjectsLocationsBucketsDatasetsLinks({
-          name: created.name,
-        });
+      const fetchedUpdate = yield* observability.getProjectsLocationsBucketsDatasetsLinks({
+        name: created.name,
+      });
       expect(fetchedUpdate.description).toContain("updated analytics");
       expect(fetchedUpdate.displayName).toEqual("Updated traces");
 
@@ -157,5 +136,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:observability", "live"],
+    timeout: 120_000,
+  },
 );

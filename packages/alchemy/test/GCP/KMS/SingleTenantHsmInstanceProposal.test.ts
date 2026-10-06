@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const INSTANCE_ID = "alchemy-sthsm-does-not-exist";
 const PROPOSAL_ID = "alchemy-test-sthsm-proposal";
@@ -37,7 +34,6 @@ const waitUntilGone = (name: string) =>
   kms.getProjectsLocationsSingleTenantHsmInstancesProposals({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -65,7 +61,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(runLifecycle)(
@@ -91,7 +87,7 @@ test.provider.skipIf(runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -116,10 +112,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.refreshSingleTenantHsmInstance).toEqual(true);
       expect(created.project).toEqual(project);
 
-      const fetched =
-        yield* kms.getProjectsLocationsSingleTenantHsmInstancesProposals({
-          name: created.name,
-        });
+      const fetched = yield* kms.getProjectsLocationsSingleTenantHsmInstancesProposals({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       yield* stack.destroy();
@@ -127,5 +122,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 90_000 },
 );

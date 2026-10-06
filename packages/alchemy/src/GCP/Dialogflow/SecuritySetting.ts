@@ -25,23 +25,17 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
+  waitUntilReadable,
 } from "./internal.ts";
 
-export type RedactionStrategy =
-  | "REDACTION_STRATEGY_UNSPECIFIED"
-  | "REDACT_WITH_SERVICE";
+export type RedactionStrategy = "REDACTION_STRATEGY_UNSPECIFIED" | "REDACT_WITH_SERVICE";
 
-export type RedactionScope =
-  | "REDACTION_SCOPE_UNSPECIFIED"
-  | "REDACT_DISK_STORAGE";
+export type RedactionScope = "REDACTION_SCOPE_UNSPECIFIED" | "REDACT_DISK_STORAGE";
 
-export type RetentionStrategy =
-  | "RETENTION_STRATEGY_UNSPECIFIED"
-  | "REMOVE_AFTER_CONVERSATION";
+export type RetentionStrategy = "RETENTION_STRATEGY_UNSPECIFIED" | "REMOVE_AFTER_CONVERSATION";
 
-export type PurgeDataType =
-  | "PURGE_DATA_TYPE_UNSPECIFIED"
-  | "DIALOGFLOW_HISTORY";
+export type PurgeDataType = "PURGE_DATA_TYPE_UNSPECIFIED" | "DIALOGFLOW_HISTORY";
 
 export type AudioFormat = "AUDIO_FORMAT_UNSPECIFIED" | "MULAW" | "MP3" | "OGG";
 
@@ -171,11 +165,12 @@ export type SecuritySetting = Resource<
  * ```
  *
  * ### Updating Security Settings
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Switch to a 30-day window
  * ```typescript
  * const settings = yield* GCP.Dialogflow.SecuritySetting("Retention", {
  *   location: "us-central1",
- *   securitySettingsId: existing.securitySettingsId,
  *   displayName: "thirty-days",
  *   retentionWindowDays: 30,
  * });
@@ -184,9 +179,7 @@ export type SecuritySetting = Resource<
  * @resource
  * @category Dialogflow
  */
-export const SecuritySetting = Resource<SecuritySetting>(
-  "GCP.Dialogflow.SecuritySetting",
-);
+export const SecuritySetting = Resource<SecuritySetting>("GCP.Dialogflow.SecuritySetting");
 
 export class SecuritySettingNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.SecuritySettingNotResolved",
@@ -194,17 +187,11 @@ export class SecuritySettingNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  securitySettingsId: string,
-) =>
+const resourceName = (project: string, location: string, securitySettingsId: string) =>
   `${locationParent(project, location)}/securitySettings/${securitySettingsId}`;
 
 const audioOf = (
-  settings:
-    | dialogflow.GoogleCloudDialogflowCxV3SecuritySettingsAudioExportSettings
-    | undefined,
+  settings: dialogflow.GoogleCloudDialogflowCxV3SecuritySettingsAudioExportSettings | undefined,
 ): AudioExportSettings | undefined => {
   if (settings === undefined) return undefined;
   return {
@@ -217,9 +204,7 @@ const audioOf = (
 };
 
 const insightsOf = (
-  settings:
-    | dialogflow.GoogleCloudDialogflowCxV3SecuritySettingsInsightsExportSettings
-    | undefined,
+  settings: dialogflow.GoogleCloudDialogflowCxV3SecuritySettingsInsightsExportSettings | undefined,
 ): InsightsExportSettings | undefined => {
   if (settings === undefined) return undefined;
   return { enableInsightsExport: settings.enableInsightsExport };
@@ -256,35 +241,23 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsSecuritySettings
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.securitySettings ?? []),
-      ),
-      Stream.filter((settings) => hasOwnershipMarker(settings.displayName)),
-      Stream.map((settings) => toAttrs(settings, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsSecuritySettings.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.securitySettings ?? [])),
+    Stream.filter((settings) => hasOwnershipMarker(settings.displayName)),
+    Stream.map((settings) => toAttrs(settings, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  dialogflow.listProjectsLocationsSecuritySettings
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.securitySettings ?? []),
-      ),
-      Stream.filter((settings) => settings.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsSecuritySettings.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.securitySettings ?? [])),
+    Stream.filter((settings) => settings.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const SecuritySettingProvider = () =>
   Provider.succeed(SecuritySetting, {
@@ -319,8 +292,7 @@ export const SecuritySettingProvider = () =>
         olds?.securitySettingsId,
         output?.securitySettingsId,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, securitySettingsId);
+      const name = output?.name ?? resourceName(env.project, location, securitySettingsId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
         const ownership = yield* internalLabels(id);
@@ -331,9 +303,7 @@ export const SecuritySettingProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -341,8 +311,7 @@ export const SecuritySettingProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listAt(locationParent(env.project, location), env.project),
+          (location) => listAt(locationParent(env.project, location), env.project),
           { concurrency: 2 },
         );
         return pages.flat();
@@ -350,17 +319,14 @@ export const SecuritySettingProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(env.project, location);
       const securitySettingsId = yield* toResourceId(
         id,
         news.securitySettingsId,
         output?.securitySettingsId,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, securitySettingsId);
+      const name = output?.name ?? resourceName(env.project, location, securitySettingsId);
       const ownership = yield* internalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
       const body: dialogflow.GoogleCloudDialogflowCxV3SecuritySettings = {
@@ -374,9 +340,7 @@ export const SecuritySettingProvider = () =>
         insightsExportSettings: news.insightsExportSettings,
         retentionWindowDays: news.retentionWindowDays,
         retentionStrategy:
-          news.retentionWindowDays === undefined
-            ? news.retentionStrategy
-            : undefined,
+          news.retentionWindowDays === undefined ? news.retentionStrategy : undefined,
       };
 
       let current = yield* getByName(name);
@@ -390,12 +354,9 @@ export const SecuritySettingProvider = () =>
             parent,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(parent, displayName),
-            ),
-          );
-        current = created ?? undefined;
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(parent, displayName)));
+        current =
+          created?.name !== undefined ? yield* waitUntilReadable(created.name, getByName) : created;
       }
 
       if (current === undefined) {
@@ -404,37 +365,18 @@ export const SecuritySettingProvider = () =>
 
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
-      const strategyChanged = !sameText(
-        current.redactionStrategy,
-        news.redactionStrategy,
-      );
-      const scopeChanged = !sameText(
-        current.redactionScope,
-        news.redactionScope,
-      );
-      const inspectChanged = !sameText(
-        current.inspectTemplate,
-        news.inspectTemplate,
-      );
-      const deidentifyChanged = !sameText(
-        current.deidentifyTemplate,
-        news.deidentifyTemplate,
-      );
-      const purgeChanged =
-        fingerprint(current.purgeDataTypes) !==
-        fingerprint(news.purgeDataTypes);
+      const strategyChanged = !sameText(current.redactionStrategy, news.redactionStrategy);
+      const scopeChanged = !sameText(current.redactionScope, news.redactionScope);
+      const inspectChanged = !sameText(current.inspectTemplate, news.inspectTemplate);
+      const deidentifyChanged = !sameText(current.deidentifyTemplate, news.deidentifyTemplate);
+      const purgeChanged = fingerprint(current.purgeDataTypes) !== fingerprint(news.purgeDataTypes);
       const audioChanged =
-        fingerprint(audioOf(current.audioExportSettings)) !==
-        fingerprint(news.audioExportSettings);
+        fingerprint(audioOf(current.audioExportSettings)) !== fingerprint(news.audioExportSettings);
       const insightsChanged =
         fingerprint(insightsOf(current.insightsExportSettings)) !==
         fingerprint(news.insightsExportSettings);
-      const windowChanged =
-        (current.retentionWindowDays ?? 0) !== (news.retentionWindowDays ?? 0);
-      const retentionStrategyChanged = !sameText(
-        current.retentionStrategy,
-        body.retentionStrategy,
-      );
+      const windowChanged = (current.retentionWindowDays ?? 0) !== (news.retentionWindowDays ?? 0);
+      const retentionStrategyChanged = !sameText(current.retentionStrategy, body.retentionStrategy);
 
       if (
         displayChanged ||
@@ -467,11 +409,11 @@ export const SecuritySettingProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsSecuritySettings({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

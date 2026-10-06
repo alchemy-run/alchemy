@@ -31,15 +31,15 @@ import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
-import type { AnyBindingEffect } from "./Binding.ts";
 import type { Assets } from "./Assets.ts";
-import type { URLEffect } from "./Worker.ts";
+import type { AnyBindingEffect } from "./Binding.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
+import type { URLEffect } from "./Worker.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
@@ -112,10 +112,7 @@ export interface R2S3CredentialsWorkerBinding {
  * (real id → remote-proxied producer). Stripped from the binding before
  * the script upload — Cloudflare never sees it.
  */
-export type QueueWorkerBinding = Extract<
-  DistilledWorkerBinding,
-  { type: "queue" }
-> & {
+export type QueueWorkerBinding = Extract<DistilledWorkerBinding, { type: "queue" }> & {
   queueId?: string;
   /**
    * Alchemy-only (stripped before upload): dev-mode remote-producer shim
@@ -139,10 +136,7 @@ export type QueueWorkerBinding = Extract<
  * live uploads it is dropped at encode until the distilled `workers`
  * service adds it.
  */
-export type ServiceWorkerBinding = Extract<
-  DistilledWorkerBinding,
-  { type: "service" }
-> & {
+export type ServiceWorkerBinding = Extract<DistilledWorkerBinding, { type: "service" }> & {
   props?: Record<string, unknown>;
 };
 
@@ -158,9 +152,7 @@ export type WireWorkerBinding = Exclude<
 export type WorkerBinding =
   | Exclude<
       DistilledWorkerBinding,
-      | { type: "durable_object_namespace" }
-      | { type: "queue" }
-      | { type: "service" }
+      { type: "durable_object_namespace" } | { type: "queue" } | { type: "service" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
@@ -247,9 +239,7 @@ export type WorkerBindings = {
 };
 
 export const bindWorker = Effect.fn(function* <Shape, Req = never>(
-  workerEff:
-    | (Worker & Rpc<Shape>)
-    | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
+  workerEff: (Worker & Rpc<Shape>) | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
 ) {
   // Worker classes and regular Effects are both yieldable here.
   const worker = isYieldableEffectLike(workerEff)

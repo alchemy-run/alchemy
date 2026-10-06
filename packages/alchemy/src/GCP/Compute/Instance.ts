@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,24 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { type WaitComputeOptions, waitZoneOperation } from "./operations.ts";
+
+export type InstanceAttachedDisk = {
+  /**
+   * Disk URL or partial URL (`zones/{zone}/disks/{disk}`).
+   */
+  source: string;
+  /**
+   * Device name exposed to the guest as `/dev/disk/by-id/google-{deviceName}`.
+   * @default the disk name
+   */
+  deviceName?: string;
+  /**
+   * Attach mode.
+   * @default "READ_WRITE"
+   */
+  mode?: "READ_WRITE" | "READ_ONLY";
+};
 
 export type InstanceProps = {
   /**
@@ -80,6 +97,18 @@ export type InstanceProps = {
    */
   associatePublicIp?: boolean;
   /**
+   * Reserved static external IPv4 address to assign to the primary network
+   * interface (e.g. `GCP.Compute.Address(...).address`). Implies a public
+   * access config; takes precedence over `associatePublicIp`.
+   */
+  natIP?: string;
+  /**
+   * Additional (non-boot) persistent disks to attach, e.g.
+   * `GCP.Compute.Disk(...).selfLink`. The disks must be in the instance's
+   * zone. Disks attached out-of-band that are not listed here are detached.
+   */
+  attachedDisks?: InstanceAttachedDisk[];
+  /**
    * Create a preemptible VM. Immutable — changing it replaces the instance.
    * @default false
    */
@@ -132,6 +161,12 @@ export type Instance = Resource<
     networkIP: string | undefined;
     /** Ephemeral or reserved public IPv4, if any. */
     natIP: string | undefined;
+    /** Additional (non-boot) disks attached to the instance. */
+    attachedDisks: {
+      source: string;
+      deviceName: string | undefined;
+      mode: string | undefined;
+    }[];
     /** Compute Engine self-link. */
     selfLink: string | undefined;
     /** RFC3339 creation timestamp. */
@@ -168,6 +203,25 @@ export type Instance = Resource<
  * });
  * ```
  *
+ * ### Static IPs and Extra Disks
+ * **Example:** Web server with a static IP and a data disk
+ * ```typescript
+ * const ip = yield* GCP.Compute.Address("web-ip", { region: "us-central1" });
+ * const data = yield* GCP.Compute.Disk("web-data", {
+ *   zone: "us-central1-a",
+ *   sizeGb: 10,
+ * });
+ * const vm = yield* GCP.Compute.Instance("web", {
+ *   zone: "us-central1-a",
+ *   natIP: ip.address,
+ *   attachedDisks: [{ source: data.selfLink, deviceName: "data" }],
+ *   tags: ["http-server"],
+ *   metadata: {
+ *     "startup-script": "#!/bin/bash\ncd /tmp && python3 -m http.server 80",
+ *   },
+ * });
+ * ```
+ *
  * ### Starting and Stopping
  * **Example:** Start a bound instance
  * ```typescript
@@ -180,32 +234,18 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.Compute.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.Compute.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.Compute.InstanceNotResolved")<{
   instanceName: string;
   zone: string;
 }> {}
 
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstanceOperationFailed",
-)<{
-  operation: string;
-  code: string;
-  message: string;
-}> {}
-
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.Compute.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.Compute.InstanceStillExists")<{
   instanceName: string;
   zone: string;
   status: string;
 }> {}
 
-export class InstanceNotSettled extends Data.TaggedError(
-  "GCP.Compute.InstanceNotSettled",
-)<{
+export class InstanceNotSettled extends Data.TaggedError("GCP.Compute.InstanceNotSettled")<{
   instanceName: string;
   zone: string;
   status: string;
@@ -213,8 +253,7 @@ export class InstanceNotSettled extends Data.TaggedError(
 
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_MACHINE_TYPE = "e2-micro";
-const DEFAULT_SOURCE_IMAGE =
-  "projects/debian-cloud/global/images/family/debian-12";
+const DEFAULT_SOURCE_IMAGE = "projects/debian-cloud/global/images/family/debian-12";
 const DEFAULT_NETWORK = "global/networks/default";
 const DEFAULT_DISK_SIZE_GB = 10;
 
@@ -236,27 +275,20 @@ const rfc1035 = (name: string): string => {
 };
 
 const machineTypeUrl = (zone: string, machineType: string): string =>
-  machineType.includes("/")
-    ? machineType
-    : `zones/${zone}/machineTypes/${machineType}`;
+  machineType.includes("/") ? machineType : `zones/${zone}/machineTypes/${machineType}`;
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const metadataRecord = (
-  metadata: compute.Metadata | undefined,
-): Record<string, string> =>
+const metadataRecord = (metadata: compute.Metadata | undefined): Record<string, string> =>
   Object.fromEntries(
     (metadata?.items ?? [])
       .filter((item) => item.key !== undefined)
       .map((item) => [item.key!, item.value ?? ""]),
   );
 
-const sameRecord = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-): boolean => {
+const sameRecord = (left: Record<string, string>, right: Record<string, string>): boolean => {
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
     if (left[key] !== right[key]) return false;
@@ -286,6 +318,40 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
+const extraDisks = (instance: compute.Instance) =>
+  (instance.disks ?? []).filter((disk) => disk.boot !== true);
+
+/** Disks are zonal, so the disk name identifies a disk within the zone. */
+const diskKey = (source: string | undefined) => lastSegment(source);
+
+const desiredAttachedDisk = (disk: InstanceAttachedDisk): compute.AttachedDisk => ({
+  source: disk.source,
+  deviceName: disk.deviceName,
+  mode: disk.mode ?? "READ_WRITE",
+  type: "PERSISTENT",
+  autoDelete: false,
+});
+
+type DesiredAccess = { kind: "none" } | { kind: "ephemeral" } | { kind: "static"; natIP: string };
+
+const desiredAccess = (news: InstanceProps): DesiredAccess =>
+  news.natIP !== undefined
+    ? { kind: "static", natIP: news.natIP }
+    : news.associatePublicIp === true
+      ? { kind: "ephemeral" }
+      : { kind: "none" };
+
+const accessConfigsFor = (access: DesiredAccess): compute.AccessConfig[] =>
+  access.kind === "none"
+    ? []
+    : [
+        {
+          type: "ONE_TO_ONE_NAT",
+          name: "External NAT",
+          ...(access.kind === "static" ? { natIP: access.natIP } : {}),
+        },
+      ];
+
 const toAttrs = (instance: compute.Instance, project: string) => {
   const nic = instance.networkInterfaces?.[0];
   return {
@@ -302,6 +368,11 @@ const toAttrs = (instance: compute.Instance, project: string) => {
     canIpForward: instance.canIpForward === true,
     networkIP: nic?.networkIP,
     natIP: nic?.accessConfigs?.[0]?.natIP,
+    attachedDisks: extraDisks(instance).map((disk) => ({
+      source: disk.source ?? "",
+      deviceName: disk.deviceName,
+      mode: disk.mode,
+    })),
     selfLink: instance.selfLink,
     creationTimestamp: instance.creationTimestamp,
     cpuPlatform: instance.cpuPlatform,
@@ -345,19 +416,10 @@ const TRANSITIONAL_STATUSES = new Set([
 ]);
 
 /** Poll until the instance reports a settled status (e.g. `RUNNING`). */
-const waitUntilSettled = (
-  project: string,
-  zone: string,
-  instanceName: string,
-) =>
+const waitUntilSettled = (project: string, zone: string, instanceName: string) =>
   getByName(project, zone, instanceName).pipe(
     Effect.flatMap(
-      (
-        instance,
-      ): Effect.Effect<
-        compute.Instance,
-        InstanceNotResolved | InstanceNotSettled
-      > =>
+      (instance): Effect.Effect<compute.Instance, InstanceNotResolved | InstanceNotSettled> =>
         instance === undefined
           ? Effect.fail(new InstanceNotResolved({ instanceName, zone }))
           : TRANSITIONAL_STATUSES.has(instance.status ?? "")
@@ -379,98 +441,15 @@ const waitUntilSettled = (
     }),
   );
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const isAlreadyExistsCode = (code: string) =>
-  code === "alreadyExists" ||
-  code === "RESOURCE_ALREADY_EXISTS" ||
-  code === "ALREADY_EXISTS";
-
-const isNotFoundCode = (code: string) =>
-  code === "notFound" ||
-  code === "RESOURCE_NOT_FOUND" ||
-  code === "RESOURCE_NOT_FOUND_BY_NAME";
-
-const waitZoneOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(
-      operation.name ?? operation.id ?? operation.selfLink,
-    );
-    if (operationName.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        code: "UNKNOWN",
-        message: "zone operation is missing a name",
-      });
-    }
-
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: operationName,
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 18,
-        }),
-      );
-    }
-
-    const errors = current.error?.errors ?? [];
-    const codes = operationCodes(current);
-    if (
-      codes.some(isAlreadyExistsCode) ||
-      current.httpErrorStatusCode === 409
-    ) {
-      return current;
-    }
-    if (codes.some(isNotFoundCode) || current.httpErrorStatusCode === 404) {
-      return current;
-    }
-    if (errors.length > 0 || current.status !== "DONE") {
-      return yield* new InstanceOperationFailed({
-        operation: operationName,
-        code: codes[0] ?? String(current.httpErrorStatusCode ?? "UNKNOWN"),
-        message:
-          errors
-            .map((item) => item.message ?? item.code ?? "unknown")
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-      });
-    }
-    return current;
-  });
-
 const applyZoneOp = <E, R>(
   project: string,
   zone: string,
   start: Effect.Effect<compute.Operation, E, R>,
+  options?: WaitComputeOptions,
 ) =>
   Effect.gen(function* () {
     const op = yield* start;
-    return yield* waitZoneOperation(project, zone, op);
+    return yield* waitZoneOperation(project, zone, op, options);
   });
 
 const insertBody = (
@@ -517,15 +496,13 @@ const insertBody = (
           diskSizeGb: String(news.diskSizeGb ?? DEFAULT_DISK_SIZE_GB),
         },
       },
+      ...(news.attachedDisks ?? []).map(desiredAttachedDisk),
     ],
     networkInterfaces: [
       {
         network: news.network ?? DEFAULT_NETWORK,
         subnetwork: news.subnetwork,
-        accessConfigs:
-          news.associatePublicIp === true
-            ? [{ type: "ONE_TO_ONE_NAT", name: "External NAT" }]
-            : [],
+        accessConfigs: accessConfigsFor(desiredAccess(news)),
       },
     ],
   };
@@ -533,14 +510,7 @@ const insertBody = (
 
 export const InstanceProvider = () =>
   Provider.succeed(Instance, {
-    stables: [
-      "instanceName",
-      "instanceId",
-      "project",
-      "zone",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["instanceName", "instanceId", "project", "zone", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -551,16 +521,10 @@ export const InstanceProvider = () =>
       }
       const previousName = olds?.instanceName ?? output?.instanceName;
       const nextName = news.instanceName ?? previousName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      const previousType = lastSegment(
-        olds?.machineType ?? DEFAULT_MACHINE_TYPE,
-      );
+      const previousType = lastSegment(olds?.machineType ?? DEFAULT_MACHINE_TYPE);
       const nextType = lastSegment(news.machineType ?? DEFAULT_MACHINE_TYPE);
       if (olds !== undefined && previousType !== nextType) {
         return { action: "replace" as const, deleteFirst: true };
@@ -572,10 +536,7 @@ export const InstanceProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      if (
-        olds !== undefined &&
-        (olds.preemptible === true) !== (news.preemptible === true)
-      ) {
+      if (olds !== undefined && (olds.preemptible === true) !== (news.preemptible === true)) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -583,18 +544,12 @@ export const InstanceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const instanceName = yield* toName(
-        id,
-        olds?.instanceName,
-        output?.instanceName,
-      );
+      const instanceName = yield* toName(id, olds?.instanceName, output?.instanceName);
       const zone = lastSegment(olds?.zone ?? output?.zone ?? DEFAULT_ZONE);
       const existing = yield* getByName(env.project, zone, instanceName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -610,9 +565,7 @@ export const InstanceProvider = () =>
           .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
-            (scoped?.instances ?? []).map((instance) =>
-              toAttrs(instance, env.project),
-            ),
+            (scoped?.instances ?? []).map((instance) => toAttrs(instance, env.project)),
           ),
         );
       }),
@@ -620,11 +573,7 @@ export const InstanceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = lastSegment(news.zone ?? output?.zone ?? DEFAULT_ZONE);
-      const instanceName = yield* toName(
-        id,
-        news.instanceName,
-        output?.instanceName,
-      );
+      const instanceName = yield* toName(id, news.instanceName, output?.instanceName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -641,6 +590,7 @@ export const InstanceProvider = () =>
             zone,
             body: insertBody(news, instanceName, zone, desiredLabels),
           }),
+          { ignore: ["RESOURCE_ALREADY_EXISTS"] },
         ).pipe(Effect.catchTag("Conflict", () => Effect.void));
         current = yield* getByName(env.project, zone, instanceName).pipe(
           Effect.flatMap((existing) =>
@@ -676,8 +626,7 @@ export const InstanceProvider = () =>
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, zone, instanceName)) ?? current;
+        current = (yield* getByName(env.project, zone, instanceName)) ?? current;
       }
 
       if (news.tags !== undefined) {
@@ -696,8 +645,7 @@ export const InstanceProvider = () =>
               },
             }),
           );
-          current =
-            (yield* getByName(env.project, zone, instanceName)) ?? current;
+          current = (yield* getByName(env.project, zone, instanceName)) ?? current;
         }
       }
 
@@ -720,9 +668,85 @@ export const InstanceProvider = () =>
               },
             }),
           );
-          current =
-            (yield* getByName(env.project, zone, instanceName)) ?? current;
+          current = (yield* getByName(env.project, zone, instanceName)) ?? current;
         }
+      }
+
+      const nic = current.networkInterfaces?.[0];
+      const nicName = nic?.name ?? "nic0";
+      const observedAccess = nic?.accessConfigs?.[0];
+      const access = desiredAccess(news);
+      const accessMatches =
+        access.kind === "none"
+          ? observedAccess === undefined
+          : access.kind === "ephemeral"
+            ? observedAccess !== undefined
+            : observedAccess?.natIP === access.natIP;
+      if (!accessMatches) {
+        if (observedAccess !== undefined) {
+          yield* applyZoneOp(
+            env.project,
+            zone,
+            compute.deleteAccessConfigInstances({
+              project: env.project,
+              zone,
+              instance: instanceName,
+              networkInterface: nicName,
+              accessConfig: observedAccess.name ?? "External NAT",
+            }),
+          );
+        }
+        for (const config of accessConfigsFor(access)) {
+          yield* applyZoneOp(
+            env.project,
+            zone,
+            compute.addAccessConfigInstances({
+              project: env.project,
+              zone,
+              instance: instanceName,
+              networkInterface: nicName,
+              body: config,
+            }),
+          );
+        }
+        current = (yield* getByName(env.project, zone, instanceName)) ?? current;
+      }
+
+      const desiredDisks = news.attachedDisks ?? [];
+      const observedDisks = extraDisks(current);
+      const desiredKeys = new Set(desiredDisks.map((disk) => diskKey(disk.source)));
+      const observedKeys = new Set(observedDisks.map((disk) => diskKey(disk.source)));
+      for (const disk of observedDisks) {
+        if (desiredKeys.has(diskKey(disk.source))) continue;
+        yield* applyZoneOp(
+          env.project,
+          zone,
+          compute.detachDiskInstances({
+            project: env.project,
+            zone,
+            instance: instanceName,
+            deviceName: disk.deviceName ?? diskKey(disk.source),
+          }),
+        );
+      }
+      for (const disk of desiredDisks) {
+        if (observedKeys.has(diskKey(disk.source))) continue;
+        yield* applyZoneOp(
+          env.project,
+          zone,
+          compute.attachDiskInstances({
+            project: env.project,
+            zone,
+            instance: instanceName,
+            body: desiredAttachedDisk(disk),
+          }),
+        );
+      }
+      if (
+        observedDisks.some((disk) => !desiredKeys.has(diskKey(disk.source))) ||
+        desiredDisks.some((disk) => !observedKeys.has(diskKey(disk.source)))
+      ) {
+        current = (yield* getByName(env.project, zone, instanceName)) ?? current;
       }
 
       const desiredProtection = news.deletionProtection === true;
@@ -737,8 +761,7 @@ export const InstanceProvider = () =>
             deletionProtection: desiredProtection,
           }),
         );
-        current =
-          (yield* getByName(env.project, zone, instanceName)) ?? current;
+        current = (yield* getByName(env.project, zone, instanceName)) ?? current;
       }
 
       current = yield* waitUntilSettled(env.project, zone, instanceName);
@@ -769,17 +792,16 @@ export const InstanceProvider = () =>
           zone,
           instance,
         }),
+        { ignore: ["RESOURCE_NOT_FOUND"] },
       ).pipe(
         Effect.retry({
           while: (error) =>
             error._tag === "Conflict" ||
-            error._tag === "GCP.Compute.InstanceOperationFailed" ||
-            error._tag === "GCP.Compute.OperationPending",
+            (error._tag === "GCP.OperationFailed" && error.reason === "RESOURCE_NOT_READY"),
           times: 8,
           schedule: Schedule.spaced("3 seconds"),
         }),
         Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
       );
       yield* waitUntilGone(env.project, zone, instance);
     }),

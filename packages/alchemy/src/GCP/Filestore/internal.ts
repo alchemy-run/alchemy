@@ -1,4 +1,5 @@
 import * as file from "@distilled.cloud/gcp/file_v1";
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -6,46 +7,26 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
 
 export const DEFAULT_ZONE = "us-central1-a";
 export const DEFAULT_SHARE_NAME = "share1";
 export const MAX_NAME_LENGTH = 63;
 
-export class FilestoreOperationFailed extends Data.TaggedError(
-  "GCP.Filestore.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class FilestoreOperationPending extends Data.TaggedError(
-  "GCP.Filestore.OperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Filestore.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Filestore.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.Filestore.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.Filestore.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.Filestore.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.Filestore.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.Filestore.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.Filestore.ResourceFailed")<{
   name: string;
   state: string;
 }> {}
@@ -70,10 +51,8 @@ export const rfc1035 = (name: string, fallback = "filestore"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const regionOf = (location: string) => {
   const parts = location.split("-");
@@ -103,26 +82,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -144,14 +113,11 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -197,85 +163,54 @@ export const isFailedState = (state: string | undefined) =>
 export const isDeletingState = (state: string | undefined) =>
   (state ?? "").toUpperCase() === "DELETING";
 
-const alreadyExists = (error: file.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: file.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: file.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const waitForOperation = (
-  operation: file.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new FilestoreOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new FilestoreOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = file.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<file.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
+/**
+ * Wait on a Filestore long-running operation. Instances, backups, and snapshots take 5–20 minutes.
+ * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
+ * when `notFoundOk` (deletes). Returns the final operation.
+ */
+export const waitForOperation = (operation: file.Operation, options?: { notFoundOk?: boolean }) =>
+  Effect.suspend(() => {
+    let latest = operation;
+    return waitForLongRunningOperation(
+      operation,
+      (name) => {
+        const get = file.getProjectsLocationsOperations({ name }).pipe(
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              latest = current;
             }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new FilestoreOperationPending({ operation: name }),
+          ),
+        );
+        const observe: Effect.Effect<
+          file.Operation,
+          file.GetProjectsLocationsOperationsError,
+          GcpOpContext
+        > =
+          options?.notFoundOk === true
+            ? get.pipe(
+                Effect.catchTag("NotFound", () =>
+                  Effect.succeed<file.Operation>({ name, done: true }),
+                ),
+              )
+            : get.pipe(
+                // A just-returned operation can briefly 404 on read.
+                Effect.retry({
+                  while: (error) => error._tag === "NotFound",
+                  times: 5,
+                  schedule: Schedule.exponential("250 millis"),
+                }),
+              );
+        return observe;
+      },
+      { budget: "30 minutes", interval: "10 seconds" },
+    ).pipe(
+      Effect.map(() => latest),
+      // google.rpc.Code ALREADY_EXISTS = 6, NOT_FOUND = 5.
+      Effect.catchTag("GCP.OperationFailed", (error) =>
+        error.code === 6 || (options?.notFoundOk === true && error.code === 5)
+          ? Effect.succeed(latest)
+          : Effect.fail(error),
       ),
-      Effect.filterOrFail(
-        (current) => !current.error || isIgnorable(current.error, options),
-        (current) =>
-          new FilestoreOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Filestore.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "8 seconds"),
-      }),
     );
   });
 
@@ -306,8 +241,9 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Filestore.ResourceStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // Backup and snapshot deletion takes several minutes.
+      times: 120,
+      schedule: Schedule.spaced("10 seconds"),
     }),
     Effect.asVoid,
   );
@@ -316,11 +252,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
   stateOf: (value: NonNullable<A>) => string | undefined,
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceFailed | ResourceNotReady,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceFailed | ResourceNotReady, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
@@ -345,8 +277,9 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
       while: (error) =>
         error._tag === "GCP.Filestore.ResourceNotReady" ||
         error._tag === "GCP.Filestore.ResourceNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // Backups and snapshots take several minutes to become READY.
+      times: 120,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 
@@ -360,5 +293,4 @@ export const listLabeledPages = <Page, A, E, R>(
     Stream.filter((item) => hasAlchemyLabelMap(labelsOf(item))),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.orElseSucceed(() => [] as A[]),
   );

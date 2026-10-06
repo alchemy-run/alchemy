@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   NetworkConnectivityNotResolved,
@@ -209,12 +204,13 @@ export type ServiceConnectionPolicy = Resource<
  * const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy(
  *   "Redis",
  *   {
- *     serviceConnectionPolicyId: existing.serviceConnectionPolicyId,
- *     location: existing.location,
- *     serviceClass: existing.serviceClass!,
- *     network: existing.network!,
+ *     serviceClass: "gcp-memorystore-redis",
+ *     network: network.selfLink ?? network.networkName,
  *     description: "redis psc v2",
- *     pscConfig: { ...existing.pscConfig, limit: "4" },
+ *     pscConfig: {
+ *       subnetworks: [subnet.selfLink ?? subnet.subnetworkName],
+ *       limit: "4",
+ *     },
  *     labels: { env: "prod", role: "psc" },
  *   },
  * );
@@ -227,11 +223,7 @@ export const ServiceConnectionPolicy = Resource<ServiceConnectionPolicy>(
   "GCP.NetworkConnectivity.ServiceConnectionPolicy",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  serviceConnectionPolicyId: string,
-) =>
+const resourceName = (project: string, location: string, serviceConnectionPolicyId: string) =>
   `projects/${project}/locations/${location}/serviceConnectionPolicies/${serviceConnectionPolicyId}`;
 
 const toPscConfig = (
@@ -281,11 +273,7 @@ const toAttrs = (
     location,
     network: policy.network,
     serviceClass: policy.serviceClass,
-    pscConfig: toPscConfig(
-      policy.pscConfig,
-      parsed.project || project,
-      location,
-    ),
+    pscConfig: toPscConfig(policy.pscConfig, parsed.project || project, location),
     infrastructure: policy.infrastructure,
     autoCreatedSubnetInfo: toAutoCreated(policy.autoCreatedSubnetInfo),
     description: policy.description,
@@ -303,39 +291,24 @@ const getByName = (name: string) =>
 
 export const ServiceConnectionPolicyProvider = () =>
   Provider.succeed(ServiceConnectionPolicy, {
-    stables: [
-      "name",
-      "serviceConnectionPolicyId",
-      "project",
-      "location",
-      "network",
-      "createTime",
-    ],
+    stables: ["name", "serviceConnectionPolicyId", "project", "location", "network", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.serviceConnectionPolicyId ?? output?.serviceConnectionPolicyId;
+      const previousId = olds?.serviceConnectionPolicyId ?? output?.serviceConnectionPolicyId;
       const nextId = news.serviceConnectionPolicyId
         ? rfc1035(news.serviceConnectionPolicyId, "service-connection-policy")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousNetwork = lastSegment(
-        canonicalizeLink(olds?.network ?? output?.network),
-      );
+      const previousNetwork = lastSegment(canonicalizeLink(olds?.network ?? output?.network));
       const nextNetwork = lastSegment(canonicalizeLink(news.network));
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousNetwork.length > 0 && previousNetwork !== nextNetwork)
       ) {
@@ -352,31 +325,22 @@ export const ServiceConnectionPolicyProvider = () =>
         output?.serviceConnectionPolicyId,
         "service-connection-policy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, serviceConnectionPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, serviceConnectionPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* collectPages(
-          networkconnectivity.listProjectsLocationsServiceConnectionPolicies.pages(
-            {
-              parent: parentOf(env.project, "-"),
-              pageSize: 1000,
-            },
-          ),
+          networkconnectivity.listProjectsLocationsServiceConnectionPolicies.pages({
+            parent: parentOf(env.project, "-"),
+            pageSize: 1000,
+          }),
           (page) => page.serviceConnectionPolicies,
         );
         return items
@@ -392,15 +356,8 @@ export const ServiceConnectionPolicyProvider = () =>
         output?.serviceConnectionPolicyId,
         "service-connection-policy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        serviceConnectionPolicyId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, serviceConnectionPolicyId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -417,10 +374,8 @@ export const ServiceConnectionPolicyProvider = () =>
             serviceConnectionPolicyId,
             subnetworkMode: news.subnetworkMode,
             "autoSubnetworkConfig.ipStack": news.autoSubnetworkConfig?.ipStack,
-            "autoSubnetworkConfig.prefixLength":
-              news.autoSubnetworkConfig?.prefixLength,
-            "autoSubnetworkConfig.allocRangeSpace": news.autoSubnetworkConfig
-              ?.allocRangeSpace
+            "autoSubnetworkConfig.prefixLength": news.autoSubnetworkConfig?.prefixLength,
+            "autoSubnetworkConfig.allocRangeSpace": news.autoSubnetworkConfig?.allocRangeSpace
               ? [...news.autoSubnetworkConfig.allocRangeSpace]
               : undefined,
             body: {
@@ -452,10 +407,8 @@ export const ServiceConnectionPolicyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const serviceClassChanged =
-        (current.serviceClass ?? "") !== news.serviceClass;
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const serviceClassChanged = (current.serviceClass ?? "") !== news.serviceClass;
       const observedPsc = toPscConfig(current.pscConfig, env.project, location);
       const pscChanged = !sameJson(
         {
@@ -465,8 +418,7 @@ export const ServiceConnectionPolicyProvider = () =>
           limit: observedPsc?.limit ?? "",
           producerInstanceLocation: observedPsc?.producerInstanceLocation ?? "",
           allowedGoogleProducersResourceHierarchyLevel: [
-            ...(observedPsc?.allowedGoogleProducersResourceHierarchyLevel ??
-              []),
+            ...(observedPsc?.allowedGoogleProducersResourceHierarchyLevel ?? []),
           ].sort(),
         },
         {
@@ -489,25 +441,20 @@ export const ServiceConnectionPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         const operation =
-          yield* networkconnectivity.patchProjectsLocationsServiceConnectionPolicies(
-            {
+          yield* networkconnectivity.patchProjectsLocationsServiceConnectionPolicies({
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                serviceClass: news.serviceClass,
-                pscConfig,
-                etag: current.etag,
-              },
+              labels: desiredLabels,
+              description: news.description,
+              serviceClass: news.serviceClass,
+              pscConfig,
+              etag: current.etag,
             },
-          );
+          });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

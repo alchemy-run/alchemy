@@ -9,30 +9,18 @@ export interface WriteSecretClient {
   /** Add a new version and return its full resource name. */
   addVersion(
     value: string | Uint8Array,
-  ): Effect.Effect<
-    string,
-    secretmanager.AddVersionProjectsSecretsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<string, secretmanager.AddVersionProjectsSecretsError, RuntimeContext>;
   /** Disable a version (a version id or full version name). */
   disableVersion(
     version: string,
-  ): Effect.Effect<
-    void,
-    secretmanager.DisableProjectsSecretsVersionsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<void, secretmanager.DisableProjectsSecretsVersionsError, RuntimeContext>;
   /**
    * Irrevocably destroy a version's data. Destroying a missing version
    * succeeds.
    */
   destroyVersion(
     version: string,
-  ): Effect.Effect<
-    void,
-    secretmanager.DestroyProjectsSecretsVersionsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<void, secretmanager.DestroyProjectsSecretsVersionsError, RuntimeContext>;
 }
 
 /**
@@ -59,6 +47,4 @@ export interface WriteSecret extends Binding.Service<
   (secret: SecretBindingTarget) => Effect.Effect<WriteSecretClient>
 > {}
 
-export const WriteSecret = Binding.Service<WriteSecret>(
-  "GCP.SecretManager.WriteSecret",
-);
+export const WriteSecret = Binding.Service<WriteSecret>("GCP.SecretManager.WriteSecret");

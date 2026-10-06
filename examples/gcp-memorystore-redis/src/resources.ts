@@ -12,7 +12,6 @@ import * as GCP from "alchemy/GCP";
  * Creating or deleting the instance takes several minutes.
  */
 export const Counters = GCP.Redis.Instance("Counters", {
-  location: "us-central1",
   tier: "BASIC",
   memorySizeGb: 1,
   authEnabled: true,

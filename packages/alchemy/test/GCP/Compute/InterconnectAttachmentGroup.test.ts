@@ -1,21 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !!process.env.GCP_TEST_COMPUTE_INTERCONNECT && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_COMPUTE_INTERCONNECT && !process.env.FAST;
 
 const waitUntilGone = (interconnectAttachmentGroup: string) =>
   GcpEnvironment.current.pipe(
@@ -54,50 +50,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
-);
-
-test.provider(
-  "probe insertInterconnectAttachmentGroups entitlement",
-  () =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertInterconnectAttachmentGroups({
-          project,
-          body: {
-            name: "alchemy-iag-probe",
-            description: "alchemy entitlement probe",
-            intent: { availabilitySla: "NO_SLA" },
-          },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteInterconnectAttachmentGroups({
-            project,
-            interconnectAttachmentGroup: "alchemy-iag-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
-    }).pipe(logLevel),
-  { timeout: 60_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -115,9 +68,7 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
-      expect(created.interconnectAttachmentGroupName).toEqual(
-        expect.any(String),
-      );
+      expect(created.interconnectAttachmentGroupName).toEqual(expect.any(String));
       expect(created.description).toEqual("dev vlan attachments");
 
       const fetched = yield* compute.getInterconnectAttachmentGroups({
@@ -130,8 +81,7 @@ test.provider.skipIf(!runLifecycle)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Compute.InterconnectAttachmentGroup("Vlans", {
-            interconnectAttachmentGroupName:
-              created.interconnectAttachmentGroupName,
+            interconnectAttachmentGroupName: created.interconnectAttachmentGroupName,
             description: "updated vlan attachments",
             intent: { availabilitySla: "NO_SLA" },
           });
@@ -140,10 +90,8 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toEqual("updated vlan attachments");
 
       yield* stack.destroy();
-      const gone = yield* waitUntilGone(
-        created.interconnectAttachmentGroupName,
-      );
+      const gone = yield* waitUntilGone(created.interconnectAttachmentGroupName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

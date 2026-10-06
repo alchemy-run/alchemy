@@ -103,10 +103,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const resourceName = (project: string, location: string, namespaceId: string) =>
   `projects/${project}/locations/${location}/namespaces/${namespaceId}`;
@@ -120,16 +118,11 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     namespaceId:
-      namespacesAt >= 0 && parts[namespacesAt + 1]
-        ? parts[namespacesAt + 1]!
-        : lastSegment(name),
+      namespacesAt >= 0 && parts[namespacesAt + 1] ? parts[namespacesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -148,17 +141,10 @@ const toId = (id: string, namespaceId: string | undefined, existing?: string) =>
       forbiddenPrefixes: ["gcp"],
     });
     const named = /^[a-z]/.test(generated) ? generated : `n${generated}`;
-    return named
-      .replace(/-+$/g, "")
-      .slice(0, MAX_NAMESPACE_ID_LENGTH)
-      .replace(/-+$/g, "");
+    return named.replace(/-+$/g, "").slice(0, MAX_NAMESPACE_ID_LENGTH).replace(/-+$/g, "");
   });
 
-const toAttrs = (
-  namespace: servicedirectory.Namespace,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (namespace: servicedirectory.Namespace, project: string, region: string) => {
   const name = namespace.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -180,30 +166,21 @@ const listNamespacesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
     const found: ReturnType<typeof toAttrs>[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response = yield* servicedirectory.listProjectsLocationsNamespaces({
         parent,
         pageSize: 1000,
         pageToken,
       });
       for (const namespace of response.namespaces ?? []) {
-        if (
-          Object.keys(namespace.labels ?? {}).some((key) =>
-            key.startsWith("alchemy-"),
-          )
-        ) {
+        if (Object.keys(namespace.labels ?? {}).some((key) => key.startsWith("alchemy-"))) {
           found.push(toAttrs(namespace, project, region));
         }
       }
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
-  }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as ReturnType<typeof toAttrs>[])));
 
 export const NamespaceProvider = () =>
   Provider.succeed(Namespace, {
@@ -214,19 +191,10 @@ export const NamespaceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.namespaceId ?? output?.namespaceId;
       const nextId = news.namespaceId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       if (idChanged || previousLocation !== nextLocation) {
         return { action: "replace" as const };
       }
@@ -235,23 +203,13 @@ export const NamespaceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const namespaceId = yield* toId(
-        id,
-        olds?.namespaceId,
-        output?.namespaceId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, namespaceId);
+      const namespaceId = yield* toId(id, olds?.namespaceId, output?.namespaceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, namespaceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -260,7 +218,7 @@ export const NamespaceProvider = () =>
         const fallback = [locationParent(env.project, env.region)];
         const found: ReturnType<typeof toAttrs>[] = [];
         let pageToken: string | undefined;
-        for (let page = 0; page < 10; page++) {
+        do {
           const response = yield* servicedirectory
             .listProjectsLocations({
               name: `projects/${env.project}`,
@@ -268,7 +226,7 @@ export const NamespaceProvider = () =>
               pageToken,
             })
             .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed({
                   locations: [
                     {
@@ -292,22 +250,14 @@ export const NamespaceProvider = () =>
             found.push(...namespaces);
           }
           pageToken = response.nextPageToken;
-          if (pageToken === undefined || pageToken === "") break;
-        }
+        } while (pageToken !== undefined && pageToken !== "");
         return found;
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const namespaceId = yield* toId(
-        id,
-        news.namespaceId,
-        output?.namespaceId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const namespaceId = yield* toId(id, news.namespaceId, output?.namespaceId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, namespaceId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -350,15 +300,13 @@ export const NamespaceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* servicedirectory
-        .deleteProjectsLocationsNamespaces({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("1 second"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* servicedirectory.deleteProjectsLocationsNamespaces({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("1 second"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

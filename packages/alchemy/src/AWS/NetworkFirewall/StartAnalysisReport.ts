@@ -39,10 +39,7 @@ export interface StartAnalysisReport extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartAnalysisReportRequest,
-    ) => Effect.Effect<
-      NFW.StartAnalysisReportResponse,
-      NFW.StartAnalysisReportError
-    >
+    ) => Effect.Effect<NFW.StartAnalysisReportResponse, NFW.StartAnalysisReportError>
   >
 > {}
 

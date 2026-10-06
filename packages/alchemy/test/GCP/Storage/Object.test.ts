@@ -1,5 +1,3 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -7,13 +5,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const getObject = (bucket: string, object: string) =>
   storage
@@ -64,9 +61,7 @@ test.provider(
       const bucketName = created.bucket.bucketName;
       expect(created.object.key).toEqual("index.html");
       expect(created.object.contentType).toEqual("text/html; charset=utf-8");
-      expect(created.object.url).toEqual(
-        `https://storage.googleapis.com/${bucketName}/index.html`,
-      );
+      expect(created.object.url).toEqual(`https://storage.googleapis.com/${bucketName}/index.html`);
 
       const live = yield* getObject(bucketName, "index.html");
       expect(live?.contentType).toEqual("text/html; charset=utf-8");
@@ -78,18 +73,14 @@ test.provider(
       expect(same.object.generation).toEqual(created.object.generation);
 
       // New content and headers converge in one upload.
-      const updated = yield* stack.deploy(
-        program("index.html", "<h1>v2</h1>", "no-cache"),
-      );
+      const updated = yield* stack.deploy(program("index.html", "<h1>v2</h1>", "no-cache"));
       expect(updated.object.generation).not.toEqual(created.object.generation);
       const liveUpdated = yield* getObject(bucketName, "index.html");
       expect(liveUpdated?.cacheControl).toEqual("no-cache");
       expect(liveUpdated?.md5Hash).toEqual(updated.object.md5Hash);
 
       // Moving the key replaces the object; the old key is deleted.
-      const moved = yield* stack.deploy(
-        program("home.html", "<h1>v2</h1>", "no-cache"),
-      );
+      const moved = yield* stack.deploy(program("home.html", "<h1>v2</h1>", "no-cache"));
       expect(moved.object.key).toEqual("home.html");
       expect(yield* getObject(bucketName, "home.html")).toBeDefined();
       yield* waitUntilObjectGone(bucketName, "index.html");
@@ -98,7 +89,7 @@ test.provider(
       yield* waitUntilObjectGone(bucketName, "home.html");
       yield* waitUntilBucketGone(bucketName);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -114,10 +105,7 @@ test.provider(
       });
       yield* fs.makeDirectory(path.join(dir, "assets"), { recursive: true });
       yield* fs.writeFileString(path.join(dir, "index.html"), "<h1>one</h1>");
-      yield* fs.writeFileString(
-        path.join(dir, "assets", "app.css"),
-        "body{color:red}",
-      );
+      yield* fs.writeFileString(path.join(dir, "assets", "app.css"), "body{color:red}");
       yield* fs.writeFile(
         path.join(dir, "assets", "logo.png"),
         new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
@@ -131,17 +119,14 @@ test.provider(
           bucketName: bucket.bucketName,
           path: dir,
           prefix: "site",
-          cacheControl: (key) =>
-            key.endsWith(".html") ? "no-cache" : undefined,
+          cacheControl: (key) => (key.endsWith(".html") ? "no-cache" : undefined),
         });
         return { bucket, objects };
       });
 
       const first = yield* stack.deploy(program);
       const bucketName = first.bucket.bucketName;
-      const byKey = Object.fromEntries(
-        first.objects.map((object) => [object.key, object]),
-      );
+      const byKey = Object.fromEntries(first.objects.map((object) => [object.key, object]));
       expect(Object.keys(byKey).sort()).toEqual([
         "site/assets/app.css",
         "site/assets/logo.png",
@@ -159,9 +144,7 @@ test.provider(
       // Editing a file without touching any prop re-uploads only that file.
       yield* fs.writeFileString(path.join(dir, "index.html"), "<h1>two</h1>");
       const second = yield* stack.deploy(program);
-      const secondByKey = Object.fromEntries(
-        second.objects.map((object) => [object.key, object]),
-      );
+      const secondByKey = Object.fromEntries(second.objects.map((object) => [object.key, object]));
       expect(secondByKey["site/index.html"]!.generation).not.toEqual(
         byKey["site/index.html"]!.generation,
       );
@@ -177,7 +160,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitUntilBucketGone(bucketName);
     }).pipe(Effect.scoped, logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -197,9 +180,7 @@ test.provider(
         notFoundPage: "404.html",
       });
 
-      const changed = yield* stack.deploy(
-        program({ mainPageSuffix: "home.html" }),
-      );
+      const changed = yield* stack.deploy(program({ mainPageSuffix: "home.html" }));
       const live = yield* storage.getBuckets({ bucket: changed.bucketName });
       expect(live.website?.mainPageSuffix).toEqual("home.html");
       expect(live.website?.notFoundPage).toBeUndefined();
@@ -214,5 +195,5 @@ test.provider(
       yield* stack.destroy();
       yield* waitUntilBucketGone(created.bucketName);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 180_000 },
 );

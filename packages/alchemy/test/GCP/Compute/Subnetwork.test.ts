@@ -1,23 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  subnetworkName: string,
-) =>
+const waitUntilGone = (project: string, region: string, subnetworkName: string) =>
   compute.getSubnetworks({ project, region, subnetwork: subnetworkName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
@@ -80,17 +74,13 @@ test.provider(
             ipCidrRange: "10.20.0.0/24",
             description: "test subnet",
             privateIpGoogleAccess: true,
-            secondaryIpRanges: [
-              { rangeName: "pods", ipCidrRange: "10.20.1.0/24" },
-            ],
+            secondaryIpRanges: [{ rangeName: "pods", ipCidrRange: "10.20.1.0/24" }],
           });
           return { network, subnetwork };
         }),
       );
 
-      expect(updated.subnetwork.subnetworkName).toEqual(
-        created.subnetwork.subnetworkName,
-      );
+      expect(updated.subnetwork.subnetworkName).toEqual(created.subnetwork.subnetworkName);
       expect(updated.subnetwork.privateIpGoogleAccess).toEqual(true);
       expect(updated.subnetwork.secondaryIpRanges).toEqual([
         { rangeName: "pods", ipCidrRange: "10.20.1.0/24" },
@@ -117,6 +107,6 @@ test.provider(
         created.subnetwork.subnetworkName,
       );
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { timeout: 360_000 },
+    }).pipe(logLevel, withNetworkSlot),
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 360_000 },
 );

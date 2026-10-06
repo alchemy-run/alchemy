@@ -136,10 +136,9 @@ export type DatasetsConsentStoresConsent = Resource<
  * @resource
  * @category Healthcare
  */
-export const DatasetsConsentStoresConsent =
-  Resource<DatasetsConsentStoresConsent>(
-    "GCP.Healthcare.DatasetsConsentStoresConsent",
-  );
+export const DatasetsConsentStoresConsent = Resource<DatasetsConsentStoresConsent>(
+  "GCP.Healthcare.DatasetsConsentStoresConsent",
+);
 
 export class DatasetsConsentStoresConsentNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresConsentNotResolved",
@@ -163,11 +162,7 @@ const storeOf = (
   return `${datasetName}/consentStores/${consentStore}`;
 };
 
-const toAttrs = (
-  consent: healthcare.Consent,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (consent: healthcare.Consent, project: string, region: string) => {
   const name = consent.name ?? "";
   const parsed = parseResourceName(name, "consents", region);
   return {
@@ -218,9 +213,7 @@ export const DatasetsConsentStoresConsentProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -231,12 +224,10 @@ export const DatasetsConsentStoresConsentProvider = () =>
           stores,
           (store) =>
             collectPages(
-              healthcare.listProjectsLocationsDatasetsConsentStoresConsents.pages(
-                {
-                  parent: store.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              healthcare.listProjectsLocationsDatasetsConsentStoresConsents.pages({
+                parent: store.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.consents,
             ),
           { concurrency: 4 },
@@ -249,16 +240,8 @@ export const DatasetsConsentStoresConsentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const consentStore = storeOf(
-        news.consentStore,
-        env.project,
-        location,
-        news.dataset,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const consentStore = storeOf(news.consentStore, env.project, location, news.dataset);
       const ownership = yield* createInternalLabels(id);
       const metadata = withOwnershipMetadata(news.metadata, ownership);
       const state = news.state ?? DEFAULT_STATE;
@@ -289,21 +272,13 @@ export const DatasetsConsentStoresConsentProvider = () =>
 
       const currentName = current.name ?? output?.name ?? "";
       const userChanged = !sameText(current.userId, news.userId);
-      const artifactChanged = !sameText(
-        current.consentArtifact,
-        news.consentArtifact,
-      );
+      const artifactChanged = !sameText(current.consentArtifact, news.consentArtifact);
       const policiesChanged = !sameJson(current.policies, news.policies);
       const metadataChanged =
         !sameJson(userLabels(current.metadata), userLabels(news.metadata)) ||
         !hasAlchemyLabelMap(current.metadata);
 
-      if (
-        userChanged ||
-        artifactChanged ||
-        policiesChanged ||
-        metadataChanged
-      ) {
+      if (userChanged || artifactChanged || policiesChanged || metadataChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsConsentStoresConsents({
             name: currentName,

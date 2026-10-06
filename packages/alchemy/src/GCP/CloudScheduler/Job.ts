@@ -9,11 +9,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TIME_ZONE = "UTC";
@@ -25,14 +20,7 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(2)),
 ]);
 
-export type HttpMethod =
-  | "POST"
-  | "GET"
-  | "HEAD"
-  | "PUT"
-  | "DELETE"
-  | "PATCH"
-  | "OPTIONS";
+export type HttpMethod = "POST" | "GET" | "HEAD" | "PUT" | "DELETE" | "PATCH" | "OPTIONS";
 
 export type OidcToken = {
   /**
@@ -195,10 +183,7 @@ export type JobProps = {
    */
   timeZone?: string;
   /**
-   * Human-readable description (max 500 characters including Alchemy's
-   * ownership marker). Cloud Scheduler jobs have no labels field, so
-   * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * in a `[alchemy …]` prefix for `read` / `list` / nuke.
+   * Human-readable description (single line, max 499 characters).
    */
   description?: string;
   /**
@@ -245,7 +230,7 @@ export type Job = Resource<
     location: string;
     /** Project id. */
     project: string;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Job description. */
     description: string | undefined;
     /** Cron or english-like schedule. */
     schedule: string | undefined;
@@ -284,9 +269,10 @@ export type Job = Resource<
  * A Cloud Scheduler job that invokes an HTTP, Pub/Sub, or App Engine
  * target on a cron schedule.
  *
- * Jobs have no labels field — Alchemy stamps ownership into the
- * description so `read`, `list`, and `pnpm nuke:gcp` can find them. Name
- * and location are immutable; changing either replaces the job.
+ * Jobs have no labels field, so ownership rests on the deterministic job
+ * name: `read` reports a job it finds without prior state as unowned
+ * (adopt it with `--adopt`). Name and location are immutable; changing
+ * either replaces the job.
  *
  * ### Creating a Job
  * **Example:** Generated name, yearly HTTP GET
@@ -335,30 +321,22 @@ export type Job = Resource<
  */
 export const Job = Resource<Job>("GCP.CloudScheduler.Job");
 
-export class JobNotResolved extends Data.TaggedError(
-  "GCP.CloudScheduler.JobNotResolved",
-)<{
+export class JobNotResolved extends Data.TaggedError("GCP.CloudScheduler.JobNotResolved")<{
   name: string;
 }> {}
 
-export class SchedulerJobNotReady extends Data.TaggedError(
-  "GCP.CloudScheduler.JobNotReady",
-)<{
+export class SchedulerJobNotReady extends Data.TaggedError("GCP.CloudScheduler.JobNotReady")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class JobStateFailed extends Data.TaggedError(
-  "GCP.CloudScheduler.JobStateFailed",
-)<{
+export class JobStateFailed extends Data.TaggedError("GCP.CloudScheduler.JobStateFailed")<{
   name: string;
   state: string;
   message: string;
 }> {}
 
-export class JobTargetMissing extends Data.TaggedError(
-  "GCP.CloudScheduler.JobTargetMissing",
-)<{
+export class JobTargetMissing extends Data.TaggedError("GCP.CloudScheduler.JobTargetMissing")<{
   name: string;
   message: string;
 }> {}
@@ -375,8 +353,7 @@ const normalizeLocation = (location: string | undefined, fallback: string) =>
 const resourceName = (project: string, location: string, jobId: string) =>
   `projects/${project}/locations/${location}/jobs/${jobId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -384,54 +361,12 @@ const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    jobId:
-      jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    jobId: jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
   };
 };
-
-const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-): string => {
-  const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  // Cloud Scheduler descriptions are a single RE2 line (`^.{1,499}$`) —
-  // newlines are rejected even when the total length is well under 499.
-  const trimmed = description?.replace(/[\r\n]+/g, " ").trim();
-  const combined =
-    trimmed && trimmed.length > 0 ? `${marker} ${trimmed}` : marker;
-  return combined.slice(0, 499);
-};
-
-const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^[\s\n]+/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-const hasOwnershipMarker = (description: string | undefined): boolean =>
-  (description ?? "").startsWith("[alchemy ");
 
 const toId = (id: string, jobId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -458,20 +393,17 @@ const timeZoneOf = (value: string | undefined) =>
   value && value.length > 0 ? value : DEFAULT_TIME_ZONE;
 
 const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const toAttrs = (job: scheduler.Job, project: string, region: string) => {
   const name = job.name ?? "";
   const parsed = parseName(name, region);
-  const { description } = parseDescription(job.description);
   return {
     name,
     jobId: parsed.jobId,
     location: parsed.location,
     project: parsed.project || project,
-    description,
+    description: job.description,
     schedule: job.schedule,
     timeZone: job.timeZone,
     state: job.state,
@@ -497,29 +429,20 @@ const getByName = (name: string) =>
 /** Poll until Cloud Scheduler reports the job in the desired ENABLED/PAUSED state. */
 const waitForJobState = (name: string, paused: boolean) =>
   getByName(name).pipe(
-    Effect.flatMap(
-      (
-        job,
-      ): Effect.Effect<
-        scheduler.Job,
-        JobStateFailed | SchedulerJobNotReady
-      > => {
-        const desired = paused ? "PAUSED" : "ENABLED";
-        if (job?.state === desired) return Effect.succeed(job);
-        if (job?.state === "UPDATE_FAILED" || job?.state === "DISABLED") {
-          return Effect.fail(
-            new JobStateFailed({
-              name,
-              state: job.state,
-              message: job.status?.message ?? `job is ${job.state}`,
-            }),
-          );
-        }
+    Effect.flatMap((job): Effect.Effect<scheduler.Job, JobStateFailed | SchedulerJobNotReady> => {
+      const desired = paused ? "PAUSED" : "ENABLED";
+      if (job?.state === desired) return Effect.succeed(job);
+      if (job?.state === "UPDATE_FAILED" || job?.state === "DISABLED") {
         return Effect.fail(
-          new SchedulerJobNotReady({ name, state: job?.state }),
+          new JobStateFailed({
+            name,
+            state: job.state,
+            message: job.status?.message ?? `job is ${job.state}`,
+          }),
         );
-      },
-    ),
+      }
+      return Effect.fail(new SchedulerJobNotReady({ name, state: job?.state }));
+    }),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudScheduler.JobNotReady",
       times: 30,
@@ -543,17 +466,12 @@ const headersMatch = (
 };
 
 const tokenEqual = (
-  observed:
-    | { serviceAccountEmail?: string; audience?: string; scope?: string }
-    | undefined,
-  desired:
-    | { serviceAccountEmail?: string; audience?: string; scope?: string }
-    | undefined,
+  observed: { serviceAccountEmail?: string; audience?: string; scope?: string } | undefined,
+  desired: { serviceAccountEmail?: string; audience?: string; scope?: string } | undefined,
 ) => {
   if (desired === undefined) return true;
   return (
-    (observed?.serviceAccountEmail ?? "") ===
-      (desired.serviceAccountEmail ?? "") &&
+    (observed?.serviceAccountEmail ?? "") === (desired.serviceAccountEmail ?? "") &&
     (observed?.audience ?? "") === (desired.audience ?? "") &&
     (observed?.scope ?? "") === (desired.scope ?? "")
   );
@@ -591,9 +509,7 @@ const toApiPubsubTarget = Effect.fn(function* (target: PubsubTarget) {
   }) as scheduler.PubsubTarget;
 });
 
-const toApiAppEngineHttpTarget = Effect.fn(function* (
-  target: AppEngineHttpTarget,
-) {
+const toApiAppEngineHttpTarget = Effect.fn(function* (target: AppEngineHttpTarget) {
   return compact({
     relativeUri: target.relativeUri,
     httpMethod: target.httpMethod,
@@ -650,42 +566,12 @@ const appEngineTargetDrift = (
   );
 };
 
-const listJobsAt = (parent: string, project: string, region: string) =>
-  Effect.gen(function* () {
-    const found: ReturnType<typeof toAttrs>[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* scheduler.listProjectsLocationsJobs({
-        parent,
-        pageSize: 500,
-        pageToken,
-      });
-      for (const job of response.jobs ?? []) {
-        if (hasOwnershipMarker(job.description)) {
-          found.push(toAttrs(job, project, region));
-        }
-      }
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-    ),
-    Effect.catchTag("Forbidden", () =>
-      Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-    ),
-  );
-
 const hasTarget = (news: JobProps) =>
   news.httpTarget !== undefined ||
   news.pubsubTarget !== undefined ||
   news.appEngineHttpTarget !== undefined;
 
-const retryTransient = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryTransient = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "NotFound" || error._tag === "Conflict",
@@ -694,11 +580,7 @@ const retryTransient = <A, E extends { _tag: string }, R>(
     }),
   );
 
-const syncPaused = Effect.fn(function* (
-  name: string,
-  current: scheduler.Job,
-  paused: boolean,
-) {
+const syncPaused = Effect.fn(function* (name: string, current: scheduler.Job, paused: boolean) {
   if (paused && current.state === "ENABLED") {
     const pausedJob = yield* retryTransient(
       scheduler.pauseProjectsLocationsJobs({ name, body: {} }),
@@ -743,19 +625,10 @@ export const JobProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.jobId ?? output?.jobId;
       const nextId = news.jobId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const locationChanged = previousLocation !== nextLocation;
 
       if (idChanged || locationChanged) {
@@ -767,93 +640,40 @@ export const JobProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseDescription(existing.description).labels,
-      ))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state the job may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const found: ReturnType<typeof toAttrs>[] = [];
-        let pageToken: string | undefined;
-        for (let page = 0; page < 10; page++) {
-          const response = yield* scheduler
-            .listProjectsLocations({
-              name: `projects/${env.project}`,
-              pageSize: 100,
-              pageToken,
-            })
-            .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed({
-                  locations: [
-                    {
-                      name: parentOf(env.project, env.region),
-                      locationId: env.region,
-                    },
-                  ],
-                  nextPageToken: undefined as string | undefined,
-                }),
-              ),
-            );
-          const parents = (response.locations ?? [])
-            .map((location) => location.name)
-            .filter((name): name is string => !!name);
-          const pages = yield* Effect.forEach(
-            parents.length > 0 ? parents : [parentOf(env.project, env.region)],
-            (parent) => listJobsAt(parent, env.project, env.region),
-            { concurrency: 4 },
-          );
-          for (const jobs of pages) {
-            found.push(...jobs);
-          }
-          pageToken = response.nextPageToken;
-          if (pageToken === undefined || pageToken === "") break;
-        }
-        return found;
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, news.jobId, output?.jobId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, jobId);
       const parent = parentOf(env.project, location);
       if (!hasTarget(news)) {
         return yield* new JobTargetMissing({
           name,
-          message:
-            "Cloud Scheduler jobs require httpTarget, pubsubTarget, or appEngineHttpTarget",
+          message: "Cloud Scheduler jobs require httpTarget, pubsubTarget, or appEngineHttpTarget",
         });
       }
 
-      const ownership = yield* createInternalLabels(id);
-      const desiredDescription = encodeDescription(ownership, news.description);
+      // Descriptions are a single RE2 line (`^.{1,499}$`).
+      const desiredDescription =
+        news.description
+          ?.replace(/[\r\n]+/g, " ")
+          .trim()
+          .slice(0, 499) || undefined;
       const desiredTimeZone = timeZoneOf(news.timeZone);
       const desiredPaused = news.paused === true;
       const httpTarget =
-        news.httpTarget !== undefined
-          ? yield* toApiHttpTarget(news.httpTarget)
-          : undefined;
+        news.httpTarget !== undefined ? yield* toApiHttpTarget(news.httpTarget) : undefined;
       const pubsubTarget =
-        news.pubsubTarget !== undefined
-          ? yield* toApiPubsubTarget(news.pubsubTarget)
-          : undefined;
+        news.pubsubTarget !== undefined ? yield* toApiPubsubTarget(news.pubsubTarget) : undefined;
       const appEngineHttpTarget =
         news.appEngineHttpTarget !== undefined
           ? yield* toApiAppEngineHttpTarget(news.appEngineHttpTarget)
@@ -888,7 +708,7 @@ export const JobProvider = () =>
       }
 
       const mask: string[] = [];
-      if ((current.description ?? "") !== desiredDescription) {
+      if ((current.description ?? "") !== (desiredDescription ?? "")) {
         mask.push("description");
       }
       if ((current.schedule ?? "") !== news.schedule) {

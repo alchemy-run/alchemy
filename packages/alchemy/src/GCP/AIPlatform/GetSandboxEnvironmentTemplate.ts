@@ -42,7 +42,6 @@ export interface GetSandboxEnvironmentTemplate extends Binding.Service<
   >
 > {}
 
-export const GetSandboxEnvironmentTemplate =
-  Binding.Service<GetSandboxEnvironmentTemplate>(
-    "GCP.AIPlatform.GetSandboxEnvironmentTemplate",
-  );
+export const GetSandboxEnvironmentTemplate = Binding.Service<GetSandboxEnvironmentTemplate>(
+  "GCP.AIPlatform.GetSandboxEnvironmentTemplate",
+);

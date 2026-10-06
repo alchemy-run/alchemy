@@ -11,7 +11,9 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  collectPages,
   LIST_LOCATIONS,
+  MAX_POLLS,
   MAX_WORKLOAD_ID_LENGTH,
   emptyOnMissing,
   hasAlchemyLabelMap,
@@ -130,23 +132,17 @@ export type Session = Resource<
  */
 export const Session = Resource<Session>("GCP.Dataproc.Session");
 
-export class SessionNotResolved extends Data.TaggedError(
-  "GCP.Dataproc.SessionNotResolved",
-)<{
+export class SessionNotResolved extends Data.TaggedError("GCP.Dataproc.SessionNotResolved")<{
   name: string;
 }> {}
 
-export class SessionFailed extends Data.TaggedError(
-  "GCP.Dataproc.SessionFailed",
-)<{
+export class SessionFailed extends Data.TaggedError("GCP.Dataproc.SessionFailed")<{
   name: string;
   state: string | undefined;
   detail: string | undefined;
 }> {}
 
-export class SessionNotReady extends Data.TaggedError(
-  "GCP.Dataproc.SessionNotReady",
-)<{
+export class SessionNotReady extends Data.TaggedError("GCP.Dataproc.SessionNotReady")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -154,19 +150,13 @@ export class SessionNotReady extends Data.TaggedError(
 const resourceName = (project: string, location: string, sessionId: string) =>
   `${locationParent(project, location)}/sessions/${sessionId}`;
 
-const defaultJupyter = (
-  news: SessionProps,
-): dataproc.JupyterConfig | undefined => {
+const defaultJupyter = (news: SessionProps): dataproc.JupyterConfig | undefined => {
   if (news.sessionTemplate !== undefined) return news.jupyterSession;
   if (news.sparkConnectSession !== undefined) return undefined;
   return news.jupyterSession ?? { kernel: "PYTHON" };
 };
 
-const toAttrs = (
-  session: dataproc.Session,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (session: dataproc.Session, project: string, location: string) => {
   const name = session.name ?? "";
   const parsed = parseResourceName(name, "sessions", location);
   return {
@@ -184,10 +174,14 @@ const toAttrs = (
   };
 };
 
+// Dataproc rejects a session create whose body omits `name` with a bare
+// `INVALID_ARGUMENT`.
 const desiredBody = (
   news: SessionProps,
+  name: string,
   desiredLabels: Record<string, string>,
 ): dataproc.Session => ({
+  name,
   labels: desiredLabels,
   sessionTemplate: news.sessionTemplate,
   jupyterSession: defaultJupyter(news),
@@ -207,9 +201,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((session) =>
-      session
-        ? Effect.succeed(session)
-        : Effect.fail(new SessionNotResolved({ name })),
+      session ? Effect.succeed(session) : Effect.fail(new SessionNotResolved({ name })),
     ),
     Effect.filterOrFail(
       (session) => session.state !== "FAILED",
@@ -232,25 +224,26 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Dataproc.SessionNotReady" ||
         error._tag === "GCP.Dataproc.SessionNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: MAX_POLLS,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 
 const listLocation = (project: string, location: string) =>
   emptyOnMissing(
-    dataproc
-      .listProjectsLocationsSessions({
+    collectPages(
+      dataproc.listProjectsLocationsSessions.pages({
         parent: locationParent(project, location),
         pageSize: 1000,
-      })
-      .pipe(
-        Effect.map((page) =>
-          (page.sessions ?? [])
-            .filter((session) => hasAlchemyLabelMap(session.labels))
-            .map((session) => toAttrs(session, project, location)),
-        ),
+      }),
+      (page) => page.sessions,
+    ).pipe(
+      Effect.map((items) =>
+        items
+          .filter((session) => hasAlchemyLabelMap(session.labels))
+          .map((session) => toAttrs(session, project, location)),
       ),
+    ),
   );
 
 export const SessionProvider = () =>
@@ -262,26 +255,19 @@ export const SessionProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.sessionId ?? output?.sessionId;
       const nextId = news.sessionId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousLocation !== nextLocation)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -289,10 +275,7 @@ export const SessionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const sessionId = yield* toPhysicalId(
         id,
         olds?.sessionId,
@@ -300,14 +283,11 @@ export const SessionProvider = () =>
         MAX_WORKLOAD_ID_LENGTH,
         "session",
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, sessionId);
+      const name = output?.name ?? resourceName(env.project, location, sessionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -323,10 +303,7 @@ export const SessionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const sessionId = yield* toPhysicalId(
         id,
         news.sessionId,
@@ -339,7 +316,7 @@ export const SessionProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const desired = desiredBody(news, desiredLabels);
+      const desired = desiredBody(news, name, desiredLabels);
 
       let current = yield* getByName(name);
 
@@ -352,7 +329,7 @@ export const SessionProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created) {
-          yield* waitForOperation(created, { interval: "5 seconds" });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(getByName(name), name);
         current = yield* waitUntilReady(name);
@@ -371,10 +348,7 @@ export const SessionProvider = () =>
         .deleteProjectsLocationsSessions({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitForOperation(operation, {
-          notFoundOk: true,
-          interval: "5 seconds",
-        });
+        yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

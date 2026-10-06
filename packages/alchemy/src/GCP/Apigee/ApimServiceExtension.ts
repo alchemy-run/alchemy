@@ -10,12 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  hasOwnershipExtension,
-  parseOwnershipExtension,
-  stripOwnershipExtension,
-  withOwnershipExtension,
-} from "./ownership.ts";
-import {
   lastSegment,
   orgParent,
   resolveOrgId,
@@ -23,6 +17,12 @@ import {
   toPhysicalId,
   waitForOperation,
 } from "./operations.ts";
+import {
+  hasOwnershipExtension,
+  parseOwnershipExtension,
+  stripOwnershipExtension,
+  withOwnershipExtension,
+} from "./ownership.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -59,8 +59,7 @@ export type ApimExtension = {
    * Supported events. Empty means all events.
    */
   supportedEvents?: Array<
-    | apigee.GoogleCloudApigeeV1ApimServiceExtensionExtensionSupportedEventsItemEnum
-    | (string & {})
+    apigee.GoogleCloudApigeeV1ApimServiceExtensionExtensionSupportedEventsItemEnum | (string & {})
   >;
 };
 
@@ -179,9 +178,7 @@ const toExtension = (
   hostname: extension.hostname ?? "",
   failOpen: extension.failOpen,
   matchCondition: extension.matchCondition,
-  supportedEvents: extension.supportedEvents
-    ? [...extension.supportedEvents]
-    : undefined,
+  supportedEvents: extension.supportedEvents ? [...extension.supportedEvents] : undefined,
 });
 
 const toAttrs = (
@@ -212,22 +209,15 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApimServiceExtensions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const ApimServiceExtensionProvider = () =>
   Provider.succeed(ApimServiceExtension, {
-    stables: [
-      "name",
-      "apimServiceExtensionId",
-      "organizationId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "apimServiceExtensionId", "organizationId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.apimServiceExtensionId ?? output?.apimServiceExtensionId;
+      const previousId = olds?.apimServiceExtensionId ?? output?.apimServiceExtensionId;
       const previousOrg = olds?.organizationId ?? output?.organizationId;
       if (
         (previousId !== undefined &&
@@ -245,9 +235,7 @@ export const ApimServiceExtensionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        olds?.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const extensionId = yield* toPhysicalId(
         id,
         olds?.apimServiceExtensionId,
@@ -272,29 +260,19 @@ export const ApimServiceExtensionProvider = () =>
             pageSize: 100,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.apimServiceExtensions ?? []),
-            ),
-            Stream.filter((resource) =>
-              hasOwnershipExtension(resource.extensions),
-            ),
-            Stream.map((resource) =>
-              toAttrs(resource, env.project, organizationId),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.apimServiceExtensions ?? [])),
+            Stream.filter((resource) => hasOwnershipExtension(resource.extensions)),
+            Stream.map((resource) => toAttrs(resource, env.project, organizationId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed([])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        news.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        news.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const extensionId = yield* toPhysicalId(
         id,
         news.apimServiceExtensionId,
@@ -303,10 +281,7 @@ export const ApimServiceExtensionProvider = () =>
       );
       const name = resourceName(organizationId, extensionId);
       const ownership = yield* createInternalLabels(id);
-      const desiredExtensions = withOwnershipExtension(
-        ownership,
-        news.extensions,
-      );
+      const desiredExtensions = withOwnershipExtension(ownership, news.extensions);
       const body: apigee.GoogleCloudApigeeV1ApimServiceExtension = {
         name: extensionId,
         lbForwardingRule: news.lbForwardingRule,
@@ -344,14 +319,11 @@ export const ApimServiceExtensionProvider = () =>
         !sameJson(current.extensions ?? [], desiredExtensions);
 
       if (needsUpdate) {
-        const operation = yield* apigee.patchOrganizationsApimServiceExtensions(
-          {
-            name,
-            updateMask:
-              "lbForwardingRule,network,networkConfigs,extensionProcessor,extensions",
-            body,
-          },
-        );
+        const operation = yield* apigee.patchOrganizationsApimServiceExtensions({
+          name,
+          updateMask: "lbForwardingRule,network,networkConfigs,extensionProcessor,extensions",
+          body,
+        });
         yield* waitForOperation(operation);
         current = (yield* getByName(name)) ?? current;
       }
@@ -362,7 +334,9 @@ export const ApimServiceExtensionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsApimServiceExtensions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

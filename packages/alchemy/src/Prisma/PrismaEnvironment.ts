@@ -13,10 +13,9 @@ export interface PrismaEnvironmentShape extends PrismaResolvedCredentials {
   baseUrl: string;
 }
 
-export class PrismaEnvironment extends Context.Service<
-  PrismaEnvironment,
-  PrismaEnvironmentShape
->()("Prisma::PrismaEnvironment") {}
+export class PrismaEnvironment extends Context.Service<PrismaEnvironment, PrismaEnvironmentShape>()(
+  "Prisma::PrismaEnvironment",
+) {}
 
 const DEFAULT_BASE_URL = "https://api.prisma.io";
 const PRISMA_API_URL_ENV = "PRISMA_API_URL";
@@ -36,9 +35,7 @@ const normalizeBaseUrl = (value: string) =>
         throw new Error("Prisma Management API URL must use HTTP or HTTPS.");
       }
       if (url.username.length > 0 || url.password.length > 0) {
-        throw new Error(
-          "Prisma Management API URL must not contain credentials.",
-        );
+        throw new Error("Prisma Management API URL must not contain credentials.");
       }
       if (url.protocol === "http:" && !isLoopbackHost(url.hostname)) {
         throw new Error(
@@ -71,10 +68,9 @@ export const fromProfile = () =>
         Config.withDefault(DEFAULT_BASE_URL),
         Effect.flatMap(normalizeBaseUrl),
       );
-      const { resolve } = yield* resolveProviderConfig<
-        PrismaAuthConfig,
-        PrismaResolvedCredentials
-      >(PRISMA_AUTH_PROVIDER_NAME);
+      const { resolve } = yield* resolveProviderConfig<PrismaAuthConfig, PrismaResolvedCredentials>(
+        PRISMA_AUTH_PROVIDER_NAME,
+      );
       const credentials = yield* resolve;
       return { ...credentials, baseUrl };
     }),

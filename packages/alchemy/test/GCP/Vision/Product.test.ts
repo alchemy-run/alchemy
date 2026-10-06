@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vision from "@distilled.cloud/gcp/vision_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -12,7 +12,6 @@ const waitUntilGone = (name: string) =>
   vision.getProjectsLocationsProducts({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -32,18 +31,15 @@ test.provider(
           name: `projects/${project}/locations/${location}/products/alchemy-missing-product`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Vision API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:vision", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(process.env.GCP_TEST_VISION === "1")(
-  "createProjectsLocationsProducts without Vision API fails with Forbidden",
+test.provider.skipIf(runLifecycle)(
+  "createProjectsLocationsProducts on a new project fails with ProductSearchNotOnboarded",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
@@ -59,12 +55,11 @@ test.provider.skipIf(process.env.GCP_TEST_VISION === "1")(
           },
         }),
       );
-      expect(error._tag).toEqual("Forbidden");
-      expect(error.message).toContain("Cloud Vision API has not been used");
+      expect(error._tag).toEqual("ProductSearchNotOnboarded");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:vision", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -87,9 +82,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(
-        created.name.startsWith(
-          `projects/${project}/locations/${location}/products/`,
-        ),
+        created.name.startsWith(`projects/${project}/locations/${location}/products/`),
       ).toEqual(true);
       expect(created.productId.length).toBeGreaterThan(0);
       expect(created.displayName).toEqual("Trail runner");
@@ -101,18 +94,10 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.displayName).toContain("[alchemy ");
+      expect(fetched.displayName).toEqual("Trail runner");
+      expect(fetched.description).toEqual("mesh upper");
       expect(fetched.productCategory).toEqual("apparel-v2");
-      expect(
-        (fetched.productLabels ?? []).some(
-          (label) => label.key === "color" && label.value === "blue",
-        ),
-      ).toEqual(true);
-      expect(
-        (fetched.productLabels ?? []).some((label) =>
-          (label.key ?? "").startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(fetched.productLabels).toEqual([{ key: "color", value: "blue" }]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -141,13 +126,13 @@ test.provider.skipIf(!runLifecycle)(
       const fetchedUpdate = yield* vision.getProjectsLocationsProducts({
         name: created.name,
       });
-      expect(fetchedUpdate.displayName).toContain("Trail runner v2");
-      expect(fetchedUpdate.description).toContain("knit upper");
+      expect(fetchedUpdate.displayName).toEqual("Trail runner v2");
+      expect(fetchedUpdate.description).toEqual("knit upper");
 
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:vision", "live"], timeout: 90_000 },
 );

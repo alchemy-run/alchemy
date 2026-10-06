@@ -1,21 +1,18 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const PACKAGE_ID = "sbom";
 const VERSION_ID = "1.0.0";
@@ -53,18 +50,13 @@ const uploadFile = (repositoryName: string) =>
       `?uploadType=media&filename=${FILENAME}&packageId=${PACKAGE_ID}&versionId=${VERSION_ID}`;
     const response = yield* client.execute(
       HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeader(
-          "Authorization",
-          `Bearer ${Redacted.value(creds.accessToken)}`,
-        ),
+        HttpClientRequest.setHeader("Authorization", `Bearer ${Redacted.value(creds.accessToken)}`),
         HttpClientRequest.bodyUint8Array(BODY, "application/json"),
       ),
     );
     if (response.status === 409) return;
     if (response.status < 200 || response.status >= 300) {
-      const body = yield* response.text.pipe(
-        Effect.catch(() => Effect.succeed("")),
-      );
+      const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
       return yield* Effect.fail(
         new Error(`generic artifact upload failed: ${response.status} ${body}`),
       );
@@ -95,7 +87,8 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* uploadFile(repo.name);
       const fileName = `${repo.name}/files/${PACKAGE_ID}:${VERSION_ID}:${FILENAME}`;
       const versionName = `${repo.name}/packages/${PACKAGE_ID}/versions/${VERSION_ID}`;
-      expect(yield* waitForFile(fileName)).toEqual("found");
+      const file = yield* waitForFile(fileName);
+      expect(file).toEqual("found");
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -105,16 +98,13 @@ test.provider.skipIf(!!process.env.FAST)(
             format: "GENERIC",
             description: "attachment parent",
           });
-          const attachment = yield* GCP.ArtifactRegistry.RepositoriesAttachment(
-            "Sbom",
-            {
-              repository: artifacts.name,
-              target: versionName,
-              type: "application/spdx+json",
-              files: [fileName],
-              annotations: { env: "test" },
-            },
-          );
+          const attachment = yield* GCP.ArtifactRegistry.RepositoriesAttachment("Sbom", {
+            repository: artifacts.name,
+            target: versionName,
+            type: "application/spdx+json",
+            files: [fileName],
+            annotations: { env: "test" },
+          });
           return { artifacts, attachment };
         }),
       );
@@ -126,10 +116,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.attachment.annotations).toMatchObject({ env: "test" });
       expect(created.attachment.files.length).toBeGreaterThan(0);
 
-      const fetched =
-        yield* artifactregistry.getProjectsLocationsRepositoriesAttachments({
-          name: created.attachment.name,
-        });
+      const fetched = yield* artifactregistry.getProjectsLocationsRepositoriesAttachments({
+        name: created.attachment.name,
+      });
       expect(fetched.name).toEqual(created.attachment.name);
       expect(fetched.annotations?.env).toEqual("test");
       expect(fetched.annotations?.["alchemy-id"]).toEqual(expect.any(String));
@@ -142,17 +131,14 @@ test.provider.skipIf(!!process.env.FAST)(
             format: "GENERIC",
             description: "attachment parent",
           });
-          const attachment = yield* GCP.ArtifactRegistry.RepositoriesAttachment(
-            "Sbom",
-            {
-              repository: artifacts.name,
-              attachmentId: created.attachment.attachmentId,
-              target: versionName,
-              type: "application/spdx+json",
-              files: [fileName],
-              annotations: { env: "prod", role: "sbom" },
-            },
-          );
+          const attachment = yield* GCP.ArtifactRegistry.RepositoriesAttachment("Sbom", {
+            repository: artifacts.name,
+            attachmentId: created.attachment.attachmentId,
+            target: versionName,
+            type: "application/spdx+json",
+            files: [fileName],
+            annotations: { env: "prod", role: "sbom" },
+          });
           return { artifacts, attachment };
         }),
       );
@@ -162,10 +148,9 @@ test.provider.skipIf(!!process.env.FAST)(
         role: "sbom",
       });
 
-      const refetched =
-        yield* artifactregistry.getProjectsLocationsRepositoriesAttachments({
-          name: updated.attachment.name,
-        });
+      const refetched = yield* artifactregistry.getProjectsLocationsRepositoriesAttachments({
+        name: updated.attachment.name,
+      });
       expect(refetched.annotations?.env).toEqual("prod");
       expect(refetched.annotations?.role).toEqual("sbom");
 
@@ -174,5 +159,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(updated.attachment.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"],
+    timeout: 180_000,
+  },
 );

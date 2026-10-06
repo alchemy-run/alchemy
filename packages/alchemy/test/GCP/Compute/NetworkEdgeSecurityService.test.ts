@@ -1,19 +1,19 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
+// Needs Cloud Armor Managed Protection Plus (GCP_TEST_CLOUD_ARMOR=1); without
+// it insert fails with `BadRequest: Network Security Policies require Cloud
+// Armor Managed Protection Plus tier and above to use.`
 const runLifecycle = !!process.env.GCP_TEST_CLOUD_ARMOR && !process.env.FAST;
 
 const region = "us-central1";
@@ -57,51 +57,27 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider(
-  "probe insertNetworkEdgeSecurityServices entitlement",
+  "insertNetworkEdgeSecurityServices without Cloud Armor Enterprise fails with CloudArmorEnterpriseRequired",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertNetworkEdgeSecurityServices({
+      const error = yield* Effect.flip(
+        compute.insertNetworkEdgeSecurityServices({
           project,
           region,
           body: {
             name: "alchemy-ness-probe",
             description: "alchemy entitlement probe",
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteNetworkEdgeSecurityServices({
-            project,
-            region,
-            networkEdgeSecurityService: "alchemy-ness-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("CloudArmorEnterpriseRequired");
     }).pipe(logLevel),
-  { timeout: 60_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -119,9 +95,7 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
-      expect(created.networkEdgeSecurityServiceName).toEqual(
-        expect.any(String),
-      );
+      expect(created.networkEdgeSecurityServiceName).toEqual(expect.any(String));
       expect(created.region).toEqual(region);
       expect(created.description).toEqual("regional network armor");
 
@@ -136,8 +110,7 @@ test.provider.skipIf(!runLifecycle)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Compute.NetworkEdgeSecurityService("EdgeArmor", {
-            networkEdgeSecurityServiceName:
-              created.networkEdgeSecurityServiceName,
+            networkEdgeSecurityServiceName: created.networkEdgeSecurityServiceName,
             region,
             description: "updated network armor",
           });
@@ -149,5 +122,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.networkEdgeSecurityServiceName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

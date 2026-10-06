@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gamesConfiguration from "@distilled.cloud/gcp/gamesConfiguration_v1configuration";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { applicationId, logLevel, probeApplicationId } from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { applicationId, logLevel, missingTag, probeApplicationId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -12,7 +12,6 @@ const waitUntilGone = (achievementId: string) =>
   gamesConfiguration.getAchievementConfigurations({ achievementId }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -31,14 +30,17 @@ test.provider(
           achievementId: "alchemy-missing-achievement",
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual(missingTag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:gamesconfiguration", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!!process.env.GCP_TEST_GAMESCONFIGURATION)(
+test.provider.skipIf(!!applicationId)(
   "insertAchievementConfigurations without Play Games access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -62,49 +64,32 @@ test.provider.skipIf(!!process.env.GCP_TEST_GAMESCONFIGURATION)(
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:gamesconfiguration", "live"],
+    timeout: 90_000,
+  },
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+// Needs a Play Games Services application the credentials administer; without
+// one the API rejects inserts with Forbidden (probe above).
+// Set GCP_GAMESCONFIGURATION_APPLICATION_ID to run the lifecycle.
+test.provider.skipIf(!applicationId)(
   "create, update, and delete an achievement configuration",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const access = yield* gamesConfiguration
-        .listAchievementConfigurations({
-          applicationId: probeApplicationId,
-          maxResults: 1,
-        })
-        .pipe(
-          Effect.as("ok" as const),
-          Effect.catchTag("Forbidden", (error) => Effect.succeed(error)),
-          Effect.catchTag("NotFound", (error) => Effect.succeed(error)),
-        );
-      if (access !== "ok") {
-        expect(["Forbidden", "NotFound"]).toContain(access._tag);
-        yield* stack.destroy();
-        return;
-      }
-      if (!applicationId) {
-        yield* stack.destroy();
-        return;
-      }
-
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.GamesConfiguration.AchievementConfiguration(
-            "FirstWin",
-            {
-              applicationId: applicationId!,
-              name: "First Win",
-              description: "Win your first match",
-            },
-          );
+          return yield* GCP.GamesConfiguration.AchievementConfiguration("FirstWin", {
+            applicationId: applicationId!,
+            name: "First Win",
+            description: "Win your first match",
+          });
         }),
       );
 
@@ -117,21 +102,16 @@ test.provider.skipIf(!!process.env.FAST)(
         achievementId: created.achievementId,
       });
       expect(fetched.id).toEqual(created.achievementId);
-      expect(fetched.draft?.description?.translations?.[0]?.value).toContain(
-        "[alchemy ",
-      );
+      expect(fetched.draft?.description?.translations?.[0]?.value).toEqual("Win your first match");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.GamesConfiguration.AchievementConfiguration(
-            "FirstWin",
-            {
-              applicationId: created.applicationId,
-              achievementId: created.achievementId,
-              name: "First Win",
-              description: "Win a match",
-            },
-          );
+          return yield* GCP.GamesConfiguration.AchievementConfiguration("FirstWin", {
+            applicationId: created.applicationId,
+            achievementId: created.achievementId,
+            name: "First Win",
+            description: "Win a match",
+          });
         }),
       );
 
@@ -143,5 +123,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.achievementId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:gamesconfiguration", "live"],
+    timeout: 90_000,
+  },
 );

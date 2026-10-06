@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_EXTERNAL_ID_LENGTH = 255;
 export const MAX_DISPLAY_NAME_LENGTH = 255;
@@ -17,12 +13,7 @@ export const MAX_REQUISITION_ID_LENGTH = 255;
 export const MAX_TITLE_LENGTH = 500;
 export const DEFAULT_LANGUAGE = "en-US";
 
-const markerOf = (
-  _labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (_labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -30,10 +21,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -53,8 +41,7 @@ export const encodeOwnership = (
 ): string => {
   const marker = fitMarker(labels, Math.min(8000, maxLength));
   const trimmed = text?.trim();
-  const combined =
-    trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
+  const combined = trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
   return combined.slice(0, maxLength);
 };
 
@@ -66,10 +53,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -97,20 +81,14 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) => {
-  if (
-    Object.keys(parseOwnership(text).labels).some((key) =>
-      key.startsWith("alchemy-"),
-    )
-  ) {
+  if (Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"))) {
     return true;
   }
   return (text ?? "").toLowerCase().includes("alchemy-");
 };
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -120,18 +98,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -173,14 +142,8 @@ export const parseTenantName = (name: string, fallbackProject: string) => {
   const tenantsAt = parts.lastIndexOf("tenants");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : fallbackProject,
-    tenantId:
-      tenantsAt >= 0 && parts[tenantsAt + 1]
-        ? parts[tenantsAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject,
+    tenantId: tenantsAt >= 0 && parts[tenantsAt + 1] ? parts[tenantsAt + 1]! : lastSegment(name),
     name,
   };
 };
@@ -197,9 +160,7 @@ export const parseCompanyName = (name: string, fallbackProject: string) => {
         ? parts.slice(0, tenantsAt + 2).join("/")
         : parentOf(name),
     companyId:
-      companiesAt >= 0 && parts[companiesAt + 1]
-        ? parts[companiesAt + 1]!
-        : lastSegment(name),
+      companiesAt >= 0 && parts[companiesAt + 1] ? parts[companiesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -214,18 +175,15 @@ export const parseJobName = (name: string, fallbackProject: string) => {
       tenantsAt >= 0 && parts[tenantsAt + 1]
         ? parts.slice(0, tenantsAt + 2).join("/")
         : parentOf(name),
-    jobId:
-      jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
+    jobId: jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
   };
 };
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBoolean = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left ?? false) === (right ?? false);
+export const sameBoolean = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? false) === (right ?? false);
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -233,11 +191,7 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  jsonEqual(
-    [...(left ?? [])].slice().sort(),
-    [...(right ?? [])].slice().sort(),
-  );
+) => jsonEqual([...(left ?? [])].slice().sort(), [...(right ?? [])].slice().sort());
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -287,9 +241,7 @@ export const toGeneratedName = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `j${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `j${generated}`.slice(0, maxLength);
     return next.length >= 4 ? next : `${next}xxxx`.slice(0, maxLength);
   });
 
@@ -301,22 +253,16 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (error) =>
-        error._tag === "Conflict" ||
-        error._tag === "BadRequest" ||
-        error._tag === "NotFound",
+        error._tag === "Conflict" || error._tag === "BadRequest" || error._tag === "NotFound",
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
   );
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.Jobs.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.Jobs.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -343,33 +289,21 @@ export const getTenant = (name: string) =>
     ? Effect.succeed(undefined)
     : jobs
         .getProjectsTenants({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const getCompany = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : jobs
         .getProjectsTenantsCompanies({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const getJob = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : jobs
         .getProjectsTenantsJobs({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const listTenants = (project: string) =>
   collectPages(
@@ -378,9 +312,7 @@ export const listTenants = (project: string) =>
       pageSize: 100,
     }),
     (page) => page.tenants,
-  ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () => emptyList<jobs.Tenant>()),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => emptyList<jobs.Tenant>()));
 
 export const listCompanies = (parent: string) =>
   parent.length === 0
@@ -391,11 +323,7 @@ export const listCompanies = (parent: string) =>
           pageSize: 100,
         }),
         (page) => page.companies,
-      ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          emptyList<jobs.Company>(),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<jobs.Company>()));
 
 export const listJobs = (parent: string, companyName: string) =>
   parent.length === 0 || companyName.length === 0
@@ -408,15 +336,11 @@ export const listJobs = (parent: string, companyName: string) =>
           jobView: "JOB_VIEW_FULL",
         }),
         (page) => page.jobs,
-      ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () => emptyList<jobs.Job>()),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<jobs.Job>()));
 
 export const listOwnedTenants = (project: string) =>
   listTenants(project).pipe(
-    Effect.map((tenants) =>
-      tenants.filter((tenant) => hasOwnershipMarker(tenant.externalId)),
-    ),
+    Effect.map((tenants) => tenants.filter((tenant) => hasOwnershipMarker(tenant.externalId))),
   );
 
 export const listOwnedCompanies = (project: string) =>
@@ -424,16 +348,14 @@ export const listOwnedCompanies = (project: string) =>
     const tenants = yield* listTenants(project);
     const pages = yield* Effect.forEach(
       tenants,
-      (tenant) =>
-        tenant.name ? listCompanies(tenant.name) : emptyList<jobs.Company>(),
+      (tenant) => (tenant.name ? listCompanies(tenant.name) : emptyList<jobs.Company>()),
       { concurrency: 4 },
     );
     return pages
       .flat()
       .filter(
         (company) =>
-          hasOwnershipMarker(company.displayName) ||
-          hasOwnershipMarker(company.externalId),
+          hasOwnershipMarker(company.displayName) || hasOwnershipMarker(company.externalId),
       );
   });
 
@@ -442,8 +364,7 @@ export const listOwnedJobs = (project: string) =>
     const tenants = yield* listTenants(project);
     const companies = yield* Effect.forEach(
       tenants,
-      (tenant) =>
-        tenant.name ? listCompanies(tenant.name) : emptyList<jobs.Company>(),
+      (tenant) => (tenant.name ? listCompanies(tenant.name) : emptyList<jobs.Company>()),
       { concurrency: 4 },
     );
     const listed = companies.flat();
@@ -451,18 +372,14 @@ export const listOwnedJobs = (project: string) =>
       listed,
       (company) => {
         const parent = company.name ? parentOf(company.name) : "";
-        return company.name
-          ? listJobs(parent, company.name)
-          : emptyList<jobs.Job>();
+        return company.name ? listJobs(parent, company.name) : emptyList<jobs.Job>();
       },
       { concurrency: 4 },
     );
     return pages
       .flat()
       .filter(
-        (job) =>
-          hasOwnershipMarker(job.description) ||
-          hasOwnershipMarker(job.requisitionId),
+        (job) => hasOwnershipMarker(job.description) || hasOwnershipMarker(job.requisitionId),
       );
   });
 
@@ -512,24 +429,20 @@ export const findOwnedJob = (parent: string, id: string) =>
 export const deleteJob = (name: string) =>
   name.length === 0
     ? Effect.void
-    : jobs
-        .deleteProjectsTenantsJobs({ name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+    : jobs.deleteProjectsTenantsJobs({ name }).pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 export const deleteCompany = (name: string) =>
   Effect.gen(function* () {
     if (name.length === 0) return;
     const parent = parentOf(name);
     const listed = yield* listJobs(parent, name);
-    yield* Effect.forEach(
-      listed,
-      (job) => (job.name ? deleteJob(job.name) : Effect.void),
-      { concurrency: 4 },
-    );
+    yield* Effect.forEach(listed, (job) => (job.name ? deleteJob(job.name) : Effect.void), {
+      concurrency: 4,
+    });
     yield* retryTransient(
       jobs
         .deleteProjectsTenantsCompanies({ name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void)),
+        .pipe(Effect.catchTag("NotFound", () => Effect.void)),
     );
   });
 
@@ -543,8 +456,6 @@ export const deleteTenant = (name: string) =>
       { concurrency: 4 },
     );
     yield* retryTransient(
-      jobs
-        .deleteProjectsTenants({ name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void)),
+      jobs.deleteProjectsTenants({ name }).pipe(Effect.catchTag("NotFound", () => Effect.void)),
     );
   });

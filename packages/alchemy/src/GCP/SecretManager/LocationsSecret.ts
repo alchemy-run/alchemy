@@ -18,11 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type {
-  CustomerManagedEncryption,
-  Rotation,
-  SecretTopic,
-} from "./Secret.ts";
+import type { CustomerManagedEncryption, Rotation, SecretTopic } from "./Secret.ts";
 
 export type LocationsSecretProps = {
   /**
@@ -157,9 +153,7 @@ export type LocationsSecret = Resource<
  * @resource
  * @category SecretManager
  */
-export const LocationsSecret = Resource<LocationsSecret>(
-  "GCP.SecretManager.LocationsSecret",
-);
+export const LocationsSecret = Resource<LocationsSecret>("GCP.SecretManager.LocationsSecret");
 
 export class LocationsSecretNotResolved extends Data.TaggedError(
   "GCP.SecretManager.LocationsSecretNotResolved",
@@ -173,10 +167,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const resourceName = (project: string, location: string, secretId: string) =>
   `projects/${project}/locations/${location}/secrets/${secretId}`;
@@ -187,16 +179,10 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    secretId:
-      secretsAt >= 0 && parts[secretsAt + 1]
-        ? parts[secretsAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    secretId: secretsAt >= 0 && parts[secretsAt + 1] ? parts[secretsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -215,27 +201,18 @@ const userAliases = (
 const toId = (id: string, secretId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
-      secretId ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
+      secretId ?? existing ?? (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
     );
   });
 
 const toTopics = (topics: secretmanager.TopicList | null | undefined) =>
   (topics ?? [])
-    .filter(
-      (topic): topic is { name: string } => typeof topic.name === "string",
-    )
+    .filter((topic): topic is { name: string } => typeof topic.name === "string")
     .map((topic) => ({ name: topic.name }));
 
-const toRotation = (
-  rotation: secretmanager.Rotation | undefined,
-): Rotation | undefined => {
+const toRotation = (rotation: secretmanager.Rotation | undefined): Rotation | undefined => {
   if (rotation === undefined) return undefined;
-  if (
-    rotation.nextRotationTime === undefined &&
-    rotation.rotationPeriod === undefined
-  ) {
+  if (rotation.nextRotationTime === undefined && rotation.rotationPeriod === undefined) {
     return undefined;
   }
   return {
@@ -253,17 +230,12 @@ const toCmek = (
   return { kmsKeyName: encryption.kmsKeyName };
 };
 
-const recordsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) => {
+const recordsEqual = (left: Record<string, string>, right: Record<string, string>) => {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && left[key] === right[key],
-    )
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
   );
 };
 
@@ -273,10 +245,7 @@ const topicsEqual = (left: SecretTopic[], right: SecretTopic[]) => {
   return a.length === b.length && a.every((name, index) => name === b[index]);
 };
 
-const rotationEqual = (
-  left: Rotation | undefined,
-  right: Rotation | undefined,
-) =>
+const rotationEqual = (left: Rotation | undefined, right: Rotation | undefined) =>
   (left?.nextRotationTime ?? "") === (right?.nextRotationTime ?? "") &&
   (left?.rotationPeriod ?? "") === (right?.rotationPeriod ?? "");
 
@@ -285,11 +254,7 @@ const cmekEqual = (
   right: CustomerManagedEncryption | undefined,
 ) => (left?.kmsKeyName ?? "") === (right?.kmsKeyName ?? "");
 
-const toAttrs = (
-  secret: secretmanager.Secret,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (secret: secretmanager.Secret, project: string, region: string) => {
   const name = secret.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -315,9 +280,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsSecrets({ name })
     .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)));
 
-const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const collectSecretPages = (parent: string) =>
@@ -329,11 +292,8 @@ const collectSecretPages = (parent: string) =>
     })
     .pipe(
       Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.secrets ?? []),
-      ),
+      Effect.map((pages) => Array.from(pages).flatMap((page) => page.secrets ?? [])),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateBody = (
@@ -359,19 +319,13 @@ export const LocationsSecretProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.secretId ?? output?.secretId;
-      const nextId = news.secretId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const idChanged =
-        previousId !== undefined &&
-        news.secretId !== undefined &&
-        previousId !== news.secretId;
+        previousId !== undefined && news.secretId !== undefined && previousId !== news.secretId;
       const locationChanged = previousLocation !== nextLocation;
       if (!idChanged && !locationChanged) return undefined;
       return { action: "replace" as const };
@@ -380,37 +334,26 @@ export const LocationsSecretProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const secretId = yield* toId(id, olds?.secretId, output?.secretId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, secretId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, secretId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const aggregated = yield* collectSecretPages(
-          `projects/${env.project}/locations/-`,
-        );
+        const aggregated = yield* collectSecretPages(`projects/${env.project}/locations/-`);
         const secrets =
           aggregated.length > 0
             ? aggregated
-            : yield* collectSecretPages(
-                `projects/${env.project}/locations/${env.region}`,
-              );
+            : yield* collectSecretPages(`projects/${env.project}/locations/${env.region}`);
         return secrets
           .filter(
             (secret) =>
-              (secret.name ?? "").includes("/locations/") &&
-              hasAlchemyLabelMap(secret.labels),
+              (secret.name ?? "").includes("/locations/") && hasAlchemyLabelMap(secret.labels),
           )
           .map((secret) => toAttrs(secret, env.project, env.region));
       }),
@@ -418,10 +361,7 @@ export const LocationsSecretProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const secretId = yield* toId(id, news.secretId, output?.secretId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, secretId);
       const parent = `projects/${env.project}/locations/${location}`;
       const desiredLabels = {
@@ -459,27 +399,13 @@ export const LocationsSecretProvider = () =>
         userAnnotations(current.annotations),
         desiredAnnotations,
       );
-      const aliasesChanged = !recordsEqual(
-        userAliases(current.versionAliases),
-        desiredAliases,
-      );
-      const topicsChanged = !topicsEqual(
-        toTopics(current.topics),
-        desiredTopics,
-      );
-      const rotationChanged = !rotationEqual(
-        toRotation(current.rotation),
-        desiredRotation,
-      );
-      const destroyTtlChanged =
-        (current.versionDestroyTtl ?? "") !== (desiredDestroyTtl ?? "");
-      const cmekChanged = !cmekEqual(
-        toCmek(current.customerManagedEncryption),
-        desiredCmek,
-      );
+      const aliasesChanged = !recordsEqual(userAliases(current.versionAliases), desiredAliases);
+      const topicsChanged = !topicsEqual(toTopics(current.topics), desiredTopics);
+      const rotationChanged = !rotationEqual(toRotation(current.rotation), desiredRotation);
+      const destroyTtlChanged = (current.versionDestroyTtl ?? "") !== (desiredDestroyTtl ?? "");
+      const cmekChanged = !cmekEqual(toCmek(current.customerManagedEncryption), desiredCmek);
       const expireTimeChanged =
-        news.expireTime !== undefined &&
-        (current.expireTime ?? "") !== news.expireTime;
+        news.expireTime !== undefined && (current.expireTime ?? "") !== news.expireTime;
       const ttlChanged =
         news.expireTime === undefined &&
         news.ttl !== undefined &&

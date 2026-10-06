@@ -144,10 +144,9 @@ export type ProductsIntegrationsVersion = Resource<
  * @resource
  * @category Integrations
  */
-export const ProductsIntegrationsVersion =
-  Resource<ProductsIntegrationsVersion>(
-    "GCP.Integrations.ProductsIntegrationsVersion",
-  );
+export const ProductsIntegrationsVersion = Resource<ProductsIntegrationsVersion>(
+  "GCP.Integrations.ProductsIntegrationsVersion",
+);
 
 export class ProductsIntegrationsVersionNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsIntegrationsVersionNotResolved",
@@ -164,9 +163,7 @@ const integrationOf = (name: string) => {
 const integrationIdOf = (name: string) => {
   const parts = name.split("/");
   const index = parts.indexOf("integrations");
-  return index >= 0
-    ? (parts[index + 1] ?? lastSegment(name))
-    : lastSegment(name);
+  return index >= 0 ? (parts[index + 1] ?? lastSegment(name)) : lastSegment(name);
 };
 
 const resourceName = (
@@ -179,9 +176,7 @@ const resourceName = (
   `${productParent(project, location, product)}/integrations/${integrationId}/versions/${versionId}`;
 
 const triggersOf = (
-  configs:
-    | integrations.GoogleCloudIntegrationsV1alphaTriggerConfigList
-    | undefined,
+  configs: integrations.GoogleCloudIntegrationsV1alphaTriggerConfigList | undefined,
 ): TriggerConfig[] | undefined => {
   if (configs === undefined) return undefined;
   return configs.map((config) => ({
@@ -225,41 +220,29 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsProductsIntegrationsVersions({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsIntegrationsVersions
     .pages({ parent, pageSize: 100 })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.integrationVersions ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.integrationVersions ?? [])),
       Stream.filter((version) => hasOwnershipMarker(version.description)),
       Stream.map((version) => toAttrs(version, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (parent: string, id: string) =>
   integrations.listProjectsLocationsProductsIntegrationsVersions
     .pages({ parent, pageSize: 100 })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.integrationVersions ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.integrationVersions ?? [])),
       Stream.filterEffect((version) => ownedByAlchemy(id, version.description)),
       Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
+      Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 const deleteIntegration = (name: string) =>
@@ -288,10 +271,7 @@ export const ProductsIntegrationsVersionProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(
-        news.location,
-        previousLocation ?? env.region,
-      );
+      const nextLocation = normalizeLocation(news.location, previousLocation ?? env.region);
       if (
         previousLocation !== undefined &&
         normalizeLocation(previousLocation, env.region) !== nextLocation
@@ -300,10 +280,7 @@ export const ProductsIntegrationsVersionProvider = () =>
       }
       const previousProduct = olds?.product ?? output?.product;
       const nextProduct = normalizeProduct(news.product);
-      if (
-        previousProduct !== undefined &&
-        normalizeProduct(previousProduct) !== nextProduct
-      ) {
+      if (previousProduct !== undefined && normalizeProduct(previousProduct) !== nextProduct) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousIntegration = olds?.integrationId ?? output?.integrationId;
@@ -327,27 +304,14 @@ export const ProductsIntegrationsVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const integrationId = yield* toResourceId(
-        id,
-        olds?.integrationId,
-        output?.integrationId,
-      );
+      const integrationId = yield* toResourceId(id, olds?.integrationId, output?.integrationId);
       const versionId = olds?.versionId ?? output?.versionId ?? "";
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const product = normalizeProduct(olds?.product ?? output?.product);
       const name =
         output?.name ??
         (versionId.length > 0
-          ? resourceName(
-              env.project,
-              location,
-              product,
-              integrationId,
-              versionId,
-            )
+          ? resourceName(env.project, location, product, integrationId, versionId)
           : "");
       let existing = yield* getByName(name);
       if (existing === undefined) {
@@ -358,9 +322,7 @@ export const ProductsIntegrationsVersionProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -375,30 +337,15 @@ export const ProductsIntegrationsVersionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const product = normalizeProduct(
-        news.product ?? output?.product ?? DEFAULT_PRODUCT,
-      );
-      const integrationId = yield* toResourceId(
-        id,
-        news.integrationId,
-        output?.integrationId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const product = normalizeProduct(news.product ?? output?.product ?? DEFAULT_PRODUCT);
+      const integrationId = yield* toResourceId(id, news.integrationId, output?.integrationId);
       const parent = `${productParent(env.project, location, product)}/integrations/${integrationId}`;
       const versionId = news.versionId ?? output?.versionId ?? "";
       const name =
         output?.name ??
         (versionId.length > 0
-          ? resourceName(
-              env.project,
-              location,
-              product,
-              integrationId,
-              versionId,
-            )
+          ? resourceName(env.project, location, product, integrationId, versionId)
           : parent);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -424,9 +371,7 @@ export const ProductsIntegrationsVersionProvider = () =>
         const created = yield* tryCreate(newIntegration).pipe(
           Effect.catchTag(["Conflict", "BadRequest"], () =>
             tryCreate(false).pipe(
-              Effect.catchTag(["Conflict", "BadRequest"], () =>
-                findOwned(parent, id),
-              ),
+              Effect.catchTag(["Conflict", "BadRequest"], () => findOwned(parent, id)),
             ),
           ),
         );
@@ -445,23 +390,20 @@ export const ProductsIntegrationsVersionProvider = () =>
         JSON.stringify(triggerConfigs ?? null);
 
       if (descriptionChanged || labelChanged || triggersChanged) {
-        current =
-          yield* integrations.patchProjectsLocationsProductsIntegrationsVersions(
-            {
-              name: currentName,
-              updateMask: updateMaskOf(
-                descriptionChanged ? "description" : undefined,
-                labelChanged ? "user_label" : undefined,
-                triggersChanged ? "trigger_configs" : undefined,
-              ),
-              body: {
-                name: currentName,
-                description,
-                userLabel: news.userLabel,
-                triggerConfigs,
-              },
-            },
-          );
+        current = yield* integrations.patchProjectsLocationsProductsIntegrationsVersions({
+          name: currentName,
+          updateMask: updateMaskOf(
+            descriptionChanged ? "description" : undefined,
+            labelChanged ? "user_label" : undefined,
+            triggersChanged ? "trigger_configs" : undefined,
+          ),
+          body: {
+            name: currentName,
+            description,
+            userLabel: news.userLabel,
+            triggerConfigs,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);

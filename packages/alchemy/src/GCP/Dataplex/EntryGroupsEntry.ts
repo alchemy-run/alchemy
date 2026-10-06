@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -170,10 +165,11 @@ export type EntryGroupsEntry = Resource<
  * ### Updating an Entry
  * **Example:** Fully qualified name and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const entry = yield* GCP.Dataplex.EntryGroupsEntry("Orders", {
  *   entryGroup: group.name,
- *   entryId: existing.entryId,
- *   entryType: existing.entryType,
+ *   entryType:
+ *     "projects/dataplex-types/locations/global/entryTypes/generic",
  *   fullyQualifiedName: "app.orders",
  *   labels: { env: "prod", team: "data" },
  * });
@@ -182,9 +178,7 @@ export type EntryGroupsEntry = Resource<
  * @resource
  * @category Dataplex
  */
-export const EntryGroupsEntry = Resource<EntryGroupsEntry>(
-  "GCP.Dataplex.EntryGroupsEntry",
-);
+export const EntryGroupsEntry = Resource<EntryGroupsEntry>("GCP.Dataplex.EntryGroupsEntry");
 
 const resolveParent = (
   project: string,
@@ -207,14 +201,9 @@ const resolveParent = (
   };
 };
 
-const resourceName = (parent: string, entryId: string) =>
-  `${parent}/entries/${entryId}`;
+const resourceName = (parent: string, entryId: string) => `${parent}/entries/${entryId}`;
 
-const toEntryId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const toEntryId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -228,10 +217,7 @@ const toEntryId = (
     );
   });
 
-const sourceLabels = (
-  news: EntryGroupsEntryProps,
-  ownership: Record<string, string>,
-) => ({
+const sourceLabels = (news: EntryGroupsEntryProps, ownership: Record<string, string>) => ({
   ...toLabels(news.entrySource?.labels),
   ...toLabels(news.labels),
   ...ownership,
@@ -254,10 +240,7 @@ const toSource = (
   };
 };
 
-const toAttrs = (
-  entry: dataplex.GoogleCloudDataplexV1Entry,
-  project: string,
-) => {
+const toAttrs = (entry: dataplex.GoogleCloudDataplexV1Entry, project: string) => {
   const name = entry.name ?? "";
   const parsed = parseName(name, "entries");
   const group = parseName(parsed.parent, "entryGroups");
@@ -280,9 +263,9 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  retryQuota(
-    dataplex.getProjectsLocationsEntryGroupsEntries({ name, view: "ALL" }),
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  retryQuota(dataplex.getProjectsLocationsEntryGroupsEntries({ name, view: "ALL" })).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const listEntriesUnder = (parent: string, project: string) =>
   collectPages(
@@ -298,7 +281,6 @@ const listEntriesUnder = (parent: string, project: string) =>
         .map((item) => toAttrs(item, project)),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const EntryGroupsEntryProvider = () =>
@@ -320,24 +302,19 @@ export const EntryGroupsEntryProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousType = olds?.entryType ?? output?.entryType ?? "";
       const nextType = news.entryType ?? previousType;
-      const previousParentEntry =
-        olds?.parentEntry ?? output?.parentEntry ?? "";
+      const previousParentEntry = olds?.parentEntry ?? output?.parentEntry ?? "";
       const nextParentEntry = news.parentEntry ?? previousParentEntry;
       return replaceOnIdentity({
         previousId: olds?.entryId ?? output?.entryId,
         nextId: news.entryId ?? olds?.entryId ?? output?.entryId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         previousParent: olds?.entryGroup ?? output?.entryGroup,
         nextParent: news.entryGroup ?? olds?.entryGroup ?? output?.entryGroup,
-        extra:
-          nextType !== previousType || nextParentEntry !== previousParentEntry,
+        extra: nextType !== previousType || nextParentEntry !== previousParentEntry,
       });
     }),
 
@@ -354,10 +331,7 @@ export const EntryGroupsEntryProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        tagRecord(existing.entrySource?.labels),
-      ))
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.entrySource?.labels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -365,28 +339,18 @@ export const EntryGroupsEntryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const groups = yield* listAtLocation(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              dataplex.listProjectsLocationsEntryGroups.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.entryGroups,
-            ).pipe(
-              Effect.map((items) =>
-                items.filter((item) => hasAlchemyLabelMap(item.labels)),
-              ),
-            ),
+        const groups = yield* listAtLocation(env.project, env.region, (parent) =>
+          collectPages(
+            dataplex.listProjectsLocationsEntryGroups.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.entryGroups,
+          ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels)))),
         );
         const nested = yield* Effect.forEach(
           groups,
-          (group) =>
-            group.name
-              ? listEntriesUnder(group.name, env.project)
-              : Effect.succeed([]),
+          (group) => (group.name ? listEntriesUnder(group.name, env.project) : Effect.succeed([])),
           { concurrency: 4 },
         );
         return nested.flat();
@@ -446,27 +410,17 @@ export const EntryGroupsEntryProvider = () =>
       }
 
       const observedLabels = tagRecord(current.entrySource?.labels);
-      const { upsert, removed } = diffLabels(
-        observedLabels,
-        desiredSourceLabels,
-      );
+      const { upsert, removed } = diffLabels(observedLabels, desiredSourceLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const fqnChanged =
-        (current.fullyQualifiedName ?? "") !== (news.fullyQualifiedName ?? "");
+      const fqnChanged = (current.fullyQualifiedName ?? "") !== (news.fullyQualifiedName ?? "");
       const aspectsChanged =
-        news.aspects !== undefined &&
-        fingerprint(news.aspects) !== fingerprint(current.aspects);
+        news.aspects !== undefined && fingerprint(news.aspects) !== fingerprint(current.aspects);
       const sourceChanged =
-        (current.entrySource?.resource ?? "") !==
-          (news.entrySource?.resource ?? "") ||
-        (current.entrySource?.system ?? "") !==
-          (news.entrySource?.system ?? "") ||
-        (current.entrySource?.platform ?? "") !==
-          (news.entrySource?.platform ?? "") ||
-        (current.entrySource?.displayName ?? "") !==
-          (news.entrySource?.displayName ?? "") ||
-        (current.entrySource?.description ?? "") !==
-          (news.entrySource?.description ?? "");
+        (current.entrySource?.resource ?? "") !== (news.entrySource?.resource ?? "") ||
+        (current.entrySource?.system ?? "") !== (news.entrySource?.system ?? "") ||
+        (current.entrySource?.platform ?? "") !== (news.entrySource?.platform ?? "") ||
+        (current.entrySource?.displayName ?? "") !== (news.entrySource?.displayName ?? "") ||
+        (current.entrySource?.description ?? "") !== (news.entrySource?.description ?? "");
 
       if (labelsChanged || fqnChanged || aspectsChanged || sourceChanged) {
         current = yield* retryQuota(

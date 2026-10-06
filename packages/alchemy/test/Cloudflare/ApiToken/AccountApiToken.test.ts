@@ -1,7 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,12 +5,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe.skip(
   "AccountApiToken",
@@ -30,20 +27,15 @@ describe.skip(
 
           const token = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ApiToken.AccountApiToken(
-                "DefaultToken",
-                {
-                  policies: [
-                    {
-                      effect: "allow",
-                      permissionGroups: ["Workers Scripts Read"],
-                      resources: {
-                        [`com.cloudflare.api.account.${accountId}`]: "*",
-                      },
-                    },
-                  ],
-                },
-              );
+              return yield* Cloudflare.ApiToken.AccountApiToken("DefaultToken", {
+                policies: [
+                  {
+                    effect: "allow",
+                    permissionGroups: ["Workers Scripts Read"],
+                    resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+                  },
+                ],
+              });
             }),
           );
 
@@ -52,10 +44,7 @@ describe.skip(
           expect(token.status).toEqual("active");
           expect(Redacted.value(token.value)).toMatch(/.+/);
 
-          const actualToken = yield* accounts.getToken({
-            accountId,
-            tokenId: token.tokenId,
-          });
+          const actualToken = yield* accounts.getToken({ accountId, tokenId: token.tokenId });
           expect(actualToken.id).toEqual(token.tokenId);
           expect(actualToken.name).toEqual(token.name);
 
@@ -82,9 +71,7 @@ describe.skip(
                   {
                     effect: "allow",
                     permissionGroups: ["Workers Scripts Read"],
-                    resources: {
-                      [`com.cloudflare.api.account.${accountId}`]: "*",
-                    },
+                    resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
                   },
                 ],
               });
@@ -101,13 +88,8 @@ describe.skip(
                 policies: [
                   {
                     effect: "allow",
-                    permissionGroups: [
-                      "Workers Scripts Read",
-                      "Workers KV Storage Read",
-                    ],
-                    resources: {
-                      [`com.cloudflare.api.account.${accountId}`]: "*",
-                    },
+                    permissionGroups: ["Workers Scripts Read", "Workers KV Storage Read"],
+                    resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
                   },
                 ],
               });
@@ -118,10 +100,7 @@ describe.skip(
           expect(updated.name).toEqual("alchemy-test-acct-update-renamed");
           expect(Redacted.value(updated.value)).toEqual(initialValue);
 
-          const actual = yield* accounts.getToken({
-            accountId,
-            tokenId: updated.tokenId,
-          });
+          const actual = yield* accounts.getToken({ accountId, tokenId: updated.tokenId });
           expect(actual.name).toEqual("alchemy-test-acct-update-renamed");
           expect(actual.policies?.[0]?.permissionGroups.length).toEqual(2);
 
@@ -144,57 +123,39 @@ describe.skip(
             {
               effect: "allow" as const,
               permissionGroups: ["Workers Scripts Read" as const],
-              resources: {
-                [`com.cloudflare.api.account.${accountId}`]: "*",
-              },
+              resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
             },
           ],
         };
 
         const first = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.ApiToken.AccountApiToken(
-              "NoopToken",
-              props,
-            );
+            return yield* Cloudflare.ApiToken.AccountApiToken("NoopToken", props);
           }),
         );
 
         const second = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.ApiToken.AccountApiToken(
-              "NoopToken",
-              props,
-            );
+            return yield* Cloudflare.ApiToken.AccountApiToken("NoopToken", props);
           }),
         );
 
         expect(second.tokenId).toEqual(first.tokenId);
-        expect(Redacted.value(second.value)).toEqual(
-          Redacted.value(first.value),
-        );
+        expect(Redacted.value(second.value)).toEqual(Redacted.value(first.value));
 
         yield* stack.destroy();
       }).pipe(logLevel),
     );
 
-    const waitForTokenToBeDeleted = Effect.fn(function* (
-      tokenId: string,
-      accountId: string,
-    ) {
+    const waitForTokenToBeDeleted = Effect.fn(function* (tokenId: string, accountId: string) {
       yield* accounts.getToken({ accountId, tokenId }).pipe(
         Effect.flatMap(() => Effect.fail(new TokenStillExists())),
         Effect.retry({
           while: (e): e is TokenStillExists => e instanceof TokenStillExists,
-          schedule: Schedule.max([
-            Schedule.exponential(200),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
         }),
         Effect.catchTag("TokenStillExists", () =>
-          Effect.die(
-            `Cloudflare API token ${tokenId} was not deleted after retries`,
-          ),
+          Effect.die(`Cloudflare API token ${tokenId} was not deleted after retries`),
         ),
         Effect.catchTag("TokenNotFound", () => Effect.void),
         Effect.catchTag("InvalidRoute", () => Effect.void),
@@ -222,18 +183,14 @@ describe(
                 {
                   effect: "allow",
                   permissionGroups: ["Workers Scripts Read"],
-                  resources: {
-                    [`com.cloudflare.api.account.${accountId}`]: "*",
-                  },
+                  resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
                 },
               ],
             });
           }),
         );
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.ApiToken.AccountApiToken,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.ApiToken.AccountApiToken);
         const all = yield* provider.list();
 
         expect(all.some((t) => t.tokenId === token.tokenId)).toBe(true);

@@ -1,4 +1,3 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
   Railway,
@@ -15,7 +14,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment, resolveWorkspace } from "./Environment.ts";
-
+import { waitUntilDeleted } from "./GraphQL.ts";
 import type { Providers } from "./Providers.ts";
 
 const usageFields = <E>(row: Query<AggregatedUsage, E>) => ({
@@ -39,9 +38,7 @@ const estimatedUsageFields = <E>(row: Query<EstimatedUsage, E>) => ({
   estimatedValue: row.estimatedValue,
   projectId: row.projectId,
 });
-type EstimatedUsageResultItem = UnwrapPlan<
-  ReturnType<typeof estimatedUsageFields>
->;
+type EstimatedUsageResultItem = UnwrapPlan<ReturnType<typeof estimatedUsageFields>>;
 
 const limitFields = <E>(limit: Query<RailwayUsageLimit, E>) => ({
   id: limit.id,
@@ -58,30 +55,19 @@ type CloudLimit = UnwrapPlan<ReturnType<typeof limitFields>>;
  */
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-export type {
-  EstimatedUsageResultItem,
-  MetricMeasurement,
-  MetricTag,
-  UsageResultItem,
-};
+export type { EstimatedUsageResultItem, MetricMeasurement, MetricTag, UsageResultItem };
 
 /**
  * Workspace identity a usage limit applies to. Accepts a
  * `Railway.Project` (`workspaceId`), `{ workspaceId }`, or `{ id }`.
  */
-export type UsageLimitWorkspace = {
-  readonly workspaceId?: string;
-  readonly id?: string;
-};
+export type UsageLimitWorkspace = { readonly workspaceId?: string; readonly id?: string };
 
 /**
  * Project whose workspace a usage limit applies to. Accepts a
  * `Railway.Project` or a `{ workspaceId, projectId? }` stub.
  */
-export type UsageLimitProject = {
-  readonly workspaceId: string;
-  readonly projectId?: string;
-};
+export type UsageLimitProject = { readonly workspaceId: string; readonly projectId?: string };
 
 /**
  * Dollar cap passed to `usageLimitSet`. A number is the soft limit.
@@ -200,9 +186,7 @@ const projectIdOf = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.length > 0) return value;
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const workspaceIdOf = (value: unknown): string | undefined => {
@@ -224,9 +208,7 @@ const parseLimit = (limit: number | UsageLimitAmount): UsageLimitAmount => {
   }
   return {
     softLimitDollars: limit.softLimitDollars,
-    ...(limit.hardLimitDollars !== undefined
-      ? { hardLimitDollars: limit.hardLimitDollars }
-      : {}),
+    ...(limit.hardLimitDollars !== undefined ? { hardLimitDollars: limit.hardLimitDollars } : {}),
   };
 };
 
@@ -276,8 +258,7 @@ const readEstimatedUsage = Query.fn(
  */
 export const usage = Effect.fn(function* (query: UsageQuery) {
   const projectId = projectIdOf(query.project);
-  const workspaceId =
-    workspaceIdOf(query.workspace) ?? (yield* resolveWorkspace()).id;
+  const workspaceId = workspaceIdOf(query.workspace) ?? (yield* resolveWorkspace()).id;
   const rows = yield* readUsage({
     measurements: [...query.measurements],
     workspaceId,
@@ -285,9 +266,7 @@ export const usage = Effect.fn(function* (query: UsageQuery) {
     ...(query.startDate !== undefined ? { startDate: query.startDate } : {}),
     ...(query.endDate !== undefined ? { endDate: query.endDate } : {}),
     ...(query.groupBy !== undefined ? { groupBy: [...query.groupBy] } : {}),
-    ...(query.includeDeleted !== undefined
-      ? { includeDeleted: query.includeDeleted }
-      : {}),
+    ...(query.includeDeleted !== undefined ? { includeDeleted: query.includeDeleted } : {}),
   });
   return rows ?? [];
 });
@@ -307,15 +286,12 @@ export const Usage = usage;
  */
 export const estimatedUsage = Effect.fn(function* (query: EstimatedUsageQuery) {
   const projectId = projectIdOf(query.project);
-  const workspaceId =
-    workspaceIdOf(query.workspace) ?? (yield* resolveWorkspace()).id;
+  const workspaceId = workspaceIdOf(query.workspace) ?? (yield* resolveWorkspace()).id;
   const rows = yield* readEstimatedUsage({
     measurements: [...query.measurements],
     workspaceId,
     ...(projectId !== undefined ? { projectId } : {}),
-    ...(query.includeDeleted !== undefined
-      ? { includeDeleted: query.includeDeleted }
-      : {}),
+    ...(query.includeDeleted !== undefined ? { includeDeleted: query.includeDeleted } : {}),
   });
   return rows ?? [];
 });
@@ -330,21 +306,13 @@ const resolveUsageLimitProps = (
       resolved.workspace === undefined
         ? undefined
         : Effect.isEffect(resolved.workspace)
-          ? yield* resolved.workspace as Effect.Effect<
-              UsageLimitWorkspace,
-              never,
-              Providers
-            >
+          ? yield* resolved.workspace as Effect.Effect<UsageLimitWorkspace, never, Providers>
           : resolved.workspace;
     const project =
       resolved.project === undefined
         ? undefined
         : Effect.isEffect(resolved.project)
-          ? yield* resolved.project as Effect.Effect<
-              UsageLimitProject,
-              never,
-              Providers
-            >
+          ? yield* resolved.project as Effect.Effect<UsageLimitProject, never, Providers>
           : resolved.project;
     return { ...resolved, workspace, project };
   });
@@ -410,25 +378,19 @@ const UsageLimitResource = Resource<UsageLimit>("Railway.UsageLimit");
  * @product Workspace
  */
 export const UsageLimit: typeof UsageLimitResource = Object.assign(
-  (
-    id: string,
-    props: UsageLimitProps | Effect.Effect<UsageLimitProps, never, Providers>,
-  ) => UsageLimitResource(id, resolveUsageLimitProps(props)),
+  (id: string, props: UsageLimitProps | Effect.Effect<UsageLimitProps, never, Providers>) =>
+    UsageLimitResource(id, resolveUsageLimitProps(props)),
   UsageLimitResource,
 );
 
-export class UsageLimitNotCreated extends Data.TaggedError(
-  "Railway.UsageLimitNotCreated",
-)<{
+export class UsageLimitNotCreated extends Data.TaggedError("Railway.UsageLimitNotCreated")<{
   customerId: string;
   workspaceId: string;
 }> {}
 
 export class UsageLimitWorkspaceNotFound extends Data.TaggedError(
   "Railway.UsageLimitWorkspaceNotFound",
-)<{
-  workspaceId: string;
-}> {}
+)<{ workspaceId: string }> {}
 
 const currentWorkspaceId = Effect.fn(function* () {
   const env = yield* yield* RailwayEnvironment;
@@ -438,10 +400,7 @@ const currentWorkspaceId = Effect.fn(function* () {
 const readWorkspaceLimit = Query.fn((workspaceId: string) => {
   const customer = Railway.workspace({ workspaceId }).customer;
   return {
-    customer: {
-      id: customer.id,
-      usageLimit: customer.usageLimit.pipe(Query.map(limitFields)),
-    },
+    customer: { id: customer.id, usageLimit: customer.usageLimit.pipe(Query.map(limitFields)) },
   };
 });
 
@@ -452,11 +411,7 @@ const getWorkspace = (workspaceId: string) =>
 
 const toAttrs = (
   limit: CloudLimit,
-  fallback: {
-    workspaceId: string;
-    customerId: string;
-    projectId?: string;
-  },
+  fallback: { workspaceId: string; customerId: string; projectId?: string },
 ): UsageLimit["Attributes"] => ({
   usageLimitId: limit.id,
   customerId: limit.customerId || fallback.customerId,
@@ -477,9 +432,7 @@ const observe = Effect.fn(function* (workspaceId: string) {
   };
 });
 
-const usageLimitSet = Query.fn((input: UsageLimitSetInput) =>
-  Railway.usageLimitSet({ input }),
-);
+const usageLimitSet = Query.fn((input: UsageLimitSetInput) => Railway.usageLimitSet({ input }));
 
 const usageLimitRemove = Query.fn((customerId: string) =>
   Railway.usageLimitRemove({ input: { customerId } }),
@@ -493,9 +446,7 @@ const setLimit = (input: {
   usageLimitSet({
     customerId: input.customerId,
     softLimitDollars: input.softLimitDollars,
-    ...(input.hardLimitDollars !== undefined
-      ? { hardLimitDollars: input.hardLimitDollars }
-      : {}),
+    ...(input.hardLimitDollars !== undefined ? { hardLimitDollars: input.hardLimitDollars } : {}),
   });
 
 const resolveScope = Effect.fn(function* (input: {
@@ -504,9 +455,7 @@ const resolveScope = Effect.fn(function* (input: {
   output?: UsageLimit["Attributes"];
 }) {
   const projectId =
-    projectIdOf(input.news?.project) ??
-    input.output?.projectId ??
-    projectIdOf(input.olds?.project);
+    projectIdOf(input.news?.project) ?? input.output?.projectId ?? projectIdOf(input.olds?.project);
   const workspaceId =
     workspaceIdOf(input.news?.workspace) ??
     workspaceIdOf(input.news?.project) ??
@@ -536,8 +485,7 @@ export const UsageLimitProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      const nextWorkspace =
-        workspaceIdOf(news.workspace) ?? workspaceIdOf(news.project);
+      const nextWorkspace = workspaceIdOf(news.workspace) ?? workspaceIdOf(news.project);
       if (nextWorkspace !== undefined && nextWorkspace !== output.workspaceId) {
         return { action: "replace" as const };
       }
@@ -545,37 +493,22 @@ export const UsageLimitProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      const { workspaceId, projectId } = yield* resolveScope({
-        olds,
-        output,
-      });
+      const { workspaceId, projectId } = yield* resolveScope({ olds, output });
       const found = yield* observe(workspaceId);
       if (found?.limit === undefined) return undefined;
-      return toAttrs(found.limit, {
-        workspaceId,
-        customerId: found.customerId,
-        projectId,
-      });
+      return toAttrs(found.limit, { workspaceId, customerId: found.customerId, projectId });
     }),
 
     list: Effect.fn(function* () {
       const workspaceId = yield* currentWorkspaceId();
       const found = yield* observe(workspaceId);
       if (found?.limit === undefined) return [];
-      return [
-        toAttrs(found.limit, {
-          workspaceId,
-          customerId: found.customerId,
-        }),
-      ];
+      return [toAttrs(found.limit, { workspaceId, customerId: found.customerId })];
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const props = news ?? ({} as UsageLimitProps);
-      const { workspaceId, projectId } = yield* resolveScope({
-        news: props,
-        output,
-      });
+      const { workspaceId, projectId } = yield* resolveScope({ news: props, output });
       const desired = parseLimit(props.limit ?? output?.softLimitDollars ?? 0);
 
       let found = yield* observe(workspaceId);
@@ -589,9 +522,7 @@ export const UsageLimitProvider = () =>
           ? (observed?.hardLimit ?? undefined) !== desired.hardLimitDollars
           : observed?.hardLimit != null;
       const needsSet =
-        observed === undefined ||
-        observed.softLimit !== desired.softLimitDollars ||
-        hardChanged;
+        observed === undefined || observed.softLimit !== desired.softLimitDollars || hardChanged;
 
       if (needsSet) {
         yield* setLimit({
@@ -613,11 +544,7 @@ export const UsageLimitProvider = () =>
         });
       }
 
-      return toAttrs(found.limit, {
-        workspaceId,
-        customerId: found.customerId,
-        projectId,
-      });
+      return toAttrs(found.limit, { workspaceId, customerId: found.customerId, projectId });
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   NetworkConnectivityNotResolved,
@@ -155,9 +150,8 @@ export type MulticloudDataTransferConfigsDestination = Resource<
  *   yield* GCP.NetworkConnectivity.MulticloudDataTransferConfigsDestination(
  *     "OnPrem",
  *     {
- *       parent: existing.parent,
- *       destinationId: existing.destinationId,
- *       ipPrefix: existing.ipPrefix!,
+ *       parent: config.name,
+ *       ipPrefix: "203.0.113.0/24",
  *       endpoints: [
  *         { asn: "64512", csp: "aws" },
  *         { asn: "64513", csp: "azure" },
@@ -210,11 +204,7 @@ const endpointsKey = (endpoints: readonly DestinationEndpoint[] | undefined) =>
 
 const configIdOf = (parent: string) => lastSegment(parent);
 
-const toAttrs = (
-  destination: networkconnectivity.Destination,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (destination: networkconnectivity.Destination, project: string, region: string) => {
   const name = destination.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const parent = parentOfName(name, COLLECTION);
@@ -266,15 +256,11 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.destinationId ?? output?.destinationId;
-      const nextId = news.destinationId
-        ? rfc1035(news.destinationId, "destination")
-        : previousId;
+      const nextId = news.destinationId ? rfc1035(news.destinationId, "destination") : previousId;
       const previousParent = olds?.parent ?? output?.parent;
       const previousPrefix = olds?.ipPrefix ?? output?.ipPrefix;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         (previousParent !== undefined && previousParent !== news.parent) ||
         (previousPrefix !== undefined && previousPrefix !== news.ipPrefix)
       ) {
@@ -293,30 +279,23 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
       );
       const parent = olds?.parent ?? output?.parent;
       const name =
-        output?.name ??
-        (parent !== undefined
-          ? resourceNameOf(parent, destinationId)
-          : undefined);
+        output?.name ?? (parent !== undefined ? resourceNameOf(parent, destinationId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const configs = yield* collectPages(
-          networkconnectivity.listProjectsLocationsMulticloudDataTransferConfigs.pages(
-            {
-              parent: `projects/${env.project}/locations/-`,
-              pageSize: 1000,
-              returnPartialSuccess: true,
-            },
-          ),
+          networkconnectivity.listProjectsLocationsMulticloudDataTransferConfigs.pages({
+            parent: `projects/${env.project}/locations/-`,
+            pageSize: 1000,
+            returnPartialSuccess: true,
+          }),
           (page) => page.multicloudDataTransferConfigs,
         );
         const nested = yield* Effect.forEach(
@@ -390,11 +369,9 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const endpointsChanged =
-        endpointsKey((current.endpoints ?? []).map(toEndpoint)) !==
-        endpointsKey(news.endpoints);
+        endpointsKey((current.endpoints ?? []).map(toEndpoint)) !== endpointsKey(news.endpoints);
       const updateMask = changedFields([
         ["labels", labelsChanged],
         ["description", descriptionChanged],
@@ -417,10 +394,7 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
             },
           );
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

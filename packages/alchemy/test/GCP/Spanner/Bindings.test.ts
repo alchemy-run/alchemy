@@ -1,60 +1,133 @@
-import { Action } from "@/Action";
+import * as spanner from "@distilled.cloud/gcp/spanner_v1";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import * as Core from "@/Test/Core";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import SpannerBindingsHost, { App, Db, ITEMS_DDL, Schema } from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "SpannerBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
+let baseUrl: string;
+let member: string;
+let names: { instance: string; schema: string; app: string };
+
+type Policy = { bindings?: { role?: string; members?: string[] }[] };
+
+const rolesOf = (policy: Policy) =>
+  (policy.bindings ?? [])
+    .filter((binding) => (binding.members ?? []).includes(member))
+    .map((binding) => binding.role)
+    .sort();
+
+const databaseRoles = (database: string) =>
+  spanner
+    .getIamPolicyProjectsInstancesDatabases({
+      resource: database,
+      body: { options: { requestedPolicyVersion: 3 } },
+    })
+    .pipe(Effect.map(rolesOf));
+
+const instanceRoles = Effect.suspend(() =>
+  spanner
+    .getIamPolicyProjectsInstances({
+      resource: names.instance,
+      body: { options: { requestedPolicyVersion: 3 } },
+    })
+    .pipe(Effect.map(rolesOf)),
 );
 
-const runLifecycle = !!process.env.GCP_TEST_SPANNER && !process.env.FAST;
+describe.skipIf(!dockerAvailable)(
+  "Spanner Bindings",
+  {
+    tags: ["provider:gcp", "provider:gcp:spanner", "provider:gcp:run", "live"],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* SpannerBindingsHost;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              instance: (yield* Db).name,
+              schema: (yield* Schema).name,
+              app: (yield* App).name,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        member = `serviceAccount:${out.serviceAccount!}`;
+        names = out;
+      }),
+      { timeout: 1_200_000 },
+    );
 
-test.provider.skipIf(!runLifecycle)(
-  "GetInstance, GetDdl, and ExecuteSql invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+    afterAll(sharedStack.destroy(), { timeout: 900_000 });
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const instance = yield* GCP.Spanner.Instance("Db", {
-            config: "regional-us-central1",
-            nodeCount: 1,
-          });
-          const database = yield* GCP.Spanner.Database("App", {
-            instance: instance.name,
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* database.name;
-              const getInstance = yield* GCP.Spanner.GetInstance(instance);
-              const getDdl = yield* GCP.Spanner.GetDdl(database);
-              const executeSql = yield* GCP.Spanner.ExecuteSql(database);
-              return Effect.fn(function* () {
-                const live = yield* getInstance();
-                const ddl = yield* getDdl();
-                const rows = yield* executeSql({
-                  sql: "SELECT 1",
-                });
-                return { live, ddl, rows };
-              });
-            }),
-          );
-          return { instance, probe: yield* Probe({}) };
-        }),
+    describe("GetInstance", () => {
+      test.provider(
+        "reads the instance, granted viewer on the instance only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<spanner.Instance>(baseUrl, "getInstance");
+            expect(live.name).toEqual(names.instance);
+            expect(live.processingUnits).toEqual(100);
+            expect(yield* instanceRoles).toEqual(["roles/spanner.viewer"]);
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:spanner", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      expect(out.probe.live.name).toEqual(out.instance.name);
-      expect(out.probe.ddl).toBeDefined();
-      expect(out.probe.rows).toBeDefined();
+    describe("GetDdl", () => {
+      test.provider(
+        "reads the schema, granted databaseReader on the database only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const ddl = yield* expectProbe<spanner.GetDatabaseDdlResponse>(baseUrl, "getDdl");
+            expect(ddl.statements).toEqual([ITEMS_DDL]);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 120_000 },
+            const direct = yield* spanner.getDdlProjectsInstancesDatabases({
+              database: names.schema,
+            });
+            expect(ddl.statements).toEqual(direct.statements);
+
+            expect(yield* databaseRoles(names.schema)).toEqual(["roles/spanner.databaseReader"]);
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:spanner", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("ExecuteSql", () => {
+      test.provider(
+        "queries the database, granted databaseUser on the database only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const result = yield* expectProbe<spanner.ResultSet>(baseUrl, "executeSql");
+            expect(result.metadata?.rowType?.fields?.[0]?.name).toEqual("n");
+            expect(result.rows).toEqual([["0"]]);
+
+            expect(yield* databaseRoles(names.app)).toEqual(["roles/spanner.databaseUser"]);
+            // Nothing leaks onto the other database or the instance.
+            expect(yield* databaseRoles(names.schema)).toEqual(["roles/spanner.databaseReader"]);
+            expect(yield* instanceRoles).toEqual(["roles/spanner.viewer"]);
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:spanner", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+  },
 );

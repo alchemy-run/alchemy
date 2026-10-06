@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 
@@ -55,10 +52,14 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAS)(
+// Health Check as a Service is allowlisted; without it insert fails with
+// `BadRequest: Invalid resource usage: 'HealthCheck as a Service feature is
+// not available for this project.'`. Set GCP_TEST_HCAAS=1 on an allowlisted
+// project.
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAAS)(
   "create, replace, and delete a regional notification endpoint",
   (stack) =>
     Effect.gen(function* () {
@@ -107,9 +108,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAS)(
         }),
       );
 
-      expect(updated.notificationEndpointName).toEqual(
-        created.notificationEndpointName,
-      );
+      expect(updated.notificationEndpointName).toEqual(created.notificationEndpointName);
       expect(updated.description).toEqual("updated health callbacks");
       expect(updated.retryDurationSec).toEqual(60);
 
@@ -126,5 +125,5 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAS)(
       const gone = yield* waitUntilGone(created.notificationEndpointName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

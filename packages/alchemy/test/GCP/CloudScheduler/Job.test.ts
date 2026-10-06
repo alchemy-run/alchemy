@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   scheduler.getProjectsLocationsJobs({ name }).pipe(
@@ -60,8 +57,7 @@ test.provider(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.schedule).toEqual("0 0 1 1 *");
       expect(fetched.state).toEqual("ENABLED");
-      expect(fetched.description).toContain("alchemy-id=");
-      expect(fetched.description).toContain("ping");
+      expect(fetched.description).toEqual("ping");
       expect(fetched.httpTarget?.uri).toEqual("https://example.com/");
 
       const updated = yield* stack.deploy(
@@ -97,9 +93,7 @@ test.provider(
       expect(fetchedUpdate.schedule).toEqual("0 0 1 2 *");
       expect(fetchedUpdate.timeZone).toEqual("America/Chicago");
       expect(fetchedUpdate.retryConfig?.retryCount).toEqual(2);
-      expect(fetchedUpdate.httpTarget?.uri).toEqual(
-        "https://example.com/health",
-      );
+      expect(fetchedUpdate.httpTarget?.uri).toEqual("https://example.com/health");
       expect(fetchedUpdate.state).toEqual("PAUSED");
 
       const replaced = yield* stack.deploy(
@@ -135,5 +129,8 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudscheduler", "live"],
+    timeout: 120_000,
+  },
 );

@@ -1,31 +1,26 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
-  servicedirectory
-    .getProjectsLocationsNamespacesServicesEndpoints({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  servicedirectory.getProjectsLocationsNamespacesServicesEndpoints({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsNamespacesServicesEndpoints on a missing endpoint fails with NotFound",
@@ -40,6 +35,7 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
     }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"] },
 );
 
 test.provider(
@@ -80,12 +76,9 @@ test.provider(
       expect(created.endpoint.annotations).toMatchObject({ protocol: "http" });
       expect(created.endpoint.uid).toEqual(expect.any(String));
 
-      const fetched =
-        yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints(
-          {
-            name: created.endpoint.name,
-          },
-        );
+      const fetched = yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints({
+        name: created.endpoint.name,
+      });
       expect(fetched.name).toEqual(created.endpoint.name);
       expect(fetched.address).toEqual("10.0.0.1");
       expect(fetched.port).toEqual(8080);
@@ -124,12 +117,9 @@ test.provider(
         role: "api",
       });
 
-      const refetched =
-        yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints(
-          {
-            name: created.endpoint.name,
-          },
-        );
+      const refetched = yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints({
+        name: created.endpoint.name,
+      });
       expect(refetched.address).toEqual("10.0.0.2");
       expect(refetched.port).toEqual(443);
       expect(refetched.annotations?.protocol).toEqual("https");
@@ -166,11 +156,9 @@ test.provider(
       expect(replaced.endpoint.port).toEqual(8443);
 
       const fetchedReplacement =
-        yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints(
-          {
-            name: replaced.endpoint.name,
-          },
-        );
+        yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints({
+          name: replaced.endpoint.name,
+        });
       expect(fetchedReplacement.name).toEqual(replaced.endpoint.name);
       expect(fetchedReplacement.address).toEqual("10.0.0.3");
 
@@ -182,5 +170,8 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.endpoint.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"],
+    timeout: 90_000,
+  },
 );

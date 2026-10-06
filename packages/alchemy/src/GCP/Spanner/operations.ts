@@ -1,10 +1,10 @@
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 /** Default instance config: the regional config of the stack's GCP region. */
 export const defaultConfigId = (region: string) => `regional-${region}`;
@@ -18,19 +18,6 @@ export const MAX_PARTITION_ID_LENGTH = 64;
 export const MAX_DISPLAY_NAME_LENGTH = 30;
 export const MIN_DISPLAY_NAME_LENGTH = 4;
 export const CUSTOM_CONFIG_PREFIX = "custom-";
-
-export class OperationFailed extends Data.TaggedError(
-  "GCP.Spanner.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class OperationPending extends Data.TaggedError(
-  "GCP.Spanner.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -55,10 +42,7 @@ export const parseResourceName = (name: string) => {
     backupScheduleId: after("backupSchedules"),
     instancePartitionId: after("instancePartitions"),
     instanceConfigId: after("instanceConfigs"),
-    instance:
-      project && instanceId
-        ? `projects/${project}/instances/${instanceId}`
-        : "",
+    instance: project && instanceId ? `projects/${project}/instances/${instanceId}` : "",
     database:
       project && instanceId && databaseId
         ? `projects/${project}/instances/${instanceId}/databases/${databaseId}`
@@ -67,14 +51,10 @@ export const parseResourceName = (name: string) => {
 };
 
 export const instanceIdOf = (value: string) =>
-  value.includes("/instances/")
-    ? parseResourceName(value).instanceId
-    : lastSegment(value);
+  value.includes("/instances/") ? parseResourceName(value).instanceId : lastSegment(value);
 
 export const databaseIdOf = (value: string) =>
-  value.includes("/databases/")
-    ? parseResourceName(value).databaseId
-    : lastSegment(value);
+  value.includes("/databases/") ? parseResourceName(value).databaseId : lastSegment(value);
 
 export const configIdOf = (config: string | undefined, region: string) =>
   lastSegment(config ?? defaultConfigId(region)).toLowerCase();
@@ -90,17 +70,10 @@ export const instanceNameOf = (project: string, instance: string) =>
       )
     : instanceName(project, lastSegment(instance));
 
-export const databaseName = (
-  project: string,
-  instanceId: string,
-  databaseId: string,
-) => `${instanceName(project, instanceId)}/databases/${databaseId}`;
+export const databaseName = (project: string, instanceId: string, databaseId: string) =>
+  `${instanceName(project, instanceId)}/databases/${databaseId}`;
 
-export const databaseNameOf = (
-  project: string,
-  instance: string,
-  database: string,
-) => {
+export const databaseNameOf = (project: string, instance: string, database: string) => {
   if (database.includes("/databases/")) {
     const parsed = parseResourceName(database);
     return databaseName(
@@ -112,38 +85,27 @@ export const databaseNameOf = (
   return databaseName(project, instanceIdOf(instance), lastSegment(database));
 };
 
-export const backupName = (
-  project: string,
-  instanceId: string,
-  backupId: string,
-) => `${instanceName(project, instanceId)}/backups/${backupId}`;
+export const backupName = (project: string, instanceId: string, backupId: string) =>
+  `${instanceName(project, instanceId)}/backups/${backupId}`;
 
 export const backupScheduleName = (
   project: string,
   instanceId: string,
   databaseId: string,
   scheduleId: string,
-) =>
-  `${databaseName(project, instanceId, databaseId)}/backupSchedules/${scheduleId}`;
+) => `${databaseName(project, instanceId, databaseId)}/backupSchedules/${scheduleId}`;
 
 export const instanceConfigName = (project: string, configId: string) =>
   `projects/${project}/instanceConfigs/${configId}`;
 
-export const configNameOf = (
-  project: string,
-  config: string | undefined,
-  region: string,
-) => {
+export const configNameOf = (project: string, config: string | undefined, region: string) => {
   const raw = (config ?? defaultConfigId(region)).trim();
   if (raw.includes("/")) return raw;
   return instanceConfigName(project, raw);
 };
 
-export const instancePartitionName = (
-  project: string,
-  instanceId: string,
-  partitionId: string,
-) => `${instanceName(project, instanceId)}/instancePartitions/${partitionId}`;
+export const instancePartitionName = (project: string, instanceId: string, partitionId: string) =>
+  `${instanceName(project, instanceId)}/instancePartitions/${partitionId}`;
 
 export const toSpannerId = (name: string, maxLength: number) => {
   let next = name
@@ -190,16 +152,10 @@ export const toPhysicalId = (
     );
   });
 
-export const toConfigId = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toConfigId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) {
-      return explicit.startsWith(CUSTOM_CONFIG_PREFIX)
-        ? explicit
-        : toCustomConfigId(explicit);
+      return explicit.startsWith(CUSTOM_CONFIG_PREFIX) ? explicit : toCustomConfigId(explicit);
     }
     if (existing !== undefined) return existing;
     return toCustomConfigId(
@@ -225,21 +181,8 @@ export const normalizeEnum = (value: string | undefined, fallback: string) => {
   return next.endsWith("_UNSPECIFIED") ? fallback : next;
 };
 
-export const hasAlchemyPrefix = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+export const hasAlchemyPrefix = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
-
-export const isAlreadyExists = (error: spanner.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").includes("ALREADY_EXISTS") ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-export const isNotFoundStatus = (error: spanner.Status | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
 
 const getOperation = (name: string) => {
   if (name.includes("/instanceConfigs/")) {
@@ -257,91 +200,37 @@ const getOperation = (name: string) => {
   return spanner.getProjectsInstancesOperations({ name });
 };
 
+/**
+ * Wait for a Spanner operation. Instance and database provisioning can take
+ * many minutes, so the budget is generous.
+ */
 export const waitForOperation = (
   operation: spanner.Operation,
   options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          isAlreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new OperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new OperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation(name).pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies spanner.Operation),
-            ),
-          )
-        : getOperation(name).pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new OperationPending({ operation: name }),
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      getOperation(name).pipe(
+        Effect.catchTag("NotFound", (error) =>
+          options?.notFoundOk === true
+            ? Effect.succeed<spanner.Operation>({ name, done: true })
+            : Effect.fail(error),
+        ),
       ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        if (status) {
-          if (options?.alreadyExistsOk === true && isAlreadyExists(status)) {
-            return Effect.succeed(current);
-          }
-          if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-            return Effect.succeed(current);
-          }
-          return Effect.fail(
-            new OperationFailed({
-              operation: name,
-              message: status.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Spanner.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
+    { budget: "30 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6) / NOT_FOUND (5) when the caller tolerates them.
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        ((options?.alreadyExistsOk === true && error.code === 6) ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+  );
 
-export const retryConcurrentChanges = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
   effect.pipe(
@@ -355,11 +244,7 @@ export const retryConcurrentChanges = <
 export const getInstanceByName = (name: string) =>
   spanner
     .getProjectsInstances({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const listAlchemyInstances = (project: string) =>
   spanner.listProjectsInstances
@@ -372,9 +257,6 @@ export const listAlchemyInstances = (project: string) =>
       Stream.filter((instance) => hasAlchemyPrefix(instance.labels)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as spanner.Instance[]),
-      ),
     );
 
 export const listAlchemyDatabases = (project: string) =>
@@ -396,9 +278,8 @@ export const listAlchemyDatabases = (project: string) =>
             Stream.flatMap((page) => Stream.fromIterable(page.databases ?? [])),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as spanner.Database[]),
-            ),
+            // The instance was deleted while listing.
+            Effect.catchTag("NotFound", () => Effect.succeed([] as spanner.Database[])),
           );
       },
       { concurrency: 4 },
@@ -408,7 +289,5 @@ export const listAlchemyDatabases = (project: string) =>
 
 export const parentOwned = (instanceNameValue: string) =>
   getInstanceByName(instanceNameValue).pipe(
-    Effect.map((instance) =>
-      instance === undefined ? true : hasAlchemyPrefix(instance.labels),
-    ),
+    Effect.map((instance) => (instance === undefined ? true : hasAlchemyPrefix(instance.labels))),
   );

@@ -1,19 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 const enterpriseDatabaseId = "alchfsucreds2";
@@ -34,9 +30,7 @@ const waitUntilGone = (name: string) =>
 const waitUntilDatabase = (name: string, want: "ready" | "gone") =>
   firestore.getProjectsDatabases({ name }).pipe(
     Effect.map((database) =>
-      database.deleteTime !== undefined
-        ? ("gone" as const)
-        : ("ready" as const),
+      database.deleteTime !== undefined ? ("gone" as const) : ("ready" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -46,22 +40,18 @@ const waitUntilDatabase = (name: string, want: "ready" | "gone") =>
     }),
   );
 
-const waitForDatabaseOperation = (
-  operation: firestore.GoogleLongrunningOperation,
-) =>
+const waitForDatabaseOperation = (operation: firestore.GoogleLongrunningOperation) =>
   Effect.gen(function* () {
     if (operation.done === true || operation.name === undefined) {
       return operation;
     }
-    return yield* firestore
-      .getProjectsDatabasesOperations({ name: operation.name })
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("4 seconds"),
-          until: (current) => current.done === true,
-          times: 10,
-        }),
-      );
+    return yield* firestore.getProjectsDatabasesOperations({ name: operation.name }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("4 seconds"),
+        until: (current) => current.done === true,
+        times: 10,
+      }),
+    );
   });
 
 const ensureEnterpriseDatabase = Effect.gen(function* () {
@@ -71,26 +61,16 @@ const ensureEnterpriseDatabase = Effect.gen(function* () {
       name: enterpriseDatabaseNameOf(project),
     })
     .pipe(
-      Effect.map((database) =>
-        database.deleteTime !== undefined ? undefined : database,
-      ),
+      Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
-  if (
-    existing !== undefined &&
-    (existing.databaseEdition ?? "").toUpperCase() === "ENTERPRISE"
-  ) {
+  if (existing !== undefined && (existing.databaseEdition ?? "").toUpperCase() === "ENTERPRISE") {
     return enterpriseDatabaseNameOf(project);
   }
   if (existing !== undefined) {
     yield* firestore
       .deleteProjectsDatabases({ name: enterpriseDatabaseNameOf(project) })
-      .pipe(
-        Effect.catchTag(
-          ["NotFound", "Forbidden", "BadRequest", "Conflict"],
-          () => Effect.void,
-        ),
-      );
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
     yield* waitUntilDatabase(enterpriseDatabaseNameOf(project), "gone");
   }
 
@@ -131,11 +111,11 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
-  "createProjectsDatabasesUserCreds on Standard edition fails with a typed error",
+  "createProjectsDatabasesUserCreds on Standard edition fails with EnterpriseDatabaseRequired",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -156,13 +136,14 @@ test.provider.skipIf(!!process.env.FAST)(
           body: {},
         }),
       );
-      expect(error._tag === "BadRequest" || error._tag === "Forbidden").toBe(
-        true,
-      );
+      expect(error._tag).toEqual("EnterpriseDatabaseRequired");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -170,22 +151,12 @@ test.provider.skipIf(!runLifecycle)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const ensured = yield* Effect.result(ensureEnterpriseDatabase);
-      if (Result.isFailure(ensured)) {
-        if (
-          ensured.failure._tag === "BadRequest" ||
-          ensured.failure._tag === "Forbidden"
-        ) {
-          return;
-        }
-        return yield* Effect.fail(ensured.failure);
-      }
-      const parent = ensured.success;
+      const parent = yield* ensureEnterpriseDatabase;
       yield* firestore
         .deleteProjectsDatabasesUserCreds({
           name: `${parent}/userCreds/appuser`,
         })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -230,5 +201,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+    timeout: 180_000,
+  },
 );

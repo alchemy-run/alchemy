@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_CONNECTION_PREFERENCE = "ACCEPT_AUTOMATIC";
 const MAX_NAME_LENGTH = 63;
@@ -23,8 +20,7 @@ const MAX_NAME_LENGTH = 63;
 export type NetworkAttachmentConnectionPreference =
   | compute.NetworkAttachmentConnectionPreferenceEnum
   | (string & {});
-export type NetworkAttachmentConnectedEndpoint =
-  compute.NetworkAttachmentConnectedEndpoint;
+export type NetworkAttachmentConnectedEndpoint = compute.NetworkAttachmentConnectedEndpoint;
 
 export type NetworkAttachmentProps = {
   /**
@@ -145,23 +141,13 @@ export type NetworkAttachment = Resource<
  * @resource
  * @category Compute
  */
-export const NetworkAttachment = Resource<NetworkAttachment>(
-  "GCP.Compute.NetworkAttachment",
-);
+export const NetworkAttachment = Resource<NetworkAttachment>("GCP.Compute.NetworkAttachment");
 
 export class NetworkAttachmentNotResolved extends Data.TaggedError(
   "GCP.Compute.NetworkAttachmentNotResolved",
 )<{
   networkAttachmentName: string;
   region: string;
-}> {}
-
-export class NetworkAttachmentOperationFailed extends Data.TaggedError(
-  "GCP.Compute.NetworkAttachmentOperationFailed",
-)<{
-  networkAttachmentName: string;
-  operation: string;
-  message: string;
 }> {}
 
 export class NetworkAttachmentStillExists extends Data.TaggedError(
@@ -234,9 +220,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const preferenceOf = (value: string | undefined) =>
   value && value.length > 0 ? value : DEFAULT_CONNECTION_PREFERENCE;
@@ -292,101 +276,12 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  networkAttachmentName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new NetworkAttachmentOperationFailed({
-        networkAttachmentName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const getByName = (
-  project: string,
-  region: string,
-  networkAttachment: string,
-) =>
+const getByName = (project: string, region: string, networkAttachment: string) =>
   compute
     .getNetworkAttachments({ project, region, networkAttachment })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  networkAttachmentName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new NetworkAttachmentOperationFailed({
-        networkAttachmentName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(networkAttachmentName, current, options);
-    return current;
-  });
-
-const awaitResource = (
-  project: string,
-  region: string,
-  networkAttachmentName: string,
-) =>
+const awaitResource = (project: string, region: string, networkAttachmentName: string) =>
   getByName(project, region, networkAttachmentName).pipe(
     Effect.flatMap((attachment) =>
       attachment !== undefined
@@ -399,36 +294,25 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.NetworkAttachmentNotResolved",
+      while: (error) => error._tag === "GCP.Compute.NetworkAttachmentNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  networkAttachmentName: string,
-) =>
+const waitUntilGone = (project: string, region: string, networkAttachmentName: string) =>
   getByName(project, region, networkAttachmentName).pipe(
     Effect.flatMap((attachment) =>
       attachment === undefined
         ? Effect.void
-        : Effect.fail(
-            new NetworkAttachmentStillExists({ networkAttachmentName }),
-          ),
+        : Effect.fail(new NetworkAttachmentStillExists({ networkAttachmentName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.NetworkAttachmentStillExists",
+      while: (error) => error._tag === "GCP.Compute.NetworkAttachmentStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.NetworkAttachmentStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.NetworkAttachmentStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -440,13 +324,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(
-        project,
-        region,
-        operation,
-        networkAttachmentName,
-        options,
-      ),
+      waitRegionOperation(project, region, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -470,21 +350,12 @@ export const NetworkAttachmentProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds?.networkAttachmentName ?? output?.networkAttachmentName;
+      const previousName = olds?.networkAttachmentName ?? output?.networkAttachmentName;
       const nextName = news.networkAttachmentName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       const previousPreference = preferenceOf(
         olds?.connectionPreference ?? output?.connectionPreference,
       );
@@ -492,10 +363,7 @@ export const NetworkAttachmentProvider = () =>
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      if (
-        previousRegion !== nextRegion ||
-        previousPreference !== nextPreference
-      ) {
+      if (previousRegion !== nextRegion || previousPreference !== nextPreference) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -508,15 +376,8 @@ export const NetworkAttachmentProvider = () =>
         olds?.networkAttachmentName,
         output?.networkAttachmentName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        networkAttachmentName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, networkAttachmentName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, networkAttachmentName);
       const { labels } = parseDescription(existing.description);
@@ -557,11 +418,7 @@ export const NetworkAttachmentProvider = () =>
       );
       const connectionPreference = preferenceOf(news.connectionPreference);
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        networkAttachmentName,
-      );
+      let current = yield* getByName(env.project, region, networkAttachmentName);
 
       if (current === undefined) {
         yield* compute
@@ -579,37 +436,25 @@ export const NetworkAttachmentProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                networkAttachmentName,
-                { ignoreAlreadyExists: true },
-              ),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
-        current = yield* awaitResource(
-          env.project,
-          region,
-          networkAttachmentName,
-        );
+        current = yield* awaitResource(env.project, region, networkAttachmentName);
       }
 
       const needsPatch =
         (current.description ?? "") !== desiredDescription ||
         refsKey(current.subnetworks) !== refsKey(subnetworks) ||
         (news.producerAcceptLists !== undefined &&
-          refsKey(current.producerAcceptLists) !==
-            refsKey(news.producerAcceptLists)) ||
+          refsKey(current.producerAcceptLists) !== refsKey(news.producerAcceptLists)) ||
         (news.producerRejectLists !== undefined &&
-          refsKey(current.producerRejectLists) !==
-            refsKey(news.producerRejectLists));
+          refsKey(current.producerRejectLists) !== refsKey(news.producerRejectLists));
 
       if (needsPatch) {
-        const latest =
-          (yield* getByName(env.project, region, networkAttachmentName)) ??
-          current;
+        const latest = (yield* getByName(env.project, region, networkAttachmentName)) ?? current;
         yield* runOp(
           env.project,
           region,
@@ -622,16 +467,12 @@ export const NetworkAttachmentProvider = () =>
               fingerprint: latest.fingerprint,
               description: desiredDescription,
               subnetworks,
-              producerAcceptLists:
-                news.producerAcceptLists ?? current.producerAcceptLists,
-              producerRejectLists:
-                news.producerRejectLists ?? current.producerRejectLists,
+              producerAcceptLists: news.producerAcceptLists ?? current.producerAcceptLists,
+              producerRejectLists: news.producerRejectLists ?? current.producerRejectLists,
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, region, networkAttachmentName)) ??
-          current;
+        current = (yield* getByName(env.project, region, networkAttachmentName)) ?? current;
       }
 
       return toAttrs(current, env.project, networkAttachmentName);
@@ -650,13 +491,9 @@ export const NetworkAttachmentProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              region,
-              operation,
-              output.networkAttachmentName,
-              { ignoreNotFound: true },
-            ),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

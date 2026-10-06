@@ -1,14 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  normalizeRegion,
-  parseDescription,
-  runRegionOp,
-  sameUrlList,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,6 +10,16 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  normalizeRegion,
+  parseDescription,
+  runRegionOp,
+  sameUrlList,
+  toPhysicalName,
+} from "./internal.ts";
 
 const DEFAULT_AGGREGATION = "NO_AGGREGATION";
 
@@ -146,16 +146,7 @@ export class RegionHealthCheckServiceNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionHealthCheckServiceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionHealthCheckServiceOperationFailed",
-)<{
-  serviceName: string;
-  operation: string;
-  message: string;
-}> {}
-
-const aggregationOf = (value: string | undefined) =>
-  (value ?? DEFAULT_AGGREGATION).toUpperCase();
+const aggregationOf = (value: string | undefined) => (value ?? DEFAULT_AGGREGATION).toUpperCase();
 
 const toAttrs = (
   service: compute.HealthCheckService,
@@ -170,9 +161,7 @@ const toAttrs = (
     healthChecks: service.healthChecks ?? [],
     networkEndpointGroups: service.networkEndpointGroups ?? [],
     notificationEndpoints: service.notificationEndpoints ?? [],
-    healthStatusAggregationPolicy: aggregationOf(
-      service.healthStatusAggregationPolicy,
-    ),
+    healthStatusAggregationPolicy: aggregationOf(service.healthStatusAggregationPolicy),
     fingerprint: service.fingerprint,
     selfLink: service.selfLink,
     serviceId: service.id,
@@ -195,60 +184,33 @@ const awaitResource = (project: string, region: string, serviceName: string) =>
     Effect.flatMap((service) =>
       service !== undefined
         ? Effect.succeed(service)
-        : Effect.fail(
-            new RegionHealthCheckServiceNotResolved({ serviceName, region }),
-          ),
+        : Effect.fail(new RegionHealthCheckServiceNotResolved({ serviceName, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionHealthCheckServiceNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionHealthCheckServiceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const failOp = (serviceName: string, operation: string, message: string) =>
-  new RegionHealthCheckServiceOperationFailed({
-    serviceName,
-    operation,
-    message,
-  });
-
 export const RegionHealthCheckServiceProvider = () =>
   Provider.succeed(RegionHealthCheckService, {
-    stables: [
-      "serviceName",
-      "project",
-      "region",
-      "serviceId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["serviceName", "project", "region", "serviceId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.serviceName ?? output?.serviceName;
       const nextName = news.serviceName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
       if (nameChanged || regionChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -262,10 +224,7 @@ export const RegionHealthCheckServiceProvider = () =>
         output?.serviceName,
         "service",
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, serviceName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -283,20 +242,16 @@ export const RegionHealthCheckServiceProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
-        return Array.from(
-          pages as readonly compute.HealthCheckServiceAggregatedList[],
-        ).flatMap((page) =>
-          Object.values(page.items ?? {}).flatMap((scoped) =>
-            (scoped?.resources ?? [])
-              .filter((item) => hasOwnershipMarker(item.description))
-              .map((item) => toAttrs(item, env.project)),
-          ),
+        return Array.from(pages as readonly compute.HealthCheckServiceAggregatedList[]).flatMap(
+          (page) =>
+            Object.values(page.items ?? {}).flatMap((scoped) =>
+              (scoped?.resources ?? [])
+                .filter((item) => hasOwnershipMarker(item.description))
+                .map((item) => toAttrs(item, env.project)),
+            ),
         );
       }),
 
@@ -330,17 +285,12 @@ export const RegionHealthCheckServiceProvider = () =>
               description: desiredDescription,
               healthChecks,
               networkEndpointGroups:
-                networkEndpointGroups.length > 0
-                  ? networkEndpointGroups
-                  : undefined,
+                networkEndpointGroups.length > 0 ? networkEndpointGroups : undefined,
               notificationEndpoints:
-                notificationEndpoints.length > 0
-                  ? notificationEndpoints
-                  : undefined,
+                notificationEndpoints.length > 0 ? notificationEndpoints : undefined,
               healthStatusAggregationPolicy: aggregation,
             },
           }),
-          (operation, message) => failOp(serviceName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, serviceName);
@@ -379,9 +329,7 @@ export const RegionHealthCheckServiceProvider = () =>
         patch.notificationEndpoints = notificationEndpoints;
         dirty = true;
       }
-      if (
-        aggregationOf(current.healthStatusAggregationPolicy) !== aggregation
-      ) {
+      if (aggregationOf(current.healthStatusAggregationPolicy) !== aggregation) {
         patch.healthStatusAggregationPolicy = aggregation;
         dirty = true;
       }
@@ -395,10 +343,8 @@ export const RegionHealthCheckServiceProvider = () =>
             healthCheckService: serviceName,
             body: patch,
           }),
-          (operation, message) => failOp(serviceName, operation, message),
         );
-        current =
-          (yield* getByName(env.project, region, serviceName)) ?? current;
+        current = (yield* getByName(env.project, region, serviceName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -415,7 +361,6 @@ export const RegionHealthCheckServiceProvider = () =>
           region,
           healthCheckService: output.serviceName,
         }),
-        (operation, message) => failOp(output.serviceName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

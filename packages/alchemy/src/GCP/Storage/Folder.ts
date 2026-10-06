@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { DeleteNotConfirmed } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  listAlchemyBuckets,
-  toFolderName,
-  withTrailingSlash,
-} from "./internal.ts";
+import { listAlchemyBuckets, toFolderName, withTrailingSlash } from "./internal.ts";
 
 export type FolderProps = {
   /**
@@ -86,9 +82,7 @@ export type Folder = Resource<
  */
 export const Folder = Resource<Folder>("GCP.Storage.Folder");
 
-export class FolderNotResolved extends Data.TaggedError(
-  "GCP.Storage.FolderNotResolved",
-)<{
+export class FolderNotResolved extends Data.TaggedError("GCP.Storage.FolderNotResolved")<{
   bucketName: string;
   folderName: string;
 }> {}
@@ -112,16 +106,12 @@ const listOnBucket = (bucketName: string) =>
   storage.listFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as storage.Folder[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as storage.Folder[])),
   );
 
 const waitUntilGone = (bucketName: string, folderName: string) =>
   getByName(bucketName, folderName).pipe(
-    Effect.map((existing) =>
-      existing === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((existing) => (existing === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -162,11 +152,7 @@ export const FolderProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const bucketName = olds?.bucketName ?? output?.bucketName;
       if (!bucketName) return undefined;
-      const folderName = yield* toFolderName(
-        id,
-        olds?.folderName,
-        output?.folderName,
-      );
+      const folderName = yield* toFolderName(id, olds?.folderName, output?.folderName);
       const existing = yield* getByName(bucketName, folderName);
       if (existing === undefined) return undefined;
       return toAttrs(existing, bucketName);
@@ -183,9 +169,7 @@ export const FolderProvider = () =>
               return Effect.succeed([] as Array<Folder["Attributes"]>);
             }
             return listOnBucket(bucketName).pipe(
-              Effect.map((items) =>
-                items.map((item) => toAttrs(item, bucketName)),
-              ),
+              Effect.map((items) => items.map((item) => toAttrs(item, bucketName))),
             );
           },
           { concurrency: 8 },
@@ -195,11 +179,7 @@ export const FolderProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const bucketName = news.bucketName;
-      const folderName = yield* toFolderName(
-        id,
-        news.folderName,
-        output?.folderName,
-      );
+      const folderName = yield* toFolderName(id, news.folderName, output?.folderName);
 
       let current = yield* getByName(bucketName, folderName);
 
@@ -210,11 +190,7 @@ export const FolderProvider = () =>
             recursive: true,
             body: { name: folderName },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(bucketName, folderName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(bucketName, folderName)));
         current = created ?? undefined;
       }
 

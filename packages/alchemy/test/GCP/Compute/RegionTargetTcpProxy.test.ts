@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 
@@ -55,7 +52,7 @@ test.provider(
       expect(error._tag).toBe("NotFound");
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -93,8 +90,7 @@ test.provider(
       expect(created.proxy.region).toEqual(region);
       expect(created.proxy.description).toEqual("tcp frontend");
       expect(
-        created.proxy.proxyHeader === "NONE" ||
-          created.proxy.proxyHeader === undefined,
+        created.proxy.proxyHeader === "NONE" || created.proxy.proxyHeader === undefined,
       ).toEqual(true);
       expect(resourceTail(created.proxy.service)).toEqual(created.backend.name);
 
@@ -104,9 +100,7 @@ test.provider(
         targetTcpProxy: created.proxy.targetTcpProxyName,
       });
       expect(fetched.name).toEqual(created.proxy.targetTcpProxyName);
-      expect(resourceTail(fetched.service)).toEqual(
-        resourceTail(created.proxy.service),
-      );
+      expect(resourceTail(fetched.service)).toEqual(resourceTail(created.proxy.service));
       expect(fetched.proxyHeader ?? "NONE").toEqual("NONE");
       expect(fetched.description).toContain("[alchemy ");
       expect(fetched.description).toContain("tcp frontend");
@@ -146,9 +140,7 @@ test.provider(
         }),
       );
 
-      expect(updated.proxy.targetTcpProxyName).toEqual(
-        created.proxy.targetTcpProxyName,
-      );
+      expect(updated.proxy.targetTcpProxyName).toEqual(created.proxy.targetTcpProxyName);
       expect(updated.proxy.description).toEqual("tcp frontend");
       expect(updated.proxy.proxyHeader).toEqual("PROXY_V1");
       expect(resourceTail(updated.proxy.service)).toEqual(updated.other.name);
@@ -159,20 +151,13 @@ test.provider(
         targetTcpProxy: updated.proxy.targetTcpProxyName,
       });
       expect(refetched.proxyHeader).toEqual("PROXY_V1");
-      expect(resourceTail(refetched.service)).toEqual(
-        resourceTail(updated.proxy.service),
-      );
-      expect(resourceTail(refetched.service)).not.toEqual(
-        resourceTail(created.proxy.service),
-      );
+      expect(resourceTail(refetched.service)).toEqual(resourceTail(updated.proxy.service));
+      expect(resourceTail(refetched.service)).not.toEqual(resourceTail(created.proxy.service));
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.proxy.project,
-        created.proxy.targetTcpProxyName,
-      );
+      const gone = yield* waitUntilGone(created.proxy.project, created.proxy.targetTcpProxyName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 120_000 },
 );

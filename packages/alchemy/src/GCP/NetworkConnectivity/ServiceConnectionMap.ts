@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   NetworkConnectivityNotResolved,
@@ -172,9 +167,7 @@ export type ServiceConnectionMap = Resource<
  * **Example:** Description and labels
  * ```typescript
  * const map = yield* GCP.NetworkConnectivity.ServiceConnectionMap("Sql", {
- *   serviceConnectionMapId: existing.serviceConnectionMapId,
- *   location: existing.location,
- *   serviceClass: existing.serviceClass,
+ *   serviceClass: "gcp-cloud-sql",
  *   description: "sql psc map v2",
  *   labels: { env: "prod", role: "psc" },
  * });
@@ -187,11 +180,7 @@ export const ServiceConnectionMap = Resource<ServiceConnectionMap>(
   "GCP.NetworkConnectivity.ServiceConnectionMap",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  serviceConnectionMapId: string,
-) =>
+const resourceName = (project: string, location: string, serviceConnectionMapId: string) =>
   `projects/${project}/locations/${location}/serviceConnectionMaps/${serviceConnectionMapId}`;
 
 const toStringMap = (
@@ -223,15 +212,10 @@ const toConsumer = (
 ): ConsumerPscConfig => ({
   project: config.project,
   consumerInstanceProject: config.consumerInstanceProject,
-  network:
-    config.network !== undefined
-      ? toNetworkResource(project, config.network)
-      : undefined,
+  network: config.network !== undefined ? toNetworkResource(project, config.network) : undefined,
   disableGlobalAccess: config.disableGlobalAccess,
   ipVersion: config.ipVersion,
-  serviceAttachmentIpAddressMap: toStringMap(
-    config.serviceAttachmentIpAddressMap,
-  ),
+  serviceAttachmentIpAddressMap: toStringMap(config.serviceAttachmentIpAddressMap),
   producerInstanceMetadata: toStringMap(config.producerInstanceMetadata),
   producerInstanceId: config.producerInstanceId,
   state: config.state,
@@ -240,15 +224,10 @@ const toConsumer = (
 const desiredConsumer = (config: ConsumerPscConfig, project: string) => ({
   project: config.project,
   consumerInstanceProject: config.consumerInstanceProject,
-  network:
-    config.network !== undefined
-      ? toNetworkResource(project, config.network)
-      : undefined,
+  network: config.network !== undefined ? toNetworkResource(project, config.network) : undefined,
   disableGlobalAccess: config.disableGlobalAccess,
   ipVersion: config.ipVersion,
-  serviceAttachmentIpAddressMap: toStringMap(
-    config.serviceAttachmentIpAddressMap,
-  ),
+  serviceAttachmentIpAddressMap: toStringMap(config.serviceAttachmentIpAddressMap),
   producerInstanceMetadata: toStringMap(config.producerInstanceMetadata),
   producerInstanceId: config.producerInstanceId,
 });
@@ -288,34 +267,22 @@ const getByName = (name: string) =>
 
 export const ServiceConnectionMapProvider = () =>
   Provider.succeed(ServiceConnectionMap, {
-    stables: [
-      "name",
-      "serviceConnectionMapId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "serviceConnectionMapId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.serviceConnectionMapId ?? output?.serviceConnectionMapId;
+      const previousId = olds?.serviceConnectionMapId ?? output?.serviceConnectionMapId;
       const nextId = news.serviceConnectionMapId
         ? rfc1035(news.serviceConnectionMapId, "service-connection-map")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -331,19 +298,12 @@ export const ServiceConnectionMapProvider = () =>
         output?.serviceConnectionMapId,
         "service-connection-map",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, serviceConnectionMapId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, serviceConnectionMapId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -369,18 +329,13 @@ export const ServiceConnectionMapProvider = () =>
         output?.serviceConnectionMapId,
         "service-connection-map",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, serviceConnectionMapId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const producerPscConfigs = (news.producerPscConfigs ?? []).map(
-        toProducer,
-      );
+      const producerPscConfigs = (news.producerPscConfigs ?? []).map(toProducer);
       const consumerPscConfigs = (news.consumerPscConfigs ?? []).map((config) =>
         desiredConsumer(config, env.project),
       );
@@ -422,8 +377,7 @@ export const ServiceConnectionMapProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const tokenChanged = (current.token ?? "") !== (news.token ?? "");
       const producerChanged = !sameJson(
         (current.producerPscConfigs ?? []).map(toProducer),
@@ -444,27 +398,21 @@ export const ServiceConnectionMapProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkconnectivity.patchProjectsLocationsServiceConnectionMaps(
-            {
-              name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                token: news.token,
-                producerPscConfigs,
-                consumerPscConfigs,
-                etag: current.etag,
-              },
-            },
-          );
+        const operation = yield* networkconnectivity.patchProjectsLocationsServiceConnectionMaps({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            name: current.name ?? name,
+            labels: desiredLabels,
+            description: news.description,
+            token: news.token,
+            producerPscConfigs,
+            consumerPscConfigs,
+            etag: current.etag,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

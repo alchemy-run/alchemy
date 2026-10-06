@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -118,14 +115,6 @@ export class NetworkEdgeSecurityServiceNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class NetworkEdgeSecurityServiceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.NetworkEdgeSecurityServiceOperationFailed",
-)<{
-  networkEdgeSecurityServiceName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class NetworkEdgeSecurityServiceStillExists extends Data.TaggedError(
   "GCP.Compute.NetworkEdgeSecurityServiceStillExists",
 )<{
@@ -196,9 +185,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const toAttrs = (
   service: compute.NetworkEdgeSecurityService,
@@ -220,58 +207,7 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  networkEdgeSecurityServiceName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new NetworkEdgeSecurityServiceOperationFailed({
-        networkEdgeSecurityServiceName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const getByName = (
-  project: string,
-  region: string,
-  networkEdgeSecurityService: string,
-) =>
+const getByName = (project: string, region: string, networkEdgeSecurityService: string) =>
   compute
     .getNetworkEdgeSecurityServices({
       project,
@@ -280,45 +216,7 @@ const getByName = (
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  networkEdgeSecurityServiceName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new NetworkEdgeSecurityServiceOperationFailed({
-        networkEdgeSecurityServiceName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(networkEdgeSecurityServiceName, current, options);
-    return current;
-  });
-
-const awaitResource = (
-  project: string,
-  region: string,
-  networkEdgeSecurityServiceName: string,
-) =>
+const awaitResource = (project: string, region: string, networkEdgeSecurityServiceName: string) =>
   getByName(project, region, networkEdgeSecurityServiceName).pipe(
     Effect.flatMap((service) =>
       service !== undefined
@@ -331,18 +229,13 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.NetworkEdgeSecurityServiceNotResolved",
+      while: (error) => error._tag === "GCP.Compute.NetworkEdgeSecurityServiceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  networkEdgeSecurityServiceName: string,
-) =>
+const waitUntilGone = (project: string, region: string, networkEdgeSecurityServiceName: string) =>
   getByName(project, region, networkEdgeSecurityServiceName).pipe(
     Effect.flatMap((service) =>
       service === undefined
@@ -354,15 +247,11 @@ const waitUntilGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.NetworkEdgeSecurityServiceStillExists",
+      while: (error) => error._tag === "GCP.Compute.NetworkEdgeSecurityServiceStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.NetworkEdgeSecurityServiceStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.NetworkEdgeSecurityServiceStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -374,13 +263,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(
-        project,
-        region,
-        operation,
-        networkEdgeSecurityServiceName,
-        options,
-      ),
+      waitRegionOperation(project, region, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -405,21 +290,12 @@ export const NetworkEdgeSecurityServiceProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousName =
-        olds?.networkEdgeSecurityServiceName ??
-        output?.networkEdgeSecurityServiceName;
+        olds?.networkEdgeSecurityServiceName ?? output?.networkEdgeSecurityServiceName;
       const nextName = news.networkEdgeSecurityServiceName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -436,15 +312,8 @@ export const NetworkEdgeSecurityServiceProvider = () =>
         olds?.networkEdgeSecurityServiceName,
         output?.networkEdgeSecurityServiceName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        networkEdgeSecurityServiceName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, networkEdgeSecurityServiceName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -481,11 +350,7 @@ export const NetworkEdgeSecurityServiceProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        networkEdgeSecurityServiceName,
-      );
+      let current = yield* getByName(env.project, region, networkEdgeSecurityServiceName);
 
       if (current === undefined) {
         yield* compute
@@ -500,36 +365,23 @@ export const NetworkEdgeSecurityServiceProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                networkEdgeSecurityServiceName,
-                { ignoreAlreadyExists: true },
-              ),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
-        current = yield* awaitResource(
-          env.project,
-          region,
-          networkEdgeSecurityServiceName,
-        );
+        current = yield* awaitResource(env.project, region, networkEdgeSecurityServiceName);
       }
 
       const needsPatch =
         (current.description ?? "") !== desiredDescription ||
         (news.securityPolicy !== undefined &&
-          lastSegment(current.securityPolicy) !==
-            lastSegment(news.securityPolicy));
+          lastSegment(current.securityPolicy) !== lastSegment(news.securityPolicy));
 
       if (needsPatch) {
         const latest =
-          (yield* getByName(
-            env.project,
-            region,
-            networkEdgeSecurityServiceName,
-          )) ?? current;
+          (yield* getByName(env.project, region, networkEdgeSecurityServiceName)) ?? current;
         yield* runOp(
           env.project,
           region,
@@ -546,11 +398,7 @@ export const NetworkEdgeSecurityServiceProvider = () =>
           }),
         );
         current =
-          (yield* getByName(
-            env.project,
-            region,
-            networkEdgeSecurityServiceName,
-          )) ?? current;
+          (yield* getByName(env.project, region, networkEdgeSecurityServiceName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -569,13 +417,9 @@ export const NetworkEdgeSecurityServiceProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              region,
-              operation,
-              output.networkEdgeSecurityServiceName,
-              { ignoreNotFound: true },
-            ),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
@@ -584,10 +428,6 @@ export const NetworkEdgeSecurityServiceProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
           }),
         );
-      yield* waitUntilGone(
-        project,
-        region,
-        output.networkEdgeSecurityServiceName,
-      );
+      yield* waitUntilGone(project, region, output.networkEdgeSecurityServiceName);
     }),
   });

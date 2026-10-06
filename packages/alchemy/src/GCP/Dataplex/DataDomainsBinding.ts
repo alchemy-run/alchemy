@@ -7,6 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAlchemyDataDomains } from "./DataDomain.ts";
 import {
   DataplexNotResolved,
   collectPages,
@@ -19,7 +20,6 @@ import {
   waitUntilExists,
   waitUntilGone,
 } from "./internal.ts";
-import { listAlchemyDataDomains } from "./DataDomain.ts";
 
 export type DataDomainsBindingProps = {
   /**
@@ -91,17 +91,12 @@ export type DataDomainsBinding = Resource<
  * @resource
  * @category Dataplex
  */
-export const DataDomainsBinding = Resource<DataDomainsBinding>(
-  "GCP.Dataplex.DataDomainsBinding",
-);
+export const DataDomainsBinding = Resource<DataDomainsBinding>("GCP.Dataplex.DataDomainsBinding");
 
 const resourceNameOf = (parent: string, dataDomainBindingId: string) =>
   `${parent}/bindings/${dataDomainBindingId}`;
 
-const toAttrs = (
-  binding: dataplex.GoogleCloudDataplexV1DataDomainBinding,
-  project: string,
-) => {
+const toAttrs = (binding: dataplex.GoogleCloudDataplexV1DataDomainBinding, project: string) => {
   const name = binding.name ?? "";
   const parsed = parseName(name, "bindings");
   return {
@@ -119,9 +114,9 @@ const toAttrs = (
 const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : retryQuota(
-        dataplex.getProjectsLocationsDataDomainsBindings({ name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    : retryQuota(dataplex.getProjectsLocationsDataDomainsBindings({ name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
 
 const listAtParent = (parent: string) =>
   collectPages(
@@ -130,10 +125,7 @@ const listAtParent = (parent: string) =>
       pageSize: 100,
     }),
     (page) => page.dataDomainBindings,
-  ).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 
 export const DataDomainsBindingProvider = () =>
   Provider.succeed(DataDomainsBinding, {
@@ -153,9 +145,7 @@ export const DataDomainsBindingProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.dataDomainBindingId ?? output?.dataDomainBindingId,
         nextId:
-          news.dataDomainBindingId ??
-          olds?.dataDomainBindingId ??
-          output?.dataDomainBindingId,
+          news.dataDomainBindingId ?? olds?.dataDomainBindingId ?? output?.dataDomainBindingId,
         previousLocation: lastSegment(olds?.parent ?? output?.parent ?? ""),
         nextLocation: lastSegment(news.parent),
         previousParent: olds?.parent ?? output?.parent,
@@ -175,14 +165,11 @@ export const DataDomainsBindingProvider = () =>
         "ddbinding",
       );
       const name =
-        output?.name ??
-        (olds?.parent ? resourceNameOf(olds.parent, dataDomainBindingId) : "");
+        output?.name ?? (olds?.parent ? resourceNameOf(olds.parent, dataDomainBindingId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return lastSegment(existing.name ?? "") === dataDomainBindingId
-        ? attrs
-        : Unowned(attrs);
+      return lastSegment(existing.name ?? "") === dataDomainBindingId ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -194,9 +181,7 @@ export const DataDomainsBindingProvider = () =>
           (domain) =>
             domain.name
               ? listAtParent(domain.name)
-              : Effect.succeed(
-                  [] as dataplex.GoogleCloudDataplexV1DataDomainBinding[],
-                ),
+              : Effect.succeed([] as dataplex.GoogleCloudDataplexV1DataDomainBinding[]),
           { concurrency: 4 },
         );
         return pages.flat().map((item) => toAttrs(item, env.project));

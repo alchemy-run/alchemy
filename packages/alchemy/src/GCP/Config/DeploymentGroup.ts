@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandNamed,
@@ -25,7 +20,6 @@ import {
   parseName,
   replaceOnIdentity,
   ResourceNotResolved,
-  retryTransient,
   stringMap,
   toPhysicalId,
   userLabels,
@@ -148,8 +142,9 @@ export type DeploymentGroup = Resource<
  * ### Updating a Deployment Group
  * **Example:** Labels and units
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const group = yield* GCP.Config.DeploymentGroup("App", {
- *   deploymentGroupId: existing.deploymentGroupId,
+ *   deploymentGroupId: "app-group",
  *   deploymentUnits: [
  *     { id: "network", dependencies: [] },
  *     { id: "cluster", dependencies: ["network"] },
@@ -162,15 +157,9 @@ export type DeploymentGroup = Resource<
  * @resource
  * @category Config
  */
-export const DeploymentGroup = Resource<DeploymentGroup>(
-  "GCP.Config.DeploymentGroup",
-);
+export const DeploymentGroup = Resource<DeploymentGroup>("GCP.Config.DeploymentGroup");
 
-const resourceName = (
-  project: string,
-  location: string,
-  deploymentGroupId: string,
-) =>
+const resourceName = (project: string, location: string, deploymentGroupId: string) =>
   `projects/${project}/locations/${location}/deploymentGroups/${deploymentGroupId}`;
 
 const toUnits = (
@@ -201,11 +190,7 @@ const desiredUnits = (
     dependencies: unit.dependencies,
   }));
 
-const toAttrs = (
-  item: config.DeploymentGroup,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: config.DeploymentGroup, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "deploymentGroups", region);
   const resolvedProject = parsed.project || project;
@@ -214,11 +199,7 @@ const toAttrs = (
     deploymentGroupId: parsed.id,
     project: resolvedProject,
     location: parsed.location,
-    deploymentUnits: toUnits(
-      item.deploymentUnits,
-      resolvedProject,
-      parsed.location,
-    ),
+    deploymentUnits: toUnits(item.deploymentUnits, resolvedProject, parsed.location),
     state: item.state,
     stateDescription: item.stateDescription,
     provisioningState: item.provisioningState,
@@ -247,6 +228,9 @@ const listOwned = (project: string, region: string) =>
     ),
   );
 
+/** Deployment group ids are at most 40 characters. */
+const MAX_DEPLOYMENT_GROUP_ID_LENGTH = 40;
+
 export const DeploymentGroupProvider = () =>
   Provider.succeed(DeploymentGroup, {
     stables: ["name", "deploymentGroupId", "project", "location", "createTime"],
@@ -256,14 +240,8 @@ export const DeploymentGroupProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.deploymentGroupId ?? output?.deploymentGroupId,
-        nextId:
-          news.deploymentGroupId ??
-          olds?.deploymentGroupId ??
-          output?.deploymentGroupId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.deploymentGroupId ?? olds?.deploymentGroupId ?? output?.deploymentGroupId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -278,19 +256,14 @@ export const DeploymentGroupProvider = () =>
         olds?.deploymentGroupId,
         output?.deploymentGroupId,
         "deploymentgroup",
+        MAX_DEPLOYMENT_GROUP_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, deploymentGroupId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, deploymentGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -307,11 +280,9 @@ export const DeploymentGroupProvider = () =>
         news.deploymentGroupId,
         output?.deploymentGroupId,
         "deploymentgroup",
+        MAX_DEPLOYMENT_GROUP_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, deploymentGroupId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -323,8 +294,8 @@ export const DeploymentGroupProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* retryTransient(
-          config.createProjectsLocationsDeploymentGroups({
+        const created = yield* config
+          .createProjectsLocationsDeploymentGroups({
             parent: parentOf(env.project, location),
             deploymentGroupId,
             body: {
@@ -332,8 +303,8 @@ export const DeploymentGroupProvider = () =>
               annotations: desiredAnnotations,
               labels: desiredLabels,
             },
-          }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          })
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -348,49 +319,44 @@ export const DeploymentGroupProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         fingerprint(toUnits(current.deploymentUnits, env.project, location)) !==
           fingerprint(units) && "deploymentUnits",
       ]);
 
       if (mask.length > 0) {
-        const operation = yield* retryTransient(
-          config.patchProjectsLocationsDeploymentGroups({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              labels: desiredLabels,
-              annotations: desiredAnnotations,
-              deploymentUnits: units,
-            },
-          }),
-        );
+        const operation = yield* config.patchProjectsLocationsDeploymentGroups({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            labels: desiredLabels,
+            annotations: desiredAnnotations,
+            deploymentUnits: units,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* retryTransient(
-        config.deleteProjectsLocationsDeploymentGroups({
+      const operation = yield* config
+        .deleteProjectsLocationsDeploymentGroups({
           name: output.name,
           force: true,
           deploymentReferencePolicy: "IGNORE_DEPLOYMENT_REFERENCES",
-        }),
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "Conflict",
-          times: 8,
-          schedule: Schedule.spaced("2 seconds"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      );
+        })
+        .pipe(
+          Effect.retry({
+            while: (error) => error._tag === "Conflict",
+            times: 8,
+            schedule: Schedule.spaced("2 seconds"),
+          }),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

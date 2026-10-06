@@ -16,16 +16,13 @@ export const PutObjectHttp = Layer.effect(
   Effect.gen(function* () {
     const media = yield* makeObjectMedia;
     return Effect.fn(function* (bucket: Bucket) {
-      yield* grantOnBucket(
-        "GCP.Storage.PutObject",
-        bucket,
-        "roles/storage.objectUser",
-      );
+      yield* grantOnBucket("GCP.Storage.PutObject", bucket, "roles/storage.objectUser");
       const bucketName = yield* bucket.bucketName;
       return Effect.fn(`GCP.Storage.PutObject(${bucket.LogicalId})`)(function* (
         request: PutObjectRequest,
       ) {
-        return yield* media.upload(yield* bucketName, request);
+        const name = yield* bucketName;
+        return yield* media.upload(name, request);
       });
     });
   }),

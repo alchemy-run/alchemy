@@ -1,21 +1,18 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent } from "./parent.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
+const runLifecycle = !process.env.FAST;
 const agentDisplayName = "alch-df-ex";
 
 const waitUntilGone = (name: string) =>
@@ -41,11 +38,14 @@ test.provider(
           name: `projects/${project}/locations/global/agents/missing/playbooks/missing/examples/missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 90_000 },
+    }).pipe(logLevel, quotaTolerant),
+  {
+    tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -65,18 +65,15 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "support-ex",
             goal: "Greet the user.",
           });
-          const example = yield* GCP.Dialogflow.AgentsPlaybooksExample(
-            "Hello",
-            {
-              playbook: playbook.name,
-              displayName: "hello",
-              conversationState: "OUTPUT_STATE_OK",
-              actions: [
-                { userUtterance: { text: "hello" } },
-                { agentUtterance: { text: "Hi, how can I help?" } },
-              ],
-            },
-          );
+          const example = yield* GCP.Dialogflow.AgentsPlaybooksExample("Hello", {
+            playbook: playbook.name,
+            displayName: "hello",
+            conversationState: "OUTPUT_STATE_OK",
+            actions: [
+              { userUtterance: { text: "hello" } },
+              { agentUtterance: { text: "Hi, how can I help?" } },
+            ],
+          });
           return { playbook, example };
         }),
       );
@@ -85,10 +82,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.example.playbook).toEqual(created.playbook.name);
       expect(created.example.displayName).toEqual("hello");
 
-      const fetched =
-        yield* dialogflow.getProjectsLocationsAgentsPlaybooksExamples({
-          name: created.example.name,
-        });
+      const fetched = yield* dialogflow.getProjectsLocationsAgentsPlaybooksExamples({
+        name: created.example.name,
+      });
       expect(fetched.name).toEqual(created.example.name);
 
       const updated = yield* stack.deploy(
@@ -99,19 +95,16 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "support-ex",
             goal: "Greet the user.",
           });
-          const example = yield* GCP.Dialogflow.AgentsPlaybooksExample(
-            "Hello",
-            {
-              playbook: playbook.name,
-              exampleId: created.example.exampleId,
-              displayName: "hello",
-              conversationState: "OUTPUT_STATE_OK",
-              actions: [
-                { userUtterance: { text: "hi" } },
-                { agentUtterance: { text: "Hello there." } },
-              ],
-            },
-          );
+          const example = yield* GCP.Dialogflow.AgentsPlaybooksExample("Hello", {
+            playbook: playbook.name,
+            exampleId: created.example.exampleId,
+            displayName: "hello",
+            conversationState: "OUTPUT_STATE_OK",
+            actions: [
+              { userUtterance: { text: "hi" } },
+              { agentUtterance: { text: "Hello there." } },
+            ],
+          });
           return { playbook, example };
         }),
       );
@@ -125,6 +118,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(gone).toEqual("gone");
 
       yield* deleteAgent(agentName);
-    }).pipe(logLevel),
-  { timeout: 120_000 },
+    }).pipe(logLevel, quotaTolerant),
+  {
+    tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+    timeout: 120_000,
+  },
 );

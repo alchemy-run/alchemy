@@ -18,11 +18,12 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 const DEFAULT_CLUSTER_TYPE = "PRIMARY";
 const DEFAULT_NETWORK = "default";
-const MAX_NAME_LENGTH = 63;
+/** Cluster ids must match `^[a-z]([a-z0-9-]{0,53}[a-z0-9])?$`. */
+const MAX_NAME_LENGTH = 55;
 
 export type ClusterTimeOfDay = {
   /** Hours of day in 24-hour format (`0`–`23`). */
@@ -354,29 +355,21 @@ export type Cluster = Resource<
  */
 export const Cluster = Resource<Cluster>("GCP.AlloyDB.Cluster");
 
-export class ClusterNotResolved extends Data.TaggedError(
-  "GCP.AlloyDB.ClusterNotResolved",
-)<{
+export class ClusterNotResolved extends Data.TaggedError("GCP.AlloyDB.ClusterNotResolved")<{
   name: string;
 }> {}
 
-export class ClusterNotReady extends Data.TaggedError(
-  "GCP.AlloyDB.ClusterNotReady",
-)<{
+export class ClusterNotReady extends Data.TaggedError("GCP.AlloyDB.ClusterNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ClusterFailed extends Data.TaggedError(
-  "GCP.AlloyDB.ClusterFailed",
-)<{
+export class ClusterFailed extends Data.TaggedError("GCP.AlloyDB.ClusterFailed")<{
   name: string;
   state: string;
 }> {}
 
-export class ClusterStillExists extends Data.TaggedError(
-  "GCP.AlloyDB.ClusterStillExists",
-)<{
+export class ClusterStillExists extends Data.TaggedError("GCP.AlloyDB.ClusterStillExists")<{
   name: string;
 }> {}
 
@@ -387,8 +380,7 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 const normalizeClusterType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_CLUSTER_TYPE).toUpperCase();
@@ -437,14 +429,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     clusterId:
-      clustersAt >= 0 && parts[clustersAt + 1]
-        ? parts[clustersAt + 1]!
-        : lastSegment(name),
+      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : lastSegment(name),
   };
 };
 
@@ -457,8 +445,7 @@ const stringMapOf = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[1].length > 0,
+      (entry): entry is [string, string] => entry[1] !== undefined && entry[1].length > 0,
     ),
   );
 
@@ -506,8 +493,7 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 const specifiedEquals = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return true;
@@ -524,8 +510,8 @@ const specifiedEquals = (desired: unknown, observed: unknown): boolean => {
       observed !== null && typeof observed === "object"
         ? (observed as Record<string, unknown>)
         : {};
-    return Object.entries(desired as Record<string, unknown>).every(
-      ([key, value]) => specifiedEquals(value, obs[key]),
+    return Object.entries(desired as Record<string, unknown>).every(([key, value]) =>
+      specifiedEquals(value, obs[key]),
     );
   }
   return fingerprint(desired) === fingerprint(observed);
@@ -549,9 +535,7 @@ const toNetworkConfig = (
   };
 };
 
-const toPscConfig = (
-  config: alloydb.PscConfig | PscConfig | undefined,
-): PscConfig | undefined => {
+const toPscConfig = (config: alloydb.PscConfig | PscConfig | undefined): PscConfig | undefined => {
   if (config === undefined) return undefined;
   return { pscEnabled: config.pscEnabled === true };
 };
@@ -564,9 +548,7 @@ const toEncryptionConfig = (
   return { kmsKeyName };
 };
 
-const toSslConfig = (
-  config: alloydb.SslConfig | SslConfig | undefined,
-): SslConfig | undefined => {
+const toSslConfig = (config: alloydb.SslConfig | SslConfig | undefined): SslConfig | undefined => {
   if (config === undefined) return undefined;
   return {
     sslMode: config.sslMode,
@@ -603,8 +585,7 @@ const isAvailable = (state: string | undefined) => {
   return value === "READY" || value === "EMPTY";
 };
 
-const isFailed = (state: string | undefined) =>
-  (state ?? "").toUpperCase() === "FAILED";
+const isFailed = (state: string | undefined) => (state ?? "").toUpperCase() === "FAILED";
 
 const toAttrs = (cluster: alloydb.Cluster, project: string) => {
   const name = cluster.name ?? "";
@@ -625,12 +606,8 @@ const toAttrs = (cluster: alloydb.Cluster, project: string) => {
     networkConfig,
     pscConfig: toPscConfig(cluster.pscConfig),
     encryptionConfig: toEncryptionConfig(cluster.encryptionConfig),
-    automatedBackupPolicy: toAutomatedBackupPolicy(
-      cluster.automatedBackupPolicy,
-    ),
-    continuousBackupConfig: toContinuousBackupConfig(
-      cluster.continuousBackupConfig,
-    ),
+    automatedBackupPolicy: toAutomatedBackupPolicy(cluster.automatedBackupPolicy),
+    continuousBackupConfig: toContinuousBackupConfig(cluster.continuousBackupConfig),
     sslConfig: toSslConfig(cluster.sslConfig),
     subscriptionType: cluster.subscriptionType,
     uid: cluster.uid,
@@ -654,9 +631,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster
-        ? Effect.succeed(cluster)
-        : Effect.fail(new ClusterNotResolved({ name })),
+      cluster ? Effect.succeed(cluster) : Effect.fail(new ClusterNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterNotResolved",
@@ -687,22 +662,20 @@ const waitUntilReady = (name: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterNotReady",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined
-        ? Effect.void
-        : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -711,10 +684,7 @@ const desiredNetworkConfig = (
   project: string,
   pscEnabled: boolean,
 ): NetworkConfig | undefined => {
-  const network = expandNetwork(
-    project,
-    news.networkConfig?.network ?? news.network,
-  );
+  const network = expandNetwork(project, news.networkConfig?.network ?? news.network);
   const allocatedIpRange = news.networkConfig?.allocatedIpRange;
   if (pscEnabled) {
     if (
@@ -797,18 +767,10 @@ export const ClusterProvider = () =>
 
       const previousId = olds?.clusterId ?? output?.clusterId;
       const nextId = news.clusterId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const previousType = normalizeClusterType(
-        olds?.clusterType ?? output?.clusterType,
-      );
-      const nextType = normalizeClusterType(
-        news.clusterType ?? output?.clusterType,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const previousType = normalizeClusterType(olds?.clusterType ?? output?.clusterType);
+      const nextType = normalizeClusterType(news.clusterType ?? output?.clusterType);
       const previousNetwork = networkIdOf(
         olds?.networkConfig?.network ??
           olds?.network ??
@@ -819,31 +781,21 @@ export const ClusterProvider = () =>
         news.networkConfig?.network ?? news.network ?? previousNetwork,
       );
       const previousRange =
-        olds?.networkConfig?.allocatedIpRange ??
-        output?.networkConfig?.allocatedIpRange ??
-        "";
+        olds?.networkConfig?.allocatedIpRange ?? output?.networkConfig?.allocatedIpRange ?? "";
       const nextRange = news.networkConfig?.allocatedIpRange ?? previousRange;
       const previousPsc =
-        olds?.pscConfig?.pscEnabled === true ||
-        output?.pscConfig?.pscEnabled === true;
+        olds?.pscConfig?.pscEnabled === true || output?.pscConfig?.pscEnabled === true;
       const nextPsc =
-        news.pscConfig?.pscEnabled !== undefined
-          ? news.pscConfig.pscEnabled === true
-          : previousPsc;
+        news.pscConfig?.pscEnabled !== undefined ? news.pscConfig.pscEnabled === true : previousPsc;
       const previousKey =
-        olds?.encryptionConfig?.kmsKeyName ??
-        output?.encryptionConfig?.kmsKeyName ??
-        "";
+        olds?.encryptionConfig?.kmsKeyName ?? output?.encryptionConfig?.kmsKeyName ?? "";
       const nextKey = news.encryptionConfig?.kmsKeyName ?? previousKey;
       const previousPrimary =
         olds?.secondaryConfig?.primaryClusterName ??
         output?.secondaryConfig?.primaryClusterName ??
         "";
-      const nextPrimary =
-        news.secondaryConfig?.primaryClusterName ?? previousPrimary;
-      const previousVersion = normalizeVersion(
-        olds?.databaseVersion ?? output?.databaseVersion,
-      );
+      const nextPrimary = news.secondaryConfig?.primaryClusterName ?? previousPrimary;
+      const previousVersion = normalizeVersion(olds?.databaseVersion ?? output?.databaseVersion);
       const nextVersion = normalizeVersion(news.databaseVersion);
       const downgrade =
         nextVersion !== undefined &&
@@ -851,9 +803,7 @@ export const ClusterProvider = () =>
         versionDecreasing(previousVersion, nextVersion);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousNetwork !== nextNetwork ||
@@ -867,26 +817,19 @@ export const ClusterProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const clusterId = yield* toId(id, olds?.clusterId, output?.clusterId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, clusterId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, clusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -902,24 +845,19 @@ export const ClusterProvider = () =>
             Stream.filter(
               (cluster) =>
                 !isPlaceholder(cluster) &&
-                Object.keys(cluster.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(cluster.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((cluster) => toAttrs(cluster, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const clusterId = yield* toId(id, news.clusterId, output?.clusterId);
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, clusterId);
       const clusterType = normalizeClusterType(news.clusterType);
       const pscEnabled = news.pscConfig?.pscEnabled === true;
@@ -933,13 +871,7 @@ export const ClusterProvider = () =>
 
       if (current === undefined) {
         const parent = `projects/${env.project}/locations/${location}`;
-        const body = toCreateBody(
-          news,
-          desiredLabels,
-          clusterType,
-          networkConfig,
-          pscEnabled,
-        );
+        const body = toCreateBody(news, desiredLabels, clusterType, networkConfig, pscEnabled);
         const created = yield* (
           clusterType === "SECONDARY"
             ? alloydb.createsecondaryProjectsLocationsClusters({
@@ -978,30 +910,23 @@ export const ClusterProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      // AlloyDB has been observed to omit `displayName` from reads; when it
+      // does, compare against what was last applied instead of re-patching
+      // on every deploy.
+      const observedDisplayName = current.displayName ?? output?.displayName ?? olds?.displayName;
+      const displayNameChanged = (observedDisplayName ?? "") !== (news.displayName ?? "");
       const annotationsChanged =
         news.annotations !== undefined &&
-        fingerprint(stringMapOf(current.annotations)) !==
-          fingerprint(news.annotations);
+        fingerprint(stringMapOf(current.annotations)) !== fingerprint(news.annotations);
       const backupChanged =
         news.automatedBackupPolicy !== undefined &&
-        !specifiedEquals(
-          news.automatedBackupPolicy,
-          current.automatedBackupPolicy,
-        );
+        !specifiedEquals(news.automatedBackupPolicy, current.automatedBackupPolicy);
       const continuousChanged =
         news.continuousBackupConfig !== undefined &&
-        !specifiedEquals(
-          news.continuousBackupConfig,
-          current.continuousBackupConfig,
-        );
+        !specifiedEquals(news.continuousBackupConfig, current.continuousBackupConfig);
       const maintenanceChanged =
         news.maintenanceUpdatePolicy !== undefined &&
-        !specifiedEquals(
-          news.maintenanceUpdatePolicy,
-          current.maintenanceUpdatePolicy,
-        );
+        !specifiedEquals(news.maintenanceUpdatePolicy, current.maintenanceUpdatePolicy);
       const sslChanged =
         news.sslConfig !== undefined &&
         !specifiedEquals(news.sslConfig, toSslConfig(current.sslConfig));
@@ -1058,15 +983,20 @@ export const ClusterProvider = () =>
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      // When the read omits `displayName`, the desired value is what is
+      // deployed: it was sent on create, patched above, or observed equal.
+      return {
+        ...toAttrs(current, env.project),
+        displayName: current.displayName ?? news.displayName,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1079,12 +1009,12 @@ export const ClusterProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),

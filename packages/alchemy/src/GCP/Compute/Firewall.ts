@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -13,6 +12,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export interface FirewallRule {
   /**
@@ -203,35 +203,14 @@ export type Firewall = Resource<
  */
 export const Firewall = Resource<Firewall>("GCP.Compute.Firewall");
 
-export class FirewallNotResolved extends Data.TaggedError(
-  "GCP.Compute.FirewallNotResolved",
-)<{
+export class FirewallNotResolved extends Data.TaggedError("GCP.Compute.FirewallNotResolved")<{
   firewallName: string;
-}> {}
-
-export class FirewallOperationFailed extends Data.TaggedError(
-  "GCP.Compute.FirewallOperationFailed",
-)<{
-  operation: string;
-  code?: string;
-  message: string;
-}> {}
-
-class FirewallOperationPending extends Data.TaggedError(
-  "GCP.Compute.FirewallOperationPending",
-)<{
-  operation: string;
-  status: string;
 }> {}
 
 const DEFAULT_NETWORK = "global/networks/default";
 const DEFAULT_DIRECTION = "INGRESS";
 const DEFAULT_PRIORITY = 1000;
-const OWNERSHIP_KEYS = [
-  "alchemy-stack",
-  "alchemy-stage",
-  "alchemy-id",
-] as const;
+const OWNERSHIP_KEYS = ["alchemy-stack", "alchemy-stage", "alchemy-id"] as const;
 
 const backoff = Schedule.min([
   Schedule.exponential(Duration.millis(300), 1.5),
@@ -265,13 +244,8 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     return rfc.slice(0, 63);
   });
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-) => {
-  const marker = OWNERSHIP_KEYS.map(
-    (key) => `${key}=${labels[key] ?? ""}`,
-  ).join(" ");
+const encodeDescription = (user: string | undefined, labels: Record<string, string>) => {
+  const marker = OWNERSHIP_KEYS.map((key) => `${key}=${labels[key] ?? ""}`).join(" ");
   const trimmed = user?.trim() ?? "";
   return trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
 };
@@ -298,9 +272,7 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasAlchemyMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const toApiRules = (
   rules: FirewallRule[] | undefined,
@@ -308,16 +280,11 @@ const toApiRules = (
   if (rules === undefined || rules.length === 0) return undefined;
   return rules.map((rule) => ({
     IPProtocol: rule.protocol,
-    ports:
-      rule.ports !== undefined && rule.ports.length > 0
-        ? rule.ports
-        : undefined,
+    ports: rule.ports !== undefined && rule.ports.length > 0 ? rule.ports : undefined,
   }));
 };
 
-const fromApiRules = (
-  rules: compute.FirewallAllowedItemList | undefined,
-): FirewallRule[] =>
+const fromApiRules = (rules: compute.FirewallAllowedItemList | undefined): FirewallRule[] =>
   (rules ?? []).flatMap((rule) =>
     rule.IPProtocol
       ? [
@@ -418,100 +385,6 @@ const toAttrs = (firewall: compute.Firewall, project: string) => ({
   creationTimestamp: firewall.creationTimestamp,
 });
 
-const isNotFoundOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors.length > 0 &&
-  errors.every((error) => {
-    const code = (error.code ?? "").toLowerCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "notfound" ||
-      code === "resource_not_found" ||
-      message.includes("was not found") ||
-      message.includes("not found")
-    );
-  });
-
-const failIfError = (operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
-  const status = operation.httpErrorStatusCode;
-  if (
-    (errors.length === 0 && (status === undefined || status < 400)) ||
-    isNotFoundOp(errors)
-  ) {
-    return Effect.void;
-  }
-  const first = errors[0];
-  return Effect.fail(
-    new FirewallOperationFailed({
-      operation: operation.name ?? "",
-      code: first?.code ?? (status !== undefined ? String(status) : undefined),
-      message:
-        first?.message ??
-        operation.httpErrorMessage ??
-        "Compute operation failed",
-    }),
-  );
-};
-
-const waitForGlobalOp = (project: string, operation: compute.Operation) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (name === undefined || name.length === 0) {
-      if (operation.status === "DONE") {
-        yield* failIfError(operation);
-        return operation;
-      }
-      return yield* new FirewallOperationFailed({
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfError(operation);
-      return operation;
-    }
-    const waited = yield* waitGlobalOperations({
-      project,
-      operation: name,
-    });
-    if (waited.status === "DONE") {
-      yield* failIfError(waited);
-      return waited;
-    }
-    const done = yield* compute
-      .getGlobalOperations({ project, operation: name })
-      .pipe(
-        Effect.flatMap((current) => {
-          if (current.status === "DONE") return Effect.succeed(current);
-          return Effect.fail(
-            new FirewallOperationPending({
-              operation: name,
-              status: current.status ?? "UNKNOWN",
-            }),
-          );
-        }),
-        Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.Compute.FirewallOperationPending" ||
-            error._tag === "NotFound",
-          times: 10,
-          schedule: backoff,
-        }),
-        Effect.catchTag(
-          "GCP.Compute.FirewallOperationPending",
-          (error) =>
-            new FirewallOperationFailed({
-              operation: error.operation,
-              message: `Timed out waiting for operation (status=${error.status})`,
-            }),
-        ),
-      );
-    yield* failIfError(done);
-    return done;
-  });
-
 const getByName = (project: string, firewall: string) =>
   compute
     .getFirewalls({ project, firewall })
@@ -556,34 +429,21 @@ export const FirewallProvider = () =>
       if (!isResolved(news)) return undefined;
       const prevName = olds?.firewallName ?? output?.firewallName;
       const nextName = news.firewallName ?? prevName;
-      const nameChanged =
-        prevName !== undefined &&
-        nextName !== undefined &&
-        prevName !== nextName;
+      const nameChanged = prevName !== undefined && nextName !== undefined && prevName !== nextName;
 
       const prevNetwork = networkId(olds?.network ?? output?.network);
-      const nextNetwork = networkId(
-        news.network ?? prevNetwork ?? DEFAULT_NETWORK,
-      );
+      const nextNetwork = networkId(news.network ?? prevNetwork ?? DEFAULT_NETWORK);
       const networkChanged =
-        prevNetwork !== undefined &&
-        nextNetwork !== undefined &&
-        prevNetwork !== nextNetwork;
+        prevNetwork !== undefined && nextNetwork !== undefined && prevNetwork !== nextNetwork;
 
       const prevDir = (olds?.direction ?? output?.direction)?.toUpperCase();
-      const nextDir = (
-        news.direction ??
-        prevDir ??
-        DEFAULT_DIRECTION
-      ).toUpperCase();
+      const nextDir = (news.direction ?? prevDir ?? DEFAULT_DIRECTION).toUpperCase();
       const directionChanged = prevDir !== undefined && prevDir !== nextDir;
 
       const prevAction = actionOf(olds) ?? actionOf(output);
       const nextAction = actionOf(news);
       const actionChanged =
-        prevAction !== undefined &&
-        nextAction !== undefined &&
-        prevAction !== nextAction;
+        prevAction !== undefined && nextAction !== undefined && prevAction !== nextAction;
 
       if (nameChanged || networkChanged || directionChanged || actionChanged) {
         return {
@@ -596,18 +456,11 @@ export const FirewallProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const firewallName = yield* toName(
-        id,
-        olds?.firewallName,
-        output?.firewallName,
-      );
+      const firewallName = yield* toName(id, olds?.firewallName, output?.firewallName);
       const existing = yield* getByName(env.project, firewallName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseDescription(existing.description).labels,
-      ))
+      return (yield* hasAlchemyLabels(id, parseDescription(existing.description).labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -615,28 +468,19 @@ export const FirewallProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* compute.listFirewalls
-          .items({ project: env.project })
-          .pipe(
-            Stream.filter((firewall) => hasAlchemyMarker(firewall.description)),
-            Stream.map((firewall) => toAttrs(firewall, env.project)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        return yield* compute.listFirewalls.items({ project: env.project }).pipe(
+          Stream.filter((firewall) => hasAlchemyMarker(firewall.description)),
+          Stream.map((firewall) => toAttrs(firewall, env.project)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const firewallName = yield* toName(
-        id,
-        news.firewallName,
-        output?.firewallName,
-      );
+      const firewallName = yield* toName(id, news.firewallName, output?.firewallName);
       const desiredLabels = yield* createInternalLabels(id);
-      const desiredDescription = encodeDescription(
-        news.description,
-        desiredLabels,
-      );
+      const desiredDescription = encodeDescription(news.description, desiredLabels);
       const desiredPriority = news.priority ?? DEFAULT_PRIORITY;
       const desiredDisabled = news.disabled === true;
       const desiredAllowed = news.allowed ?? [];
@@ -655,17 +499,10 @@ export const FirewallProvider = () =>
         yield* compute
           .insertFirewalls({
             project: env.project,
-            body: insertBody(
-              firewallName,
-              env.project,
-              news,
-              desiredDescription,
-            ),
+            body: insertBody(firewallName, env.project, news, desiredDescription),
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitForGlobalOp(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.void),
           );
         current = yield* getByName(env.project, firewallName).pipe(
@@ -679,9 +516,7 @@ export const FirewallProvider = () =>
             times: 8,
             schedule: backoff,
           }),
-          Effect.catchTag("GCP.Compute.FirewallNotResolved", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("GCP.Compute.FirewallNotResolved", () => Effect.succeed(undefined)),
         );
       }
 
@@ -719,25 +554,13 @@ export const FirewallProvider = () =>
       if (!listsEqual(observed.targetTags, desiredTargetTags)) {
         patch.targetTags = desiredTargetTags;
       }
-      if (
-        !listsEqual(
-          observed.sourceServiceAccounts,
-          desiredSourceServiceAccounts,
-        )
-      ) {
+      if (!listsEqual(observed.sourceServiceAccounts, desiredSourceServiceAccounts)) {
         patch.sourceServiceAccounts = desiredSourceServiceAccounts;
       }
-      if (
-        !listsEqual(
-          observed.targetServiceAccounts,
-          desiredTargetServiceAccounts,
-        )
-      ) {
+      if (!listsEqual(observed.targetServiceAccounts, desiredTargetServiceAccounts)) {
         patch.targetServiceAccounts = desiredTargetServiceAccounts;
       }
-      if (
-        !logConfigEqual(observed.logConfig, fromApiLogConfig(desiredLogConfig))
-      ) {
+      if (!logConfigEqual(observed.logConfig, fromApiLogConfig(desiredLogConfig))) {
         patch.logConfig = desiredLogConfig ?? { enable: false };
       }
 
@@ -749,9 +572,7 @@ export const FirewallProvider = () =>
             body: patch,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitForGlobalOp(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 5,
@@ -773,7 +594,9 @@ export const FirewallProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForGlobalOp(env.project, operation),
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
         );

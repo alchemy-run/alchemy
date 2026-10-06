@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,21 +9,14 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_SESSION_AFFINITY = "NONE";
 const MAX_NAME_LENGTH = 63;
 
-export type TargetPoolSessionAffinity =
-  | "NONE"
-  | "CLIENT_IP"
-  | "CLIENT_IP_PROTO"
-  | (string & {});
+export type TargetPoolSessionAffinity = "NONE" | "CLIENT_IP" | "CLIENT_IP_PROTO" | (string & {});
 
 export type TargetPoolProps = {
   /**
@@ -175,26 +167,14 @@ export type TargetPool = Resource<
  */
 export const TargetPool = Resource<TargetPool>("GCP.Compute.TargetPool");
 
-export class TargetPoolNotResolved extends Data.TaggedError(
-  "GCP.Compute.TargetPoolNotResolved",
-)<{
+export class TargetPoolNotResolved extends Data.TaggedError("GCP.Compute.TargetPoolNotResolved")<{
   targetPoolName: string;
   region: string;
 }> {}
 
-export class TargetPoolPending extends Data.TaggedError(
-  "GCP.Compute.TargetPoolPending",
-)<{
+export class TargetPoolPending extends Data.TaggedError("GCP.Compute.TargetPoolPending")<{
   targetPoolName: string;
   status: string;
-}> {}
-
-export class TargetPoolOperationFailed extends Data.TaggedError(
-  "GCP.Compute.TargetPoolOperationFailed",
-)<{
-  targetPoolName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -289,10 +269,7 @@ const instanceKey = (value: string) => {
   return lastSegment(value).toLowerCase();
 };
 
-const toAttrs = (
-  pool: compute.TargetPool,
-  project: string,
-): TargetPool["Attributes"] => {
+const toAttrs = (pool: compute.TargetPool, project: string): TargetPool["Attributes"] => {
   const parsed = parseDescription(pool.description);
   return {
     targetPoolName: pool.name ?? "",
@@ -312,88 +289,17 @@ const toAttrs = (
   };
 };
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (
-  operation: compute.Operation,
-  targetPoolName: string,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new TargetPoolOperationFailed({
-      targetPoolName,
-      operation: operation.name ?? "",
-      message: errors
-        .map((error) => error.message ?? error.code ?? "unknown")
-        .join("; "),
-    }),
-  );
-};
-
 const getByName = (project: string, region: string, targetPool: string) =>
   compute
     .getTargetPools({ project, region, targetPool })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  targetPoolName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* failIfOpError(operation, targetPoolName);
-        return;
-      }
-      return yield* new TargetPoolOperationFailed({
-        targetPoolName,
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfOpError(operation, targetPoolName);
-      return;
-    }
-    const waited = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    yield* failIfOpError(waited, targetPoolName);
-  });
 
 const runOp = <E, R>(
   project: string,
   region: string,
   targetPoolName: string,
   start: Effect.Effect<compute.Operation, E, R>,
-) =>
-  start.pipe(
-    Effect.flatMap((operation) =>
-      waitForOperation(project, region, operation, targetPoolName),
-    ),
-  );
+) => start.pipe(Effect.flatMap((operation) => waitRegionOperation(project, region, operation)));
 
 const requirePool = (project: string, region: string, targetPoolName: string) =>
   getByName(project, region, targetPoolName).pipe(
@@ -409,11 +315,7 @@ const requirePool = (project: string, region: string, targetPoolName: string) =>
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  targetPoolName: string,
-) =>
+const waitUntilGone = (project: string, region: string, targetPoolName: string) =>
   getByName(project, region, targetPoolName).pipe(
     Effect.flatMap((pool) =>
       pool === undefined
@@ -453,18 +355,10 @@ export const TargetPoolProvider = () =>
       const previousName = olds?.targetPoolName ?? output?.targetPoolName;
       const nextName = news.targetPoolName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
       const affinityChanged =
@@ -472,11 +366,9 @@ export const TargetPoolProvider = () =>
         sessionAffinityOf(news.sessionAffinity) !==
           sessionAffinityOf(olds?.sessionAffinity ?? output?.sessionAffinity);
 
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const descriptionChanged =
-        news.description !== undefined &&
-        (news.description ?? "") !== previousDescription;
+        news.description !== undefined && (news.description ?? "") !== previousDescription;
 
       if (nameChanged || regionChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -486,8 +378,7 @@ export const TargetPoolProvider = () =>
           action: "replace" as const,
           deleteFirst:
             previousName !== undefined &&
-            (news.targetPoolName === undefined ||
-              news.targetPoolName === previousName),
+            (news.targetPoolName === undefined || news.targetPoolName === previousName),
         };
       }
       return undefined;
@@ -495,15 +386,8 @@ export const TargetPoolProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const targetPoolName = yield* toName(
-        id,
-        olds?.targetPoolName,
-        output?.targetPoolName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const targetPoolName = yield* toName(id, olds?.targetPoolName, output?.targetPoolName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, targetPoolName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -526,9 +410,7 @@ export const TargetPoolProvider = () =>
             (scoped?.targetPools ?? [])
               .filter((item) => {
                 const { labels } = parseDescription(item.description);
-                return Object.keys(labels).some((key) =>
-                  key.startsWith("alchemy-"),
-                );
+                return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
               })
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -537,11 +419,7 @@ export const TargetPoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const targetPoolName = yield* toName(
-        id,
-        news.targetPoolName,
-        output?.targetPoolName,
-      );
+      const targetPoolName = yield* toName(id, news.targetPoolName, output?.targetPoolName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -550,12 +428,8 @@ export const TargetPoolProvider = () =>
         news.backupPool !== undefined && news.backupPool.length > 0
           ? toPoolUrl(env.project, region, news.backupPool)
           : undefined;
-      const healthChecks = news.healthChecks?.map((check) =>
-        toHealthCheckUrl(env.project, check),
-      );
-      const instances = news.instances?.map((instance) =>
-        toInstanceUrl(env.project, instance),
-      );
+      const healthChecks = news.healthChecks?.map((check) => toHealthCheckUrl(env.project, check));
+      const instances = news.instances?.map((instance) => toInstanceUrl(env.project, instance));
 
       let current = yield* getByName(env.project, region, targetPoolName);
 
@@ -576,20 +450,11 @@ export const TargetPoolProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                targetPoolName,
-              ).pipe(
-                Effect.flatMap(() =>
-                  requirePool(env.project, region, targetPoolName),
-                ),
-              ),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(Effect.flatMap(() => requirePool(env.project, region, targetPoolName))),
             ),
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, region, targetPoolName),
-            ),
+            Effect.catchTag("Conflict", () => getByName(env.project, region, targetPoolName)),
           );
         current = created ?? undefined;
       }
@@ -605,8 +470,7 @@ export const TargetPoolProvider = () =>
               ? toPoolUrl(env.project, region, news.backupPool)
               : ""
             : (current.backupPool ?? "");
-        const desiredFailover =
-          news.failoverRatio ?? current.failoverRatio ?? 0;
+        const desiredFailover = news.failoverRatio ?? current.failoverRatio ?? 0;
         if (
           !sameRef(desiredBackup, current.backupPool) ||
           desiredFailover !== (current.failoverRatio ?? 0)
@@ -623,23 +487,16 @@ export const TargetPoolProvider = () =>
               body: { target: desiredBackup },
             }),
           ).pipe(Effect.catchTag("Conflict", () => Effect.void));
-          current =
-            (yield* getByName(env.project, region, targetPoolName)) ?? current;
+          current = (yield* getByName(env.project, region, targetPoolName)) ?? current;
         }
       }
 
       if (healthChecks !== undefined) {
         const observed = current.healthChecks ?? [];
         const observedKeys = new Set(observed.map((url) => lastSegment(url)));
-        const desiredKeys = new Set(
-          healthChecks.map((url) => lastSegment(url)),
-        );
-        const toAdd = healthChecks.filter(
-          (url) => !observedKeys.has(lastSegment(url)),
-        );
-        const toRemove = observed.filter(
-          (url) => !desiredKeys.has(lastSegment(url)),
-        );
+        const desiredKeys = new Set(healthChecks.map((url) => lastSegment(url)));
+        const toAdd = healthChecks.filter((url) => !observedKeys.has(lastSegment(url)));
+        const toRemove = observed.filter((url) => !desiredKeys.has(lastSegment(url)));
         if (toAdd.length > 0) {
           yield* runOp(
             env.project,
@@ -670,20 +527,15 @@ export const TargetPoolProvider = () =>
             }),
           );
         }
-        current =
-          (yield* getByName(env.project, region, targetPoolName)) ?? current;
+        current = (yield* getByName(env.project, region, targetPoolName)) ?? current;
       }
 
       if (instances !== undefined) {
         const observed = current.instances ?? [];
         const observedKeys = new Set(observed.map(instanceKey));
         const desiredKeys = new Set(instances.map(instanceKey));
-        const toAdd = instances.filter(
-          (url) => !observedKeys.has(instanceKey(url)),
-        );
-        const toRemove = observed.filter(
-          (url) => !desiredKeys.has(instanceKey(url)),
-        );
+        const toAdd = instances.filter((url) => !observedKeys.has(instanceKey(url)));
+        const toRemove = observed.filter((url) => !desiredKeys.has(instanceKey(url)));
         if (toAdd.length > 0) {
           yield* runOp(
             env.project,
@@ -714,8 +566,7 @@ export const TargetPoolProvider = () =>
             }),
           );
         }
-        current =
-          (yield* getByName(env.project, region, targetPoolName)) ?? current;
+        current = (yield* getByName(env.project, region, targetPoolName)) ?? current;
       }
 
       if (news.securityPolicy !== undefined) {
@@ -732,8 +583,7 @@ export const TargetPoolProvider = () =>
               body: { securityPolicy: desiredPolicy },
             }),
           );
-          current =
-            (yield* getByName(env.project, region, targetPoolName)) ?? current;
+          current = (yield* getByName(env.project, region, targetPoolName)) ?? current;
         }
       }
 
@@ -752,7 +602,9 @@ export const TargetPoolProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, region, operation, output.targetPoolName),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

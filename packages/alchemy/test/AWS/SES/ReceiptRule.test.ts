@@ -1,10 +1,3 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { Role } from "@/AWS/IAM";
-import { Bucket } from "@/AWS/S3";
-import { ReceiptRule, ReceiptRuleSet } from "@/AWS/SES";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as ses from "@distilled.cloud/aws/ses";
@@ -13,6 +6,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { Role } from "@/AWS/IAM";
+import { Bucket } from "@/AWS/S3";
+import { ReceiptRule, ReceiptRuleSet } from "@/AWS/SES";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,21 +22,17 @@ class RuleStillExists extends Data.TaggedError("RuleStillExists")<{
 }> {}
 
 const assertRuleDeleted = (ruleSetName: string, ruleName: string) =>
-  ses
-    .describeReceiptRule({ RuleSetName: ruleSetName, RuleName: ruleName })
-    .pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new RuleStillExists({ ruleSetName, ruleName })),
-      ),
-      Effect.catchTag(
-        ["RuleDoesNotExistException", "RuleSetDoesNotExistException"],
-        () => Effect.void,
-      ),
-      Effect.retry({
-        while: (e) => e._tag === "RuleStillExists",
-        schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
-      }),
-    );
+  ses.describeReceiptRule({ RuleSetName: ruleSetName, RuleName: ruleName }).pipe(
+    Effect.flatMap(() => Effect.fail(new RuleStillExists({ ruleSetName, ruleName }))),
+    Effect.catchTag(
+      ["RuleDoesNotExistException", "RuleSetDoesNotExistException"],
+      () => Effect.void,
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "RuleStillExists",
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
 
 test.provider(
   "receipt rule lifecycle: create with actions, update in place, delete",
@@ -79,12 +75,8 @@ test.provider(
       // silently bounce all inbound mail).
       expect(observed.Rule?.Enabled).toBe(true);
       expect(observed.Rule?.ScanEnabled).toBe(true);
-      expect(observed.Rule?.Actions?.[0]?.AddHeaderAction?.HeaderValue).toBe(
-        "inbound",
-      );
-      expect(observed.Rule?.Recipients).toEqual([
-        "support@ses-bindings.alchemy-test.example.com",
-      ]);
+      expect(observed.Rule?.Actions?.[0]?.AddHeaderAction?.HeaderValue).toBe("inbound");
+      expect(observed.Rule?.Recipients).toEqual(["support@ses-bindings.alchemy-test.example.com"]);
 
       // update in place: swap the action set, disable scanning, require TLS.
       // (A BounceAction is not usable here — SES validates its Sender against
@@ -117,9 +109,7 @@ test.provider(
       expect(updated.Rule?.ScanEnabled).toBe(false);
       expect(updated.Rule?.TlsPolicy).toBe("Require");
       expect(updated.Rule?.Actions).toHaveLength(1);
-      expect(updated.Rule?.Actions?.[0]?.AddHeaderAction?.HeaderValue).toBe(
-        "updated",
-      );
+      expect(updated.Rule?.Actions?.[0]?.AddHeaderAction?.HeaderValue).toBe("updated");
 
       yield* stack.destroy();
       yield* assertRuleDeleted(ruleSet.ruleSetName, rule.ruleName);

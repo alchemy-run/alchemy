@@ -10,10 +10,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type {
-  LogBucketCmekSettings,
-  LogBucketIndexConfig,
-} from "./LogBucket.ts";
 import {
   DEFAULT_LOCATION,
   DEFAULT_RETENTION_DAYS,
@@ -28,6 +24,7 @@ import {
   resolveBillingAccountId,
   toPhysicalId,
 } from "./internal.ts";
+import type { LogBucketCmekSettings, LogBucketIndexConfig } from "./LogBucket.ts";
 
 export type BillingBucketIndexConfig = LogBucketIndexConfig;
 export type BillingBucketCmekSettings = LogBucketCmekSettings;
@@ -165,9 +162,7 @@ export type BillingBucket = Resource<
  * **Example:** Change description and retention
  * ```typescript
  * const bucket = yield* GCP.Logging.BillingBucket("AppLogs", {
- *   billingAccountId: existing.billingAccountId,
- *   bucketId: existing.bucketId,
- *   location: existing.location,
+ *   location: "global",
  *   description: "retained application logs",
  *   retentionDays: 60,
  * });
@@ -176,9 +171,7 @@ export type BillingBucket = Resource<
  * @resource
  * @category Logging
  */
-export const BillingBucket = Resource<BillingBucket>(
-  "GCP.Logging.BillingBucket",
-);
+export const BillingBucket = Resource<BillingBucket>("GCP.Logging.BillingBucket");
 
 export class BillingBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketNotResolved",
@@ -186,24 +179,16 @@ export class BillingBucketNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class BillingBucketFailed extends Data.TaggedError(
-  "GCP.Logging.BillingBucketFailed",
-)<{
+export class BillingBucketFailed extends Data.TaggedError("GCP.Logging.BillingBucketFailed")<{
   name: string;
   state: string | undefined;
 }> {}
 
-const resourceName = (
-  billingAccountId: string,
-  location: string,
-  bucketId: string,
-) =>
+const resourceName = (billingAccountId: string, location: string, bucketId: string) =>
   `${billingAccountParent(billingAccountId)}/locations/${location}/buckets/${bucketId}`;
 
 const parseBucketName = (name: string) => {
-  const match = name.match(
-    /^billingAccounts\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/,
-  );
+  const match = name.match(/^billingAccounts\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/);
   if (!match) return undefined;
   return {
     billingAccountId: match[1]!,
@@ -222,22 +207,16 @@ const locationOf = (bucket: logging.LogBucket, fallback: string) => {
   return parsed?.location ?? fallback;
 };
 
-const isDeleted = (
-  bucket: logging.LogBucket | undefined,
-): bucket is undefined =>
+const isDeleted = (bucket: logging.LogBucket | undefined): bucket is undefined =>
   bucket === undefined || bucket.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
 const canonRestricted = (fields: readonly string[] | undefined) =>
   [...(fields ?? [])].slice().sort();
 
 const canonIndexConfigs = (
-  configs:
-    | readonly logging.IndexConfig[]
-    | readonly BillingBucketIndexConfig[]
-    | undefined,
+  configs: readonly logging.IndexConfig[] | readonly BillingBucketIndexConfig[] | undefined,
 ): BillingBucketIndexConfig[] =>
   [...(configs ?? [])]
     .flatMap((config) =>
@@ -245,19 +224,14 @@ const canonIndexConfigs = (
         ? [
             {
               fieldPath: config.fieldPath,
-              type: (config.type ??
-                "INDEX_TYPE_STRING") as BillingBucketIndexConfig["type"],
+              type: (config.type ?? "INDEX_TYPE_STRING") as BillingBucketIndexConfig["type"],
             },
           ]
         : [],
     )
     .sort((left, right) => left.fieldPath.localeCompare(right.fieldPath));
 
-const toAttrs = (
-  bucket: logging.LogBucket,
-  billingAccountId: string,
-  location: string,
-) => {
+const toAttrs = (bucket: logging.LogBucket, billingAccountId: string, location: string) => {
   const parsedName = parseBucketName(bucket.name ?? "");
   const bucketId = bucketIdOf(bucket);
   const resolvedLocation = locationOf(bucket, location);
@@ -265,9 +239,7 @@ const toAttrs = (
   const cmekKey = bucket.cmekSettings?.kmsKeyName;
   const account = parsedName?.billingAccountId ?? billingAccountId;
   return {
-    name:
-      bucket.name ??
-      (bucketId ? resourceName(account, resolvedLocation, bucketId) : ""),
+    name: bucket.name ?? (bucketId ? resourceName(account, resolvedLocation, bucketId) : ""),
     bucketId,
     billingAccountId: account,
     location: resolvedLocation,
@@ -321,9 +293,7 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket)
-        ? Effect.void
-        : Effect.fail(new BillingBucketNotResolved({ name })),
+      isDeleted(bucket) ? Effect.void : Effect.fail(new BillingBucketNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BillingBucketNotResolved",
@@ -332,10 +302,7 @@ const waitUntilDeleted = (name: string) =>
     }),
   );
 
-const toCreateBody = (
-  props: BillingBucketProps,
-  description: string,
-): logging.LogBucket => ({
+const toCreateBody = (props: BillingBucketProps, description: string): logging.LogBucket => ({
   description,
   retentionDays: props.retentionDays,
   locked: props.locked === true ? true : undefined,
@@ -351,9 +318,7 @@ const toCreateBody = (
           type: config.type,
         }))
       : undefined,
-  cmekSettings: props.cmekSettings
-    ? { kmsKeyName: props.cmekSettings.kmsKeyName }
-    : undefined,
+  cmekSettings: props.cmekSettings ? { kmsKeyName: props.cmekSettings.kmsKeyName } : undefined,
 });
 
 export const BillingBucketProvider = () =>
@@ -364,21 +329,17 @@ export const BillingBucketProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.bucketId ?? output?.bucketId;
       const idChanged =
-        previousId !== undefined &&
-        news.bucketId !== undefined &&
-        news.bucketId !== previousId;
+        previousId !== undefined && news.bucketId !== undefined && news.bucketId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
         news.location !== previousLocation;
-      const previousAccount =
-        olds?.billingAccountId ?? output?.billingAccountId;
+      const previousAccount = olds?.billingAccountId ?? output?.billingAccountId;
       const accountChanged =
         previousAccount !== undefined &&
         news.billingAccountId !== undefined &&
-        billingAccountIdOf(news.billingAccountId) !==
-          billingAccountIdOf(previousAccount);
+        billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !locationChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -389,14 +350,8 @@ export const BillingBucketProvider = () =>
         output?.billingAccountId,
       );
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const bucketId = yield* toPhysicalId(
-        id,
-        olds?.bucketId,
-        output?.bucketId,
-        "b",
-      );
-      const name =
-        output?.name ?? resourceName(billingAccountId, location, bucketId);
+      const bucketId = yield* toPhysicalId(id, olds?.bucketId, output?.bucketId, "b");
+      const name = output?.name ?? resourceName(billingAccountId, location, bucketId);
       const existing = yield* getByName(name);
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, billingAccountId, location);
@@ -407,9 +362,7 @@ export const BillingBucketProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const billingAccountId = yield* lookupProjectBillingAccountId(
-          env.project,
-        );
+        const billingAccountId = yield* lookupProjectBillingAccountId(env.project);
         if (billingAccountId === undefined) return [];
         return yield* logging.listBillingAccountsLocationsBuckets
           .pages({
@@ -418,22 +371,13 @@ export const BillingBucketProvider = () =>
           })
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
-            Stream.filter(
-              (bucket) =>
-                !isDeleted(bucket) && hasOwnershipMarker(bucket.description),
-            ),
+            Stream.filter((bucket) => !isDeleted(bucket) && hasOwnershipMarker(bucket.description)),
             Stream.map((bucket) =>
-              toAttrs(
-                bucket,
-                billingAccountId,
-                locationOf(bucket, DEFAULT_LOCATION),
-              ),
+              toAttrs(bucket, billingAccountId, locationOf(bucket, DEFAULT_LOCATION)),
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as BillingBucket["Attributes"][]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as BillingBucket["Attributes"][])),
           );
       }),
 
@@ -443,22 +387,14 @@ export const BillingBucketProvider = () =>
         output?.billingAccountId,
       );
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const bucketId = yield* toPhysicalId(
-        id,
-        news.bucketId,
-        output?.bucketId,
-        "b",
-      );
+      const bucketId = yield* toPhysicalId(id, news.bucketId, output?.bucketId, "b");
       const name = resourceName(billingAccountId, location, bucketId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        current.lifecycleState === "DELETE_REQUESTED"
-      ) {
+      if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
         yield* undelete(current.name ?? name);
         current = yield* waitUntilActive(current.name ?? name);
       }
@@ -472,10 +408,7 @@ export const BillingBucketProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
-        if (
-          current !== undefined &&
-          current.lifecycleState === "DELETE_REQUESTED"
-        ) {
+        if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
           yield* undelete(current.name ?? name);
           current = yield* waitUntilActive(current.name ?? name);
         } else if (current !== undefined && isPending(current.lifecycleState)) {
@@ -489,13 +422,11 @@ export const BillingBucketProvider = () =>
 
       const desiredLocked = news.locked === true;
       const desiredAnalytics = news.analyticsEnabled === true;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const retentionChanged =
         news.retentionDays !== undefined &&
         current.locked !== true &&
-        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !==
-          news.retentionDays;
+        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !== news.retentionDays;
       const restrictedChanged =
         news.restrictedFields !== undefined &&
         !jsonEqual(
@@ -504,20 +435,15 @@ export const BillingBucketProvider = () =>
         );
       const indexChanged =
         news.indexConfigs !== undefined &&
-        !jsonEqual(
-          canonIndexConfigs(current.indexConfigs),
-          canonIndexConfigs(news.indexConfigs),
-        );
+        !jsonEqual(canonIndexConfigs(current.indexConfigs), canonIndexConfigs(news.indexConfigs));
       const analyticsChanged =
         news.analyticsEnabled !== undefined &&
         desiredAnalytics &&
         current.analyticsEnabled !== true;
       const cmekChanged =
         news.cmekSettings !== undefined &&
-        (current.cmekSettings?.kmsKeyName ?? "") !==
-          news.cmekSettings.kmsKeyName;
-      const lockedChanged =
-        news.locked !== undefined && desiredLocked && current.locked !== true;
+        (current.cmekSettings?.kmsKeyName ?? "") !== news.cmekSettings.kmsKeyName;
+      const lockedChanged = news.locked !== undefined && desiredLocked && current.locked !== true;
 
       const syncMask = [
         descriptionChanged ? "description" : undefined,

@@ -1,27 +1,22 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstances({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -30,7 +25,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstances on a missing instance fails with Forbidden or NotFound",
+  "getProjectsInstances on a missing instance fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -42,24 +37,18 @@ test.provider(
           name: `projects/${project}/instances/alchemy-bt-missing`,
         }),
       );
-      // API-disabled projects return Forbidden (SERVICE_DISABLED). Missing
-      // instances on an enabled API are also 403 rather than 404.
-      expect(error._tag).toBeOneOf(["Forbidden", "NotFound"]);
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* bigtable
-        .listProjectsInstances({
-          parent: `projects/${project}`,
-        })
-        .pipe(
-          Effect.catchTag("Forbidden", () =>
-            Effect.succeed({ instances: [] as bigtable.Instance[] }),
-          ),
-        );
-      expect(Array.isArray(page.instances ?? [])).toEqual(true);
+      const page = yield* bigtable.listProjectsInstances({
+        parent: `projects/${project}`,
+      });
+      expect((page.instances ?? []).map((item) => item.name)).not.toContain(
+        `projects/${project}/instances/alchemy-bt-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -135,5 +124,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 120_000 },
 );

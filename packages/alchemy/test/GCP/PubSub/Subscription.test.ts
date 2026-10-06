@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   pubsub.getProjectsSubscriptions({ subscription: name }).pipe(
@@ -131,7 +128,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.subscription.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -172,15 +169,13 @@ test.provider(
         .find((binding) => binding.role === "roles/pubsub.publisher")
         ?.members?.find((member) => member.includes("@gcp-sa-pubsub."));
       expect(agent).toBeDefined();
-      const subscriptionPolicy =
-        yield* pubsub.getIamPolicyProjectsSubscriptions({
-          resource: out.subscription,
-        });
+      const subscriptionPolicy = yield* pubsub.getIamPolicyProjectsSubscriptions({
+        resource: out.subscription,
+      });
       expect(
         (subscriptionPolicy.bindings ?? []).some(
           (binding) =>
-            binding.role === "roles/pubsub.subscriber" &&
-            binding.members?.includes(agent!),
+            binding.role === "roles/pubsub.subscriber" && binding.members?.includes(agent!),
         ),
       ).toBe(true);
 
@@ -197,9 +192,7 @@ test.provider(
         })
         .pipe(
           Effect.tap(({ receivedMessages = [] }) => {
-            const ackIds = receivedMessages.flatMap((m) =>
-              m.ackId ? [m.ackId] : [],
-            );
+            const ackIds = receivedMessages.flatMap((m) => (m.ackId ? [m.ackId] : []));
             return ackIds.length === 0
               ? Effect.void
               : pubsub.modifyAckDeadlineProjectsSubscriptions({
@@ -224,13 +217,13 @@ test.provider(
         }),
       );
       expect(atob(letter!.message?.data ?? "")).toEqual("poison");
-      expect(
-        letter!.message?.attributes?.CloudPubSubDeadLetterSourceSubscription,
-      ).toEqual(out.subscription.split("/").pop());
+      expect(letter!.message?.attributes?.CloudPubSubDeadLetterSourceSubscription).toEqual(
+        out.subscription.split("/").pop(),
+      );
 
       yield* stack.destroy();
       expect(yield* waitUntilGone(out.subscription)).toEqual("gone");
       expect(yield* waitUntilGone(out.inbox)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 240_000 },
 );

@@ -15,7 +15,6 @@ import { sha256Object } from "../../Util/sha256.ts";
 import type {
   ClusterAdapterService,
   IdentityState,
-  RegistryState,
   WorkloadBindingContract,
   WorkloadImageSource,
 } from "../ClusterAdapter.ts";
@@ -39,9 +38,7 @@ export const deepMerge = <T>(base: T, override: unknown): T => {
   ) {
     return override as T;
   }
-  const out: Record<string, unknown> = {
-    ...(base as Record<string, unknown>),
-  };
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const [key, value] of Object.entries(override)) {
     out[key] =
       key in (base as Record<string, unknown>)
@@ -59,18 +56,14 @@ export const imagePlatformOf = (
   architecture: "amd64" | "arm64" | undefined,
   connection?: Connection | undefined,
 ): string =>
-  (architecture ?? connection?.architecture) === "arm64"
-    ? "linux/arm64"
-    : "linux/amd64";
+  (architecture ?? connection?.architecture) === "arm64" ? "linux/arm64" : "linux/amd64";
 
 /**
  * Best-effort {@link Connection} of a `cluster` prop value — `undefined`
  * instead of throwing, for plan-time diffs where the referenced resource
  * may resolve to stables-only (or `{}`).
  */
-export const tryConnectionOf = (
-  cluster: ClusterLike | undefined,
-): Connection | undefined => {
+export const tryConnectionOf = (cluster: ClusterLike | undefined): Connection | undefined => {
   if (cluster === undefined) return undefined;
   if ("auth" in cluster && cluster.auth !== undefined) return cluster;
   if ("connection" in cluster && cluster.connection !== undefined) {
@@ -97,12 +90,8 @@ const sortKeysDeep = (value: unknown): unknown => {
  * clusters, which is a replacement. Deliberately excludes `endpoint` /
  * CA: managed clusters can rotate those in place.
  */
-export const connectionIdentity = (
-  connection: Connection | undefined,
-): string | undefined =>
-  connection === undefined
-    ? undefined
-    : JSON.stringify(sortKeysDeep(connection.auth));
+export const connectionIdentity = (connection: Connection | undefined): string | undefined =>
+  connection === undefined ? undefined : JSON.stringify(sortKeysDeep(connection.auth));
 
 /**
  * The persisted connection of a workload's attributes, tolerating legacy
@@ -110,17 +99,12 @@ export const connectionIdentity = (
  * instead of a `connection`) by synthesizing an `aws-eks` connection —
  * the only platform those legacy types could target.
  */
-export const connectionOfOutput = (
-  output: Record<string, unknown>,
-): Connection | undefined => {
+export const connectionOfOutput = (output: Record<string, unknown>): Connection | undefined => {
   const connection = output.connection as Connection | undefined;
   if (connection?.auth !== undefined) return connection;
   if (typeof output.clusterName === "string") {
     return {
-      auth: {
-        kind: "aws-eks",
-        clusterName: output.clusterName,
-      } as unknown as ConnectionAuth,
+      auth: { kind: "aws-eks", clusterName: output.clusterName } as unknown as ConnectionAuth,
     };
   }
   return undefined;
@@ -136,11 +120,8 @@ export const collectBindingEnv = (
   bindings: ResourceBinding<WorkloadBindingContract>[],
 ): { env: Record<string, any>; grantKeys: string[] } => {
   const activeBindings = bindings.filter(
-    (
-      binding: ResourceBinding<WorkloadBindingContract> & {
-        action?: string;
-      },
-    ) => binding.action !== "delete",
+    (binding: ResourceBinding<WorkloadBindingContract> & { action?: string }) =>
+      binding.action !== "delete",
   );
 
   const env = activeBindings
@@ -151,9 +132,7 @@ export const collectBindingEnv = (
     ...new Set(
       activeBindings.flatMap((binding) =>
         Object.keys(binding?.data ?? {}).filter(
-          (key) =>
-            key !== "env" &&
-            (binding.data as Record<string, unknown>)[key] !== undefined,
+          (key) => key !== "env" && (binding.data as Record<string, unknown>)[key] !== undefined,
         ),
       ),
     ),
@@ -165,9 +144,7 @@ export const collectBindingEnv = (
 export type ImageSourceKind = "main" | "context" | "image";
 
 /** Which image source a props bag declares (`main` always wins). */
-export const imageSourceKind = (
-  source: WorkloadImageSource,
-): ImageSourceKind | undefined =>
+export const imageSourceKind = (source: WorkloadImageSource): ImageSourceKind | undefined =>
   source.main !== undefined
     ? "main"
     : source.image !== undefined
@@ -188,21 +165,15 @@ export const computeStaticWorkloadImageHash = Effect.fn(function* (
 ) {
   const kind = imageSourceKind(source);
   if (kind === "image") {
-    return (yield* sha256Object({ image: source.image!, platform })).slice(
-      0,
-      16,
-    );
+    return (yield* sha256Object({ image: source.image!, platform })).slice(0, 16);
   }
   if (kind === "context") {
-    if (
-      source.dockerfile !== undefined &&
-      isInlineDockerfile(source.dockerfile)
-    ) {
+    if (source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)) {
       if (typeof source.dockerfile.content !== "string") return undefined;
-      return (yield* sha256Object({
-        dockerfile: source.dockerfile.content,
-        platform,
-      })).slice(0, 16);
+      return (yield* sha256Object({ dockerfile: source.dockerfile.content, platform })).slice(
+        0,
+        16,
+      );
     }
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -216,11 +187,10 @@ export const computeStaticWorkloadImageHash = Effect.fn(function* (
     }
     const contextHash = yield* hashDirectory({ cwd: context });
     const dockerfileContent = yield* fs.readFileString(dockerfile);
-    return (yield* sha256Object({
-      contextHash,
-      dockerfile: dockerfileContent,
-      platform,
-    })).slice(0, 16);
+    return (yield* sha256Object({ contextHash, dockerfile: dockerfileContent, platform })).slice(
+      0,
+      16,
+    );
   }
   return undefined;
 });
@@ -250,9 +220,7 @@ export interface ResolveWorkloadImageOptions {
  * `context` sources into the connection's `registry`, which those sources
  * require.
  */
-export const resolveWorkloadImage = Effect.fn(function* (
-  options: ResolveWorkloadImageOptions,
-) {
+export const resolveWorkloadImage = Effect.fn(function* (options: ResolveWorkloadImageOptions) {
   const { adapter, source } = options;
   if (adapter.registry !== undefined) {
     return yield* adapter.registry.resolve({
@@ -270,15 +238,8 @@ export const resolveWorkloadImage = Effect.fn(function* (
 
   const kind = imageSourceKind(source);
   if (kind === "image") {
-    const codeHash = (yield* computeStaticWorkloadImageHash(
-      source,
-      options.platform,
-    ))!;
-    return {
-      imageUri: source.image!,
-      codeHash,
-      state: undefined,
-    };
+    const codeHash = (yield* computeStaticWorkloadImageHash(source, options.platform))!;
+    return { imageUri: source.image!, codeHash, state: undefined };
   }
 
   const registry = options.connection.registry;
@@ -328,10 +289,7 @@ export const workloadImageHash = Effect.fn(function* (options: {
       bootstrap: options.bootstrap,
     });
   }
-  if (
-    options.connection.registry !== undefined &&
-    imageSourceKind(options.source) === "main"
-  ) {
+  if (options.connection.registry !== undefined && imageSourceKind(options.source) === "main") {
     return yield* options.connectionRegistry.hash({
       source: options.source,
       platform: options.platform,
@@ -340,10 +298,7 @@ export const workloadImageHash = Effect.fn(function* (options: {
       bootstrap: options.bootstrap,
     });
   }
-  return yield* computeStaticWorkloadImageHash(
-    options.source,
-    options.platform,
-  );
+  return yield* computeStaticWorkloadImageHash(options.source, options.platform);
 });
 
 /** The identity-adapter state persisted on workload attributes. */

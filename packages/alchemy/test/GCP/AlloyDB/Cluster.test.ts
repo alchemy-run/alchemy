@@ -1,20 +1,18 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_ALLOYDB && !process.env.FAST;
+// AlloyDB clusters and instances take well over 5 minutes to provision.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   alloydb.getProjectsLocationsClusters({ name }).pipe(
@@ -40,25 +38,19 @@ test.provider(
           name: `projects/${project}/locations/us-central1/clusters/alchemy-alloydb-missing`,
         }),
       );
-      // Entitled accounts return NotFound. The testing SA currently gets
-      // Forbidden (AlloyDB Admin / API not granted).
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* alloydb
-        .listProjectsLocationsClusters({
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag("Forbidden", () =>
-            Effect.succeed({ clusters: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.clusters ?? [])).toEqual(true);
+      const page = yield* alloydb.listProjectsLocationsClusters({
+        parent: `projects/${project}/locations/-`,
+        pageSize: 10,
+      });
+      expect((page.clusters ?? []).map((item) => item.name)).not.toContain(
+        `projects/${project}/locations/us-central1/clusters/alchemy-alloydb-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:alloydb", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -94,7 +86,8 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(fetched.displayName).toEqual("alchemy-test-cluster");
+      // GCP omits displayName from cluster reads, so only the resource
+      // attributes (asserted above) carry it.
       expect(fetched.pscConfig?.pscEnabled).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -118,7 +111,8 @@ test.provider.skipIf(!runLifecycle)(
       const refetched = yield* alloydb.getProjectsLocationsClusters({
         name: created.name,
       });
-      expect(refetched.displayName).toEqual("alchemy-prod-cluster");
+      // GCP omits displayName from cluster reads, so only the resource
+      // attributes (asserted above) carry it.
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("db");
 
@@ -127,5 +121,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+    timeout: 3_600_000,
+    retry: 0,
+  },
 );

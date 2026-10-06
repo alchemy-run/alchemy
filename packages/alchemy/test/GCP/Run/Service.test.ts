@@ -1,39 +1,33 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
+import { spawnSync } from "node:child_process";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
-import * as cloudrun from "@distilled.cloud/gcp/run_v2";
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
+import * as cloudrun from "@distilled.cloud/gcp/run_v2";
+import * as storage from "@distilled.cloud/gcp/storage_v1";
+import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import { spawnSync } from "node:child_process";
-import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
-import * as storage from "@distilled.cloud/gcp/storage_v1";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { DataBucket, Tweets } from "./fixtures/bound-resources.ts";
 import PublishOnlyService from "./fixtures/service-publish-only.ts";
 import BoundRedisService from "./fixtures/service-redis.ts";
 import BoundService from "./fixtures/service.ts";
-import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -134,7 +128,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 120_000 },
 );
 
 class ServiceNotReady extends Data.TaggedError("ServiceNotReady")<{
@@ -180,9 +174,7 @@ test.provider.skipIf(!dockerAvailable)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deployed = (
-        program: typeof BoundService | typeof PublishOnlyService,
-      ) =>
+      const deployed = (program: typeof BoundService | typeof PublishOnlyService) =>
         stack.deploy(
           Effect.gen(function* () {
             const service = yield* program;
@@ -218,9 +210,7 @@ test.provider.skipIf(!dockerAvailable)(
       const topicPolicy = yield* pubsub.getIamPolicyProjectsTopics({
         resource: out.topic,
       });
-      expect([...membersOf(topicPolicy, member)]).toEqual([
-        "roles/pubsub.publisher",
-      ]);
+      expect([...membersOf(topicPolicy, member)]).toEqual(["roles/pubsub.publisher"]);
       const bucketPolicy = yield* storage.getIamPolicyBuckets({
         bucket: out.bucket,
       });
@@ -230,9 +220,7 @@ test.provider.skipIf(!dockerAvailable)(
       ]);
 
       // The runtime SA's own token publishes and round-trips object content.
-      const body = yield* fetchJson<{ published: boolean; read: string }>(
-        out.uri!,
-      );
+      const body = yield* fetchJson<{ published: boolean; read: string }>(out.uri!);
       expect(body).toEqual({ published: true, read: "stored" });
 
       // Step 2: drop the Storage bindings. The code change redeploys and the
@@ -246,12 +234,8 @@ test.provider.skipIf(!dockerAvailable)(
       const topicAfter = yield* pubsub.getIamPolicyProjectsTopics({
         resource: out.topic,
       });
-      expect([...membersOf(topicAfter, member)]).toEqual([
-        "roles/pubsub.publisher",
-      ]);
-      const step2 = yield* fetchJson<{ published: boolean; step?: number }>(
-        next.uri!,
-      ).pipe(
+      expect([...membersOf(topicAfter, member)]).toEqual(["roles/pubsub.publisher"]);
+      const step2 = yield* fetchJson<{ published: boolean; step?: number }>(next.uri!).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           until: (response) => response.step === 2,
@@ -272,10 +256,11 @@ test.provider.skipIf(!dockerAvailable)(
         );
       expect(saGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 420_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 420_000 },
 );
 
-test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_REDIS)(
+// Memorystore Redis provisioning takes 5-10 minutes.
+test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_SLOW || !!process.env.FAST)(
   "effect-native Function with Memorystore Redis over Direct VPC",
   (stack) =>
     Effect.gen(function* () {
@@ -307,7 +292,7 @@ test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_REDIS)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 1_500_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 1_500_000 },
 );
 
 test.provider(
@@ -332,8 +317,7 @@ test.provider(
             return yield* GCP.Run.Service("BrokenBuild", {
               serviceId,
               location,
-              main: new URL("./fixtures/does-not-exist.ts", import.meta.url)
-                .href,
+              main: new URL("./fixtures/does-not-exist.ts", import.meta.url).href,
             });
           }),
         )
@@ -352,5 +336,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 180_000 },
 );

@@ -21,6 +21,7 @@ import {
   parseOwnership,
   projectOf,
   toResourceId,
+  retryQuota,
 } from "./internal.ts";
 
 export type AgentsPlaybooksVersionProps = {
@@ -97,8 +98,7 @@ export class AgentsPlaybooksVersionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (playbook: string, versionId: string) =>
-  `${playbook}/versions/${versionId}`;
+const resourceName = (playbook: string, versionId: string) => `${playbook}/versions/${versionId}`;
 
 const toAttrs = (
   version: dialogflow.GoogleCloudDialogflowCxV3PlaybookVersion,
@@ -127,57 +127,35 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooksVersions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.playbookVersions ?? []),
-      ),
-      Stream.filter((version) => hasOwnershipMarker(version.description)),
-      Stream.map((version) => toAttrs(version, project, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooksVersions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.playbookVersions ?? [])),
+    Stream.filter((version) => hasOwnershipMarker(version.description)),
+    Stream.map((version) => toAttrs(version, project, parent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const listPlaybooks = (agent: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooks
-    .pages({ parent: agent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooks.pages({ parent: agent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDescription = (parent: string, description: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooksVersions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.playbookVersions ?? []),
-      ),
-      Stream.filter((version) => version.description === description),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooksVersions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.playbookVersions ?? [])),
+    Stream.filter((version) => version.description === description),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const AgentsPlaybooksVersionProvider = () =>
   Provider.succeed(AgentsPlaybooksVersion, {
-    stables: [
-      "name",
-      "versionId",
-      "playbook",
-      "location",
-      "project",
-      "updateTime",
-    ],
+    stables: ["name", "versionId", "playbook", "location", "project", "updateTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -199,14 +177,10 @@ export const AgentsPlaybooksVersionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const playbook = olds?.playbook ?? output?.playbook;
-      const versionId = yield* toResourceId(
-        id,
-        olds?.versionId,
-        output?.versionId,
-      );
       const name =
-        output?.name ??
-        (playbook !== undefined ? resourceName(playbook, versionId) : "");
+        // Version ids are assigned by the server, so only a recorded name can
+        // be fetched directly (a guessed id is rejected as malformed).
+        output?.name ?? "";
       let existing = yield* getByName(name);
       if (existing === undefined && playbook !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -217,9 +191,7 @@ export const AgentsPlaybooksVersionProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, playbook);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -234,9 +206,7 @@ export const AgentsPlaybooksVersionProvider = () =>
               const versions = yield* Effect.forEach(
                 playbooks,
                 (playbook) =>
-                  playbook.name
-                    ? listAt(playbook.name, env.project)
-                    : Effect.succeed([]),
+                  playbook.name ? listAt(playbook.name, env.project) : Effect.succeed([]),
                 { concurrency: 4 },
               );
               return versions.flat();
@@ -249,16 +219,12 @@ export const AgentsPlaybooksVersionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const playbook = news.playbook;
-      const versionId = yield* toResourceId(
-        id,
-        news.versionId,
-        output?.versionId,
-      );
+      const versionId = yield* toResourceId(id, news.versionId, output?.versionId);
       const name = output?.name ?? resourceName(playbook, versionId);
       const ownership = yield* internalLabels(id);
       const description = encodeOwnership(ownership, news.description);
 
-      let current = yield* getByName(output?.name ?? name);
+      let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
         current = yield* findByDescription(playbook, description);
       }
@@ -269,11 +235,7 @@ export const AgentsPlaybooksVersionProvider = () =>
             parent: playbook,
             body: { description },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDescription(playbook, description),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDescription(playbook, description)));
         current = created ?? undefined;
       }
 
@@ -282,7 +244,7 @@ export const AgentsPlaybooksVersionProvider = () =>
       }
 
       return toAttrs(current, env.project, playbook);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -290,5 +252,5 @@ export const AgentsPlaybooksVersionProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

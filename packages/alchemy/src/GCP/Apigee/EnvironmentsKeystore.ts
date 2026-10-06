@@ -66,7 +66,7 @@ export type EnvironmentsKeystore = Resource<
  * keystore in Apigee environments mapped to this GCP project for
  * `pnpm nuke:gcp`. Name is identity — changing `keystoreId`,
  * `organization`, or `environment` replaces the keystore. Aliases are
- * managed by `EnvironmentsKeystoresAliases`.
+ * managed by `EnvironmentsKeystoresAlias`.
  *
  * ### Creating a Keystore
  * **Example:** Generated name
@@ -97,11 +97,7 @@ export class EnvironmentsKeystoreNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organizationId: string,
-  environmentId: string,
-  keystoreId: string,
-) =>
+const resourceName = (organizationId: string, environmentId: string, keystoreId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/keystores/${keystoreId}`;
 
 const toAttrs = (
@@ -113,9 +109,7 @@ const toAttrs = (
   const parsed = parseOrgEnv(raw);
   const keystoreId = lastSegment(raw);
   return {
-    name: raw.includes("/")
-      ? raw
-      : resourceName(organizationId, environmentId, keystoreId || raw),
+    name: raw.includes("/") ? raw : resourceName(organizationId, environmentId, keystoreId || raw),
     keystoreId: keystoreId || raw,
     organizationId: parsed.organizationId || organizationId,
     environmentId: parsed.environmentId || environmentId,
@@ -127,9 +121,7 @@ const getByName = (name: string) =>
   missingToUndefined(apigee.getOrganizationsEnvironmentsKeystores({ name }));
 
 const listIds = (parent: string) =>
-  deployedConfig(parent).pipe(
-    Effect.map((config) => namesFromConfig(config?.keystores)),
-  );
+  deployedConfig(parent).pipe(Effect.map((config) => namesFromConfig(config?.keystores)));
 
 export const EnvironmentsKeystoreProvider = () =>
   Provider.succeed(EnvironmentsKeystore, {
@@ -141,14 +133,11 @@ export const EnvironmentsKeystoreProvider = () =>
       const previousOrg = olds?.organization ?? output?.organizationId;
       const previousEnv = olds?.environment ?? output?.environmentId;
       const idChanged =
-        previousId !== undefined &&
-        news.keystoreId !== undefined &&
-        news.keystoreId !== previousId;
+        previousId !== undefined && news.keystoreId !== undefined && news.keystoreId !== previousId;
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -164,17 +153,11 @@ export const EnvironmentsKeystoreProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
-      const keystoreId = yield* toResourceId(
-        id,
-        olds?.keystoreId,
-        output?.keystoreId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
-      const name =
-        output?.name ?? resourceName(organizationId, environmentId, keystoreId);
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
+      const keystoreId = yield* toResourceId(id, olds?.keystoreId, output?.keystoreId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
+      const name = output?.name ?? resourceName(organizationId, environmentId, keystoreId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, organizationId, environmentId);
@@ -192,14 +175,10 @@ export const EnvironmentsKeystoreProvider = () =>
               : resourceName(item.organizationId, item.environmentId, raw);
             const keystore = yield* getByName(name);
             if (keystore === undefined) {
-              found.push(
-                toAttrs({ name }, item.organizationId, item.environmentId),
-              );
+              found.push(toAttrs({ name }, item.organizationId, item.environmentId));
               continue;
             }
-            found.push(
-              toAttrs(keystore, item.organizationId, item.environmentId),
-            );
+            found.push(toAttrs(keystore, item.organizationId, item.environmentId));
           }
         }
         return found;
@@ -209,12 +188,9 @@ export const EnvironmentsKeystoreProvider = () =>
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(news.organization, project);
       const environmentId = environmentIdOf(news.environment);
-      const keystoreId = yield* toResourceId(
-        id,
-        news.keystoreId,
-        output?.keystoreId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
+      const keystoreId = yield* toResourceId(id, news.keystoreId, output?.keystoreId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
       const parent = environmentNameOf(organizationId, environmentId);
       const name = resourceName(organizationId, environmentId, keystoreId);
 
@@ -241,6 +217,6 @@ export const EnvironmentsKeystoreProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsEnvironmentsKeystores({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

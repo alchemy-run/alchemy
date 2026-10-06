@@ -1,27 +1,22 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstancesTables({ name, view: "NAME_ONLY" }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -30,7 +25,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstancesTables on a missing instance fails with Forbidden",
+  "getProjectsInstancesTables on a missing instance fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -42,11 +37,11 @@ test.provider(
           name: `projects/${project}/instances/alchemybtmissing/tables/missing`,
         }),
       );
-      expect(error._tag).toBe("Forbidden");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -81,9 +76,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.table.name).toContain("/tables/");
       expect(created.table.tableId).toEqual(expect.any(String));
       expect(created.table.instance).toEqual(created.instance.name);
-      expect(created.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(
-        3,
-      );
+      expect(created.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(3);
       expect(created.table.deletionProtection).toEqual(false);
 
       const fetched = yield* bigtable.getProjectsInstancesTables({
@@ -119,9 +112,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.table.name).toEqual(created.table.name);
-      expect(updated.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(
-        5,
-      );
+      expect(updated.table.columnFamilies.cf?.gcRule?.maxNumVersions).toEqual(5);
 
       const refetched = yield* bigtable.getProjectsInstancesTables({
         name: created.table.name,
@@ -134,5 +125,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.table.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 120_000 },
 );

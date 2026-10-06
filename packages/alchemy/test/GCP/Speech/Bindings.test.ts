@@ -1,86 +1,154 @@
-import { Action } from "@/Action";
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as speech from "@distilled.cloud/gcp/speech_v1";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { location, logLevel, runLifecycle } from "./common.ts";
+import * as Core from "@/Test/Core";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import SpeechBindingsHost, { Hints, Ships } from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "SpeechBindings");
 
-test.provider.skipIf(!runLifecycle)(
-  "GetCustomClasse and GetPhraseSet round-trip",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+let baseUrl: string;
+let hostAccount: string;
+let project: string;
+let customClassName: string;
+let phraseSetName: string;
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const ships = yield* GCP.Speech.CustomClasse("BindShips", {
-            location,
-            items: [{ value: "sloop" }],
-          });
-          const hints = yield* GCP.Speech.PhraseSet("BindHints", {
-            location,
-            phrases: [{ value: "weather" }],
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* ships.name;
-              yield* hints.name;
-              const getClass = yield* GCP.Speech.GetCustomClasse(ships);
-              const getPhraseSet = yield* GCP.Speech.GetPhraseSet(hints);
-              const recognize = yield* GCP.Speech.Recognize(hints);
-              return Effect.fn(function* () {
-                const customClass = yield* getClass();
-                const phraseSet = yield* getPhraseSet();
-                const recognized = yield* recognize({
-                  body: {
-                    config: {
-                      languageCode: "en-US",
-                      encoding: "LINEAR16",
-                      sampleRateHertz: 16000,
-                    },
-                    audio: { content: "" },
-                  },
-                }).pipe(
-                  Effect.map((result) => ({ tag: "ok" as const, result })),
-                  Effect.catchTag(
-                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
-                    (error) =>
-                      Effect.succeed({
-                        tag: error._tag,
-                        message: error.message,
-                      }),
-                  ),
-                );
-                return { customClass, phraseSet, recognized };
-              });
-            }),
-          );
-          return yield* Probe({});
-        }),
+/**
+ * Project-level roles (with their IAM Condition, if any) held by the
+ * host's service account. Speech-to-Text has no resource-level IAM.
+ */
+const projectRoles = () =>
+  resourcemanager
+    .getIamPolicyProjects({
+      resource: `projects/${project}`,
+      body: { options: { requestedPolicyVersion: 3 } },
+    })
+    .pipe(
+      Effect.map((policy) =>
+        (policy.bindings ?? [])
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
+          .map((binding) => ({
+            role: binding.role,
+            condition: binding.condition?.expression,
+          })),
+      ),
+    );
+
+describe.skipIf(!dockerAvailable)(
+  "Speech Bindings",
+  {
+    tags: ["provider:gcp", "provider:gcp:speech", "provider:gcp:run", "live"],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* SpeechBindingsHost;
+            const ships = yield* Ships;
+            const hints = yield* Hints;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              project: host.project,
+              customClass: ships.name,
+              phraseSet: hints.name,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        project = out.project;
+        customClassName = out.customClass;
+        phraseSetName = out.phraseSet;
+      }),
+      { timeout: 900_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    // Every Speech binding grants the same unconditioned project role.
+    const expectSpeechClientOnly = Effect.gen(function* () {
+      expect(yield* projectRoles()).toEqual([
+        { role: "roles/speech.client", condition: undefined },
+      ]);
+    });
+
+    describe("GetCustomClass", () => {
+      test.provider(
+        "reads the bound custom class as the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ name: string; items: string[] }>(
+              baseUrl,
+              "getCustomClass",
+            );
+            expect(out.name).toEqual(customClassName);
+            expect(out.items).toEqual(["sloop", "schooner"]);
+
+            const live = yield* speech.getProjectsLocationsCustomClasses({
+              name: customClassName,
+            });
+            expect(live.name).toEqual(out.name);
+            yield* expectSpeechClientOnly;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:speech", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      expect(out.customClass.name).toEqual(expect.any(String));
-      expect(
-        (out.customClass.items ?? []).some((item) => item.value === "sloop"),
-      ).toEqual(true);
-      expect(out.phraseSet.name).toEqual(expect.any(String));
-      expect(
-        (out.phraseSet.phrases ?? []).some(
-          (phrase) => phrase.value === "weather",
-        ),
-      ).toEqual(true);
-      expect([
-        "ok",
-        "Forbidden",
-        "BadRequest",
-        "NotFound",
-        "Conflict",
-      ]).toContain(out.recognized.tag);
+    describe("GetPhraseSet", () => {
+      test.provider(
+        "reads the bound phrase set as the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              name: string;
+              phrases: string[];
+            }>(baseUrl, "getPhraseSet");
+            expect(out.name).toEqual(phraseSetName);
+            expect(out.phrases).toEqual(["weather"]);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 90_000 },
+            const live = yield* speech.getProjectsLocationsPhraseSets({
+              name: phraseSetName,
+            });
+            expect(live.name).toEqual(out.name);
+            yield* expectSpeechClientOnly;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:speech", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("Recognize", () => {
+      test.provider(
+        "recognizes audio adapted with the bound phrase set as the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              results: unknown[];
+              totalBilledTime: string;
+            }>(baseUrl, "recognize");
+            // Silence has nothing to transcribe, but the request is billed.
+            expect(out.results).toEqual([]);
+            expect(out.totalBilledTime).toMatch(/^\d+(\.\d+)?s$/);
+            yield* expectSpeechClientOnly;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:speech", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+  },
 );

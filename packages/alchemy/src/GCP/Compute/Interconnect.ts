@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,20 +18,17 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_TYPE = "DEDICATED";
 const DEFAULT_LINK_TYPE = "LINK_TYPE_ETHERNET_10G_LR";
 
-export type InterconnectType =
-  | compute.InterconnectInterconnectTypeEnum
-  | (string & {});
-export type InterconnectLinkType =
-  | compute.InterconnectLinkTypeEnum
-  | (string & {});
+export type InterconnectType = compute.InterconnectInterconnectTypeEnum | (string & {});
+export type InterconnectLinkType = compute.InterconnectLinkTypeEnum | (string & {});
 export type InterconnectMacsec = compute.InterconnectMacsec;
-export type InterconnectApplicationAware =
-  compute.InterconnectApplicationAwareInterconnect;
+export type InterconnectApplicationAware = compute.InterconnectApplicationAwareInterconnect;
 
 export type InterconnectProps = {
   /**
@@ -232,14 +228,6 @@ export class InterconnectNotResolved extends Data.TaggedError(
   interconnectName: string;
 }> {}
 
-export class InterconnectOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InterconnectOperationFailed",
-)<{
-  interconnectName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class InterconnectStillExists extends Data.TaggedError(
   "GCP.Compute.InterconnectStillExists",
 )<{
@@ -283,8 +271,7 @@ const locationUrl = (project: string, location: string) => {
   return `projects/${project}/global/interconnectLocations/${location}`;
 };
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const linkTypeOf = (value: string | undefined) => value ?? DEFAULT_LINK_TYPE;
 
@@ -335,89 +322,10 @@ const toAttrs = (
   kind: interconnect.kind,
 });
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  interconnectName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new InterconnectOperationFailed({
-        interconnectName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, interconnect: string) =>
   compute
     .getInterconnects({ project, interconnect })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  interconnectName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitGlobalOperations(
-        { project, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new InterconnectOperationFailed({
-        interconnectName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(interconnectName, current, options);
-    return current;
-  });
 
 const awaitResource = (project: string, interconnectName: string) =>
   getByName(project, interconnectName).pipe(
@@ -456,7 +364,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, operation, interconnectName, options),
+      waitGlobalOperation(project, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -483,31 +393,21 @@ export const InterconnectProvider = () =>
       const previousName = olds?.interconnectName ?? output?.interconnectName;
       const nextName = news.interconnectName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousLocation = lastSegment(olds?.location ?? output?.location);
       const nextLocation = lastSegment(news.location ?? previousLocation);
-      const previousType = typeOf(
-        olds?.interconnectType ?? output?.interconnectType,
-      );
+      const previousType = typeOf(olds?.interconnectType ?? output?.interconnectType);
       const nextType = typeOf(news.interconnectType ?? previousType);
       const previousLink = linkTypeOf(olds?.linkType ?? output?.linkType);
       const nextLink = linkTypeOf(news.linkType ?? previousLink);
       const previousCustomer = olds?.customerName ?? output?.customerName ?? "";
       const nextCustomer = news.customerName ?? previousCustomer;
-      const previousRemote = lastSegment(
-        olds?.remoteLocation ?? output?.remoteLocation,
-      );
+      const previousRemote = lastSegment(olds?.remoteLocation ?? output?.remoteLocation);
       const nextRemote = lastSegment(news.remoteLocation ?? previousRemote);
-      const previousFeatures = featuresKey(
-        olds?.requestedFeatures ?? output?.requestedFeatures,
-      );
+      const previousFeatures = featuresKey(olds?.requestedFeatures ?? output?.requestedFeatures);
       const nextFeatures = featuresKey(
-        news.requestedFeatures ??
-          olds?.requestedFeatures ??
-          output?.requestedFeatures,
+        news.requestedFeatures ?? olds?.requestedFeatures ?? output?.requestedFeatures,
       );
 
       const immutableChanged =
@@ -516,8 +416,7 @@ export const InterconnectProvider = () =>
         previousLink !== nextLink ||
         previousCustomer !== nextCustomer ||
         previousRemote !== nextRemote ||
-        (news.requestedFeatures !== undefined &&
-          previousFeatures !== nextFeatures);
+        (news.requestedFeatures !== undefined && previousFeatures !== nextFeatures);
 
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -530,17 +429,11 @@ export const InterconnectProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const interconnectName = yield* toName(
-        id,
-        olds?.interconnectName,
-        output?.interconnectName,
-      );
+      const interconnectName = yield* toName(id, olds?.interconnectName, output?.interconnectName);
       const existing = yield* getByName(env.project, interconnectName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -555,26 +448,18 @@ export const InterconnectProvider = () =>
           })
           .pipe(
             Stream.filter((item) =>
-              Object.keys(item.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(item.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,
             Effect.map((items) => Array.from(items)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as Interconnect["Attributes"][]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as Interconnect["Attributes"][])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const interconnectName = yield* toName(
-        id,
-        news.interconnectName,
-        output?.interconnectName,
-      );
+      const interconnectName = yield* toName(id, news.interconnectName, output?.interconnectName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -611,8 +496,8 @@ export const InterconnectProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, interconnectName, {
-                ignoreAlreadyExists: true,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -628,10 +513,8 @@ export const InterconnectProvider = () =>
           (current.requestedLinkCount ?? 1) !== requestedLinkCount) ||
         (current.macsecEnabled === true) !== (news.macsecEnabled === true) ||
         (news.macsec !== undefined &&
-          JSON.stringify(current.macsec ?? null) !==
-            JSON.stringify(news.macsec ?? null)) ||
-        (news.aaiEnabled !== undefined &&
-          (current.aaiEnabled === true) !== news.aaiEnabled);
+          JSON.stringify(current.macsec ?? null) !== JSON.stringify(news.macsec ?? null)) ||
+        (news.aaiEnabled !== undefined && (current.aaiEnabled === true) !== news.aaiEnabled);
 
       if (needsPatch) {
         yield* runOp(
@@ -659,8 +542,7 @@ export const InterconnectProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
-          const latest =
-            (yield* getByName(env.project, interconnectName)) ?? current;
+          const latest = (yield* getByName(env.project, interconnectName)) ?? current;
           if (latest === undefined) {
             return yield* new InterconnectNotResolved({ interconnectName });
           }
@@ -700,8 +582,8 @@ export const InterconnectProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, operation, output.interconnectName, {
-              ignoreNotFound: true,
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
