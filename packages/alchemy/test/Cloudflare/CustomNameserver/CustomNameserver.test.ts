@@ -1,22 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as customNameservers from "@distilled.cloud/cloudflare/custom-nameservers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Account custom nameservers require a Business/Enterprise plan (or paid
 // add-on). On the testing account every call — even the list — fails with
@@ -47,16 +43,11 @@ const findByName = (accountId: string, nsName: string) =>
 const expectGone = (accountId: string, nsName: string) =>
   findByName(accountId, nsName).pipe(
     Effect.flatMap((found) =>
-      found
-        ? Effect.fail({ _tag: "CustomNameserverNotDeleted" } as const)
-        : Effect.void,
+      found ? Effect.fail({ _tag: "CustomNameserverNotDeleted" } as const) : Effect.void,
     ),
     Effect.retry({
       while: (e) => e._tag === "CustomNameserverNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -76,6 +67,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:customnameserver", "live"] },
 );
 
 // Canonical `list()` test (account collection). On the unentitled testing
@@ -83,23 +75,24 @@ test.provider(
 // which `list()` maps to an empty collection — so the read-only assertion is
 // "list returns a well-typed array" (here, `[]`). An entitled account also
 // runs the deploy+presence variant below.
-test.provider("list enumerates account custom nameservers", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates account custom nameservers",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.CustomNameserver.CustomNameserver,
-    );
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.CustomNameserver.CustomNameserver);
+      const all = yield* provider.list();
 
-    // Always a well-typed array; `[]` on unentitled accounts.
-    expect(Array.isArray(all)).toBe(true);
-    if (!entitled) {
-      expect(all).toEqual([]);
-    }
+      // Always a well-typed array; `[]` on unentitled accounts.
+      expect(Array.isArray(all)).toBe(true);
+      if (!entitled) {
+        expect(all).toEqual([]);
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:customnameserver", "live"] },
 );
 
 test.provider.skipIf(!entitled)(
@@ -114,15 +107,16 @@ test.provider.skipIf(!entitled)(
         Cloudflare.CustomNameserver.CustomNameserver("NsList", { nsName }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomNameserver.CustomNameserver,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomNameserver.CustomNameserver);
       const all = yield* provider.list();
       expect(all.some((x) => x.nsName === ns.nsName)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:customnameserver", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!entitled)(
@@ -157,10 +151,7 @@ test.provider.skipIf(!entitled)(
 
       // nsSet is immutable — changing it must replace the nameserver.
       const replaced = yield* stack.deploy(
-        Cloudflare.CustomNameserver.CustomNameserver("Ns", {
-          nsName,
-          nsSet: 2,
-        }),
+        Cloudflare.CustomNameserver.CustomNameserver("Ns", { nsName, nsSet: 2 }),
       );
       expect(replaced.nsName).toEqual(nsName);
       expect(replaced.nsSet).toEqual(2);
@@ -171,5 +162,8 @@ test.provider.skipIf(!entitled)(
       yield* expectGone(accountId, nsName);
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:customnameserver", "live"],
+    timeout: 120_000,
+  },
 );

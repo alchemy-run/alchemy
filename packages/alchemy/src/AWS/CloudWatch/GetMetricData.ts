@@ -43,13 +43,8 @@ export interface GetMetricData extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetMetricDataRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetMetricDataOutput,
-      cloudwatch.GetMetricDataError
-    >
+    ) => Effect.Effect<cloudwatch.GetMetricDataOutput, cloudwatch.GetMetricDataError>
   >
 > {}
 
-export const GetMetricData = Binding.Service<GetMetricData>(
-  "AWS.CloudWatch.GetMetricData",
-);
+export const GetMetricData = Binding.Service<GetMetricData>("AWS.CloudWatch.GetMetricData");

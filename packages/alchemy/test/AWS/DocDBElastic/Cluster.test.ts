@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/DocDBElastic";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/DocDBElastic";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -27,6 +27,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:docdbelastic", "live"] },
 );
 
 // Resolve two default-for-AZ subnets and the default security group.
@@ -43,9 +44,7 @@ const defaultNetwork = Effect.gen(function* () {
   // a/b/c) only.
   const subnetIds = (subnets.Subnets ?? [])
     .filter((s) => /[abc]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .map((s) => s.SubnetId)
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .slice(0, 2);
@@ -70,22 +69,13 @@ const assertClusterDeleting = (arn: string) =>
   Effect.gen(function* () {
     const status = yield* docdbelastic.getCluster({ clusterArn: arn }).pipe(
       Effect.map((r) => r.cluster.status),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("GONE" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
     );
     if (status !== "GONE" && status !== "DELETING") {
-      return yield* Effect.fail(
-        new Error(`cluster '${arn}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`cluster '${arn}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // A DocumentDB elastic cluster takes ~8-10 minutes to provision and bills
@@ -126,9 +116,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(new Set(cluster.subnetIds)).toEqual(new Set(network.subnetIds));
 
       // Out-of-band verification via distilled.
-      const described = yield* docdbelastic.getCluster({
-        clusterArn: cluster.clusterArn,
-      });
+      const described = yield* docdbelastic.getCluster({ clusterArn: cluster.clusterArn });
       expect(described.cluster.status).toBe("ACTIVE");
       expect(described.cluster.shardCount).toBe(1);
 
@@ -138,5 +126,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertClusterDeleting(cluster.clusterArn);
     }),
   // cluster create (~10 min) + delete initiation, one test.
-  { timeout: 1_500_000 },
+  {
+    tags: ["provider:aws", "provider:aws:docdbelastic", "provider:aws:ec2", "live"],
+    timeout: 1_500_000,
+  },
 );

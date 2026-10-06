@@ -1,6 +1,6 @@
+import { expect } from "bun:test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -32,10 +32,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
@@ -44,7 +41,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full SvelteKit build, so give the hook more
@@ -75,10 +71,10 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    expect(html).toContain("SvelteKit on Cloudflare Workers");
+    expect(html).toContain("SvelteKit on Cloudflare");
     // The `GREETING` env value from alchemy.run.ts, read via `platform.env`
     // in the server `load` — proves the Worker rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from SvelteKit on Cloudflare!");
   }),
   { timeout: 180_000 },
 );

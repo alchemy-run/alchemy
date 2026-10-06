@@ -29,12 +29,7 @@ export interface GetCoreDevice extends Binding.Service<
   () => Effect.Effect<
     (
       request: greengrassv2.GetCoreDeviceRequest,
-    ) => Effect.Effect<
-      greengrassv2.GetCoreDeviceResponse,
-      greengrassv2.GetCoreDeviceError
-    >
+    ) => Effect.Effect<greengrassv2.GetCoreDeviceResponse, greengrassv2.GetCoreDeviceError>
   >
 > {}
-export const GetCoreDevice = Binding.Service<GetCoreDevice>(
-  "AWS.GreengrassV2.GetCoreDevice",
-);
+export const GetCoreDevice = Binding.Service<GetCoreDevice>("AWS.GreengrassV2.GetCoreDevice");

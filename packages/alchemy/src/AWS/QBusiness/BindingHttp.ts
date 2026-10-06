@@ -64,8 +64,7 @@ export const makeQBusinessApplicationHttpBinding = <
                 Resource: [
                   application.applicationArn,
                   ...(options.subResources ?? []).map(
-                    (suffix) =>
-                      Output.interpolate`${application.applicationArn}/${suffix}`,
+                    (suffix) => Output.interpolate`${application.applicationArn}/${suffix}`,
                   ),
                 ],
               },
@@ -131,9 +130,7 @@ export const makeQBusinessIndexHttpBinding = <
                   index.indexArn,
                   // The index ARN is `…:application/{appId}/index/{indexId}`
                   // — the parent application ARN is its prefix.
-                  index.indexArn.pipe(
-                    Output.map((arn) => arn.split("/index/")[0]!),
-                  ),
+                  index.indexArn.pipe(Output.map((arn) => arn.split("/index/")[0]!)),
                   ...(options.subResources ?? []).map(
                     (suffix) => Output.interpolate`${index.indexArn}/${suffix}`,
                   ),
@@ -204,9 +201,7 @@ export const makeQBusinessDataSourceHttpBinding = <
                   dataSource.dataSourceArn.pipe(
                     Output.map((arn) => arn.split("/data-source/")[0]!),
                   ),
-                  dataSource.dataSourceArn.pipe(
-                    Output.map((arn) => arn.split("/index/")[0]!),
-                  ),
+                  dataSource.dataSourceArn.pipe(Output.map((arn) => arn.split("/index/")[0]!)),
                 ],
               },
             ],
@@ -257,9 +252,7 @@ export const makeQBusinessWebExperienceHttpBinding = <
    * identity) — e.g. `CreateAnonymousWebExperienceUrl` converts a
    * `Duration.Input` into the wire `sessionDurationInMinutes`.
    */
-  prepare?: (
-    request: Req | undefined,
-  ) => Omit<I, "applicationId" | "webExperienceId">;
+  prepare?: (request: Req | undefined) => Omit<I, "applicationId" | "webExperienceId">;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -289,14 +282,10 @@ export const makeQBusinessWebExperienceHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${webExperience.LogicalId})`)(function* (
-        request?: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${webExperience.LogicalId})`)(function* (request?: Req) {
         const wire = options.prepare
           ? options.prepare(request)
-          : (request as unknown as
-              | Omit<I, "applicationId" | "webExperienceId">
-              | undefined);
+          : (request as unknown as Omit<I, "applicationId" | "webExperienceId"> | undefined);
         return yield* op({
           ...wire,
           applicationId: yield* applicationId,

@@ -1,17 +1,13 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { isResolved } from "../Diff.ts";
 import { hashDirectory } from "../Command/Memo.ts";
+import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import {
-  toConnection,
-  type ClusterLike,
-  type Connection,
-} from "./Connection.ts";
 import type { ClusterTransport } from "./ClusterAdapter.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   connectCluster,
   deleteObjects,
@@ -19,15 +15,8 @@ import {
   resolveKindSpec,
 } from "./internal/client.ts";
 import { renderHelmChart } from "./internal/helm.ts";
-import type {
-  KubernetesObjectDefinition,
-  KubernetesObjectRef,
-} from "./internal/objects.ts";
-import {
-  connectionIdentity,
-  connectionOfOutput,
-  tryConnectionOf,
-} from "./internal/workload.ts";
+import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
+import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface HelmChartProps {
@@ -119,15 +108,18 @@ export interface HelmChart extends Resource<
  * The chart is rendered locally with the `helm` CLI (`helm template` —
  * install helm on the deploying machine, like Docker for image builds);
  * the rendered objects then flow through the same apply machinery as
- * `Kubernetes.Manifest`: Alchemy owns the object lifecycle, corrects drift
- * on every deploy, prunes objects that drop out of the render, and deletes
- * everything on destroy. There is no in-cluster Helm release record; the
- * target `cluster` can be a managed cluster resource (e.g.
- * `AWS.EKS.Cluster`) or any cluster your kubeconfig can reach.
+ * `Kubernetes.Manifest`: Alchemy owns the object lifecycle, re-applies the
+ * full render whenever the chart's inputs change, prunes objects that drop
+ * out of the render, and deletes everything on destroy. There is no
+ * in-cluster Helm release record; the target `cluster` can be a managed
+ * cluster resource (e.g. `AWS.EKS.Cluster`) or any cluster your kubeconfig
+ * can reach.
  *
- * Helm install/upgrade hooks are not executed (objects are applied, not
- * `helm install`ed); charts that depend on hooks for correctness should be
- * installed with Helm directly.
+ * Helm lifecycle hooks (`helm.sh/hook`-annotated objects: install/upgrade/
+ * delete hooks, tests) are neither executed nor applied — the chart is
+ * rendered with `--no-hooks`, so they never enter the managed-object graph.
+ * Charts that depend on hooks for correctness should be installed with Helm
+ * directly.
  * ### Installing a Chart
  * **Example:** Chart from a repository
  * ```typescript
@@ -164,6 +156,7 @@ export interface HelmChart extends Resource<
  * ```
  *
  * @resource
+ * @product Helm
  */
 export const HelmChart = Resource<HelmChart>("Kubernetes.HelmChart", {
   aliases: ["AWS.EKS.HelmChart"],
@@ -174,13 +167,9 @@ export const HelmChart = Resource<HelmChart>("Kubernetes.HelmChart", {
  * content hash when `chart` is a local path (so editing a local chart is
  * visible to `diff` even though no prop changed).
  */
-const computeChartHash = Effect.fn(function* (
-  news: HelmChartProps,
-  releaseName: string,
-) {
+const computeChartHash = Effect.fn(function* (news: HelmChartProps, releaseName: string) {
   const fs = yield* FileSystem.FileSystem;
-  const isLocalDir =
-    !news.chart.startsWith("oci://") && (yield* fs.exists(news.chart));
+  const isLocalDir = !news.chart.startsWith("oci://") && (yield* fs.exists(news.chart));
   return yield* sha256Object({
     chart: news.chart,
     repo: news.repo,
@@ -190,9 +179,7 @@ const computeChartHash = Effect.fn(function* (
     values: news.values,
     includeCrds: news.includeCrds ?? true,
     createNamespace: news.createNamespace ?? false,
-    localChart: isLocalDir
-      ? yield* hashDirectory({ cwd: news.chart })
-      : undefined,
+    localChart: isLocalDir ? yield* hashDirectory({ cwd: news.chart }) : undefined,
   });
 });
 
@@ -204,7 +191,8 @@ const resolveReleaseName = (
   Effect.suspend(() => {
     if (news.releaseName) return Effect.succeed(news.releaseName);
     if (output?.releaseName) return Effect.succeed(output.releaseName);
-    return createPhysicalName({ id, lowercase: true });
+    // Helm rejects release names longer than 53 characters.
+    return createPhysicalName({ id, maxLength: 53, lowercase: true });
   });
 
 /**
@@ -249,9 +237,7 @@ export const HelmChartProvider = () =>
           // moving any of it means a different set of objects.
           if (
             output &&
-            ((oldCluster !== undefined &&
-              newCluster !== undefined &&
-              oldCluster !== newCluster) ||
+            ((oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) ||
               output.releaseName !== releaseName ||
               output.namespace !== (news.namespace ?? "default"))
           ) {
@@ -322,9 +308,7 @@ export const HelmChartProvider = () =>
           // The objects live in-cluster; if the cluster itself is gone, so
           // are they.
           const transport = yield* connectCluster(connection).pipe(
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return undefined;
           return output;
@@ -334,9 +318,7 @@ export const HelmChartProvider = () =>
           if (!connection) return;
           const transport = yield* connectCluster(connection).pipe(
             // Cluster already destroyed — its objects went with it.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return;
           yield* deleteObjects({ transport, objects: output.objects });

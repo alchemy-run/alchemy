@@ -34,16 +34,8 @@ export interface CreateIngestion extends Binding.Service<
     dataSet: DataSet,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.CreateIngestionRequest,
-        "AwsAccountId" | "DataSetId"
-      >,
-    ) => Effect.Effect<
-      quicksight.CreateIngestionResponse,
-      quicksight.CreateIngestionError
-    >
+      request: Omit<quicksight.CreateIngestionRequest, "AwsAccountId" | "DataSetId">,
+    ) => Effect.Effect<quicksight.CreateIngestionResponse, quicksight.CreateIngestionError>
   >
 > {}
-export const CreateIngestion = Binding.Service<CreateIngestion>(
-  "AWS.QuickSight.CreateIngestion",
-);
+export const CreateIngestion = Binding.Service<CreateIngestion>("AWS.QuickSight.CreateIngestion");

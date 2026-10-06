@@ -11,12 +11,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireMinutes } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  fetchObservedTags,
-  jobArn,
-  retryWhileRoleNotAssumable,
-  syncTags,
-} from "./internal.ts";
+import { fetchObservedTags, jobArn, retryWhileRoleNotAssumable, syncTags } from "./internal.ts";
 
 export interface JobCommand {
   /**
@@ -179,21 +174,14 @@ export const JobProvider = () =>
   Provider.effect(
     Job,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { jobName?: string | undefined },
-      ) {
-        return (
-          props.jobName ?? (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { jobName?: string | undefined }) {
+        return props.jobName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* glue.getJob({ JobName: name }).pipe(
           Effect.map((r) => r.Job),
-          Effect.catchTag("EntityNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -211,9 +199,7 @@ export const JobProvider = () =>
         DefaultArguments: props.defaultArguments,
         NonOverridableArguments: props.nonOverridableArguments,
         Connections:
-          props.connections !== undefined
-            ? { Connections: props.connections }
-            : undefined,
+          props.connections !== undefined ? { Connections: props.connections } : undefined,
         MaxRetries: props.maxRetries,
         Timeout: toWireMinutes(props.timeout),
         MaxCapacity: props.maxCapacity,
@@ -284,9 +270,7 @@ export const JobProvider = () =>
                 ...buildDefinition(news),
                 Tags: desiredTags,
               }),
-            ).pipe(
-              Effect.catchTag("AlreadyExistsException", () => Effect.void),
-            );
+            ).pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
           } else {
             // UpdateJob replaces the full JobUpdate (Name is not part of it).
             yield* retryWhileRoleNotAssumable(

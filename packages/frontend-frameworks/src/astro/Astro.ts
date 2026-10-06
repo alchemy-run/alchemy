@@ -1,4 +1,3 @@
-import * as FrameworkCore from "../core/index.ts";
 import type { AstroInlineConfig, AstroIntegration } from "astro";
 import type * as AstroNamespace from "astro";
 import * as Effect from "effect/Effect";
@@ -6,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as ViteModule from "vite";
+import * as FrameworkCore from "../core/index.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
 import {
   DEFAULT_TARGET_SPECIFIER,
@@ -51,6 +51,14 @@ export interface AstroFrameworkOptions<TargetConfig = unknown> {
    * actionable error.
    */
   readonly astro?: AstroInlineConfig | undefined;
+  /**
+   * Path to an alternate Astro config file, resolved against {@link root}
+   * when relative (astro itself resolves a relative `configFile` against
+   * the process cwd, so this module anchors it to the project root before
+   * handing it over). Defaults to astro's own config discovery
+   * (`astro.config.*` in the project root).
+   */
+  readonly config?: string | undefined;
   /** Project root. Defaults to the process working directory. */
   readonly root?: string | undefined;
 }
@@ -82,8 +90,9 @@ export interface AstroConfigInputs {
 /**
  * Build the in-memory `AstroInlineConfig` — the overlay astro merges OVER
  * the project's own `astro.config.*` (which loads natively; `configFile`
- * is left undiscovered-default, so a project without a config file falls
- * back to a purely programmatic config). Astro's `resolveConfig` merge
+ * is left undiscovered-default unless the user overlay carries one, so a
+ * project without a config file falls back to a purely programmatic
+ * config). Astro's `resolveConfig` merge
  * gives this inline config precedence: arrays (`integrations`,
  * `vite.plugins`) concatenate after the file's, scalars override.
  *
@@ -97,9 +106,7 @@ export interface AstroConfigInputs {
  *   per-route `prerender = false` opt-outs enabled by the adapter) applies.
  * - User `vite.plugins` are preserved ahead of the collector.
  */
-export const makeAstroInlineConfig = (
-  inputs: AstroConfigInputs,
-): AstroInlineConfig => {
+export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineConfig => {
   const user = inputs.userConfig;
   const serverOverrides = {
     ...(inputs.port !== undefined ? { port: inputs.port } : {}),
@@ -122,10 +129,7 @@ export const makeAstroInlineConfig = (
     server,
     vite: {
       ...user?.vite,
-      plugins: [
-        ...(user?.vite?.plugins ?? []),
-        ...(inputs.extraVitePlugins ?? []),
-      ],
+      plugins: [...(user?.vite?.plugins ?? []), ...(inputs.extraVitePlugins ?? [])],
     },
   };
 };
@@ -152,11 +156,7 @@ export const makeAstroInlineConfig = (
  */
 export const make = <TargetConfig = unknown>(
   options?: AstroFrameworkOptions<TargetConfig>,
-): Effect.Effect<
-  FrameworkCore.Framework["Service"],
-  never,
-  FileSystem.FileSystem | Path.Path
-> =>
+): Effect.Effect<FrameworkCore.Framework["Service"], never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -181,17 +181,24 @@ export const make = <TargetConfig = unknown>(
     });
 
     const resolveRoot = (override: string | undefined) =>
-      Effect.sync(() =>
-        path.resolve(override ?? options?.root ?? process.cwd()),
-      );
+      Effect.sync(() => path.resolve(override ?? options?.root ?? process.cwd()));
+
+    /**
+     * The user's inline Astro overlay with `config` resolved into
+     * `configFile`, anchored to the project root (astro resolves a
+     * relative `configFile` against the process cwd, not `root`).
+     */
+    const resolveUserAstro = (root: string): AstroInlineConfig | undefined =>
+      options?.config === undefined
+        ? options?.astro
+        : { ...options?.astro, configFile: path.resolve(root, options.config) };
 
     const resolveTarget = (
       root: string,
     ): Effect.Effect<AstroTarget, FrameworkCore.FrameworkError> =>
       FrameworkCore.resolveDeployTarget<AstroTarget, TargetConfig | undefined>(
         root,
-        (options?.target ??
-          DEFAULT_TARGET_SPECIFIER) as FrameworkCore.DeployTargetInput<
+        (options?.target ?? DEFAULT_TARGET_SPECIFIER) as FrameworkCore.DeployTargetInput<
           AstroTarget,
           TargetConfig | undefined
         >,
@@ -210,9 +217,7 @@ export const make = <TargetConfig = unknown>(
         ),
       );
 
-    const loadAstro = (
-      root: string,
-    ): Effect.Effect<AstroModule, FrameworkCore.FrameworkError> =>
+    const loadAstro = (root: string): Effect.Effect<AstroModule, FrameworkCore.FrameworkError> =>
       FrameworkCore.loadProjectModule<AstroModule>(root, "astro").pipe(
         Effect.mapError(fail("Failed to load the project's astro")),
       );
@@ -225,7 +230,7 @@ export const make = <TargetConfig = unknown>(
       makeAstroInlineConfig({
         root,
         integration: target.integration(),
-        userConfig: options?.astro,
+        userConfig: resolveUserAstro(root),
         ...overrides,
       });
 
@@ -236,10 +241,16 @@ export const make = <TargetConfig = unknown>(
         if (target.build !== undefined) {
           // Wholesale build takeover: the target owns the entire
           // production build (the OpenNext-style case). The inline Astro
-          // overlay rides along so a child-process build can reconstruct
-          // the framework with the same options.
+          // overlay rides along (with `config` already resolved into an
+          // absolute `configFile`) so a child-process build can
+          // reconstruct the framework with the same options.
           return yield* target
-            .build({ root, framework: "astro", astro: options?.astro })
+            .build({
+              root,
+              framework: "astro",
+              env: buildOptions?.env,
+              astro: resolveUserAstro(root),
+            })
             .pipe(
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),
@@ -286,22 +297,13 @@ export const make = <TargetConfig = unknown>(
         // `resolveViteDevPort`. Astro's dev server runs on Astro's own
         // Vite dependency, so the version is resolved from the astro
         // package's directory, not the project root.
-        const viteVersion = yield* FrameworkCore.resolveProjectPackageDirectory(
-          root,
-          "astro",
-        ).pipe(
+        const viteVersion = yield* FrameworkCore.resolveProjectPackageDirectory(root, "astro").pipe(
           Effect.flatMap((astroDirectory) =>
-            FrameworkCore.resolveInstalledPackageVersion(
-              astroDirectory,
-              "vite",
-            ),
+            FrameworkCore.resolveInstalledPackageVersion(astroDirectory, "vite"),
           ),
           Effect.orElseSucceed(() => undefined),
         );
-        const port = yield* FrameworkCore.resolveViteDevPort(
-          viteVersion,
-          devOptions?.port,
-        );
+        const port = yield* FrameworkCore.resolveViteDevPort(viteVersion, devOptions?.port);
         const config = makeConfig(root, target, {
           port,
           host: devOptions?.host,
@@ -320,9 +322,7 @@ export const make = <TargetConfig = unknown>(
             : undefined);
         if (url === undefined) {
           return yield* Effect.fail(
-            fail("Could not determine the URL of the astro dev server")(
-              undefined,
-            ),
+            fail("Could not determine the URL of the astro dev server")(undefined),
           );
         }
         return { url };
@@ -336,8 +336,5 @@ export const make = <TargetConfig = unknown>(
  */
 export const layer = <TargetConfig = unknown>(
   options?: AstroFrameworkOptions<TargetConfig>,
-): Layer.Layer<
-  FrameworkCore.Framework,
-  never,
-  FileSystem.FileSystem | Path.Path
-> => Layer.effect(FrameworkCore.Framework, make(options));
+): Layer.Layer<FrameworkCore.Framework, never, FileSystem.FileSystem | Path.Path> =>
+  Layer.effect(FrameworkCore.Framework, make(options));

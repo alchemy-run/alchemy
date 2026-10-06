@@ -34,10 +34,7 @@ export interface GetServiceQuota extends Binding.Service<
   () => Effect.Effect<
     (
       request: servicequotas.GetServiceQuotaRequest,
-    ) => Effect.Effect<
-      servicequotas.GetServiceQuotaResponse,
-      servicequotas.GetServiceQuotaError
-    >
+    ) => Effect.Effect<servicequotas.GetServiceQuotaResponse, servicequotas.GetServiceQuotaError>
   >
 > {}
 export const GetServiceQuota = Binding.Service<GetServiceQuota>(

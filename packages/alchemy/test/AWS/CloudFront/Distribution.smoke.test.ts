@@ -1,3 +1,7 @@
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   CachePolicy,
@@ -12,14 +16,10 @@ import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 const SIGNING_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvTkfqkMHU8HMmIRKJaMl
@@ -32,190 +32,184 @@ HQIDAQAB
 -----END PUBLIC KEY-----
 `;
 
-describe("AWS.CloudFront smoke", () => {
-  test.provider.skipIf(!runLive)(
-    "deploy distribution wired to cache, origin request, and response headers policies alongside a key group",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+describe(
+  "AWS.CloudFront smoke",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:cloudfront",
+      "provider:aws:iam",
+      "provider:aws:s3",
+      "live",
+    ],
+  },
+  () => {
+    test.provider.skipIf(!runLive)(
+      "deploy distribution wired to cache, origin request, and response headers policies alongside a key group",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
 
-        const deployed = yield* stack.deploy(
-          Effect.gen(function* () {
-            const bucket = yield* Bucket("SmokeBucket", { forceDestroy: true });
-            const oac = yield* OriginAccessControl("SmokeOac", {
-              originType: "s3",
-            });
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const bucket = yield* Bucket("SmokeBucket", { forceDestroy: true });
+              const oac = yield* OriginAccessControl("SmokeOac", { originType: "s3" });
 
-            const cachePolicy = yield* CachePolicy("SmokeCachePolicy", {
-              comment: "smoke",
-              minTTL: 0,
-              defaultTTL: "60 seconds",
-              maxTTL: "1 day",
-              parametersInCacheKeyAndForwardedToOrigin: {
-                EnableAcceptEncodingGzip: true,
-                EnableAcceptEncodingBrotli: true,
-                HeadersConfig: { HeaderBehavior: "none" },
-                CookiesConfig: { CookieBehavior: "none" },
-                QueryStringsConfig: { QueryStringBehavior: "none" },
-              },
-            });
+              const cachePolicy = yield* CachePolicy("SmokeCachePolicy", {
+                comment: "smoke",
+                minTTL: 0,
+                defaultTTL: "60 seconds",
+                maxTTL: "1 day",
+                parametersInCacheKeyAndForwardedToOrigin: {
+                  EnableAcceptEncodingGzip: true,
+                  EnableAcceptEncodingBrotli: true,
+                  HeadersConfig: { HeaderBehavior: "none" },
+                  CookiesConfig: { CookieBehavior: "none" },
+                  QueryStringsConfig: { QueryStringBehavior: "none" },
+                },
+              });
 
-            const originRequestPolicy = yield* OriginRequestPolicy(
-              "SmokeOriginRequestPolicy",
-              {
+              const originRequestPolicy = yield* OriginRequestPolicy("SmokeOriginRequestPolicy", {
                 comment: "smoke",
                 headersConfig: { HeaderBehavior: "none" },
                 cookiesConfig: { CookieBehavior: "none" },
                 queryStringsConfig: { QueryStringBehavior: "all" },
-              },
-            );
+              });
 
-            const responseHeadersPolicy = yield* ResponseHeadersPolicy(
-              "SmokeResponseHeadersPolicy",
-              {
-                comment: "smoke",
-                securityHeadersConfig: {
-                  StrictTransportSecurity: {
-                    AccessControlMaxAgeSec: 31536000,
-                    IncludeSubdomains: true,
-                    Preload: true,
-                    Override: true,
-                  },
-                  ContentTypeOptions: { Override: true },
-                  FrameOptions: { FrameOption: "DENY", Override: true },
-                },
-              },
-            );
-
-            const publicKey = yield* PublicKey("SmokeSigningKey", {
-              encodedKey: SIGNING_PUBLIC_KEY,
-              comment: "smoke signed-url key",
-            });
-
-            const keyGroup = yield* KeyGroup("SmokeSigningKeys", {
-              comment: "smoke signed-url group",
-              items: [publicKey.publicKeyId],
-            });
-
-            const distribution = yield* Distribution("SmokeDistribution", {
-              origins: [
+              const responseHeadersPolicy = yield* ResponseHeadersPolicy(
+                "SmokeResponseHeadersPolicy",
                 {
-                  id: "site",
-                  domainName: bucket.bucketRegionalDomainName,
-                  s3Origin: true,
-                  originAccessControlId: oac.originAccessControlId,
+                  comment: "smoke",
+                  securityHeadersConfig: {
+                    StrictTransportSecurity: {
+                      AccessControlMaxAgeSec: 31536000,
+                      IncludeSubdomains: true,
+                      Preload: true,
+                      Override: true,
+                    },
+                    ContentTypeOptions: { Override: true },
+                    FrameOptions: { FrameOption: "DENY", Override: true },
+                  },
                 },
-              ],
-              defaultRootObject: "index.html",
-              defaultCacheBehavior: {
-                targetOriginId: "site",
-                viewerProtocolPolicy: "redirect-to-https",
-                compress: true,
-                allowedMethods: ["GET", "HEAD"],
-                cachedMethods: ["GET", "HEAD"],
-                cachePolicyId: cachePolicy.cachePolicyId,
-                originRequestPolicyId:
-                  originRequestPolicy.originRequestPolicyId,
-                responseHeadersPolicyId:
-                  responseHeadersPolicy.responseHeadersPolicyId,
-              },
-            });
+              );
 
-            const statement: PolicyStatement = {
-              Effect: "Allow",
-              Principal: { Service: "cloudfront.amazonaws.com" },
-              Action: ["s3:GetObject"],
-              Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
-              Condition: {
-                StringEquals: {
-                  "AWS:SourceArn": distribution.distributionArn as any,
+              const publicKey = yield* PublicKey("SmokeSigningKey", {
+                encodedKey: SIGNING_PUBLIC_KEY,
+                comment: "smoke signed-url key",
+              });
+
+              const keyGroup = yield* KeyGroup("SmokeSigningKeys", {
+                comment: "smoke signed-url group",
+                items: [publicKey.publicKeyId],
+              });
+
+              const distribution = yield* Distribution("SmokeDistribution", {
+                origins: [
+                  {
+                    id: "site",
+                    domainName: bucket.bucketRegionalDomainName,
+                    s3Origin: true,
+                    originAccessControlId: oac.originAccessControlId,
+                  },
+                ],
+                defaultRootObject: "index.html",
+                defaultCacheBehavior: {
+                  targetOriginId: "site",
+                  viewerProtocolPolicy: "redirect-to-https",
+                  compress: true,
+                  allowedMethods: ["GET", "HEAD"],
+                  cachedMethods: ["GET", "HEAD"],
+                  cachePolicyId: cachePolicy.cachePolicyId,
+                  originRequestPolicyId: originRequestPolicy.originRequestPolicyId,
+                  responseHeadersPolicyId: responseHeadersPolicy.responseHeadersPolicyId,
                 },
-              },
-            };
+              });
 
-            yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`(
-              { policyStatements: [statement] },
-            );
+              const statement: PolicyStatement = {
+                Effect: "Allow",
+                Principal: { Service: "cloudfront.amazonaws.com" },
+                Action: ["s3:GetObject"],
+                Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
+                Condition: {
+                  StringEquals: { "AWS:SourceArn": distribution.distributionArn as any },
+                },
+              };
 
-            return {
-              bucket,
-              oac,
-              cachePolicy,
-              originRequestPolicy,
-              responseHeadersPolicy,
-              publicKey,
-              keyGroup,
-              distribution,
-            };
-          }),
-        );
+              yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`({
+                policyStatements: [statement],
+              });
 
-        const dist = yield* cloudfront.getDistribution({
-          Id: deployed.distribution.distributionId,
-        });
-        expect(dist.Distribution?.Status).toEqual("Deployed");
+              return {
+                bucket,
+                oac,
+                cachePolicy,
+                originRequestPolicy,
+                responseHeadersPolicy,
+                publicKey,
+                keyGroup,
+                distribution,
+              };
+            }),
+          );
 
-        const defaultBehavior =
-          dist.Distribution?.DistributionConfig?.DefaultCacheBehavior;
-        expect(defaultBehavior?.CachePolicyId).toEqual(
-          deployed.cachePolicy.cachePolicyId,
-        );
-        expect(defaultBehavior?.OriginRequestPolicyId).toEqual(
-          deployed.originRequestPolicy.originRequestPolicyId,
-        );
-        expect(defaultBehavior?.ResponseHeadersPolicyId).toEqual(
-          deployed.responseHeadersPolicy.responseHeadersPolicyId,
-        );
+          const dist = yield* cloudfront.getDistribution({
+            Id: deployed.distribution.distributionId,
+          });
+          expect(dist.Distribution?.Status).toEqual("Deployed");
 
-        const cachePolicy = yield* cloudfront.getCachePolicy({
-          Id: deployed.cachePolicy.cachePolicyId,
-        });
-        expect(cachePolicy.CachePolicy?.Id).toEqual(
-          deployed.cachePolicy.cachePolicyId,
-        );
+          const defaultBehavior = dist.Distribution?.DistributionConfig?.DefaultCacheBehavior;
+          expect(defaultBehavior?.CachePolicyId).toEqual(deployed.cachePolicy.cachePolicyId);
+          expect(defaultBehavior?.OriginRequestPolicyId).toEqual(
+            deployed.originRequestPolicy.originRequestPolicyId,
+          );
+          expect(defaultBehavior?.ResponseHeadersPolicyId).toEqual(
+            deployed.responseHeadersPolicy.responseHeadersPolicyId,
+          );
 
-        const originRequestPolicy = yield* cloudfront.getOriginRequestPolicy({
-          Id: deployed.originRequestPolicy.originRequestPolicyId,
-        });
-        expect(originRequestPolicy.OriginRequestPolicy?.Id).toEqual(
-          deployed.originRequestPolicy.originRequestPolicyId,
-        );
+          const cachePolicy = yield* cloudfront.getCachePolicy({
+            Id: deployed.cachePolicy.cachePolicyId,
+          });
+          expect(cachePolicy.CachePolicy?.Id).toEqual(deployed.cachePolicy.cachePolicyId);
 
-        const responseHeadersPolicy =
-          yield* cloudfront.getResponseHeadersPolicy({
+          const originRequestPolicy = yield* cloudfront.getOriginRequestPolicy({
+            Id: deployed.originRequestPolicy.originRequestPolicyId,
+          });
+          expect(originRequestPolicy.OriginRequestPolicy?.Id).toEqual(
+            deployed.originRequestPolicy.originRequestPolicyId,
+          );
+
+          const responseHeadersPolicy = yield* cloudfront.getResponseHeadersPolicy({
             Id: deployed.responseHeadersPolicy.responseHeadersPolicyId,
           });
-        expect(responseHeadersPolicy.ResponseHeadersPolicy?.Id).toEqual(
-          deployed.responseHeadersPolicy.responseHeadersPolicyId,
-        );
+          expect(responseHeadersPolicy.ResponseHeadersPolicy?.Id).toEqual(
+            deployed.responseHeadersPolicy.responseHeadersPolicyId,
+          );
 
-        const keyGroup = yield* cloudfront.getKeyGroup({
-          Id: deployed.keyGroup.keyGroupId,
-        });
-        expect(keyGroup.KeyGroup?.KeyGroupConfig?.Items).toEqual([
-          deployed.publicKey.publicKeyId,
-        ]);
+          const keyGroup = yield* cloudfront.getKeyGroup({ Id: deployed.keyGroup.keyGroupId });
+          expect(keyGroup.KeyGroup?.KeyGroupConfig?.Items).toEqual([
+            deployed.publicKey.publicKeyId,
+          ]);
 
-        yield* stack.destroy();
-        yield* assertDistributionDeleted(deployed.distribution.distributionId);
-        yield* assertCachePolicyDeleted(deployed.cachePolicy.cachePolicyId);
-        yield* assertOriginRequestPolicyDeleted(
-          deployed.originRequestPolicy.originRequestPolicyId,
-        );
-        yield* assertResponseHeadersPolicyDeleted(
-          deployed.responseHeadersPolicy.responseHeadersPolicyId,
-        );
-        yield* assertKeyGroupDeleted(deployed.keyGroup.keyGroupId);
-        yield* assertPublicKeyDeleted(deployed.publicKey.publicKeyId);
-      }),
-    900_000,
-  );
-});
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(deployed.distribution.distributionId);
+          yield* assertCachePolicyDeleted(deployed.cachePolicy.cachePolicyId);
+          yield* assertOriginRequestPolicyDeleted(
+            deployed.originRequestPolicy.originRequestPolicyId,
+          );
+          yield* assertResponseHeadersPolicyDeleted(
+            deployed.responseHeadersPolicy.responseHeadersPolicyId,
+          );
+          yield* assertKeyGroupDeleted(deployed.keyGroup.keyGroupId);
+          yield* assertPublicKeyDeleted(deployed.publicKey.publicKeyId);
+        }),
+      900_000,
+    );
+  },
+);
 
 const retrying = (label: string) =>
   Effect.retry({
-    while: (error: unknown) =>
-      error instanceof Error && error.message === label,
+    while: (error: unknown) => error instanceof Error && error.message === label,
     schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
   });
 
@@ -235,18 +229,14 @@ const assertCachePolicyDeleted = (id: string) =>
 
 const assertOriginRequestPolicyDeleted = (id: string) =>
   cloudfront.getOriginRequestPolicy({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("OriginRequestPolicyStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("OriginRequestPolicyStillExists"))),
     Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.void),
     retrying("OriginRequestPolicyStillExists"),
   );
 
 const assertResponseHeadersPolicyDeleted = (id: string) =>
   cloudfront.getResponseHeadersPolicy({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("ResponseHeadersPolicyStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("ResponseHeadersPolicyStillExists"))),
     Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.void),
     retrying("ResponseHeadersPolicyStillExists"),
   );

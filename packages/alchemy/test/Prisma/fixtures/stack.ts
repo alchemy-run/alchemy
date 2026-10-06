@@ -1,6 +1,6 @@
-import * as Prisma from "@/Prisma";
-import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
+import * as Alchemy from "@/index.ts";
+import * as Prisma from "@/Prisma";
 import ReadCompute from "./read-compute.ts";
 import ReadWriteCompute from "./readwrite-compute.ts";
 import WriteCompute from "./write-compute.ts";
@@ -11,7 +11,7 @@ import WriteCompute from "./write-compute.ts";
  * so it can be deployed by the test suite AND inspected directly, e.g.
  *
  * ```sh
- * alchemy tail --stage test ./test/Prisma/fixtures/stack.ts
+ * alchemy logs --tail --stage test --config ./test/Prisma/fixtures/stack.ts
  * ```
  *
  * State is file-local (`.alchemy/` on the runner) — a Prisma-only suite must

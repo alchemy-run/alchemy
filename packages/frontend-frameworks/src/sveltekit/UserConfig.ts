@@ -67,9 +67,7 @@ export const DEFAULT_VITE_CONFIG_FILES: ReadonlyArray<string> = [
 
 /** The shape of kit's setup-plugin `api` (structural — kit doesn't export it). */
 interface SetupPluginApi {
-  readonly options?: {
-    kit?: Record<string, unknown>;
-  };
+  readonly options?: Record<string, unknown>;
 }
 
 /**
@@ -97,12 +95,7 @@ export const flattenPluginOption = async (
  * `api.options` afterwards — `vite-plugin-svelte` was already instantiated
  * with them — so the injector warns instead of silently dropping them.
  */
-const CONSTRUCTION_TIME_KEYS = [
-  "extensions",
-  "compilerOptions",
-  "vitePlugin",
-  "preprocess",
-];
+const CONSTRUCTION_TIME_KEYS = ["extensions", "compilerOptions", "vitePlugin", "preprocess"];
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -152,8 +145,7 @@ export const makeSvelteKitConfigPlugin = (
   options: SvelteKitConfigPluginOptions,
 ): ViteModule.Plugin => {
   const warn =
-    options.warn ??
-    ((message: string) => console.warn(`[${CONFIG_PLUGIN_NAME}] ${message}`));
+    options.warn ?? ((message: string) => console.warn(`[${CONFIG_PLUGIN_NAME}] ${message}`));
   return {
     name: CONFIG_PLUGIN_NAME,
     enforce: "pre",
@@ -161,9 +153,7 @@ export const makeSvelteKitConfigPlugin = (
       order: "pre",
       handler: async (config) => {
         const plugins = await flattenPluginOption(config.plugins);
-        const setup = plugins.find(
-          (plugin) => plugin.name === SVELTEKIT_SETUP_PLUGIN_NAME,
-        );
+        const setup = plugins.find((plugin) => plugin.name === SVELTEKIT_SETUP_PLUGIN_NAME);
         if (setup === undefined) {
           throw new Error(
             "The project's Vite config does not register the SvelteKit plugin. " +
@@ -173,18 +163,18 @@ export const makeSvelteKitConfigPlugin = (
           );
         }
         const svelteConfig = (setup.api as SetupPluginApi | undefined)?.options;
-        const kit = svelteConfig?.kit;
-        if (kit === undefined || !isPlainObject(kit)) {
+        const nestedKit = svelteConfig?.["kit"];
+        const kit = isPlainObject(nestedKit) ? nestedKit : svelteConfig;
+
+        if (!isPlainObject(kit)) {
           throw new Error(
             `The "${SVELTEKIT_SETUP_PLUGIN_NAME}" plugin does not expose its config as ` +
-              "`api.options.kit` — the installed @sveltejs/kit version is incompatible " +
-              "with this integration's adapter injection.",
+              "`api.options` or `api.options.kit` — the installed @sveltejs/kit version " +
+              "is incompatible with this integration's adapter injection.",
           );
         }
         if (options.kit !== undefined) {
-          const { applicable, constructionTime } = Object.entries(
-            options.kit,
-          ).reduce<{
+          const { applicable, constructionTime } = Object.entries(options.kit).reduce<{
             applicable: Record<string, unknown>;
             constructionTime: Array<string>;
           }>(
@@ -210,8 +200,7 @@ export const makeSvelteKitConfigPlugin = (
         const userAdapter = kit["adapter"];
         if (userAdapter !== null && userAdapter !== undefined) {
           const name =
-            isPlainObject(userAdapter) &&
-            typeof userAdapter["name"] === "string"
+            isPlainObject(userAdapter) && typeof userAdapter["name"] === "string"
               ? userAdapter["name"]
               : "unknown";
           warn(

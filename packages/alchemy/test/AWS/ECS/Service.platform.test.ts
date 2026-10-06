@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import { Service } from "@/AWS/ECS/Service.ts";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
@@ -11,6 +6,11 @@ import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import { Service } from "@/AWS/ECS/Service.ts";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -26,11 +26,52 @@ const defaultAzSubnets = (vpcId: string) =>
         { Name: "default-for-az", Values: ["true"] },
       ],
     })
-    .pipe(
-      Effect.map((r) =>
-        (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-      ),
+    .pipe(Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))));
+
+/**
+ * Delete any leftover out-of-band "legacy" fixtures carrying {@link name}.
+ *
+ * The reap test builds its fixtures under a fixed name and relies on
+ * finalizers to reclaim them, which a hard kill skips. Matching by listing
+ * (rather than describe-by-name) keeps this free of not-found handling: an
+ * absent fixture simply doesn't appear.
+ */
+const reclaimLegacyFixtures = Effect.fn("reclaimLegacyFixtures")(function* (
+  name: string,
+  vpcId: string,
+) {
+  const lbs = yield* elbv2.describeLoadBalancers({});
+  const lbArn = (lbs.LoadBalancers ?? []).find(
+    (lb) => lb.LoadBalancerName === name,
+  )?.LoadBalancerArn;
+  if (lbArn) {
+    const listeners = yield* elbv2.describeListeners({
+      LoadBalancerArn: lbArn,
+    });
+    yield* Effect.forEach(
+      (listeners.Listeners ?? []).flatMap((l) => (l.ListenerArn ? [l.ListenerArn] : [])),
+      (ListenerArn) => elbv2.deleteListener({ ListenerArn }),
     );
+    yield* elbv2.deleteLoadBalancer({ LoadBalancerArn: lbArn });
+  }
+
+  const tgs = yield* elbv2.describeTargetGroups({});
+  const tgArn = (tgs.TargetGroups ?? []).find((tg) => tg.TargetGroupName === name)?.TargetGroupArn;
+  if (tgArn) {
+    yield* elbv2.deleteTargetGroup({ TargetGroupArn: tgArn });
+  }
+
+  const sgs = yield* ec2.describeSecurityGroups({
+    Filters: [
+      { Name: "vpc-id", Values: [vpcId] },
+      { Name: "group-name", Values: [name] },
+    ],
+  });
+  const sgId = (sgs.SecurityGroups ?? [])[0]?.GroupId;
+  if (sgId) {
+    yield* ec2.deleteSecurityGroup({ GroupId: sgId });
+  }
+});
 
 // The image-owning `Service` platform form: `image:` (mirrored into ECR) with
 // `loadBalancer: true` — the Service synthesizes its own task definition
@@ -95,11 +136,7 @@ test.provider(
       });
       const container = described.taskDefinition?.containerDefinitions?.[0];
       expect(container?.image).toBe(deployed.imageUri);
-      expect(container?.command).toEqual([
-        "sh",
-        "-c",
-        "while true; do sleep 30; done",
-      ]);
+      expect(container?.command).toEqual(["sh", "-c", "while true; do sleep 30; done"]);
       expect(container?.portMappings?.[0]?.containerPort).toBe(80);
       // `environmentFiles` lands on the synthesized primary container, with
       // the execution role granted read access to the referenced object.
@@ -123,9 +160,7 @@ test.provider(
         services: [deployed.serviceName],
       });
       const svc = services.services?.[0];
-      expect(svc?.loadBalancers?.[0]?.targetGroupArn).toBe(
-        deployed.targetGroupArn,
-      );
+      expect(svc?.loadBalancers?.[0]?.targetGroupArn).toBe(deployed.targetGroupArn);
       expect(svc?.loadBalancers?.[0]?.containerPort).toBe(80);
 
       yield* stack.destroy();
@@ -138,9 +173,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("RepositoryNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(true)),
         );
       expect(repoGone).toBe(true);
 
@@ -150,9 +183,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(lbGone).toBe(true);
 
@@ -179,11 +210,83 @@ test.provider(
       const clusters = yield* ecs.describeClusters({
         clusters: ["alchemy-test-ecs-service-platform"],
       });
-      expect((clusters.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
-        false,
-      );
+      expect((clusters.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
     }),
-  { timeout: 420_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:ecr",
+      "provider:aws:ecs",
+      "provider:aws:iam",
+      "live",
+    ],
+    timeout: 420_000,
+  },
+);
+
+// `host` / `bridge` tasks have no ENI: ECS rejects an `awsvpcConfiguration`
+// for them, and their ALB targets must register by instance, not IP. Deploy
+// an EC2 host-mode service with `desiredCount: 0` (no container instance
+// needed) and check both on the live service and target group.
+test.provider(
+  "host network mode skips awsvpc configuration and targets instances",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const cluster = yield* Cluster("HostModeCluster", {});
+          return yield* Service("HostModeEdge", {
+            cluster,
+            image: "busybox:stable",
+            command: ["sh", "-c", "while true; do sleep 30; done"],
+            port: 80,
+            networkMode: "host",
+            requiresCompatibilities: ["EC2"],
+            launchType: "EC2",
+            desiredCount: 0,
+            loadBalancer: true,
+          });
+        }),
+      );
+
+      const described = yield* ecs.describeTaskDefinition({
+        taskDefinition: deployed.taskDefinitionArn,
+      });
+      expect(described.taskDefinition?.networkMode).toBe("host");
+
+      const services = yield* ecs.describeServices({
+        cluster: deployed.clusterArn,
+        services: [deployed.serviceName],
+      });
+      const svc = services.services?.[0];
+      expect(svc?.launchType).toBe("EC2");
+      expect(svc?.networkConfiguration).toBeUndefined();
+      expect(svc?.loadBalancers?.[0]?.targetGroupArn).toBe(deployed.targetGroupArn);
+
+      const targetGroups = yield* elbv2.describeTargetGroups({
+        TargetGroupArns: [deployed.targetGroupArn!],
+      });
+      expect(targetGroups.TargetGroups?.[0]?.TargetType).toBe("instance");
+
+      yield* stack.destroy();
+
+      const clusters = yield* ecs.describeClusters({ clusters: [deployed.clusterArn] });
+      expect((clusters.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
+      const tgGone = yield* elbv2
+        .describeTargetGroups({ TargetGroupArns: [deployed.targetGroupArn!] })
+        .pipe(
+          Effect.map((r) => (r.TargetGroups ?? []).length === 0),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(true)),
+        );
+      expect(tgGone).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 420_000,
+  },
 );
 
 // Migration reap: state rows written by the pre-composition provider carry
@@ -223,6 +326,16 @@ test.provider(
       // reap deletes are instant). Finalizers reclaim them if the test dies
       // before the reap runs.
       const legacyName = "alchemy-test-ecs-svc-legacy";
+      // The scaffolding below is created out-of-band under a fixed name and
+      // reclaimed by finalizers. A hard kill (SIGKILL, machine death) skips
+      // finalizers, so the previous run's copy survives and the next run dies
+      // on DuplicateLoadBalancerName before it can test anything. Reclaim any
+      // same-named leftovers first so the suite is rerunnable after a crash.
+      //
+      // This is scaffolding hygiene, NOT adoption of a leaked stack-managed
+      // resource: these are fixtures the test itself creates, and the reap
+      // under test is unaffected by whether they pre-existed.
+      yield* reclaimLegacyFixtures(legacyName, net.vpcId);
       const legacySubnets = yield* defaultAzSubnets(net.vpcId);
       const legacyLb = yield* elbv2.createLoadBalancer({
         Name: legacyName,
@@ -232,9 +345,7 @@ test.provider(
       });
       const legacyLbArn = legacyLb.LoadBalancers?.[0]?.LoadBalancerArn!;
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteLoadBalancer({ LoadBalancerArn: legacyLbArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteLoadBalancer({ LoadBalancerArn: legacyLbArn }).pipe(Effect.ignore),
       );
       const legacyTg = yield* elbv2.createTargetGroup({
         Name: legacyName,
@@ -245,9 +356,7 @@ test.provider(
       });
       const legacyTgArn = legacyTg.TargetGroups?.[0]?.TargetGroupArn!;
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteTargetGroup({ TargetGroupArn: legacyTgArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteTargetGroup({ TargetGroupArn: legacyTgArn }).pipe(Effect.ignore),
       );
       const legacyListener = yield* elbv2.createListener({
         LoadBalancerArn: legacyLbArn,
@@ -257,9 +366,7 @@ test.provider(
       });
       const legacyListenerArn = legacyListener.Listeners?.[0]?.ListenerArn!;
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteListener({ ListenerArn: legacyListenerArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteListener({ ListenerArn: legacyListenerArn }).pipe(Effect.ignore),
       );
       const legacySg = yield* ec2.createSecurityGroup({
         GroupName: legacyName,
@@ -273,21 +380,17 @@ test.provider(
 
       // Rewrite the service's state row into the legacy inline shape.
       const state = yield* yield* State;
-      const stage = "test"; // scratch stacks default to the "test" stage
+      const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const serviceRow = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
           isResourceState(r.row) && r.row.resourceType === "AWS.ECS.Service",
       );
       if (!serviceRow) {
-        return yield* Effect.die(
-          new Error("no AWS.ECS.Service state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no AWS.ECS.Service state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -342,9 +445,7 @@ test.provider(
         .describeLoadBalancers({ LoadBalancerArns: [legacyLbArn] })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (gone) => gone,
@@ -356,17 +457,13 @@ test.provider(
         .describeTargetGroups({ TargetGroupArns: [legacyTgArn] })
         .pipe(
           Effect.map((r) => (r.TargetGroups ?? []).length === 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(true)),
         );
       expect(legacyTgGone).toBe(true);
-      const legacySgGone = yield* ec2
-        .describeSecurityGroups({ GroupIds: [legacySgId] })
-        .pipe(
-          Effect.map((r) => (r.SecurityGroups ?? []).length === 0),
-          Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(true)),
-        );
+      const legacySgGone = yield* ec2.describeSecurityGroups({ GroupIds: [legacySgId] }).pipe(
+        Effect.map((r) => (r.SecurityGroups ?? []).length === 0),
+        Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(true)),
+      );
       expect(legacySgGone).toBe(true);
 
       yield* stack.destroy();
@@ -378,9 +475,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(composedLbGone).toBe(true);
 
@@ -398,11 +493,12 @@ test.provider(
               arn.includes(`/${redeployed.taskFamily!}:`),
             ),
           ),
-          Effect.catchTag("ClientException", () =>
-            Effect.succeed([] as string[]),
-          ),
+          Effect.catchTag("ClientException", () => Effect.succeed([] as string[])),
         );
       expect(activeRevisions).toEqual([]);
     }),
-  { timeout: 420_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 420_000,
+  },
 );

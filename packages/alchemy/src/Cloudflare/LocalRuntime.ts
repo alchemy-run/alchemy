@@ -7,18 +7,24 @@ import * as Path from "effect/Path";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
+import { moduleExtension } from "../Util/Node.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
-import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
+import type { Queue } from "./Queues/Queue.ts";
 
-export const LOCAL_ENTRY_URL = import.meta.resolve(
+/**
+ * The Cloudflare provider group module ([Local.ts](./Local.ts)) every
+ * Cloudflare local provider is registered in; the dev sidecar imports it on
+ * first use (see `Local/Sidecar.ts`).
+ */
+export const LOCAL_PROVIDERS_URL = import.meta.resolve(
   // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
   // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
   // we have to pick the right extension ourselves. `import.meta.url` reflects
   // the actual on-disk extension of *this* file (`.ts` when loaded from
   // `src/` under Bun or vitest, `.js` when loaded from the compiled `lib/`
   // under Node), which is exactly the signal we need.
-  import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+  `./Local${moduleExtension(import.meta.url)}`,
   import.meta.url,
 );
 
@@ -45,10 +51,7 @@ export class LocalRuntimeState extends Context.Service<
      * updating state so the running instance is reconfigured; the hook is
      * a no-op until the worker has served at least once.
      */
-    readonly workerRestarts: MutableHashMap.MutableHashMap<
-      string,
-      Effect.Effect<void>
-    >;
+    readonly workerRestarts: MutableHashMap.MutableHashMap<string, Effect.Effect<void>>;
   }
 >()("alchemy/cloudflare/LocalRuntimeState") {}
 
@@ -90,9 +93,7 @@ const makeLocalRuntimeServices = () =>
     }),
   );
 
-let _localRuntimeServices:
-  | ReturnType<typeof makeLocalRuntimeServices>
-  | undefined;
+let _localRuntimeServices: ReturnType<typeof makeLocalRuntimeServices> | undefined;
 
 /**
  * The shared local-runtime dependency layer (workerd `Runtime`,
@@ -107,12 +108,10 @@ let _localRuntimeServices:
  * per stack build (a fresh build gets a fresh instance via its own memo
  * map; the layer blueprint itself is immutable).
  */
-export const localRuntimeServices = () =>
-  (_localRuntimeServices ??= makeLocalRuntimeServices());
+export const localRuntimeServices = () => (_localRuntimeServices ??= makeLocalRuntimeServices());
 
 export const isLocalId = (id: string | undefined): id is string =>
   typeof id === "string" && id.startsWith(LOCAL_ID_PREFIX);
 export const isLiveId = (id: string | undefined): id is string =>
   typeof id === "string" && !id.startsWith(LOCAL_ID_PREFIX);
-export const generateLocalId = (): string =>
-  `${LOCAL_ID_PREFIX}${crypto.randomUUID()}`;
+export const generateLocalId = (): string => `${LOCAL_ID_PREFIX}${crypto.randomUUID()}`;

@@ -40,10 +40,7 @@ export const WriteQueueHttp = Layer.effect(
 const toMessage = (message: SendMessage) =>
   message.contentType === "text"
     ? {
-        body:
-          typeof message.body === "string"
-            ? message.body
-            : String(message.body),
+        body: typeof message.body === "string" ? message.body : String(message.body),
         contentType: "text" as const,
       }
     : { body: message.body, contentType: "json" as const };
@@ -79,8 +76,7 @@ export const makeWriteQueueHttpClient = (
   return {
     raw: Effect.die(
       new SendError({
-        message:
-          "Queue HTTP client does not expose a native Queue binding; use send/sendBatch.",
+        message: "Queue HTTP client does not expose a native Queue binding; use send/sendBatch.",
         cause: new Error("unsupported"),
       }),
     ),

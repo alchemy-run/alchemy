@@ -38,10 +38,7 @@ export interface BatchCreateCategory extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchCreateCategoryRequest,
-    ) => Effect.Effect<
-      qapps.BatchCreateCategoryResponse,
-      qapps.BatchCreateCategoryError
-    >
+    ) => Effect.Effect<qapps.BatchCreateCategoryResponse, qapps.BatchCreateCategoryError>
   >
 > {}
 

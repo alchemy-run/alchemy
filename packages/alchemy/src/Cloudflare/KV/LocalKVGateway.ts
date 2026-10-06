@@ -26,9 +26,7 @@ import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
 import type { makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
 import { NamespaceError } from "./NamespaceTypes.ts";
 
-const tryPromise = <T>(
-  fn: () => Promise<T>,
-): Effect.Effect<T, NamespaceError> =>
+const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, NamespaceError> =>
   Effect.tryPromise({
     try: fn,
     catch: (error: any) =>
@@ -61,8 +59,7 @@ export const makeProxyKVNamespaceHelpers = (
           name: gatewayName("alchemy-kv-gateway", namespaceId),
           bindings: [KvNamespace.local({ binding: "KV", id: namespaceId })],
         });
-        const kv = (proxy.env as Record<string, unknown>)
-          .KV as runtime.KVNamespace<string>;
+        const kv = (proxy.env as Record<string, unknown>).KV as runtime.KVNamespace<string>;
         return yield* tryPromise(() => fn(kv));
       }),
     ).pipe(

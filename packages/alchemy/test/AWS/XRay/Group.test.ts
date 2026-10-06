@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Group } from "@/AWS/XRay";
-import * as Test from "@/Test/Alchemy";
 import * as xray from "@distilled.cloud/aws/xray";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Group } from "@/AWS/XRay";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,9 +22,7 @@ class GroupStillExists extends Data.TaggedError("GroupStillExists")<{
 const assertGroupDeleted = (groupName: string) =>
   findGroup(groupName).pipe(
     Effect.flatMap((group) =>
-      group === undefined
-        ? Effect.void
-        : Effect.fail(new GroupStillExists({ groupName })),
+      group === undefined ? Effect.void : Effect.fail(new GroupStillExists({ groupName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "GroupStillExists",
@@ -56,11 +54,7 @@ test.provider(
       expect(created?.InsightsConfiguration?.InsightsEnabled).toBe(false);
       const tags = yield* xray
         .listTagsForResource({ ResourceARN: group.groupArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestGroup");
 
@@ -68,8 +62,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Group("TestGroup", {
-            filterExpression:
-              'service("alchemy-xray-test") AND responsetime > 2',
+            filterExpression: 'service("alchemy-xray-test") AND responsetime > 2',
             insightsEnabled: true,
             tags: { Environment: "test" },
           });
@@ -88,8 +81,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Group("TestGroup", {
-            filterExpression:
-              'service("alchemy-xray-test") AND responsetime > 2',
+            filterExpression: 'service("alchemy-xray-test") AND responsetime > 2',
             tags: { Environment: "test" },
           });
         }),
@@ -100,7 +92,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertGroupDeleted(group.groupName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:xray", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -137,5 +129,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertGroupDeleted("alchemy-test-group-b");
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:xray", "live"], timeout: 120_000 },
 );

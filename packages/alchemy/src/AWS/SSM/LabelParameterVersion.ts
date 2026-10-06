@@ -35,10 +35,7 @@ export interface LabelParameterVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: LabelParameterVersionRequest,
-    ) => Effect.Effect<
-      SSM.LabelParameterVersionResult,
-      SSM.LabelParameterVersionError
-    >
+    ) => Effect.Effect<SSM.LabelParameterVersionResult, SSM.LabelParameterVersionError>
   >
 > {}
 export const LabelParameterVersion = Binding.Service<LabelParameterVersion>(

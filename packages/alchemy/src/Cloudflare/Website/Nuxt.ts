@@ -19,9 +19,7 @@ import {
  */
 const NUXT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
-export interface NuxtProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface NuxtProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -58,20 +56,23 @@ export interface NuxtProps<
    */
   memo?: MemoOptions;
   /**
-   * Nuxt configuration overrides merged over the project's own
-   * `nuxt.config.ts` (the override wins). The project's config file is
-   * loaded natively — modules, layers, and all — so this is for
-   * deploy-specific tweaks (`routeRules`, `runtimeConfig`, ...). Must be
-   * JSON-serializable (it persists in state). Do not set `nitro.preset`
-   * here — the Cloudflare deploy target owns the preset and a foreign
-   * preset is a hard error.
-   */
-  nuxt?: Record<string, unknown>;
-  /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
   assets?: AssetsConfig;
+  /**
+   * Nuxt config overrides merged over the project's own `nuxt.config.ts`
+   * (the highest-priority c12 layer — a value here wins over the file).
+   * Use it for deploy-time values the config file can't express, e.g.
+   * per-stage `runtimeConfig`; `nuxt.config.ts` remains the primary home
+   * for everything else.
+   *
+   * Must be JSON-serializable — no functions, plugins, or modules (the
+   * value persists in state and participates in the rebuild hash).
+   * `nitro.preset` is always owned by the deploy target and cannot be
+   * overridden here.
+   */
+  nuxt?: Record<string, unknown>;
 }
 
 /**
@@ -131,7 +132,7 @@ export interface NuxtProps<
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   env: {
- *     API_KEY: Config.redacted("API_KEY"),
+ *     API_KEY: Config.Redacted("API_KEY"),
  *   },
  * });
  *
@@ -155,14 +156,34 @@ export interface NuxtProps<
  * ### Prerendering
  * Routes marked for prerendering in `routeRules` (or via
  * `nitro.prerender`) render at build time into `.output/public` and are
- * served as static assets — no Worker invocation.
+ * served as static assets — no Worker invocation. Configure them in
+ * your `nuxt.config.ts`, which loads natively:
  *
- * **Example:** Prerendering a route
+ * **Example:** Prerendering a route (nuxt.config.ts)
+ * ```typescript
+ * // nuxt.config.ts
+ * export default defineNuxtConfig({
+ *   routeRules: {
+ *     "/about": { prerender: true },
+ *   },
+ * });
+ * ```
+ *
+ * ### Config Overrides
+ * `nuxt.config.ts` is the primary home for Nuxt configuration — it loads
+ * natively. The `nuxt` prop layers deploy-time overrides on top (the
+ * highest-priority c12 layer) for values the file can't express, like
+ * per-stage settings. The bag must be JSON-serializable — no functions,
+ * plugins, or modules — and `nitro.preset` stays owned by the deploy
+ * target.
+ *
+ * **Example:** Deploy-time config overrides
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   nuxt: {
- *     routeRules: {
- *       "/about": { prerender: true },
+ *     app: { baseURL: "/docs/" },
+ *     runtimeConfig: {
+ *       public: { apiBase: "https://api.example.com" },
  *     },
  *   },
  * });
@@ -259,9 +280,10 @@ export const Nuxt: {
         | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -272,40 +294,48 @@ export const Nuxt: {
       | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<NuxtProps<Bindings>>
+    | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Nuxt(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | InputProps<NuxtProps<Bindings>>
+          | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
+      ) => effectClass(Nuxt(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // The server build uses nitro's hybrid workerd node-compat
-            // (`cloudflare.nodeCompat: true`), which relies on workerd's
-            // native `node:*` modules — `getCompatibility` already adds
-            // `nodejs_compat` to every non-python Worker.
-            // `main` is the source provider's user-entry seam (nitro's
-            // entry), not the Worker's own bundling entry.
-            main: undefined!,
-            source: {
-              provider: NUXT_SOURCE_PROVIDER,
-              devMode: "server",
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // The server build uses nitro's hybrid workerd node-compat
+          // (`cloudflare.nodeCompat: true`), which relies on workerd's
+          // native `node:*` modules — `getCompatibility` already adds
+          // `nodejs_compat` to every non-python Worker.
+          // `main` is the source provider's user-entry seam (nitro's
+          // entry), not the Worker's own bundling entry.
+          main: undefined!,
+          source: {
+            provider: NUXT_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: {
               rootDir: props?.rootDir,
-              options: {
-                rootDir: props?.rootDir,
-                main: props?.main,
-                memo: props?.memo,
-                nuxt: props?.nuxt,
-              },
+              main: props?.main,
+              memo: props?.memo,
+              nuxt: props?.nuxt,
             },
-          }),
-        ),
+          },
+        })),
       )) as any;

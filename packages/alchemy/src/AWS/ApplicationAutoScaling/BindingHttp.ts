@@ -32,12 +32,7 @@ interface TargetTriple {
  * callable injects the bound {@link ScalableTarget}'s identity triple and the
  * deploy-time half grants `actions` on `*`.
  */
-export const makeTargetScopedHttpBinding = <
-  I extends TargetTriple,
-  A,
-  E,
-  R,
->(options: {
+export const makeTargetScopedHttpBinding = <I extends TargetTriple, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.ApplicationAutoScaling.DescribeScalingActivities`. */
   tag: string;
   /** The distilled operation; the identity triple is injected from the target. */

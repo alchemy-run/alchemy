@@ -154,21 +154,17 @@ export interface MetricsDestination extends Resource<
  *
  * @resource
  */
-export const MetricsDestination = Resource<MetricsDestination>(
-  "AWS.RUM.MetricsDestination",
-);
+export const MetricsDestination = Resource<MetricsDestination>("AWS.RUM.MetricsDestination");
 
 /**
  * Raised when a `BatchCreateRumMetricDefinitions` /
  * `BatchDeleteRumMetricDefinitions` call reports per-definition errors.
  */
-export class RumMetricDefinitionsError extends Data.TaggedError(
-  "RumMetricDefinitionsError",
-)<{ message: string }> {}
+export class RumMetricDefinitionsError extends Data.TaggedError("RumMetricDefinitionsError")<{
+  message: string;
+}> {}
 
-const toWireDefinition = (
-  def: MetricDefinition,
-): rum.MetricDefinitionRequest => ({
+const toWireDefinition = (def: MetricDefinition): rum.MetricDefinitionRequest => ({
   Name: def.name,
   ValueKey: def.valueKey,
   UnitLabel: def.unitLabel,
@@ -183,15 +179,10 @@ const sameRecord = (
 ) => {
   const left = Object.entries(a ?? {}).filter(([, v]) => v !== undefined);
   const right = Object.entries(b ?? {}).filter(([, v]) => v !== undefined);
-  return (
-    left.length === right.length && left.every(([k, v]) => (b ?? {})[k] === v)
-  );
+  return left.length === right.length && left.every(([k, v]) => (b ?? {})[k] === v);
 };
 
-const definitionInSync = (
-  observed: rum.MetricDefinition,
-  desired: MetricDefinition,
-) =>
+const definitionInSync = (observed: rum.MetricDefinition, desired: MetricDefinition) =>
   observed.ValueKey === desired.valueKey &&
   observed.UnitLabel === desired.unitLabel &&
   observed.EventPattern === desired.eventPattern &&
@@ -207,10 +198,7 @@ export const MetricsDestinationProvider = () =>
        * monitor itself is gone) → undefined.
        */
       const observeDestination = Effect.fn(function* (
-        props: Pick<
-          MetricsDestinationProps,
-          "appMonitorName" | "destination" | "destinationArn"
-        >,
+        props: Pick<MetricsDestinationProps, "appMonitorName" | "destination" | "destinationArn">,
       ) {
         const destinations = yield* rum.listRumMetricsDestinations
           .items({ AppMonitorName: props.appMonitorName })
@@ -223,8 +211,7 @@ export const MetricsDestinationProvider = () =>
         return Array.from(destinations).find(
           (d) =>
             d.Destination === props.destination &&
-            (props.destination !== "Evidently" ||
-              d.DestinationArn === props.destinationArn),
+            (props.destination !== "Evidently" || d.DestinationArn === props.destinationArn),
         );
       });
 
@@ -272,9 +259,7 @@ export const MetricsDestinationProvider = () =>
           const key = {
             AppMonitorName: props.appMonitorName,
             Destination: props.destination,
-            ...(props.destination === "Evidently"
-              ? { DestinationArn: props.destinationArn }
-              : {}),
+            ...(props.destination === "Evidently" ? { DestinationArn: props.destinationArn } : {}),
           };
 
           // 1. OBSERVE — the live destination list is authoritative.
@@ -286,8 +271,7 @@ export const MetricsDestinationProvider = () =>
           //    race, not a failure.
           if (
             observed === undefined ||
-            (props.iamRoleArn !== undefined &&
-              observed.IamRoleArn !== props.iamRoleArn)
+            (props.iamRoleArn !== undefined && observed.IamRoleArn !== props.iamRoleArn)
           ) {
             yield* rum
               .putRumMetricsDestination({
@@ -380,10 +364,7 @@ export const MetricsDestinationProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
               }),
             );
         }),

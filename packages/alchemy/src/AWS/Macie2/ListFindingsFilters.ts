@@ -27,10 +27,7 @@ export interface ListFindingsFilters extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.ListFindingsFiltersRequest,
-    ) => Effect.Effect<
-      macie2.ListFindingsFiltersResponse,
-      macie2.ListFindingsFiltersError
-    >
+    ) => Effect.Effect<macie2.ListFindingsFiltersResponse, macie2.ListFindingsFiltersError>
   >
 > {}
 export const ListFindingsFilters = Binding.Service<ListFindingsFilters>(

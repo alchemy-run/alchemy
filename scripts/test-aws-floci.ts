@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 /**
  * Run the live AWS suites for services that have a Floci local provider
  * (`flociDual` / `ProviderLayer.dual` in Providers.ts) under
@@ -10,8 +12,7 @@
  * Extra alchemy-test args are forwarded (`-t`, `--retry`, paths, …).
  */
 import { Glob } from "bun";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { preferLocalFlociImage } from "./floci-image.ts";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const alchemyRoot = join(repoRoot, "packages/alchemy");
@@ -51,11 +52,7 @@ for (let i = 0; i < args.length; i++) {
   const arg = args[i]!;
   if (arg.startsWith("-")) {
     flags.push(arg);
-    if (
-      flagsWithValue.has(arg) &&
-      args[i + 1] &&
-      !args[i + 1]!.startsWith("-")
-    ) {
+    if (flagsWithValue.has(arg) && args[i + 1] && !args[i + 1]!.startsWith("-")) {
       flags.push(args[++i]!);
     }
     continue;
@@ -72,8 +69,7 @@ if (allowedRoots.length === 0) {
   process.exit(1);
 }
 
-const requestedRoots =
-  paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
+const requestedRoots = paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
 
 const files: string[] = [];
 for (const root of requestedRoots) {
@@ -93,7 +89,8 @@ for (const root of requestedRoots) {
 }
 
 process.env.ALCHEMY_TEST_DEV = "1";
-process.env.ALCHEMY_FLOCI_IMAGE ??= "floci:dev";
+
+preferLocalFlociImage("test:aws:floci");
 
 if (!flags.includes("--profile")) {
   flags.unshift("--profile", "testing");
@@ -106,6 +103,41 @@ if (!flags.includes("--concurrency") && !flags.includes("-c")) {
   // ballooned to ~60GB RSS on a full-suite run; 12 was ~4.5GB but too slow.
   // 32 matches the live-suite sweet spot from AGENTS.md.
   flags.unshift("--concurrency", "32");
+}
+
+// The emulator container outlives any single run, so orphaned rows survive
+// into the next one — and a hard kill (machine death, SIGKILL) skips every
+// finalizer and `afterAll`, so orphans are routine rather than exceptional.
+// They do not just linger; they actively break later runs: a fixed-name
+// fixture collides (`DuplicateLoadBalancerName`), and a Glue table whose S3
+// location was deleted fails unrelated Athena queries, because the query
+// engine resolves the whole catalog.
+//
+// This is the emulator's counterpart to the `pnpm nuke` + `state clear` step
+// that precedes a live-cloud suite run (see AGENTS.md, "The convergence
+// loop"). Set `ALCHEMY_FLOCI_NO_RESET=1` to keep state across runs while
+// iterating on a single suite.
+if (!process.env.ALCHEMY_FLOCI_NO_RESET) {
+  const endpoint = process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
+  try {
+    const res = await fetch(`${endpoint}/_floci/state/reset`, {
+      method: "POST",
+      signal: AbortSignal.timeout(30_000),
+    });
+    console.log(
+      res.ok
+        ? `test:aws:floci: reset emulator state (${endpoint})`
+        : `test:aws:floci: emulator state reset returned ${res.status}; continuing`,
+    );
+  } catch (error) {
+    // Not fatal: the emulator may simply not be up yet, in which case
+    // `ensureFloci` starts a fresh one during the run — which is clean anyway.
+    console.log(
+      `test:aws:floci: could not reset emulator state (${
+        error instanceof Error ? error.message : String(error)
+      }); continuing`,
+    );
+  }
 }
 
 const proc = Bun.spawn(["bun", "alchemy-test", ...files.sort(), ...flags], {

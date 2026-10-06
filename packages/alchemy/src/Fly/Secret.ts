@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import type { AppSecret } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
-import { createHash } from "node:crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -77,14 +77,14 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * managed in one place by Fly.
  *
  * For a secret only this {@link Service} reads from `.env` at deploy
- * time, yield `Config.redacted` instead. Do not pass `env: { ... }` on
+ * time, yield `Config.Redacted` instead. Do not pass `env: { ... }` on
  * a Service.
  *
  * @see https://fly.io/docs/apps/secrets/
  *
- * ### Config.redacted on a Service
+ * ### Config.Redacted on a Service
  * Most secrets in a Service come from your `.env`. Yield
- * `Config.redacted` in init. Alchemy binds the value onto the Machine.
+ * `Config.Redacted` in init. Alchemy binds the value onto the Machine.
  *
  * **Example:** Bind from .env
  * ```typescript
@@ -95,7 +95,7 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     const apiKey = yield* Config.redacted("API_KEY");
+ *     const apiKey = yield* Config.Redacted("API_KEY");
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -197,12 +197,11 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * ```
  *
  * @resource
+ * @product Secret
  */
 export const Secret: typeof SecretResource = Object.assign(
-  (
-    id: string,
-    props: SecretProps | Effect.Effect<SecretProps, never, Providers>,
-  ) => SecretResource(id, resolveSecretProps(props)),
+  (id: string, props: SecretProps | Effect.Effect<SecretProps, never, Providers>) =>
+    SecretResource(id, resolveSecretProps(props)),
   SecretResource,
 );
 
@@ -211,18 +210,14 @@ export class SecretNotCreated extends Data.TaggedError("Fly.SecretNotCreated")<{
   name: string;
 }> {}
 
-export class SecretAppRequired extends Data.TaggedError(
-  "Fly.SecretAppRequired",
-)<{
+export class SecretAppRequired extends Data.TaggedError("Fly.SecretAppRequired")<{
   message: string;
 }> {}
 
 const appNameOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { appName?: unknown };
-  return typeof rec.appName === "string" && rec.appName.length > 0
-    ? rec.appName
-    : undefined;
+  return typeof rec.appName === "string" && rec.appName.length > 0 ? rec.appName : undefined;
 };
 
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
@@ -301,9 +296,7 @@ export const SecretProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const appName =
-        output?.appName ??
-        (olds !== undefined ? appNameOf(olds.app) : undefined);
+      const appName = output?.appName ?? (olds !== undefined ? appNameOf(olds.app) : undefined);
       if (appName === undefined) return undefined;
       const name = yield* resolveName(id, olds?.name, output?.name);
       const found = yield* getByName(appName, name);
@@ -345,14 +338,10 @@ export const SecretProvider = () =>
 
       // Observe by cached identity, then the desired (app, name).
       let current =
-        output !== undefined
-          ? yield* getByName(output.appName, output.name)
-          : undefined;
+        output !== undefined ? yield* getByName(output.appName, output.name) : undefined;
       if (
         current === undefined &&
-        (output === undefined ||
-          output.appName !== appName ||
-          output.name !== name)
+        (output === undefined || output.appName !== appName || output.name !== name)
       ) {
         current = yield* getByName(appName, name);
       }
@@ -379,12 +368,9 @@ export const SecretProvider = () =>
       // previous value differs. Never log the plaintext.
       if (!createdThisRun) {
         const candidates = yield* flyDigestCandidates(desiredPlain);
-        const digestMatches =
-          current.digest !== undefined && candidates.includes(current.digest);
-        const previousPlain =
-          olds?.value !== undefined ? unwrapSecret(olds.value) : undefined;
-        const valueChanged =
-          previousPlain === undefined || previousPlain !== desiredPlain;
+        const digestMatches = current.digest !== undefined && candidates.includes(current.digest);
+        const previousPlain = olds?.value !== undefined ? unwrapSecret(olds.value) : undefined;
+        const valueChanged = previousPlain === undefined || previousPlain !== desiredPlain;
         if (!digestMatches && valueChanged) {
           yield* machines
             .updateSecrets({

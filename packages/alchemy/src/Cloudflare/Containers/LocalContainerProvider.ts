@@ -5,18 +5,18 @@ import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
-import type { ResourceBinding } from "../../Resource.ts";
+import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
+import { localAccountId } from "../LocalAccount.ts";
+import { generateLocalId, LOCAL_PROVIDERS_URL } from "../LocalRuntime.ts";
 import type {
   AnyContainerApplicationProps,
   ContainerApplication,
   DevContainerImage,
 } from "./ContainerApplication.ts";
-import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   createContainerApplicationName,
   makeContainerEnv,
@@ -44,7 +44,7 @@ import { ContainerPlatform } from "./ContainerPlatform.ts";
 export const LocalContainerProvider = () =>
   RpcProvider.effect(
     ContainerPlatform,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -69,8 +69,7 @@ export const LocalContainerProvider = () =>
           // point `dev` at both. The build-context materialization is shared
           // with the live provider (see `prepareContainerBuildContext`).
           if (news.main) {
-            const { context, dockerfile, hash } =
-              yield* prepareContainerBuildContext(id, news);
+            const { context, dockerfile, hash } = yield* prepareContainerBuildContext(id, news);
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
@@ -92,10 +91,7 @@ export const LocalContainerProvider = () =>
           // Variant 3a — inline Dockerfile content: materialize into the
           // same stable generated context the live provider uses and point
           // the runtime's build at it.
-          if (
-            news.dockerfile !== undefined &&
-            isInlineDockerfile(news.dockerfile)
-          ) {
+          if (news.dockerfile !== undefined && isInlineDockerfile(news.dockerfile)) {
             const content = news.dockerfile.content;
             if (typeof content !== "string") {
               return yield* Effect.die(
@@ -104,10 +100,7 @@ export const LocalContainerProvider = () =>
                 ),
               );
             }
-            const { context } = yield* materializeInlineDockerfileContext(
-              id,
-              content,
-            );
+            const { context } = yield* materializeInlineDockerfileContext(id, content);
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
@@ -139,6 +132,35 @@ export const LocalContainerProvider = () =>
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
 
+      /**
+       * The props that decide what the dev IMAGE is, picked off the
+       * possibly-unresolved plan-time props — or `undefined` when any of
+       * them has not resolved yet. Everything else (env, instances, …) may
+       * still carry Outputs/Effects (the `.make` form's `exports` impl
+       * Effect never resolves at all) without disabling the content check.
+       */
+      const resolvedImageInputs = (input: unknown): AnyContainerApplicationProps | undefined => {
+        if (typeof input !== "object" || input === null) return undefined;
+        const news = input as AnyContainerApplicationProps;
+        const picked = {
+          main: news.main,
+          image: news.image,
+          dockerfile: news.dockerfile,
+          context: news.context,
+          runtime: news.runtime,
+          handler: news.handler,
+          isExternal: news.isExternal,
+          external: news.external,
+          build: news.build,
+          autoInstallExternals: news.autoInstallExternals,
+        };
+        if (!isResolved(picked)) return undefined;
+        if (!picked.main && !picked.image && !picked.dockerfile && !picked.context) {
+          return undefined;
+        }
+        return picked as AnyContainerApplicationProps;
+      };
+
       const placeholderConfiguration = (
         props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
@@ -151,6 +173,7 @@ export const LocalContainerProvider = () =>
           secrets: props.secrets,
           vcpu: props.vcpu,
           memory: props.memory,
+          memoryMib: props.memoryMib,
           disk: props.disk,
           environmentVariables: Object.entries(env).map(([name, value]) => ({
             name,
@@ -176,7 +199,7 @@ export const LocalContainerProvider = () =>
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         output: ContainerApplication["Attributes"] | undefined;
       }) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+        const accountId = yield* localAccountId;
         const env = makeContainerEnv(news, accountId, bindings);
         const { dev, hash } = yield* prepareImage(id, news);
         return {
@@ -198,17 +221,32 @@ export const LocalContainerProvider = () =>
       });
 
       return {
-        // No HMR for containers (yet): bundle once on first reconcile, then
-        // treat the resource as a no-op so subsequent reconciles don't
-        // re-bundle on every change.
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output }) {
           if (!output) return { action: "update" };
+          // A content-only edit (an imported module of `main`, a Dockerfile,
+          // a context file) changes no prop, so the engine's structural
+          // fallback would call it a noop and the image would never rebuild.
+          // Compare the recomputed image hash instead — and gate only on
+          // the IMAGE inputs being resolved, not the whole props bag: the
+          // platform `.make` form carries an `exports` impl Effect that is
+          // never "resolved", and requiring full resolution silently
+          // disabled this check for every effectful container.
+          const imageInputs = resolvedImageInputs(news);
+          if (imageInputs !== undefined) {
+            // Recompute fresh on every plan. `prepareImage` is memoized so
+            // a plan's diff→precreate→reconcile chain bundles once — but
+            // this provider runs in the RPC sidecar, whose `ArtifactStore`
+            // outlives every run, so without this eviction the FIRST run's
+            // hash would be compared forever.
+            yield* (yield* Artifacts.Artifacts).delete(`container-image:${id}`);
+            const input = yield* prepareImage(id, imageInputs);
+            if (input.hash !== output.hash?.image || !output.dev) {
+              return { action: "update" };
+            }
+          }
           if (!isResolved(news)) return undefined;
-          const input = yield* prepareImage(id, news);
-          return input.hash !== output.hash?.image || !output.dev
-            ? { action: "update" }
-            : undefined;
+          return !output.dev ? { action: "update" } : undefined;
         }),
         read: Effect.fn(function* ({ output }) {
           return output;

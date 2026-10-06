@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { AnomalyMonitor } from "@/AWS/CostExplorer/AnomalyMonitor.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as ce from "@distilled.cloud/aws/cost-explorer";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AnomalyMonitor } from "@/AWS/CostExplorer/AnomalyMonitor.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,9 +31,7 @@ const assertMonitorGone = (monitorArn: string) =>
   Effect.gen(function* () {
     const found = yield* getMonitor(monitorArn);
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`monitor '${monitorArn}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`monitor '${monitorArn}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -61,7 +59,10 @@ test.provider(
       );
       expect(error._tag).toBe("UnknownMonitorException");
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:aws", "provider:aws:costexplorer", "live"],
+    timeout: 60_000,
+  },
 );
 
 test.provider(
@@ -89,12 +90,8 @@ test.provider(
       const created = yield* getMonitor(deployed.monitorArn);
       expect(created?.MonitorName).toBe(monitorName);
       expect(created?.MonitorType).toBe("CUSTOM");
-      const tags = yield* pin(
-        ce.listTagsForResource({ ResourceArn: deployed.monitorArn }),
-      );
-      const tagRecord = Object.fromEntries(
-        (tags.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = yield* pin(ce.listTagsForResource({ ResourceArn: deployed.monitorArn }));
+      const tagRecord = Object.fromEntries((tags.ResourceTags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.fixture).toBe("cost-explorer-anomaly-monitor");
       expect(tagRecord["alchemy::id"]).toBe("Monitor");
 
@@ -125,7 +122,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertMonitorGone(deployed.monitorArn);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:costexplorer", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Monitor names are unique per account and the specification is create-only,
@@ -157,13 +157,14 @@ test.provider(
       expect(replaced.monitorArn).not.toBe(deployed.monitorArn);
       yield* assertMonitorGone(deployed.monitorArn);
       const after = yield* getMonitor(replaced.monitorArn);
-      expect(after?.MonitorSpecification?.Tags?.Values).toEqual([
-        "alchemy-replace-2",
-      ]);
+      expect(after?.MonitorSpecification?.Tags?.Values).toEqual(["alchemy-replace-2"]);
 
       // Destroy — the replacement monitor is gone.
       yield* stack.destroy();
       yield* assertMonitorGone(replaced.monitorArn);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:costexplorer", "live"],
+    timeout: 120_000,
+  },
 );

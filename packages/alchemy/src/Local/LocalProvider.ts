@@ -6,15 +6,11 @@ import * as Fiber from "effect/Fiber";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
 import { isResolved, stripEffects, type Diff } from "../Diff.ts";
 import type { Platform } from "../Platform.ts";
 import type { ProviderService } from "../Provider.ts";
-import type {
-  ResourceBinding,
-  ResourceClassLike,
-  ResourceLike,
-} from "../Resource.ts";
+import type { ScopedPlanStatusSession } from "../Report.ts";
+import type { ResourceBinding, ResourceClassLike, ResourceLike } from "../Resource.ts";
 import { sha256 } from "../Util/sha256.ts";
 import * as RpcProvider from "./RpcProvider.ts";
 
@@ -57,10 +53,7 @@ export interface LocalProviderInput<R extends ResourceLike> {
   bindings: ResourceBinding<R["Binding"]>[];
 }
 
-export interface StartContext<
-  R extends ResourceLike,
-  Config,
-> extends LocalProviderInput<R> {
+export interface StartContext<R extends ResourceLike, Config> extends LocalProviderInput<R> {
   /**
    * The value produced by {@link LocalProviderSpec.resolveConfig} for this
    * reconcile — the same value whose canonical hash decided that a
@@ -82,13 +75,18 @@ export interface StartContext<
 
 export interface StopContext {
   id: string;
+  /**
+   * Fully-qualified name (namespace path + logical id) — the key the
+   * generated instance registry uses. Cross-restart state a provider keeps
+   * outside instance scopes MUST be keyed by this, not `id`: two resources
+   * in different namespaces can share a logical id (two `AWS.Website.*`
+   * sites each declaring a `Command.Dev("Dev")`, ...).
+   */
+  fqn: string;
   instanceId: string;
 }
 
-export interface StablesContext<
-  R extends ResourceLike,
-  Config,
-> extends LocalProviderInput<R> {
+export interface StablesContext<R extends ResourceLike, Config> extends LocalProviderInput<R> {
   config: Config;
   output: R["Attributes"] | undefined;
 }
@@ -120,9 +118,7 @@ export interface LocalProviderSpec<
    *
    * @default `{ news: stripEffects(news), bindings }`
    */
-  resolveConfig?: (
-    ctx: LocalProviderInput<R>,
-  ) => Effect.Effect<Config, any, any>;
+  resolveConfig?: (ctx: LocalProviderInput<R>) => Effect.Effect<Config, any, any>;
   /**
    * Boot one instance: acquire the long-running process in the ambient
    * `Scope` and return the resource's Attributes once it is *ready* (URL
@@ -155,11 +151,7 @@ export interface LocalProviderSpec<
    */
   stables?: (
     ctx: StablesContext<R, Config>,
-  ) => Effect.Effect<
-    Extract<keyof R["Attributes"], string>[] | undefined,
-    any,
-    any
-  >;
+  ) => Effect.Effect<Extract<keyof R["Attributes"], string>[] | undefined, any, any>;
   precreate?: AnyReqProviderService<R>["precreate"];
   tail?: AnyReqProviderService<R>["tail"];
   logs?: AnyReqProviderService<R>["logs"];
@@ -226,10 +218,7 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
     return Object.fromEntries(
       Object.keys(input)
         .sort()
-        .map((key) => [
-          key,
-          normalize((input as Record<string, unknown>)[key]),
-        ]),
+        .map((key) => [key, normalize((input as Record<string, unknown>)[key])]),
     );
   };
   return sha256(JSON.stringify(normalize(value)));
@@ -259,7 +248,8 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
  * a per-id semaphore so restarts never interleave.
  *
  * @param cls - the resource class (or Platform) this provider serves.
- * @param serverEntryUrl - sidecar entry module (see {@link RpcProvider.effect}).
+ * @param providersUrl - the provider group module this provider is registered
+ *   in (see {@link RpcProvider.effect}).
  * @param spec - Effect constructing the {@link LocalProviderSpec}; resolve
  *   the services your callbacks need here and close over them.
  */
@@ -270,12 +260,12 @@ export const make = <
   Req = never,
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
-  serverEntryUrl: string,
+  providersUrl: string,
   spec: Effect.Effect<LocalProviderSpec<R, Config, StartR>, never, Req>,
 ) =>
   RpcProvider.effect(
     cls,
-    serverEntryUrl,
+    providersUrl,
     Effect.gen(function* () {
       const {
         resolveConfig = defaultResolveConfig<R, Config>,
@@ -291,14 +281,18 @@ export const make = <
       // The provider layer scope: in the sidecar this closes at session
       // shutdown, interrupting every registered instance and running its
       // finalizers (killing the processes).
-      const rootScope = yield* Effect.scope;
+      // Close independent instances concurrently at provider shutdown.
+      const rootScope = yield* Scope.fork(yield* Effect.scope, "parallel");
 
-      // Keyed by logical id: a restart replaces the entry, a replacement's
-      // new generation overwrites it (and the old generation's delete is
-      // gated on `instanceId` so it cannot kill the successor).
+      // Keyed by FQN (namespace path + logical id): a restart replaces the
+      // entry, a replacement's new generation overwrites it (and the old
+      // generation's delete is gated on `instanceId` so it cannot kill the
+      // successor). NOT the logical id — that collides across namespaces
+      // (two sites each declaring a `Command.Dev("Dev")` would evict each
+      // other's running process).
       const instances = new Map<string, Instance<R["Attributes"]>>();
 
-      // Serializes reconcile/delete per logical id so a restart can never
+      // Serializes reconcile/delete per resource so a restart can never
       // interleave with another restart or a delete and leak a scope.
       const locks = new Map<string, Semaphore.Semaphore>();
       const lock = (id: string) => {
@@ -309,22 +303,16 @@ export const make = <
         }
         return semaphore;
       };
-      const withLock = <A, E, RR>(
-        id: string,
-        effect: Effect.Effect<A, E, RR>,
-      ) => Semaphore.withPermits(lock(id), 1)(effect);
+      const withLock = <A, E, RR>(key: string, effect: Effect.Effect<A, E, RR>) =>
+        Semaphore.withPermits(lock(key), 1)(effect);
 
-      const resolveDesired = Effect.fn(function* (
-        input: LocalProviderInput<R>,
-      ) {
+      const resolveDesired = Effect.fn(function* (input: LocalProviderInput<R>) {
         const config = yield* resolveConfig(input);
         const configHash = yield* canonicalHash(config);
         return { config, configHash };
       });
 
-      const teardown = Effect.fn(function* (
-        instance: Instance<R["Attributes"]>,
-      ) {
+      const teardown = Effect.fn(function* (instance: Instance<R["Attributes"]>) {
         yield* Fiber.interrupt(instance.fiber);
         yield* Scope.close(instance.scope, Exit.void);
       });
@@ -337,8 +325,8 @@ export const make = <
       ) {
         const token = {};
         const invalidate = Effect.sync(() => {
-          if (instances.get(input.id)?.token === token) {
-            instances.delete(input.id);
+          if (instances.get(input.fqn)?.token === token) {
+            instances.delete(input.fqn);
           }
         });
         const scope = yield* Scope.fork(rootScope);
@@ -348,7 +336,7 @@ export const make = <
           session,
           invalidate,
         }).pipe(Effect.forkDetach, Scope.provide(scope));
-        instances.set(input.id, {
+        instances.set(input.fqn, {
           instanceId: input.instanceId,
           config,
           configHash,
@@ -404,15 +392,13 @@ export const make = <
             bindings: newBindings as ResourceBinding<R["Binding"]>[],
           };
           const { config, configHash } = yield* resolveDesired(input);
-          const existing = instances.get(id);
+          const existing = instances.get(fqn);
           if (existing && existing.configHash === configHash) {
             return { action: "noop" } satisfies Diff;
           }
           return {
             action: "update",
-            stables: stables
-              ? yield* stables({ ...input, config, output })
-              : undefined,
+            stables: stables ? yield* stables({ ...input, config, output }) : undefined,
           } satisfies Diff;
         }),
         reconcile: Effect.fn(function* ({
@@ -431,7 +417,7 @@ export const make = <
           session: ScopedPlanStatusSession;
         }) {
           return yield* withLock(
-            id,
+            fqn,
             Effect.gen(function* () {
               const input: LocalProviderInput<R> = {
                 id,
@@ -441,22 +427,18 @@ export const make = <
                 bindings,
               };
               const { config, configHash } = yield* resolveDesired(input);
-              const existing = instances.get(id);
+              const existing = instances.get(fqn);
               if (existing) {
                 if (existing.configHash === configHash) {
-                  yield* Effect.log(
-                    `[${id}] No changes, using existing instance`,
-                  );
+                  yield* Effect.log(`[${fqn}] No changes, using existing instance`);
                   // Adopt the newest instanceId so a later replacement's
                   // old-generation delete cannot tear this instance down.
                   existing.instanceId = instanceId;
                   return yield* Fiber.join(existing.fiber);
                 }
-                yield* Effect.log(
-                  `[${id}] Changes detected, restarting instance`,
-                );
+                yield* Effect.log(`[${fqn}] Changes detected, restarting instance`);
                 yield* teardown(existing);
-                instances.delete(id);
+                instances.delete(fqn);
               }
               return yield* startInstance(input, session, config, configHash);
             }),
@@ -464,15 +446,17 @@ export const make = <
         }),
         delete: Effect.fn(function* ({
           id,
+          fqn,
           instanceId,
         }: {
           id: string;
+          fqn: string;
           instanceId: string;
         }) {
           yield* withLock(
-            id,
+            fqn,
             Effect.gen(function* () {
-              const existing = instances.get(id);
+              const existing = instances.get(fqn);
               if (existing && existing.instanceId !== instanceId) {
                 // A replacement's new generation is registered under this
                 // logical id — the old generation's delete must not touch
@@ -481,13 +465,13 @@ export const make = <
               }
               if (existing) {
                 yield* teardown(existing);
-                instances.delete(id);
+                instances.delete(fqn);
               }
               // Runs even when nothing is registered: cross-restart state
               // (proxies, restart hooks) and out-of-session cleanup (e.g.
               // deleting a local row during a live deploy) still need it.
               if (stop) {
-                yield* stop({ id, instanceId });
+                yield* stop({ id, fqn, instanceId });
               }
             }),
           );
@@ -502,11 +486,7 @@ export const make = <
       // requirement: the RpcProvider wrapper captures the layer-build
       // context and provides it to every lifecycle call, so services the
       // layer demanded at build are available to `start` at runtime.
-    }) as Effect.Effect<
-      ProviderService<R>,
-      never,
-      Req | Exclude<StartR, Scope.Scope>
-    >,
+    }) as Effect.Effect<ProviderService<R>, never, Req | Exclude<StartR, Scope.Scope>>,
   );
 
 const defaultResolveConfig = <R extends ResourceLike, Config>(

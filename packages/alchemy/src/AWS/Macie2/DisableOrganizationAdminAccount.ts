@@ -33,7 +33,6 @@ export interface DisableOrganizationAdminAccount extends Binding.Service<
     >
   >
 > {}
-export const DisableOrganizationAdminAccount =
-  Binding.Service<DisableOrganizationAdminAccount>(
-    "AWS.Macie2.DisableOrganizationAdminAccount",
-  );
+export const DisableOrganizationAdminAccount = Binding.Service<DisableOrganizationAdminAccount>(
+  "AWS.Macie2.DisableOrganizationAdminAccount",
+);

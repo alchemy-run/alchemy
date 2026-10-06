@@ -14,9 +14,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as YAML from "yaml";
 import type { KubernetesObjectDefinition } from "./objects.ts";
 
@@ -26,9 +26,7 @@ export class HelmError extends Data.TaggedError("HelmError")<{
   readonly cause?: unknown;
 }> {}
 
-const HelmBin = Config.string("HELM_BIN").pipe(
-  Effect.orElseSucceed(() => "helm"),
-);
+const HelmBin = Config.String("HELM_BIN").pipe(Effect.orElseSucceed(() => "helm"));
 
 export interface RenderHelmChartOptions {
   /**
@@ -55,14 +53,14 @@ export interface RenderHelmChartOptions {
 }
 
 /**
- * Render a chart with `helm template` and parse the multi-document YAML
- * output into object definitions. Every rendered object must carry
- * `apiVersion`, `kind`, and `metadata.name` (server-side apply needs a
- * name; `generateName`-only objects are rejected with a clear error).
+ * Render a chart with `helm template --no-hooks` and parse the
+ * multi-document YAML output into object definitions. Every rendered object
+ * must carry `apiVersion`, `kind`, and `metadata.name` (server-side apply
+ * needs a name; `generateName`-only objects are rejected with a clear
+ * error). Helm lifecycle hooks are excluded from the result (see
+ * {@link isHelmHook}).
  */
-export const renderHelmChart = Effect.fn(function* (
-  options: RenderHelmChartOptions,
-) {
+export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOptions) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -74,6 +72,11 @@ export const renderHelmChart = Effect.fn(function* (
     options.chart,
     "--namespace",
     options.namespace,
+    // Helm lifecycle hooks (`helm.sh/hook`) only make sense under Helm's own
+    // release events; HelmChart server-side applies the render and does not
+    // implement hook timing/weights/delete policies, so a hook (e.g. a
+    // pre-delete uninstall Job) must never enter the managed-object graph.
+    "--no-hooks",
   ];
   if (options.repo !== undefined) {
     args.push("--repo", options.repo);
@@ -111,12 +114,15 @@ export const renderHelmChart = Effect.fn(function* (
         { concurrency: "unbounded" },
       ),
     ),
+    // Scope the child to this render so it isn't tied to (and killed by)
+    // an enclosing scope that closes before helm exits.
+    Effect.scoped,
     // A spawn failure (almost always ENOENT) means the helm CLI itself is
     // missing — a machine-setup problem, not a resource error.
     Effect.catchCause((cause) =>
       Effect.die(
         new Error(
-          `Failed to run '${bin}': ${String(cause)}. Kubernetes.HelmChart renders charts with the local helm CLI — install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
+          `Failed to run '${bin}': ${String(cause)}. Kubernetes.HelmChart renders charts with the local helm CLI; if it isn't installed, install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
         ),
       ),
     ),
@@ -135,7 +141,21 @@ export const renderHelmChart = Effect.fn(function* (
   return yield* parseRenderedManifests(options.chart, result.stdout);
 });
 
-/** Parse `helm template` output (multi-document YAML) into definitions. */
+/**
+ * Whether a rendered object is a Helm lifecycle hook (`helm.sh/hook`
+ * annotation). Hooks are executed by Helm at release events (pre-install,
+ * pre-delete, test, …); HelmChart has no release and no hook lifecycle, so
+ * they are filtered out rather than applied as ordinary objects.
+ */
+export const isHelmHook = (object: KubernetesObjectDefinition): boolean =>
+  typeof object.metadata.annotations?.["helm.sh/hook"] === "string";
+
+/**
+ * Parse `helm template` output (multi-document YAML) into definitions.
+ * Hook-annotated objects are dropped — `renderHelmChart` already passes
+ * `--no-hooks`, but the parser enforces the invariant independently of the
+ * helm CLI's behavior.
+ */
 export const parseRenderedManifests = (
   chart: string,
   rendered: string,
@@ -145,10 +165,7 @@ export const parseRenderedManifests = (
     // Strip only that exact leading preamble; chart output remains subject to
     // the same strict Kubernetes object validation below.
     const manifests = chart.startsWith("oci://")
-      ? rendered.replace(
-          /^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/,
-          "",
-        )
+      ? rendered.replace(/^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/, "")
       : rendered;
     const documents = yield* Effect.try({
       try: () => YAML.parseAllDocuments(manifests),
@@ -173,10 +190,7 @@ export const parseRenderedManifests = (
         );
       }
       const object = value as Partial<KubernetesObjectDefinition>;
-      if (
-        typeof object.apiVersion !== "string" ||
-        typeof object.kind !== "string"
-      ) {
+      if (typeof object.apiVersion !== "string" || typeof object.kind !== "string") {
         return yield* Effect.fail(
           new HelmError({
             message: `Chart '${chart}' rendered an object without apiVersion/kind: ${JSON.stringify(value).slice(0, 200)}`,
@@ -190,7 +204,9 @@ export const parseRenderedManifests = (
           }),
         );
       }
-      objects.push(object as KubernetesObjectDefinition);
+      const definition = object as KubernetesObjectDefinition;
+      if (isHelmHook(definition)) continue;
+      objects.push(definition);
     }
     return objects;
   });

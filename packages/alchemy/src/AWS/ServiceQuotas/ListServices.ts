@@ -26,12 +26,7 @@ export interface ListServices extends Binding.Service<
   () => Effect.Effect<
     (
       request?: servicequotas.ListServicesRequest,
-    ) => Effect.Effect<
-      servicequotas.ListServicesResponse,
-      servicequotas.ListServicesError
-    >
+    ) => Effect.Effect<servicequotas.ListServicesResponse, servicequotas.ListServicesError>
   >
 > {}
-export const ListServices = Binding.Service<ListServices>(
-  "AWS.ServiceQuotas.ListServices",
-);
+export const ListServices = Binding.Service<ListServices>("AWS.ServiceQuotas.ListServices");

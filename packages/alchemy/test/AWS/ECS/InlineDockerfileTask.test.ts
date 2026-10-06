@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 import InlineDockerfileTaskLive, {
   InlineDockerfileTask,
@@ -49,40 +49,49 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
 
       expect(taskDefinitionArn).toBeTruthy();
 
-      // Launch the one-shot task once, out-of-band.
-      const started = yield* ecs.runTask({
-        cluster: clusterArn,
-        taskDefinition: taskDefinitionArn!,
-        launchType: "FARGATE",
-        count: 1,
-        startedBy: "alchemy-inline-dockerfile-test",
-        networkConfiguration: {
-          awsvpcConfiguration: {
-            subnets: [subnetId!],
-            assignPublicIp: "ENABLED",
+      // Launch the one-shot task once, out-of-band. The task/execution
+      // roles were created seconds ago: ECS rejects `runTask` with
+      // "unable to assume the role" until IAM propagates, so retry that
+      // one typed error (bounded).
+      const started = yield* ecs
+        .runTask({
+          cluster: clusterArn,
+          taskDefinition: taskDefinitionArn!,
+          launchType: "FARGATE",
+          count: 1,
+          startedBy: "alchemy-inline-dockerfile-test",
+          networkConfiguration: {
+            awsvpcConfiguration: {
+              subnets: [subnetId!],
+              assignPublicIp: "ENABLED",
+            },
           },
-        },
-      });
+        })
+        .pipe(
+          Effect.retry({
+            while: (e) =>
+              e._tag === "ClientException" &&
+              (e.message ?? "").includes("unable to assume the role"),
+            schedule: Schedule.spaced("5 seconds"),
+            times: 12,
+          }),
+        );
       expect(started.failures ?? []).toEqual([]);
       const taskArn = started.tasks?.[0]?.taskArn;
       expect(taskArn).toBeTruthy();
 
       // Wait for the task to stop: image pull + container boot + the
       // one-shot program running to completion (~1-3 minutes cold).
-      const stopped = yield* ecs
-        .describeTasks({ cluster: clusterArn, tasks: [taskArn!] })
-        .pipe(
-          Effect.flatMap((result) => {
-            const task = result.tasks?.[0];
-            return task?.lastStatus === "STOPPED"
-              ? Effect.succeed(task)
-              : Effect.fail(
-                  new Error(`task not stopped yet: ${task?.lastStatus}`),
-                );
-          }),
-          Effect.tapError((error) => Effect.logInfo(String(error))),
-          Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
-        );
+      const stopped = yield* ecs.describeTasks({ cluster: clusterArn, tasks: [taskArn!] }).pipe(
+        Effect.flatMap((result) => {
+          const task = result.tasks?.[0];
+          return task?.lastStatus === "STOPPED"
+            ? Effect.succeed(task)
+            : Effect.fail(new Error(`task not stopped yet: ${task?.lastStatus}`));
+        }),
+        Effect.tapError((error) => Effect.logInfo(String(error))),
+        Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
+      );
 
       // Exit 0 requires the artifact to have been baked by the inline RUN.
       expect(stopped.stoppedReason ?? "").not.toContain("CannotPullContainer");
@@ -90,5 +99,15 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
 
       yield* stack.destroy();
     }),
-  { timeout: 900_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:ecs",
+      "provider:docker",
+      "provider:docker:dockerfile",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );

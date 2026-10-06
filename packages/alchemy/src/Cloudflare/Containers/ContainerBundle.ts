@@ -4,16 +4,11 @@ import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
@@ -83,10 +78,7 @@ export const makeContainerEnv = (
  * Derive the physical name for a container application. Shared between the
  * live and local providers so they agree on the deterministic name.
  */
-export const createContainerApplicationName = (
-  id: string,
-  name: string | undefined,
-) =>
+export const createContainerApplicationName = (id: string, name: string | undefined) =>
   Effect.suspend(() => {
     if (name) return Effect.succeed(name);
     return createPhysicalName({
@@ -110,10 +102,7 @@ export const createContainerApplicationName = (
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
-  props: Pick<
-    AnyContainerApplicationProps,
-    "main" | "image" | "dockerfile" | "context"
-  >,
+  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
 ): Effect.Effect<void> => {
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
@@ -221,15 +210,11 @@ export const buildFinalDockerfile = (
   external: string[] = [],
   autoInstallExternals = true,
 ): string => {
-  const base =
-    envPreamble ??
-    (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
+  const base = envPreamble ?? (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   const installCmd = runtime === "bun" ? "bun add" : "npm install";
   const installStep =
-    autoInstallExternals && external.length > 0
-      ? `RUN ${installCmd} ${external.join(" ")}`
-      : "";
+    autoInstallExternals && external.length > 0 ? `RUN ${installCmd} ${external.join(" ")}` : "";
   return [
     base,
     "",
@@ -260,11 +245,7 @@ export const materializeInlineDockerfileContext = Effect.fn(function* (
   const { dotAlchemy } = yield* AlchemyContext;
   const docker = yield* Docker;
   const path = yield* Path.Path;
-  const context = yield* getStableContextDir(
-    dotAlchemy,
-    dotAlchemy,
-    `${id}-dockerfile`,
-  );
+  const context = yield* getStableContextDir(dotAlchemy, dotAlchemy, `${id}-dockerfile`);
   yield* docker.materialize({ context, dockerfile: content, files: [] });
   return { context, dockerfile: path.join(context, "Dockerfile") };
 });
@@ -302,10 +283,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   const realMain = yield* resolveMainPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
-  const buildBundle = Effect.fn(function* (
-    entry: string,
-    plugins?: rolldown.RolldownPluginOption,
-  ) {
+  const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {
     return yield* Bundle.build(
       {
         ...build?.input,
@@ -321,9 +299,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
         platform: "node",
         resolve: {
           conditionNames:
-            runtime === "bun"
-              ? ["bun", "import", "module", "default"]
-              : ["node", "import", "module", "default"],
+            runtime === "bun" ? [...Bundle.BUN_CONDITION_NAMES] : [...Bundle.NODE_CONDITION_NAMES],
           ...build?.input?.resolve,
         },
         plugins: [build?.input?.plugins, plugins],
@@ -347,104 +323,17 @@ export const bundleContainerProgram = Effect.fn(function* ({
         realMain,
         virtualEntryPlugin(
           (importPath) => `
-${
-  runtime === "bun"
-    ? `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-const HttpServer = BunHttpServer;
-`
-    : `
-import { NodeServices } from "@effect/platform-node";
-import { NodeHttpServer } from "alchemy/Http";
-const HttpServer = NodeHttpServer;
-`
-}
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import { provideProcessTelemetry } from "alchemy/Telemetry";
-import { CloudflareEnvironment } from "alchemy/Cloudflare";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import { MinimumLogLevel } from "effect/References";
-
+import { bootstrap } from ${JSON.stringify(
+            runtime === "bun"
+              ? "alchemy/Runtime/Bootstrap/CloudflareContainerBun"
+              : "alchemy/Runtime/Bootstrap/CloudflareContainerNode",
+          )};
 import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
-  FetchHttpClient.layer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(Stack, {
-  name: ${JSON.stringify(stack.name)},
-  stage: ${JSON.stringify(stack.stage)},
-  bindings: {},
-  resources: {}
-});
-
-const serverEffect = tag.pipe(
-  // Process-lifetime telemetry: built once into the root scope; exporters
-  // batch on their intervals and flush when the scope closes on graceful
-  // shutdown.
-  Effect.flatMap((func) =>
-    func.RuntimeContext.exports.pipe(
-      Effect.flatMap((exports) => exports.default),
-      provideProcessTelemetry(func.RuntimeContext),
-    ),
-  ),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(HttpServer()),
-      // Capability bindings that talk to Cloudflare's HTTP API from inside the
-      // container (e.g. R2/KV/Queue \`*Http\` bindings) resolve their account via
-      // \`CloudflareEnvironment\` at runtime, exactly like the Worker bridge does
-      // (the service value is an \`Effect\` of the resolved credentials). The
-      // per-operation account/token are read from the container's env (the bound
-      // token outputs), so an absent account id here is harmless.
-      Layer.provideMerge(
-        Layer.succeed(
-          CloudflareEnvironment,
-          Effect.succeed({
-            account: process.env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
-          }),
-        )
-      ),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          // Auto-bound \`Config\` values arrive in the env as
-          // \`{"_tag":"Redacted","value":...}\` markers; reify them so a
-          // \`Config\` re-read inside a handler decodes the raw source value.
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Container bootstrap starting...");
-await Effect.runPromise(serverEffect).catch((err) => {
-  console.error("Container bootstrap failed:", err);
-  process.exit(1);
-})`,
+await bootstrap(entrypoint, ${JSON.stringify({
+            stack: { name: stack.name, stage: stack.stage },
+          })});
+`,
         ),
       );
 
@@ -456,10 +345,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
   // code runs).
   const files = bundleOutput.files.map((f) => ({
     path: f.path,
-    content:
-      typeof f.content === "string"
-        ? new TextEncoder().encode(f.content)
-        : f.content,
+    content: typeof f.content === "string" ? new TextEncoder().encode(f.content) : f.content,
   }));
 
   return { files, hash: bundleOutput.hash };
@@ -492,17 +378,11 @@ export const prepareContainerBuildContext = Effect.fn(function* (
 
   const main = news.main;
   if (!main) {
-    return yield* Effect.die(
-      new Error("Container requires a `main` entrypoint."),
-    );
+    return yield* Effect.die(new Error("Container requires a `main` entrypoint."));
   }
   yield* validateContainerImageProps(news);
   const runtime = news.runtime ?? "bun";
-  const context = yield* getStableContextDir(
-    process.cwd(),
-    dotAlchemy,
-    `${id}-container`,
-  );
+  const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
   const dockerfileContent = buildFinalDockerfile(
     yield* containerEnvPreamble(news),
     runtime,

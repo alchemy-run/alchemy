@@ -46,6 +46,4 @@ export interface GetProducts extends Binding.Service<
     ) => Effect.Effect<pricing.GetProductsResponse, pricing.GetProductsError>
   >
 > {}
-export const GetProducts = Binding.Service<GetProducts>(
-  "AWS.Pricing.GetProducts",
-);
+export const GetProducts = Binding.Service<GetProducts>("AWS.Pricing.GetProducts");

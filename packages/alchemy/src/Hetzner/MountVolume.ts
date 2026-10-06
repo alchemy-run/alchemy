@@ -28,9 +28,7 @@ const linuxDeviceOf = (volume: Volume): string => {
   return typeof value === "string" ? value : "";
 };
 
-const isBindHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
+const isBindHost = (value: unknown): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
   ((value as { Type?: string }).Type === "Hetzner.Service" ||
@@ -53,7 +51,7 @@ export interface ServiceBinding {
  *
  * `yield* Hetzner.MountVolume(volume, { path: "/data" })` inside a
  * Service impl registers `{ env, volumes: [{ volumeId, path }] }` on the
- * host. Service reconcile attaches the Volume (automount ok) and SSHs
+ * host. Service reconcile attaches the Volume (no automount) and SSHs
  * `mkdir` + `mount` + fstab at `path`. The same `(volume, server, path)`
  * from two Services is one attach and one mount.
  *
@@ -71,6 +69,7 @@ export interface ServiceBinding {
  * ```
  *
  * @binding
+ * @product Volume
  */
 export interface MountVolume extends Binding.Service<
   MountVolume,

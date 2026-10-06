@@ -1,15 +1,18 @@
+import { expect } from "bun:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as Alchemy from "alchemy";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Fly from "alchemy/Fly";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 import type { User } from "../src/schema.ts";
+import { MIGRATE_TOKEN } from "../src/shared.ts";
 
 /** A `User` row as it arrives over JSON — `createdAt` is an ISO string. */
 type SerializedUser = Omit<User, "createdAt"> & { createdAt: string };
@@ -20,18 +23,33 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const fetchOk = (url: string) =>
+/**
+ * Generated migration SQL, in journal order. `Drizzle.Schema` writes these
+ * during the deploy in `beforeAll`, so read lazily inside the test.
+ */
+const readMigrationSql = (): string[] => {
+  const dir = path.resolve(import.meta.dirname, "..", "migrations");
+  return fs
+    .readdirSync(dir)
+    .filter((entry) => fs.existsSync(path.join(dir, entry, "migration.sql")))
+    .sort()
+    .map((entry) => fs.readFileSync(path.join(dir, entry, "migration.sql"), "utf8"));
+};
+
+/** Run a request, retrying non-200s through the fresh app's warmup. */
+const executeOk = (request: HttpClientRequest.HttpClientRequest) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    return yield* client.get(url).pipe(
+    return yield* client.execute(request).pipe(
       Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`HTTP ${res.status}`)),
+        res.status === 200 ? Effect.succeed(res) : Effect.fail(new Error(`HTTP ${res.status}`)),
       ),
+      // Bounded (~90s): machine boot + route warmup. Never use unbounded
+      // exponential growth here — a genuinely broken route should surface
+      // well inside the test timeout.
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 20,
+        schedule: Schedule.spaced("2 seconds"),
+        times: 45,
       }),
     );
   });
@@ -50,15 +68,31 @@ test(
     expect(out.region).toBe("iad");
     expect(out.apiUrl).toBe(`https://${out.appName}.fly.dev`);
 
-    const health = yield* fetchOk(`${out.apiUrl}/health`);
+    // Apply the generated schema THROUGH the deployed Service. MPG is only
+    // reachable on the org's private network, so the in-network Service is
+    // the data plane for DDL too — the test never connects to the cluster
+    // directly. The `/migrate` route is idempotent, so warmup retries are
+    // safe.
+    const migrations = readMigrationSql();
+    expect(migrations.length).toBeGreaterThan(0);
+    for (const sqlText of migrations) {
+      const migrated = yield* executeOk(
+        HttpClientRequest.post(`${out.apiUrl}/migrate`).pipe(
+          HttpClientRequest.setHeader("x-migrate-token", MIGRATE_TOKEN),
+          HttpClientRequest.bodyText(sqlText),
+        ),
+      );
+      const { applied } = (yield* migrated.json) as { applied: number };
+      expect(applied).toBeGreaterThan(0);
+    }
+
+    const health = yield* executeOk(HttpClientRequest.get(`${out.apiUrl}/health`));
     expect(health.status).toBe(200);
     const body = (yield* health.json) as { ok: boolean; users: number };
     expect(body.ok).toBe(true);
     expect(body.users).toBeNumber();
 
-    const created = yield* HttpClient.execute(
-      HttpClientRequest.post(`${out.apiUrl}/users`),
-    );
+    const created = yield* HttpClient.execute(HttpClientRequest.post(`${out.apiUrl}/users`));
     expect(created.status).toBe(200);
     const createdBody = (yield* created.json) as { user: SerializedUser[] };
     expect(createdBody.user).toHaveLength(1);

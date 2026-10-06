@@ -1,23 +1,22 @@
+import { Retry } from "@distilled.cloud/prisma";
+import {
+  type GetBucketKeysResponse,
+  deleteBucketKey,
+  getBucketKeys,
+  createBucketKey,
+} from "@distilled.cloud/prisma/management";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  attrOrRedactedString,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Bucket } from "./Bucket.ts";
-import {
-  PrismaClient,
-  isNotFound,
-  type PrismaManagementClient,
-} from "./Client.ts";
+import { attrOrRedactedString, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import { physicalInstanceName } from "./Internal/EnvName.ts";
+import { type ObservedBucketKey, requiredSecretValue } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Providers } from "./Providers.ts";
 import {
   concreteIdsChanged,
@@ -26,7 +25,7 @@ import {
   resolveBucketId,
   unresolvedBucketIdOf,
 } from "./Refs.ts";
-import type { BucketKey as ApiBucketKey, BucketKeyRole } from "./Types.ts";
+import type { BucketKeyRole } from "./Types.ts";
 
 export interface BucketAccessKeyProps {
   /**
@@ -118,10 +117,9 @@ export interface BucketAccessKey extends Resource<
  * ```
  *
  * @resource
+ * @product Bucket
  */
-export const BucketAccessKey = Resource<BucketAccessKey>(
-  "Prisma.BucketAccessKey",
-);
+export const BucketAccessKey = Resource<BucketAccessKey>("Prisma.BucketAccessKey");
 
 const BUCKET_ACCESS_KEY_STABLES = [
   "bucketAccessKeyId",
@@ -145,21 +143,36 @@ export class AmbiguousBucketAccessKeyError extends Data.TaggedError(
   message: string;
 }> {}
 
-const listKeys = (client: PrismaManagementClient, bucketId: string) =>
-  client
-    .listBucketKeys(bucketId, { limit: 100 })
-    .pipe(Effect.catchIf(isNotFound, () => Effect.succeed([])));
-
-const uniqueKeyNamed = (
-  client: PrismaManagementClient,
-  bucketId: string,
-  expectedName: string,
-) =>
-  listKeys(client, bucketId).pipe(
-    Effect.flatMap((keys) => {
-      const matches = keys.filter(
-        (key: ApiBucketKey) => key.name === expectedName,
+// Distilled emits the cursor-paginated list operations as plain ops, so
+// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+const listKeys = (bucketId: string) =>
+  Effect.gen(function* () {
+    const keys: GetBucketKeysResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getBucketKeys(
+        cursor === undefined ? { bucketId, limit: 100 } : { bucketId, limit: 100, cursor },
       );
+      keys.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getBucketKeys: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return keys;
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
+
+const uniqueKeyNamed = (bucketId: string, expectedName: string) =>
+  listKeys(bucketId).pipe(
+    Effect.flatMap((keys) => {
+      const matches = keys.filter((key: ObservedBucketKey) => key.name === expectedName);
       return matches.length > 1
         ? Effect.fail(
             new AmbiguousBucketAccessKeyError({
@@ -177,7 +190,6 @@ const ProviderLive = () =>
   Provider.effect(
     BucketAccessKey,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: BUCKET_ACCESS_KEY_STABLES,
         // Bucket keys cannot be listed account-wide, and bucket deletion
@@ -188,8 +200,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output?.bucketAccessKeyId)) {
             return { action: "update" } as const;
           }
-          const oldBucketId =
-            output?.bucketId ?? unresolvedBucketIdOf(olds.bucket);
+          const oldBucketId = output?.bucketId ?? unresolvedBucketIdOf(olds.bucket);
           const newBucketId = isResolved(news.bucket)
             ? unresolvedBucketIdOf(news.bucket)
             : undefined;
@@ -201,11 +212,7 @@ const ProviderLive = () =>
           if (isResolved(news.role) && news.role !== olds.role) {
             return { action: "replace" } as const;
           }
-          if (
-            isResolved(news.name) &&
-            news.name !== undefined &&
-            news.name !== olds.name
-          ) {
+          if (isResolved(news.name) && news.name !== undefined && news.name !== olds.name) {
             return { action: "replace" } as const;
           }
           return undefined;
@@ -215,56 +222,51 @@ const ProviderLive = () =>
           // persisted state stays authoritative for credentials; the list
           // endpoint only confirms the key still exists.
           if (!output || isPrismaDevId(output.bucketAccessKeyId)) return output;
-          const keys = yield* listKeys(client, output.bucketId);
-          return keys.some(
-            (key: ApiBucketKey) => key.id === output.bucketAccessKeyId,
-          )
+          const keys = yield* listKeys(output.bucketId);
+          return keys.some((key: ObservedBucketKey) => key.id === output.bucketAccessKeyId)
             ? output
             : undefined;
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
-          const persisted =
-            output && !isPrismaDevId(output.bucketAccessKeyId)
-              ? output
-              : undefined;
+          const persisted = output && !isPrismaDevId(output.bucketAccessKeyId) ? output : undefined;
           if (persisted) {
             // Prisma returns the secret exactly once, at creation. Persisted
             // state is authoritative afterwards — but only while the key
             // still exists; a revoked key falls through to mint fresh
             // credentials.
-            const keys = yield* listKeys(client, persisted.bucketId);
-            if (
-              keys.some(
-                (key: ApiBucketKey) => key.id === persisted.bucketAccessKeyId,
-              )
-            ) {
+            const keys = yield* listKeys(persisted.bucketId);
+            if (keys.some((key: ObservedBucketKey) => key.id === persisted.bucketAccessKeyId)) {
               return persisted;
             }
           }
           const bucketId = yield* resolveBucketId(news.bucket);
-          const expectedName = physicalInstanceName(
-            news.name ?? id,
-            instanceId,
-          );
+          const expectedName = physicalInstanceName(news.name ?? id, instanceId);
           // A crash after create but before state persist leaves a key under
           // the deterministic name whose secret was never persisted and can
           // never be recovered. Revoke it and mint a fresh key rather than
           // leaking an unusable credential.
-          const orphan = yield* uniqueKeyNamed(client, bucketId, expectedName);
+          const orphan = yield* uniqueKeyNamed(bucketId, expectedName);
           if (orphan) {
-            yield* client
-              .deleteBucketKey(bucketId, orphan.id)
-              .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+            yield* deleteBucketKey({
+              bucketId,
+              keyId: orphan.id,
+            }).pipe(Effect.catchTag("NotFound", () => Effect.void));
           }
-          const created = yield* client.createBucketKey(bucketId, {
+          const created = yield* createBucketKey({
+            bucketId,
             name: expectedName,
             role: news.role,
-          });
+          }).pipe(
+            // The secret is revealed exactly once, so a replayed create
+            // would leak an unusable key; opt out of the retry policy.
+            Retry.none,
+            Effect.map((response) => response.data),
+          );
           return {
             bucketAccessKeyId: created.id,
             bucketId,
-            accessKeyId: created.accessKeyId,
-            secretAccessKey: Redacted.make(created.secretAccessKey),
+            accessKeyId: requiredSecretValue(created.accessKeyId),
+            secretAccessKey: Redacted.make(requiredSecretValue(created.secretAccessKey)),
             endpoint: created.endpoint,
             bucketName: created.bucketName,
           } satisfies BucketAccessKey["Attributes"];
@@ -273,31 +275,28 @@ const ProviderLive = () =>
           if (isPrismaDevId(output.bucketAccessKeyId)) return;
           // Bucket deletion revokes remaining keys server-side, so the key
           // may already be gone when the bucket was destroyed first.
-          yield* client
-            .deleteBucketKey(output.bucketId, output.bucketAccessKeyId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+          yield* deleteBucketKey({
+            bucketId: output.bucketId,
+            keyId: output.bucketAccessKeyId,
+          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
       };
     }),
   );
 
 const ProviderLocal = () =>
-  devProvider(
-    BucketAccessKey,
-    BUCKET_ACCESS_KEY_STABLES,
-    ({ id, news, output }) => ({
-      bucketAccessKeyId: devId("bucket-access-key", id),
-      bucketId: attrOrString(news.bucket, "bucketId") ?? devId("bucket", id),
-      accessKeyId: devId("access-key", id),
-      // Keep the fabricated secret stable across dev reconciles, mirroring
-      // the reveal-once live behavior where persisted state is authoritative.
-      secretAccessKey:
-        attrOrRedactedString(output, "secretAccessKey") ??
-        Redacted.make(devId("secret-access-key", id)),
-      endpoint: "http://localhost",
-      bucketName: `dev-${id}`,
-    }),
-  );
+  devProvider(BucketAccessKey, BUCKET_ACCESS_KEY_STABLES, ({ id, news, output }) => ({
+    bucketAccessKeyId: devId("bucket-access-key", id),
+    bucketId: attrOrString(news.bucket, "bucketId") ?? devId("bucket", id),
+    accessKeyId: devId("access-key", id),
+    // Keep the fabricated secret stable across dev reconciles, mirroring
+    // the reveal-once live behavior where persisted state is authoritative.
+    secretAccessKey:
+      attrOrRedactedString(output, "secretAccessKey") ??
+      Redacted.make(devId("secret-access-key", id)),
+    endpoint: "http://localhost",
+    bucketName: `dev-${id}`,
+  }));
 
 export const BucketAccessKeyProvider = () =>
   ProviderLayer.dual(BucketAccessKey, {

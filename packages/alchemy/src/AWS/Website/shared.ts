@@ -2,8 +2,8 @@ import type { Input } from "../../Input.ts";
 import type { Certificate } from "../ACM/Certificate.ts";
 import type { Distribution } from "../CloudFront/Distribution.ts";
 import type { Records } from "../Route53/Records.ts";
-import type { AssetFileOption } from "./AssetDeployment.ts";
 import type { Bucket } from "../S3/Bucket.ts";
+import type { AssetFileOption } from "./AssetDeployment.ts";
 
 /**
  * Same-stack resources a Router-attached site binds its concrete hostnames
@@ -31,7 +31,8 @@ export interface WebsiteRouterBindTargets {
   /**
    * The Router's Route 53 alias record set — bound hostnames get A-alias
    * records pointing at the distribution. Absent when the Router's domain
-   * sets `dns: false` or has no `hostedZoneId`.
+   * sets `dns: false`. Without an explicit `hostedZoneId`, the set infers
+   * its zone from the first bound hostname.
    */
   records?: Records;
 }
@@ -69,7 +70,11 @@ export interface WebsiteStandaloneDomainProps {
    */
   name: string;
   /**
-   * Hosted zone used for Route 53 automation.
+   * Hosted zone used for Route 53 automation. Optional — when omitted,
+   * the most specific PUBLIC hosted zone in the account containing each
+   * hostname is inferred by walking its parent domains; the deploy fails
+   * actionably when no zone matches. Pass an explicit id to pin the zone
+   * (e.g. when several zones could match).
    */
   hostedZoneId?: string;
   /**
@@ -164,9 +169,7 @@ export interface WebsiteRouterDomainProps {
  * site owns its own CloudFront distribution) or a Router attachment (the
  * site is served through an existing `AWS.Website.Router`).
  */
-export type WebsiteDomainProps =
-  | WebsiteStandaloneDomainProps
-  | WebsiteRouterDomainProps;
+export type WebsiteDomainProps = WebsiteStandaloneDomainProps | WebsiteRouterDomainProps;
 
 /**
  * Accepted `domain` prop shape: a bare hostname string (shorthand for
@@ -184,11 +187,7 @@ export type WebsiteDomainInput = string | WebsiteDomainProps | null;
 export const normalizeWebsiteDomain = <D extends WebsiteDomainProps>(
   domain: string | D | null | undefined,
 ): D | undefined =>
-  domain == null
-    ? undefined
-    : typeof domain === "string"
-      ? ({ name: domain } as D)
-      : domain;
+  domain == null ? undefined : typeof domain === "string" ? ({ name: domain } as D) : domain;
 
 export interface WebsiteRewrite {
   /**
@@ -240,12 +239,7 @@ export interface WebsiteInvalidationProps {
  * Character encoding appended as `charset` to inferred text-based content
  * types (`none` omits the charset entirely).
  */
-export type WebsiteTextEncoding =
-  | "utf-8"
-  | "iso-8859-1"
-  | "windows-1252"
-  | "ascii"
-  | "none";
+export type WebsiteTextEncoding = "utf-8" | "iso-8859-1" | "windows-1252" | "ascii" | "none";
 
 export interface StaticSiteBuildProps {
   /**
@@ -256,6 +250,10 @@ export interface StaticSiteBuildProps {
    * Directory containing the build output, relative to `path`.
    */
   output: string;
+  /**
+   * Environment variables exposed to the build command.
+   */
+  env?: Record<string, Input<string>>;
   /**
    * Glob patterns of files to hash. Paths are relative to `path`.
    * When the hash of matched files changes, the build will re-run.

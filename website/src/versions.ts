@@ -1,10 +1,6 @@
-import workspaceYaml from "../../pnpm-workspace.yaml?raw";
 import alchemyPkg from "../../packages/alchemy/package.json" with { type: "json" };
-import { parse } from "yaml";
-
-const workspace = parse(workspaceYaml) as {
-  catalogs: { effect: { effect: string } };
-};
 
 export const alchemyVersion = alchemyPkg.version;
-export const effectVersion = workspace.catalogs.effect.effect;
+// effect's npm dist-tag for the 4.0 release candidates (effect@rc,
+// @effect/platform-bun@rc, @effect/platform-node@rc).
+export const effectVersion = "rc";
