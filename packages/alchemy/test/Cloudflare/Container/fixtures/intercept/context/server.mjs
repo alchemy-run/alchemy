@@ -2,7 +2,7 @@
 // `/probe?url=<url>` fetches <url> from INSIDE the container and reports what
 // came back. The container has no internet, so only the owning Durable
 // Object's interception can answer.
-const http = require("node:http");
+import * as http from "node:http";
 
 const server = http.createServer(async (req, res) => {
   res.setHeader("content-type", "application/json");
