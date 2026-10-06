@@ -125,9 +125,10 @@ const makeClient = () => {
       calls.push(["listProjectDatabases", { projectId, query }]);
       return Effect.succeed([]);
     },
-    createDatabase: (input: unknown) => {
+    createDatabase: (input: { logicalId?: string }) => {
       calls.push(["createDatabase", input]);
       return Effect.succeed({
+        logicalId: input.logicalId ?? null,
         id: "database-1",
         type: "database",
         url: "https://api.prisma.test/v1/databases/database-1",
@@ -233,9 +234,10 @@ const makeClient = () => {
       calls.push(["listApps", query]);
       return Effect.succeed([]);
     },
-    createApp: (input: { projectId: string }) => {
+    createApp: (input: { projectId: string; logicalId?: string }) => {
       calls.push(["createApp", input]);
       return Effect.succeed({
+        logicalId: input.logicalId ?? null,
         id: "service-1",
         type: "app",
         url: "https://api.prisma.test/v1/services/service-1",
@@ -394,6 +396,10 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
  * operations. `dispatchTo` maps each handler's result onto the wire (see the
  * fixture).
  */
+// The logical-ID lookups list these routes before most operations; a suite
+// that does not declare them sees empty lists.
+const emptyList = () => Effect.succeed([]);
+
 const dispatchManagement = (client: any, request: Captured): Response => {
   {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
@@ -421,7 +427,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (tail === "branches") {
         return request.method === "GET"
           ? call(
-              client.listBranches,
+              client.listBranches ?? emptyList,
               [id, Object.fromEntries(new URLSearchParams(request.search))],
               list,
             )
@@ -438,7 +444,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (id === undefined) {
         return request.method === "GET"
           ? call(
-              client.listDatabases,
+              client.listDatabases ?? emptyList,
               [Object.fromEntries(new URLSearchParams(request.search))],
               list,
             )
@@ -528,7 +534,11 @@ const dispatchManagement = (client: any, request: Captured): Response => {
     if (head === "services") {
       if (id === undefined) {
         return request.method === "GET"
-          ? call(client.listApps, [Object.fromEntries(new URLSearchParams(request.search))], list)
+          ? call(
+              client.listApps ?? emptyList,
+              [Object.fromEntries(new URLSearchParams(request.search))],
+              list,
+            )
           : call(client.createApp, [body]);
       }
       if (tail === "deployments") {
@@ -1802,11 +1812,17 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expect(routesOf(fake.captured)).toEqual([
           "GET /v1/projects",
           "GET /v1/projects/project-1/databases",
+          // Database: logical-ID lookup, then the name fallback.
+          "GET /v1/projects/project-1/branches",
+          "GET /v1/databases",
           "GET /v1/projects/project-1/databases",
           "GET /v1/databases/database-1/connections",
           "GET /v1/databases/database-1/connections",
           "GET /v1/databases/database-1/connections",
           "GET /v1/projects/project-1/branches",
+          // App: logical-ID lookup, then the display-name fallback.
+          "GET /v1/projects/project-1/branches",
+          "GET /v1/services",
           "GET /v1/services",
           "GET /v1/projects/project-1/branches",
           "GET /v1/deployments/version-1",
@@ -1815,10 +1831,13 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           "GET /v1/source-repositories",
         ]);
         expect(calls.map(([operation]) => operation)).toEqual([
+          "listBranches",
           "listDatabaseConnections",
           "listDatabaseConnections",
           "listDatabaseConnections",
           "listBranches",
+          "listBranches",
+          "listApps",
           "listApps",
           "listBranches",
           "getDeployment",
@@ -2107,6 +2126,9 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
 
         expect(routesOf(fake.captured)).toEqual([
           "POST /v1/projects",
+          // Database looks up its logical ID before creating.
+          "GET /v1/projects/project-1/branches",
+          "GET /v1/databases",
           "POST /v1/databases",
           "GET /v1/databases/database-1/connections",
           "POST /v1/connections",
@@ -2130,10 +2152,17 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           region: "us-east-1",
         });
         expect(calls).toEqual([
+          ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
           [
             "createDatabase",
             // JSON transport drops `undefined` members.
-            { projectId: "project-1", region: "us-east-1", name: "main", isDefault: false },
+            {
+              projectId: "project-1",
+              region: "us-east-1",
+              name: "main",
+              isDefault: false,
+              logicalId: "Database",
+            },
           ],
           ["listDatabaseConnections", { databaseId: "database-1", query: { limit: 100 } }],
           ["createConnection", { databaseId: "database-1", name: "api-000000000000" }],
@@ -2151,6 +2180,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               displayName: "api",
               branchId: "branch-1",
               regionId: "us-east-1",
+              logicalId: "App",
             },
           ],
           ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
@@ -3452,6 +3482,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               input: { name: "primary", branchId: "branch-1" },
             },
           ],
+          // A database from before logical IDs gets its fqn stamped once.
+          ["updateDatabase", { id: "database-1", input: { logicalId: "Database" } }],
           ["getConnection", "connection-1"],
           ["rotateConnection", "connection-1"],
           ["getBranch", "branch-1"],
@@ -3465,6 +3497,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               input: { displayName: "web", branchId: "branch-1", branchGitName: undefined },
             },
           ],
+          ["updateApp", { id: "service-1", input: { logicalId: "App" } }],
           ["getEnvironmentVariable", "env-1"],
           ["updateEnvironmentVariable", { id: "env-1", input: { value: "new-secret" } }],
         ]);
@@ -3529,6 +3562,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               region: { id: "us-east-1", name: "US East" },
               source: { type: "empty" },
               branchId: "branch-main",
+              logicalId: "Database",
             };
           }),
         getApp: (id: string) =>
@@ -3545,6 +3579,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               latestDeploymentId: null,
               appEndpointDomain: "service-1.prisma.build",
               createdAt,
+              logicalId: "App",
             };
           }),
         listBranches: (projectId: string, query: unknown) =>
@@ -3675,6 +3710,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         region: { id: "us-east-1", name: "US East" },
         source: { type: "database" as const, databaseId: "source" },
         branchId: null,
+        logicalId: "Database",
       };
       const client = {
         getDatabase: (id: string) =>
@@ -3825,6 +3861,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         region: { id: "us-east-1", name: "US East" },
         source: { type: "empty" as const },
         branchId: "branch-1",
+        logicalId: "Database",
       };
       const client = {
         getDatabase: (id: string) =>
@@ -3972,6 +4009,70 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
       ],
+    },
+  );
+
+  it.effect(
+    "creates a database on a new git branch, then sets its derived logical ID",
+    () => {
+      const { client, calls } = makeClient();
+      const base = client as any;
+      const cloud = {
+        ...base,
+        createDatabase: (input: { branchGitName?: string; logicalId?: string }) =>
+          base.createDatabase(input).pipe(
+            Effect.map((database: object) => ({
+              ...database,
+              branchId: "branch-preview",
+              logicalId: input.logicalId ?? null,
+            })),
+          ),
+        updateDatabase: (id: string, input: { logicalId?: string }) => {
+          calls.push(["updateDatabase", { id, input }]);
+          return Effect.succeed({
+            ...logicalIdDatabase(id, "Database-000000000000", input.logicalId ?? null),
+            branchId: "branch-preview",
+          });
+        },
+      } as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDatabase.Provider;
+        const result = yield* provider.reconcile(
+          reconcileInput("Database", {
+            project: "project-1",
+            region: "us-east-1",
+            branchGitName: "preview",
+          }),
+        );
+
+        expect(result.logicalId).toBe("Database");
+        // The API refuses logicalId with branchGitName, and the branch does
+        // not exist yet, so the create goes through branchGitName alone.
+        const create = calls.find(([operation]) => operation === "createDatabase")?.[1];
+        expect(create).toMatchObject({ branchGitName: "preview" });
+        expect(create).not.toHaveProperty("logicalId");
+        const updates = calls.filter(([operation]) => operation === "updateDatabase");
+        expect(updates.at(-1)).toEqual([
+          "updateDatabase",
+          { id: "database-1", input: { logicalId: "Database" } },
+        ]);
+      }).pipe(
+        Effect.provide(providerLayer(cloud)),
+        Effect.provide(managementApi(cloud).layer),
+        Effect.provideService(Stack, {
+          name: "prisma-provider-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+        Effect.provideService(InstanceId, "00000000000000000000000000000000"),
+      );
+    },
+    {
+      tags: ["provider:prisma:database"],
     },
   );
 
@@ -4213,6 +4314,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         region: { id: "us-east-1", name: "US East" },
         source: { type: "empty" as const },
         branchId: "branch-main",
+        logicalId: "Database",
       });
       const client = {
         listProjectDatabases: (projectId: string, query: unknown) =>
@@ -5626,11 +5728,17 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             .map((request) => request.bodyJson),
         ).toEqual([
           { createDatabase: false, name: "app" },
-          { projectId: "project-1", region: "us-east-1", name: "main", isDefault: false },
+          {
+            projectId: "project-1",
+            region: "us-east-1",
+            name: "main",
+            isDefault: false,
+            logicalId: "Database",
+          },
           { databaseId: "database-1", name: "api-000000000000" },
           undefined,
           { gitName: "preview" },
-          { displayName: "api", branchId: "branch-main", projectId: "project-1" },
+          { displayName: "api", branchId: "branch-main", projectId: "project-1", logicalId: "App" },
           { projectId: "project-1", class: "production", key: "TOKEN", value: "secret" },
           { projectId: "project-1", provider: "github", providerRepositoryId: 123 },
         ]);
@@ -5645,6 +5753,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               source: undefined,
               branchId: undefined,
               branchGitName: undefined,
+              logicalId: "Database",
             },
           ],
           ["createConnection", { databaseId: "database-1", name: "api-000000000000" }],
@@ -5655,7 +5764,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           [
             "createApp",
             // JSON transport drops `undefined` members.
-            { projectId: "project-1", displayName: "api", branchId: "branch-main" },
+            {
+              projectId: "project-1",
+              displayName: "api",
+              branchId: "branch-main",
+              logicalId: "App",
+            },
           ],
           [
             "createEnvironmentVariable",

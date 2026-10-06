@@ -107,6 +107,7 @@ describe(
         latestDeploymentId: null,
         appEndpointDomain: "app-1.prisma.build",
         createdAt: "2026-01-01T00:00:00Z",
+        logicalId: "App",
       };
       const props = { project: "project-1", displayName: "api", regionId: "us-east-1" as const };
 
@@ -184,6 +185,7 @@ describe(
       const regionalApp = (id: string, branchId: string | null) => ({
         ...app(id, branchId),
         region: { id: "eu-west-3" as const, name: "Europe West" },
+        logicalId: "App",
       });
       const client = {
         listBranches: () => Effect.succeed([branch("branch-wanted")]),
@@ -218,7 +220,12 @@ describe(
         // regionId nor branchGitName.
         expect(calls[0]).toEqual([
           "createApp",
-          { projectId: "project-1", displayName: "api", branchId: "branch-wanted" },
+          {
+            projectId: "project-1",
+            displayName: "api",
+            branchId: "branch-wanted",
+            logicalId: "App",
+          },
         ]);
         expect(calls.map(([name]) => name)).toEqual(["createApp", "updateApp"]);
       }).pipe(provide(client));
@@ -227,12 +234,12 @@ describe(
     it.effect("repairs externally drifted mutable App state", () => {
       const calls: Array<[string, unknown?]> = [];
       const client = {
-        getApp: () => Effect.succeed({ ...app("app-1"), name: "drifted" }),
+        getApp: () => Effect.succeed({ ...app("app-1"), name: "drifted", logicalId: "App" }),
         listBranches: () => Effect.succeed([branch("branch-main")]),
         updateApp: (id: string, input: unknown) =>
           Effect.sync(() => {
             calls.push(["updateApp", { id, input }]);
-            return app(id);
+            return { ...app(id), logicalId: "App" };
           }),
       } as unknown as PrismaManagementClient;
 

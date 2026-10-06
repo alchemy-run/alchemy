@@ -47,10 +47,10 @@ export interface BucketProps {
   branchId?: string;
   /**
    * Stable identity of this declaration on the Prisma platform, unique per
-   * branch. When set, the provider finds the bucket by it within the project
-   * and branch, never by display name, so lost state or a rename in the
-   * Console does not create a second bucket. Changing it updates the bucket
-   * in place.
+   * branch. The provider finds the bucket by it within the project and
+   * branch, so lost state or a rename in the Console does not create a second
+   * bucket. Changing it updates the bucket in place.
+   * @default the resource's fully qualified logical ID, e.g. `"uploads"` or `"App/Uploads"`
    */
   logicalId?: string;
 }
@@ -194,7 +194,7 @@ const ProviderLive = () =>
       return {
         stables: ["bucketId"],
         list: () => listBuckets().pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
-        diff: Effect.fn(function* ({ olds, news, output }) {
+        diff: Effect.fn(function* ({ fqn, olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.bucketId)) {
             return { action: "update" } as const;
@@ -222,21 +222,24 @@ const ProviderLive = () =>
           }
           if (
             isResolved(news.logicalId) &&
-            news.logicalId !== undefined &&
-            news.logicalId !== (output ? output.logicalId : olds.logicalId)
+            (news.logicalId ?? fqn) !== (output ? output.logicalId : (olds.logicalId ?? fqn))
           ) {
             return { action: "update" } as const;
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ output, olds }) {
+        read: Effect.fn(function* ({ fqn, output, olds }) {
           const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           if (!bucketId) {
             const projectId = unresolvedProjectIdOf(olds.project);
-            if (!projectId || olds.logicalId === undefined) return undefined;
+            if (!projectId) return undefined;
             // Only a declaration assigns a logical ID, so a match is this
             // bucket.
-            const bucket = yield* findBucketByLogicalId(projectId, olds.logicalId, olds.branchId);
+            const bucket = yield* findBucketByLogicalId(
+              projectId,
+              olds.logicalId ?? fqn,
+              olds.branchId,
+            );
             return bucket ? attrsFrom(bucket) : undefined;
           }
           const bucket = yield* getBucket({ bucketId }).pipe(
@@ -245,9 +248,9 @@ const ProviderLive = () =>
           );
           return bucket ? attrsFrom(bucket) : undefined;
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ fqn, news, output }) {
           const projectId = yield* resolveProjectId(news.project);
-          const logicalId = news.logicalId;
+          const logicalId = news.logicalId ?? fqn;
           const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           let observed: ObservedBucket | undefined = bucketId
             ? yield* getBucket({ bucketId }).pipe(
@@ -255,7 +258,7 @@ const ProviderLive = () =>
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
             : undefined;
-          if (!observed && logicalId !== undefined) {
+          if (!observed) {
             observed = yield* findBucketByLogicalId(projectId, logicalId, news.branchId);
           }
           if (!observed) {
@@ -265,18 +268,14 @@ const ProviderLive = () =>
               ...(news.branchId === undefined || news.branchId === null
                 ? {}
                 : { branchId: news.branchId }),
-              ...(logicalId === undefined ? {} : { logicalId }),
+              logicalId,
             }).pipe(
               // A replayed create would make a second bucket; the retry policy
               // cannot see the request, so opt out explicitly.
               Retry.none,
               Effect.map((response) => response.data),
               Effect.catchTag("Conflict", (conflict) =>
-                Effect.fail(
-                  logicalId === undefined
-                    ? conflict
-                    : logicalIdTaken(logicalId, news.branchId, projectId, conflict),
-                ),
+                Effect.fail(logicalIdTaken(logicalId, news.branchId, projectId, conflict)),
               ),
             );
           }
@@ -309,7 +308,7 @@ const ProviderLive = () =>
               ),
             );
           }
-          if (logicalId !== undefined && observed.logicalId !== logicalId) {
+          if (observed.logicalId !== logicalId) {
             const { branchId } = observed;
             // The API refuses logicalId in the same request as a branch
             // move, so it is set only after the move above.
@@ -353,12 +352,12 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(Bucket, ["bucketId"], ({ id, news }) => ({
+  devProvider(Bucket, ["bucketId"], ({ id, fqn, news }) => ({
     bucketId: devId("bucket", id),
     name: news.name ?? id,
     projectId: attrOrString(news.project, "projectId") ?? devId("project", id),
     createdAt: DEV_TIMESTAMP,
-    logicalId: news.logicalId ?? null,
+    logicalId: news.logicalId ?? fqn,
   }));
 
 export const BucketProvider = () =>

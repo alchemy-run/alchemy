@@ -24,7 +24,7 @@ const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 // physicalBucketAccessKeyName(logical id "BucketAccessKey", instanceId above)
 const expectedKeyName = "BucketAccessKey-aaaaaaaaaaaa";
 
-const apiBucket = (id: string, name: string): ApiBucket => ({
+const apiBucket = (id: string, name: string): ApiBucket & { logicalId: string | null } => ({
   id,
   type: "bucket",
   url: `https://api.prisma.test/v1/buckets/${id}`,
@@ -34,6 +34,8 @@ const apiBucket = (id: string, name: string): ApiBucket => ({
   createdAt,
   project: { id: "project-1", url: "https://api.prisma.test/v1/projects/project-1", name: "app" },
   branchId: null,
+  // Stamped with the resource's fqn, as the provider leaves it.
+  logicalId: "Bucket",
 });
 
 const bucketAttrs = (id: string, name: string): Bucket["Attributes"] => ({
@@ -41,7 +43,7 @@ const bucketAttrs = (id: string, name: string): Bucket["Attributes"] => ({
   name,
   projectId: "project-1",
   createdAt,
-  logicalId: null,
+  logicalId: "Bucket",
 });
 
 const apiBucketKey = (id: string, name = expectedKeyName): ApiBucketKey => ({
@@ -94,6 +96,10 @@ const bucketApi = (client: any) =>
     const body = request.bodyJson as any;
     const { call, callVoid, list } = dispatchTo(request);
 
+    if (head === "projects" && tail === "branches" && request.method === "GET") {
+      // Without branches the logical-ID lookup resolves no default branch.
+      return call(client.listBranches ?? (() => Effect.succeed([])), [], list);
+    }
     if (head !== "buckets") return unhandled(request);
     if (bucketId === undefined) {
       return request.method === "GET"
@@ -367,7 +373,7 @@ describe(
     it.effect("cold read owns the bucket with the logical ID and ignores a same-named one", () => {
       const listed: unknown[] = [];
       const buckets = [
-        { ...apiBucket("bucket-named", "uploads"), branchId: "branch-1" },
+        { ...apiBucket("bucket-named", "uploads"), branchId: "branch-1", logicalId: null },
         {
           ...apiBucket("bucket-declared", "renamed-in-console"),
           branchId: "branch-1",
@@ -418,8 +424,14 @@ describe(
         ]);
 
         expect(yield* read("other")).toBeUndefined();
+        // Without an explicit logical ID the lookup uses the fqn, never the name.
         expect(yield* read()).toBeUndefined();
-        expect(listed).toHaveLength(2);
+        expect(listed).toHaveLength(3);
+        expect(listed[2]).toEqual({
+          projectId: "project-1",
+          logicalId: "Bucket",
+          branchId: "branch-1",
+        });
       }).pipe(Effect.provide(bucketLayer(client)));
     });
 

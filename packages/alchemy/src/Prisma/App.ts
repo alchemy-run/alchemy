@@ -55,9 +55,10 @@ export interface AppProps {
   branchGitName?: string;
   /**
    * Stable identity of this declaration on the Prisma platform, unique per
-   * branch. When set, the provider finds the App by it within the project and
-   * branch, never by display name, so lost state or a rename in the Console
-   * does not create a second App. Changing it updates the App in place.
+   * branch. The provider finds the App by it within the project and branch,
+   * so lost state or a rename in the Console does not create a second App.
+   * Changing it updates the App in place.
+   * @default the resource's fully qualified logical ID, e.g. `"web"` or `"Site/Web"`
    */
   logicalId?: string;
 }
@@ -250,7 +251,7 @@ const ProviderLive = () =>
       return {
         stables: ["appId"],
         list: () => listApps().pipe(Effect.map((apps) => apps.map(attrsFrom))),
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, fqn, olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.appId)) {
             return { action: "update" } as const;
@@ -274,8 +275,7 @@ const ProviderLive = () =>
           }
           if (
             isResolved(news.logicalId) &&
-            news.logicalId !== undefined &&
-            news.logicalId !== (output ? output.logicalId : olds.logicalId)
+            (news.logicalId ?? fqn) !== (output ? output.logicalId : (olds.logicalId ?? fqn))
           ) {
             return { action: "update" } as const;
           }
@@ -312,8 +312,9 @@ const ProviderLive = () =>
             ? ({ action: "update" } as const)
             : undefined;
         }),
-        read: Effect.fn(function* ({ id, output, olds }) {
+        read: Effect.fn(function* ({ id, fqn, output, olds }) {
           const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
+          let matchedByLogicalId = false;
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
@@ -322,9 +323,19 @@ const ProviderLive = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 if (!projectId) return undefined;
-                if (olds.logicalId !== undefined) {
-                  return yield* findAppByLogicalId(projectId, olds.logicalId, olds);
+                const byLogicalId = yield* findAppByLogicalId(
+                  projectId,
+                  olds.logicalId ?? fqn,
+                  olds,
+                );
+                if (byLogicalId) {
+                  matchedByLogicalId = true;
+                  return byLogicalId;
                 }
+                // An explicit logical ID is the only identity. A derived one
+                // falls back to the display name for Apps created before
+                // logical IDs existed.
+                if (olds.logicalId !== undefined) return undefined;
                 return yield* findApp(
                   projectId,
                   yield* createDisplayName(id, olds.displayName),
@@ -334,12 +345,13 @@ const ProviderLive = () =>
           if (!app) return undefined;
           const attrs = attrsFrom(app);
           // Only a declaration assigns a logical ID, so a match is this App.
-          return appId || olds.logicalId !== undefined ? attrs : Unowned(attrs);
+          return appId || matchedByLogicalId ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
+        reconcile: Effect.fn(function* ({ id, fqn, news, output }) {
           yield* validateAppProps(news);
           const projectId = yield* resolveProjectId(news.project);
           const displayName = yield* createDisplayName(id, news.displayName);
+          const logicalId = news.logicalId ?? fqn;
           const branch = yield* desiredBranchId(projectId, news);
           if (!branch.resolved) {
             return yield* Effect.fail(
@@ -363,7 +375,7 @@ const ProviderLive = () =>
               displayName,
               branchId: branch.id,
               ...(news.regionId === undefined ? {} : { regionId: news.regionId }),
-              ...(news.logicalId === undefined ? {} : { logicalId: news.logicalId }),
+              logicalId,
             }).pipe(
               // A replayed create would make a second App; the retry policy
               // cannot see the request, so opt out explicitly.
@@ -374,12 +386,9 @@ const ProviderLive = () =>
               })),
               Effect.catchTag("Conflict", (conflict) =>
                 Effect.gen(function* () {
-                  if (
-                    news.logicalId !== undefined &&
-                    (yield* findAppByLogicalId(projectId, news.logicalId, news)) !== undefined
-                  ) {
+                  if ((yield* findAppByLogicalId(projectId, logicalId, news)) !== undefined) {
                     return yield* Effect.fail(
-                      logicalIdTaken(news.logicalId, branch.id, projectId, conflict),
+                      logicalIdTaken(logicalId, branch.id, projectId, conflict),
                     );
                   }
                   const app = yield* findApp(projectId, displayName, news);
@@ -410,8 +419,7 @@ const ProviderLive = () =>
               branchId: branch.id,
             }).pipe(Effect.map((response) => response.data));
           }
-          const logicalId = news.logicalId;
-          if (logicalId !== undefined && app.logicalId !== logicalId) {
+          if (app.logicalId !== logicalId) {
             // The API refuses logicalId in the same request as a branch
             // move, so it is set only after the move above.
             app = yield* updateService({ serviceId: app.id, logicalId }).pipe(
@@ -451,7 +459,7 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(App, ["appId"], ({ id, news }) => ({
+  devProvider(App, ["appId"], ({ id, fqn, news }) => ({
     appId: devId("app", id),
     name: news.displayName ?? id,
     projectId: attrOrString(news.project, "projectId"),
@@ -460,7 +468,7 @@ const ProviderLocal = () =>
     latestDeploymentId: null,
     appEndpointDomain: "localhost",
     createdAt: DEV_TIMESTAMP,
-    logicalId: news.logicalId ?? null,
+    logicalId: news.logicalId ?? fqn,
   }));
 
 export const AppProvider = () =>
