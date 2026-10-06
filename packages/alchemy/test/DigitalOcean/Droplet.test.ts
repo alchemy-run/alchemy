@@ -26,7 +26,7 @@ const DROPLET_NAME = "alchemy-test-droplet";
 const RENAMED_DROPLET_NAME = "alchemy-test-droplet-renamed";
 // The smallest size that exists in every region. A live droplet costs
 // money. Each live test creates one droplet and always destroys it.
-const REGION = "sfo3";
+const REGION = "sfo2";
 const SIZE = "s-1vcpu-512mb-10gb";
 const IMAGE = "ubuntu-24-04-x64";
 const OTHER_IMAGE = "ubuntu-22-04-x64";
@@ -465,7 +465,7 @@ test.provider.skipIf(skipSlow)(
       expect(updated.ipv6).toMatch(/:/);
 
       // A same-named droplet without this resource's tag belongs to someone else.
-      const foreign = yield* stack
+      const twinFailure = yield* stack
         .deploy(
           Effect.gen(function* () {
             yield* droplet({
@@ -477,7 +477,7 @@ test.provider.skipIf(skipSlow)(
           }),
         )
         .pipe(Effect.flip);
-      expect(foreign).toBeInstanceOf(OwnedBySomeoneElse);
+      expect(twinFailure).toBeInstanceOf(OwnedBySomeoneElse);
 
       const reserved = yield* stack
         .deploy(

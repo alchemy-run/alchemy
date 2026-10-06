@@ -146,8 +146,8 @@ const hasFingerprint = (fingerprint: string) => (key: ApiSshKey) => key.fingerpr
  */
 export const diffSshKey = (news: Input<SshKeyProps>, olds: SshKeyProps) => {
   if (!isResolved(news)) return undefined;
-  const replaces = keyMaterial(news.publicKey) !== keyMaterial(olds.publicKey);
-  return replaces ? ({ action: "replace" } as const) : undefined;
+  const needsReplacement = keyMaterial(news.publicKey) !== keyMaterial(olds.publicKey);
+  return needsReplacement ? ({ action: "replace" } as const) : undefined;
 };
 
 const toAttrs = (key: ApiSshKey): SshKeyAttributes => ({
@@ -170,145 +170,132 @@ const registeredBySomeoneElse = (id: string, key: ApiSshKey) =>
     physicalName: key.name,
   });
 
-export const SshKeyProvider = () =>
-  Provider.effect(
-    SshKey,
-    Effect.gen(function* () {
-      const create = yield* DO.createSshKey;
-      const get = yield* DO.getSshKey;
-      const update = yield* DO.updateSshKey;
-      const deleteSshKey = yield* DO.deleteSshKey;
-      const list = yield* DO.listSshKeys;
-
-      // The API accepts an id or a fingerprint as the key identifier.
-      const observe = (identifier: string) =>
-        noneIfNotFound(
-          get({ ssh_key_identifier: identifier }).pipe(Effect.map((response) => response.ssh_key)),
-        );
-
-      const observeById = (sshKeyId: number) => observe(String(sshKeyId));
-
-      const listAll = list.items({ per_page: PAGE_SIZE }).pipe(Stream.runCollect);
-
-      // The stored id is a cache. The fingerprint finds the key without it.
-      const observeByIdOrFingerprint = Effect.fn(function* (
-        sshKeyId: number | undefined,
-        fingerprint: string,
-      ) {
-        if (sshKeyId !== undefined) {
-          const byId = yield* observeById(sshKeyId);
-          if (Option.isSome(byId)) return byId;
-        }
-        return yield* observe(fingerprint);
-      });
-
-      const waitForKey = (
-        sshKeyId: number,
-        wait: {
-          readonly until: (key: ApiSshKey) => boolean;
-          readonly waitingFor: string;
-        },
-      ) =>
-        pollUntil(observeById(sshKeyId), {
-          ...SSH_KEY_POLL,
-          until: (observed): observed is Option.Some<ApiSshKey> =>
-            Option.isSome(observed) && wait.until(observed.value),
-          onTimeout: () => new SshKeyWaitTimedOut({ sshKeyId, waitingFor: wait.waitingFor }),
-        }).pipe(Effect.map((observed) => observed.value));
-
-      const waitUntilGone = (sshKeyId: number) =>
-        pollUntil(observeById(sshKeyId), {
-          ...SSH_KEY_POLL,
-          until: Option.isNone,
-          onTimeout: () => new SshKeyStillExists({ sshKeyId }),
-        });
-
-      // A concurrent deploy of this resource can register the key first. A
-      // registration under another name belongs to someone else.
-      const observeOwnRegistration = Effect.fn(function* (
-        id: string,
-        fingerprint: string,
-        name: string,
-      ) {
-        const registered = yield* observe(fingerprint);
-        if (Option.isSome(registered) && !hasName(name)(registered.value)) {
-          return yield* registeredBySomeoneElse(id, registered.value);
-        }
-        return registered;
-      });
-
-      const register = (id: string, publicKey: string, fingerprint: string, name: string) =>
-        create({ name, public_key: publicKey }).pipe(
-          Effect.map((response) => response.ssh_key),
-          Effect.catchTag("SshKeyAlreadyRegistered", (rejection) =>
-            observeOwnRegistration(id, fingerprint, name).pipe(
-              Effect.flatMap(
-                Option.match({
-                  onNone: () => Effect.fail(rejection),
-                  onSome: Effect.succeed,
-                }),
-              ),
-            ),
-          ),
-          // A droplet created right after cannot use a key that GET does
-          // not return yet.
-          Effect.flatMap((key) =>
-            waitForKey(key.id, {
-              until: hasFingerprint(fingerprint),
-              waitingFor: "the registered key",
-            }),
-          ),
-        );
-
-      const syncName = Effect.fn(function* (key: ApiSshKey, name: string) {
-        if (hasName(name)(key)) return key;
-        yield* update({ ssh_key_identifier: String(key.id), name });
-        return yield* waitForKey(key.id, {
-          until: hasName(name),
-          waitingFor: `the name '${name}'`,
-        });
-      });
-
-      return {
-        stables: ["sshKeyId", "fingerprint", "publicKey"],
-        // A key carries no ownership marker, so a list cannot tell the keys
-        // Alchemy registered from the rest of the team's.
-        nuke: { skip: true },
-        list: Effect.fn(function* () {
-          return (yield* listAll).map(toAttrs);
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          if (output !== undefined) {
-            const byId = yield* observeById(output.sshKeyId);
-            if (Option.isSome(byId)) return toAttrs(byId.value);
-          }
-          const registered = yield* observe(yield* fingerprintOf(olds.publicKey));
-          if (Option.isNone(registered)) return undefined;
-          // A generated name proves ownership. A chosen name proves nothing,
-          // so the key belongs to someone else until `--adopt` says otherwise.
-          const generatedName = olds.name === undefined ? yield* physicalName(id) : undefined;
-          const attrs = toAttrs(registered.value);
-          return generatedName !== undefined && hasName(generatedName)(registered.value)
-            ? attrs
-            : Unowned(attrs);
-        }),
-        diff: ({ olds, news }) => Effect.succeed(diffSshKey(news, olds)),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const name = news.name ?? (yield* physicalName(id));
-          const publicKey = news.publicKey.trim();
-          const fingerprint = yield* fingerprintOf(publicKey);
-
-          const observed = yield* observeByIdOrFingerprint(output?.sshKeyId, fingerprint);
-          const key = yield* Option.match(observed, {
-            onNone: () => register(id, publicKey, fingerprint, name),
-            onSome: Effect.succeed,
-          });
-          return toAttrs(yield* syncName(key, name));
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* ignoreNotFound(deleteSshKey({ ssh_key_identifier: String(output.sshKeyId) }));
-          yield* waitUntilGone(output.sshKeyId);
-        }),
-      };
-    }),
+// The API accepts an id or a fingerprint as the key identifier.
+const observe = (identifier: string) =>
+  noneIfNotFound(
+    DO.getSshKey({ ssh_key_identifier: identifier }).pipe(
+      Effect.map((response) => response.ssh_key),
+    ),
   );
+
+const observeById = (sshKeyId: number) => observe(String(sshKeyId));
+
+const listAll = DO.listSshKeys.items({ per_page: PAGE_SIZE }).pipe(Stream.runCollect);
+
+// The stored id is a cache. The fingerprint finds the key without it.
+const observeByIdOrFingerprint = Effect.fn(function* (
+  sshKeyId: number | undefined,
+  fingerprint: string,
+) {
+  if (sshKeyId !== undefined) {
+    const byId = yield* observeById(sshKeyId);
+    if (Option.isSome(byId)) return byId;
+  }
+  return yield* observe(fingerprint);
+});
+
+const waitForKey = (
+  sshKeyId: number,
+  wait: {
+    readonly until: (key: ApiSshKey) => boolean;
+    readonly waitingFor: string;
+  },
+) =>
+  pollUntil(observeById(sshKeyId), {
+    ...SSH_KEY_POLL,
+    until: (observed): observed is Option.Some<ApiSshKey> =>
+      Option.isSome(observed) && wait.until(observed.value),
+    onTimeout: () => new SshKeyWaitTimedOut({ sshKeyId, waitingFor: wait.waitingFor }),
+  }).pipe(Effect.map((observed) => observed.value));
+
+const waitUntilGone = (sshKeyId: number) =>
+  pollUntil(observeById(sshKeyId), {
+    ...SSH_KEY_POLL,
+    until: Option.isNone,
+    onTimeout: () => new SshKeyStillExists({ sshKeyId }),
+  });
+
+// A concurrent deploy of this resource can register the key first. A
+// registration under another name belongs to someone else.
+const observeOwnRegistration = Effect.fn(function* (id: string, fingerprint: string, name: string) {
+  const registeredKey = yield* observe(fingerprint);
+  if (Option.isSome(registeredKey) && !hasName(name)(registeredKey.value)) {
+    return yield* registeredBySomeoneElse(id, registeredKey.value);
+  }
+  return registeredKey;
+});
+
+const register = (id: string, publicKey: string, fingerprint: string, name: string) =>
+  DO.createSshKey({ name, public_key: publicKey }).pipe(
+    Effect.map((response) => response.ssh_key),
+    Effect.catchTag("SshKeyAlreadyRegistered", (rejection) =>
+      observeOwnRegistration(id, fingerprint, name).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.fail(rejection),
+            onSome: Effect.succeed,
+          }),
+        ),
+      ),
+    ),
+    // A droplet created right after cannot use a key that GET does
+    // not return yet.
+    Effect.flatMap((key) =>
+      waitForKey(key.id, {
+        until: hasFingerprint(fingerprint),
+        waitingFor: "the registered key",
+      }),
+    ),
+  );
+
+const syncName = Effect.fn(function* (key: ApiSshKey, name: string) {
+  if (hasName(name)(key)) return key;
+  yield* DO.updateSshKey({ ssh_key_identifier: String(key.id), name });
+  return yield* waitForKey(key.id, {
+    until: hasName(name),
+    waitingFor: `the name '${name}'`,
+  });
+});
+
+export const SshKeyProvider = () =>
+  Provider.succeed(SshKey, {
+    stables: ["sshKeyId", "fingerprint", "publicKey"],
+    // A key carries no ownership marker, so a list cannot tell the keys
+    // Alchemy registered from the rest of the team's.
+    nuke: { skip: true },
+    list: Effect.fn(function* () {
+      return (yield* listAll).map(toAttrs);
+    }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      if (output !== undefined) {
+        const byId = yield* observeById(output.sshKeyId);
+        if (Option.isSome(byId)) return toAttrs(byId.value);
+      }
+      const registeredKey = yield* observe(yield* fingerprintOf(olds.publicKey));
+      if (Option.isNone(registeredKey)) return undefined;
+      // A generated name proves ownership. A chosen name proves nothing,
+      // so the key belongs to someone else until `--adopt` says otherwise.
+      const generatedName = olds.name === undefined ? yield* physicalName(id) : undefined;
+      const attrs = toAttrs(registeredKey.value);
+      return generatedName !== undefined && hasName(generatedName)(registeredKey.value)
+        ? attrs
+        : Unowned(attrs);
+    }),
+    diff: ({ olds, news }) => Effect.succeed(diffSshKey(news, olds)),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const name = news.name ?? (yield* physicalName(id));
+      const publicKey = news.publicKey.trim();
+      const fingerprint = yield* fingerprintOf(publicKey);
+
+      const observed = yield* observeByIdOrFingerprint(output?.sshKeyId, fingerprint);
+      const key = yield* Option.match(observed, {
+        onNone: () => register(id, publicKey, fingerprint, name),
+        onSome: Effect.succeed,
+      });
+      return toAttrs(yield* syncName(key, name));
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* ignoreNotFound(DO.deleteSshKey({ ssh_key_identifier: String(output.sshKeyId) }));
+      yield* waitUntilGone(output.sshKeyId);
+    }),
+  });

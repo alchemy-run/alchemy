@@ -271,7 +271,7 @@ const fingerprintRule = (rule: FirewallRule) =>
  *
  * @internal exported for unit testing
  */
-export const sameRules = (
+export const haveSameRules = (
   a: ReadonlyArray<FirewallRule> | undefined,
   b: ReadonlyArray<FirewallRule> | undefined,
 ) => setEquals(a?.map(fingerprintRule), b?.map(fingerprintRule));
@@ -349,8 +349,8 @@ const matches = (desired: DesiredFirewall) => (firewall: ApiFirewall) =>
   firewall.name === desired.name &&
   setEquals(firewall.droplet_ids, desired.dropletIds) &&
   setEquals(firewall.tags, desired.tags) &&
-  sameRules(inboundRulesOf(firewall), desired.inboundRules) &&
-  sameRules(outboundRulesOf(firewall), desired.outboundRules);
+  haveSameRules(inboundRulesOf(firewall), desired.inboundRules) &&
+  haveSameRules(outboundRulesOf(firewall), desired.outboundRules);
 
 const hasPropagated = (firewall: ApiFirewall) =>
   firewall.status === "succeeded" && (firewall.pending_changes ?? []).length === 0;
@@ -370,112 +370,103 @@ const toAttrs = (firewall: ApiFirewall): FirewallAttributes => ({
 
 const physicalName = (id: string) => createPhysicalName({ id, maxLength: NAME_MAX_LENGTH });
 
-export const FirewallProvider = () =>
-  Provider.effect(
-    Firewall,
-    Effect.gen(function* () {
-      const create = yield* DO.createFirewall;
-      const get = yield* DO.getFirewall;
-      const update = yield* DO.updateFirewall;
-      const deleteFirewall = yield* DO.deleteFirewall;
-      const list = yield* DO.listFirewalls;
-
-      const observeById = (firewallId: string) =>
-        noneIfNotFound(
-          get({ firewall_id: firewallId }).pipe(Effect.map((response) => response.firewall)),
-        );
-
-      const listAll = list.items({ per_page: PAGE_SIZE }).pipe(Stream.runCollect);
-
-      const observeByName = (name: string) =>
-        listAll.pipe(Effect.map(Arr.findFirst((firewall) => firewall.name === name)));
-
-      // The stored id is a cache. A generated name contains the instance
-      // id, so it finds the firewall without the id. A chosen name proves
-      // nothing, because firewall names are not unique.
-      const observeOwned = Effect.fn(function* (
-        firewallId: string | undefined,
-        generatedName: string | undefined,
-      ) {
-        if (firewallId !== undefined) {
-          const byId = yield* observeById(firewallId);
-          if (Option.isSome(byId)) return byId;
-        }
-        if (generatedName === undefined) return Option.none<ApiFirewall>();
-        return yield* observeByName(generatedName);
-      });
-
-      const waitUntilPropagated = (firewallId: string) =>
-        pollUntil(observeById(firewallId), {
-          ...FIREWALL_POLL,
-          until: (observed): observed is Option.Some<ApiFirewall> =>
-            Option.isSome(observed) && (hasFailed(observed.value) || hasPropagated(observed.value)),
-          onTimeout: (last) =>
-            new FirewallWaitTimedOut({
-              firewallId,
-              waitingFor: "its rules on every droplet",
-              lastStatus: Option.getOrUndefined(Option.map(last, (firewall) => firewall.status)),
-            }),
-        }).pipe(
-          Effect.map((observed) => observed.value),
-          Effect.filterOrFail(
-            (firewall) => !hasFailed(firewall),
-            () => new FirewallApplyFailed({ firewallId }),
-          ),
-        );
-
-      const waitUntilGone = (firewallId: string) =>
-        pollUntil(observeById(firewallId), {
-          ...FIREWALL_POLL,
-          until: Option.isNone,
-          onTimeout: () => new FirewallStillExists({ firewallId }),
-        });
-
-      const createFirewall = (desired: DesiredFirewall) =>
-        create(toApiBody(desired)).pipe(Effect.map((response) => response.firewall));
-
-      // The update is a full replacement of the firewall.
-      const syncFirewall = Effect.fn(function* (firewall: ApiFirewall, desired: DesiredFirewall) {
-        if (!matches(desired)(firewall)) {
-          yield* update({ firewall_id: firewall.id, ...toApiBody(desired) });
-        }
-        return yield* waitUntilPropagated(firewall.id);
-      });
-
-      return {
-        stables: ["firewallId", "createdAt"],
-        // A firewall carries no ownership marker, so a list cannot tell the
-        // firewalls Alchemy created from the rest of the team's.
-        nuke: { skip: true },
-        list: Effect.fn(function* () {
-          return (yield* listAll).map(toAttrs);
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const generatedName = olds.name === undefined ? yield* physicalName(id) : undefined;
-          const owned = yield* observeOwned(output?.firewallId, generatedName);
-          if (Option.isSome(owned)) return toAttrs(owned.value);
-          // A same-named firewall belongs to someone else until `--adopt`
-          // says otherwise.
-          if (olds.name === undefined) return undefined;
-          const named = yield* observeByName(olds.name);
-          return Option.getOrUndefined(Option.map(named, (firewall) => Unowned(toAttrs(firewall))));
-        }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const name = news.name ?? (yield* physicalName(id));
-          const generatedName = news.name === undefined ? name : undefined;
-          const desired = desiredFirewall(name, news);
-
-          const observed = yield* observeOwned(output?.firewallId, generatedName);
-          const firewall = yield* Option.match(observed, {
-            onNone: () => createFirewall(desired),
-            onSome: Effect.succeed,
-          });
-          return toAttrs(yield* syncFirewall(firewall, desired));
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* ignoreNotFound(deleteFirewall({ firewall_id: output.firewallId }));
-          yield* waitUntilGone(output.firewallId);
-        }),
-      };
-    }),
+const observeById = (firewallId: string) =>
+  noneIfNotFound(
+    DO.getFirewall({ firewall_id: firewallId }).pipe(Effect.map((response) => response.firewall)),
   );
+
+const listAll = DO.listFirewalls.items({ per_page: PAGE_SIZE }).pipe(Stream.runCollect);
+
+const observeByName = (name: string) =>
+  listAll.pipe(Effect.map(Arr.findFirst((firewall) => firewall.name === name)));
+
+// The stored id is a cache. A generated name contains the instance
+// id, so it finds the firewall without the id. A chosen name proves
+// nothing, because firewall names are not unique.
+const observeOwned = Effect.fn(function* (
+  firewallId: string | undefined,
+  generatedName: string | undefined,
+) {
+  if (firewallId !== undefined) {
+    const byId = yield* observeById(firewallId);
+    if (Option.isSome(byId)) return byId;
+  }
+  if (generatedName === undefined) return Option.none<ApiFirewall>();
+  return yield* observeByName(generatedName);
+});
+
+const waitUntilPropagated = (firewallId: string) =>
+  pollUntil(observeById(firewallId), {
+    ...FIREWALL_POLL,
+    until: (observed): observed is Option.Some<ApiFirewall> =>
+      Option.isSome(observed) && (hasFailed(observed.value) || hasPropagated(observed.value)),
+    onTimeout: (last) =>
+      new FirewallWaitTimedOut({
+        firewallId,
+        waitingFor: "its rules on every droplet",
+        lastStatus: Option.getOrUndefined(Option.map(last, (firewall) => firewall.status)),
+      }),
+  }).pipe(
+    Effect.map((observed) => observed.value),
+    Effect.filterOrFail(
+      (firewall) => !hasFailed(firewall),
+      () => new FirewallApplyFailed({ firewallId }),
+    ),
+  );
+
+const waitUntilGone = (firewallId: string) =>
+  pollUntil(observeById(firewallId), {
+    ...FIREWALL_POLL,
+    until: Option.isNone,
+    onTimeout: () => new FirewallStillExists({ firewallId }),
+  });
+
+const createFirewall = (desired: DesiredFirewall) =>
+  DO.createFirewall(toApiBody(desired)).pipe(Effect.map((response) => response.firewall));
+
+// The update is a full replacement of the firewall.
+const syncFirewall = Effect.fn(function* (firewall: ApiFirewall, desired: DesiredFirewall) {
+  if (!matches(desired)(firewall)) {
+    yield* DO.updateFirewall({ firewall_id: firewall.id, ...toApiBody(desired) });
+  }
+  return yield* waitUntilPropagated(firewall.id);
+});
+
+export const FirewallProvider = () =>
+  Provider.succeed(Firewall, {
+    stables: ["firewallId", "createdAt"],
+    // A firewall carries no ownership marker, so a list cannot tell the
+    // firewalls Alchemy created from the rest of the team's.
+    nuke: { skip: true },
+    list: Effect.fn(function* () {
+      return (yield* listAll).map(toAttrs);
+    }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const generatedName = olds.name === undefined ? yield* physicalName(id) : undefined;
+      const ownedFirewall = yield* observeOwned(output?.firewallId, generatedName);
+      if (Option.isSome(ownedFirewall)) return toAttrs(ownedFirewall.value);
+      // A same-named firewall belongs to someone else until `--adopt`
+      // says otherwise.
+      if (olds.name === undefined) return undefined;
+      const namedFirewall = yield* observeByName(olds.name);
+      return Option.getOrUndefined(
+        Option.map(namedFirewall, (firewall) => Unowned(toAttrs(firewall))),
+      );
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const name = news.name ?? (yield* physicalName(id));
+      const generatedName = news.name === undefined ? name : undefined;
+      const desired = desiredFirewall(name, news);
+
+      const observed = yield* observeOwned(output?.firewallId, generatedName);
+      const firewall = yield* Option.match(observed, {
+        onNone: () => createFirewall(desired),
+        onSome: Effect.succeed,
+      });
+      return toAttrs(yield* syncFirewall(firewall, desired));
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* ignoreNotFound(DO.deleteFirewall({ firewall_id: output.firewallId }));
+      yield* waitUntilGone(output.firewallId);
+    }),
+  });

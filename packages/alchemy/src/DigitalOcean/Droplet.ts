@@ -403,8 +403,8 @@ export const diffDroplet = Effect.fn(function* ({
   readonly output: DropletAttributes | undefined;
 }) {
   if (!isResolved(news)) {
-    const replaces = output !== undefined && hasUnresolvedReplacingProp(news);
-    return replaces ? replacement(olds) : undefined;
+    const needsReplacement = output !== undefined && hasUnresolvedReplacingProp(news);
+    return needsReplacement ? replacement(olds) : undefined;
   }
   if (output !== undefined && propsDriftedFromCloud(news, output).length > 0) {
     return replacement(olds);
@@ -476,309 +476,286 @@ const hasConverged =
     setEquals(droplet.tags, tags) &&
     featureActions(droplet, news).length === 0;
 
-export const DropletProvider = () =>
-  Provider.effect(
-    Droplet,
-    Effect.gen(function* () {
-      const create = yield* DO.createDroplet;
-      const get = yield* DO.getDroplet;
-      const destroy = yield* DO.dropletsDestroy;
-      const list = yield* DO.listDroplets;
-      const postAction = yield* DO.postDropletAction;
-      const getAction = yield* DO.getDropletAction;
-      const createTag = yield* DO.createTag;
-      const deleteTag = yield* DO.deleteTag;
-      const assignTag = yield* DO.assignTagResources;
-      const unassignTag = yield* DO.unassignTagResources;
+const physicalName = (id: string) =>
+  createPhysicalName({
+    id,
+    lowercase: true,
+    maxLength: NAME_MAX_LENGTH,
+  });
 
-      const physicalName = (id: string) =>
-        createPhysicalName({
-          id,
-          lowercase: true,
-          maxLength: NAME_MAX_LENGTH,
-        });
-
-      const observeById = (dropletId: number) =>
-        noneIfNotFound(
-          get({ droplet_id: dropletId }).pipe(Effect.map((response) => response.droplet)),
-        );
-
-      // `tag_name` also returns GPU droplets, which the plain list hides
-      // behind `type=gpus`.
-      const listTagged = (tag: string) =>
-        list.items({ tag_name: tag, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
-
-      const listOfType = (type: "droplets" | "gpus") =>
-        list.items({ type, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
-
-      const observeNewestTagged = (tag: string) =>
-        listTagged(tag).pipe(Effect.map((droplets) => Arr.head(Arr.sort(droplets, newestFirst))));
-
-      const observeByName = (name: string) =>
-        list({ name, per_page: 1 }).pipe(
-          Effect.map((response) => Arr.head(response.droplets ?? [])),
-        );
-
-      // The stored id is a cache. The tag finds the droplet without it.
-      const observeByIdOrTag = Effect.fn(function* (dropletId: number | undefined, tag: string) {
-        if (dropletId !== undefined) {
-          const byId = yield* observeById(dropletId);
-          if (Option.isSome(byId)) return byId;
-        }
-        return yield* observeNewestTagged(tag);
-      });
-
-      // GET can lag a change by up to a minute, and answers 404 right after
-      // create, so every change is polled until observed.
-      const waitForDroplet = (
-        dropletId: number,
-        wait: {
-          readonly until: (droplet: ApiDroplet) => boolean;
-          readonly waitingFor: string;
-          readonly budget: PollBudget;
-        },
-      ) =>
-        pollUntil(observeById(dropletId), {
-          ...wait.budget,
-          until: (observed): observed is Option.Some<ApiDroplet> =>
-            Option.isSome(observed) && wait.until(observed.value),
-          onTimeout: (last) =>
-            new DropletWaitTimedOut({
-              dropletId,
-              waitingFor: wait.waitingFor,
-              lastStatus: Option.getOrUndefined(Option.map(last, (droplet) => droplet.status)),
-            }),
-        }).pipe(Effect.map((observed) => observed.value));
-
-      const waitUntilAcceptsActions = (droplet: ApiDroplet) =>
-        acceptsActions(droplet)
-          ? Effect.succeed(droplet)
-          : waitForDroplet(droplet.id, {
-              until: acceptsActions,
-              waitingFor: "a state that accepts actions",
-              budget: ACTION_POLL,
-            });
-
-      const waitUntilGone = (dropletId: number) =>
-        pollUntil(observeById(dropletId), {
-          ...PROVISIONING_POLL,
-          until: Option.isNone,
-          onTimeout: () => new DropletStillExists({ dropletId }),
-        });
-
-      // A 404 on a new action is read lag.
-      const observeActionStatus = (dropletId: number, actionId: number) =>
-        getAction({ droplet_id: dropletId, action_id: actionId }).pipe(
-          Effect.map((response) => response.action.status),
-          Effect.catchTag("NotFound", () => Effect.succeed<ActionStatus>("in-progress")),
-        );
-
-      const waitForAction = (dropletId: number, actionId: number) =>
-        pollUntil(observeActionStatus(dropletId, actionId), {
-          ...ACTION_POLL,
-          until: isFinished,
-          onTimeout: () => new DropletActionTimedOut({ dropletId, actionId }),
-        }).pipe(
-          Effect.filterOrFail(
-            (status) => status === "completed",
-            (status) => new DropletActionFailed({ dropletId, actionId, status }),
-          ),
-        );
-
-      const runAction = Effect.fn(function* (
-        dropletId: number,
-        body: PostDropletActionRequestBody,
-      ) {
-        const posted = yield* postAction({ droplet_id: dropletId, body });
-        yield* waitForAction(dropletId, posted.action.id);
-      });
-
-      // The assign endpoint answers 404 for a tag that does not exist yet.
-      const assign = (tag: string, dropletId: number) => {
-        const assignment = assignTag({ tag_id: tag, ...taggedAs(dropletId) });
-        return assignment.pipe(
-          Effect.catchTag("NotFound", () =>
-            createTag({ name: tag }).pipe(Effect.andThen(assignment)),
-          ),
-        );
-      };
-
-      // Deleting a tag removes it from every droplet that carries it.
-      const deleteTagIfUnused = Effect.fn(function* (tag: string) {
-        const tagged = yield* listTagged(tag);
-        if (tagged.length > 0) return;
-        yield* ignoreNotFound(deleteTag({ tag_id: tag }));
-      });
-
-      const unassign = Effect.fn(function* (tag: string, dropletId: number) {
-        yield* ignoreNotFound(unassignTag({ tag_id: tag, ...taggedAs(dropletId) }));
-        if (isAlchemyTag(tag)) yield* deleteTagIfUnused(tag);
-      });
-
-      // Observed tags are the baseline, so adoption drops foreign tags.
-      const syncTags = (droplet: ApiDroplet, desired: ReadonlyArray<string>) => {
-        const observed = droplet.tags;
-        const missing = desired.filter((tag) => !observed.includes(tag));
-        const unwanted = observed.filter((tag) => !desired.includes(tag));
-        return Effect.all(
-          [
-            Effect.forEach(missing, (tag) => assign(tag, droplet.id), {
-              concurrency: "unbounded",
-              discard: true,
-            }),
-            Effect.forEach(unwanted, (tag) => unassign(tag, droplet.id), {
-              concurrency: "unbounded",
-              discard: true,
-            }),
-          ],
-          { concurrency: "unbounded", discard: true },
-        );
-      };
-
-      // Each action locks the droplet until it finishes.
-      const syncFeatures = (droplet: ApiDroplet, news: DropletProps) =>
-        Effect.forEach(featureActions(droplet, news), (body) => runAction(droplet.id, body), {
-          discard: true,
-        });
-
-      const syncName = Effect.fn(function* (droplet: ApiDroplet, name: string) {
-        if (droplet.name === name) return;
-        yield* runAction(droplet.id, { type: "rename", name });
-      });
-
-      const createDroplet = Effect.fn(function* (
-        name: string,
-        news: DropletProps,
-        tags: ReadonlyArray<string>,
-      ) {
-        const created = yield* create({
-          body: {
-            name,
-            region: news.region,
-            size: news.size,
-            image: news.image,
-            ssh_keys: news.sshKeys,
-            backups: news.backups,
-            ipv6: news.ipv6,
-            monitoring: news.monitoring,
-            tags: [...tags],
-            user_data: news.userData,
-            volumes: news.volumes,
-            vpc_uuid: news.vpcUuid,
-            with_droplet_agent: news.withDropletAgent,
-          } satisfies DropletSingleCreateInput,
-        });
-        const dropletId = created.droplet?.id;
-        if (dropletId === undefined) {
-          return yield* new DropletCreateFailed({
-            name,
-            reason: "create response carried no droplet",
-          });
-        }
-        return yield* waitForDroplet(dropletId, {
-          until: isActiveWithPublicIpv4,
-          waitingFor: "active with a public IPv4 address",
-          budget: PROVISIONING_POLL,
-        });
-      });
-
-      const ensureDroplet = (
-        observed: Option.Option<ApiDroplet>,
-        name: string,
-        news: DropletProps,
-        tags: ReadonlyArray<string>,
-      ) =>
-        Option.match(observed, {
-          onNone: () => createDroplet(name, news, tags),
-          onSome: waitUntilAcceptsActions,
-        });
-
-      const waitUntilAcceptsDestroy = (dropletId: number) =>
-        pollUntil(observeById(dropletId), {
-          ...ACTION_POLL,
-          until: (observed) => Option.isNone(observed) || acceptsActions(observed.value),
-          onTimeout: (last) =>
-            new DropletWaitTimedOut({
-              dropletId,
-              waitingFor: "a state that accepts destroy",
-              lastStatus: Option.getOrUndefined(Option.map(last, (droplet) => droplet.status)),
-            }),
-        });
-
-      const destroyDroplet = Effect.fn(function* (dropletId: number) {
-        yield* waitUntilAcceptsDestroy(dropletId);
-        yield* ignoreNotFound(destroy({ droplet_id: dropletId }));
-        yield* waitUntilGone(dropletId);
-      });
-
-      return {
-        stables: [
-          "dropletId",
-          "region",
-          "sizeSlug",
-          "imageId",
-          "imageSlug",
-          "ipv4",
-          "privateIpv4",
-          "ipv6",
-          "vpcUuid",
-          "createdAt",
-        ],
-        list: Effect.fn(function* () {
-          const droplets = yield* Effect.forEach(["droplets", "gpus"] as const, listOfType, {
-            concurrency: "unbounded",
-          });
-          return droplets
-            .flat()
-            .filter((droplet) => droplet.tags.some(isAlchemyTag))
-            .map(toAttrs);
-        }),
-        read: Effect.fn(function* ({ fqn, olds, output }) {
-          const owned = yield* observeByIdOrTag(output?.dropletId, yield* ownershipTagFor(fqn));
-          if (Option.isSome(owned)) return toAttrs(owned.value);
-          // A same-named droplet without the tag belongs to someone else
-          // until `--adopt` says otherwise.
-          if (olds.name === undefined) return undefined;
-          const foreign = yield* observeByName(olds.name);
-          return Option.getOrUndefined(Option.map(foreign, (droplet) => Unowned(toAttrs(droplet))));
-        }),
-        diff: diffDroplet,
-        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
-          yield* rejectReservedTags(news.tags);
-          const name = news.name ?? (yield* physicalName(id));
-          const generationTag = generationTagFor(instanceId);
-          const tags = Arr.dedupe([
-            ...(news.tags ?? []),
-            yield* ownershipTagFor(fqn),
-            generationTag,
-          ]);
-
-          // The ownership tag is not a fallback here: a replacement shares
-          // it with the droplet it replaces.
-          const observed = yield* observeByIdOrTag(output?.dropletId, generationTag);
-          const droplet = yield* ensureDroplet(observed, name, news, tags);
-
-          yield* syncTags(droplet, tags);
-          yield* syncFeatures(droplet, news);
-          yield* syncName(droplet, name);
-          const synced = yield* waitForDroplet(droplet.id, {
-            until: hasConverged(name, tags, news),
-            waitingFor: `name '${name}', its tags and features`,
-            budget: ACTION_POLL,
-          });
-          return toAttrs(synced);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          const observed = yield* observeById(output.dropletId);
-          if (Option.isNone(observed)) return;
-          const droplet = observed.value;
-          yield* destroyDroplet(droplet.id);
-          // DigitalOcean keeps a tag after its last droplet is destroyed.
-          yield* Effect.forEach(droplet.tags.filter(isAlchemyTag), deleteTagIfUnused, {
-            concurrency: "unbounded",
-            discard: true,
-          });
-        }),
-      };
-    }),
+const observeById = (dropletId: number) =>
+  noneIfNotFound(
+    DO.getDroplet({ droplet_id: dropletId }).pipe(Effect.map((response) => response.droplet)),
   );
+
+// `tag_name` also returns GPU droplets, which the plain list hides
+// behind `type=gpus`.
+const listTagged = (tag: string) =>
+  DO.listDroplets.items({ tag_name: tag, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
+
+const listOfType = (type: "droplets" | "gpus") =>
+  DO.listDroplets.items({ type, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
+
+const observeNewestTagged = (tag: string) =>
+  listTagged(tag).pipe(Effect.map((droplets) => Arr.head(Arr.sort(droplets, newestFirst))));
+
+const observeByName = (name: string) =>
+  DO.listDroplets({ name, per_page: 1 }).pipe(
+    Effect.map((response) => Arr.head(response.droplets ?? [])),
+  );
+
+// The stored id is a cache. The tag finds the droplet without it.
+const observeByIdOrTag = Effect.fn(function* (dropletId: number | undefined, tag: string) {
+  if (dropletId !== undefined) {
+    const byId = yield* observeById(dropletId);
+    if (Option.isSome(byId)) return byId;
+  }
+  return yield* observeNewestTagged(tag);
+});
+
+// GET can lag a change by up to a minute, and answers 404 right after
+// create, so every change is polled until observed.
+const waitForDroplet = (
+  dropletId: number,
+  wait: {
+    readonly until: (droplet: ApiDroplet) => boolean;
+    readonly waitingFor: string;
+    readonly budget: PollBudget;
+  },
+) =>
+  pollUntil(observeById(dropletId), {
+    ...wait.budget,
+    until: (observed): observed is Option.Some<ApiDroplet> =>
+      Option.isSome(observed) && wait.until(observed.value),
+    onTimeout: (last) =>
+      new DropletWaitTimedOut({
+        dropletId,
+        waitingFor: wait.waitingFor,
+        lastStatus: Option.getOrUndefined(Option.map(last, (droplet) => droplet.status)),
+      }),
+  }).pipe(Effect.map((observed) => observed.value));
+
+const waitUntilAcceptsActions = (droplet: ApiDroplet) =>
+  acceptsActions(droplet)
+    ? Effect.succeed(droplet)
+    : waitForDroplet(droplet.id, {
+        until: acceptsActions,
+        waitingFor: "a state that accepts actions",
+        budget: ACTION_POLL,
+      });
+
+const waitUntilGone = (dropletId: number) =>
+  pollUntil(observeById(dropletId), {
+    ...PROVISIONING_POLL,
+    until: Option.isNone,
+    onTimeout: () => new DropletStillExists({ dropletId }),
+  });
+
+// A 404 on a new action is read lag.
+const observeActionStatus = (dropletId: number, actionId: number) =>
+  DO.getDropletAction({ droplet_id: dropletId, action_id: actionId }).pipe(
+    Effect.map((response) => response.action.status),
+    Effect.catchTag("NotFound", () => Effect.succeed<ActionStatus>("in-progress")),
+  );
+
+const waitForAction = (dropletId: number, actionId: number) =>
+  pollUntil(observeActionStatus(dropletId, actionId), {
+    ...ACTION_POLL,
+    until: isFinished,
+    onTimeout: () => new DropletActionTimedOut({ dropletId, actionId }),
+  }).pipe(
+    Effect.filterOrFail(
+      (status) => status === "completed",
+      (status) => new DropletActionFailed({ dropletId, actionId, status }),
+    ),
+  );
+
+const runAction = Effect.fn(function* (dropletId: number, body: PostDropletActionRequestBody) {
+  const posted = yield* DO.postDropletAction({ droplet_id: dropletId, body });
+  yield* waitForAction(dropletId, posted.action.id);
+});
+
+// The assign endpoint answers 404 for a tag that does not exist yet.
+const assign = (tag: string, dropletId: number) => {
+  const assignment = DO.assignTagResources({ tag_id: tag, ...taggedAs(dropletId) });
+  return assignment.pipe(
+    Effect.catchTag("NotFound", () => DO.createTag({ name: tag }).pipe(Effect.andThen(assignment))),
+  );
+};
+
+// Deleting a tag removes it from every droplet that carries it.
+const deleteTagIfUnused = Effect.fn(function* (tag: string) {
+  const tagged = yield* listTagged(tag);
+  if (tagged.length > 0) return;
+  yield* ignoreNotFound(DO.deleteTag({ tag_id: tag }));
+});
+
+const unassign = Effect.fn(function* (tag: string, dropletId: number) {
+  yield* ignoreNotFound(DO.unassignTagResources({ tag_id: tag, ...taggedAs(dropletId) }));
+  if (isAlchemyTag(tag)) yield* deleteTagIfUnused(tag);
+});
+
+// Observed tags are the baseline, so adoption drops foreign tags.
+const syncTags = (droplet: ApiDroplet, desired: ReadonlyArray<string>) => {
+  const observed = droplet.tags;
+  const missing = desired.filter((tag) => !observed.includes(tag));
+  const unwanted = observed.filter((tag) => !desired.includes(tag));
+  return Effect.all(
+    [
+      Effect.forEach(missing, (tag) => assign(tag, droplet.id), {
+        concurrency: "unbounded",
+        discard: true,
+      }),
+      Effect.forEach(unwanted, (tag) => unassign(tag, droplet.id), {
+        concurrency: "unbounded",
+        discard: true,
+      }),
+    ],
+    { concurrency: "unbounded", discard: true },
+  );
+};
+
+// Each action locks the droplet until it finishes.
+const syncFeatures = (droplet: ApiDroplet, news: DropletProps) =>
+  Effect.forEach(featureActions(droplet, news), (body) => runAction(droplet.id, body), {
+    discard: true,
+  });
+
+const syncName = Effect.fn(function* (droplet: ApiDroplet, name: string) {
+  if (droplet.name === name) return;
+  yield* runAction(droplet.id, { type: "rename", name });
+});
+
+const createDroplet = Effect.fn(function* (
+  name: string,
+  news: DropletProps,
+  tags: ReadonlyArray<string>,
+) {
+  const created = yield* DO.createDroplet({
+    body: {
+      name,
+      region: news.region,
+      size: news.size,
+      image: news.image,
+      ssh_keys: news.sshKeys,
+      backups: news.backups,
+      ipv6: news.ipv6,
+      monitoring: news.monitoring,
+      tags: [...tags],
+      user_data: news.userData,
+      volumes: news.volumes,
+      vpc_uuid: news.vpcUuid,
+      with_droplet_agent: news.withDropletAgent,
+    } satisfies DropletSingleCreateInput,
+  });
+  const dropletId = created.droplet?.id;
+  if (dropletId === undefined) {
+    return yield* new DropletCreateFailed({
+      name,
+      reason: "create response carried no droplet",
+    });
+  }
+  return yield* waitForDroplet(dropletId, {
+    until: isActiveWithPublicIpv4,
+    waitingFor: "active with a public IPv4 address",
+    budget: PROVISIONING_POLL,
+  });
+});
+
+const ensureDroplet = (
+  observed: Option.Option<ApiDroplet>,
+  name: string,
+  news: DropletProps,
+  tags: ReadonlyArray<string>,
+) =>
+  Option.match(observed, {
+    onNone: () => createDroplet(name, news, tags),
+    onSome: waitUntilAcceptsActions,
+  });
+
+const waitUntilAcceptsDestroy = (dropletId: number) =>
+  pollUntil(observeById(dropletId), {
+    ...ACTION_POLL,
+    until: (observed) => Option.isNone(observed) || acceptsActions(observed.value),
+    onTimeout: (last) =>
+      new DropletWaitTimedOut({
+        dropletId,
+        waitingFor: "a state that accepts destroy",
+        lastStatus: Option.getOrUndefined(Option.map(last, (droplet) => droplet.status)),
+      }),
+  });
+
+const destroyDroplet = Effect.fn(function* (dropletId: number) {
+  yield* waitUntilAcceptsDestroy(dropletId);
+  yield* ignoreNotFound(DO.dropletsDestroy({ droplet_id: dropletId }));
+  yield* waitUntilGone(dropletId);
+});
+
+export const DropletProvider = () =>
+  Provider.succeed(Droplet, {
+    stables: [
+      "dropletId",
+      "region",
+      "sizeSlug",
+      "imageId",
+      "imageSlug",
+      "ipv4",
+      "privateIpv4",
+      "ipv6",
+      "vpcUuid",
+      "createdAt",
+    ],
+    list: Effect.fn(function* () {
+      const droplets = yield* Effect.forEach(["droplets", "gpus"] as const, listOfType, {
+        concurrency: "unbounded",
+      });
+      return droplets
+        .flat()
+        .filter((droplet) => droplet.tags.some(isAlchemyTag))
+        .map(toAttrs);
+    }),
+    read: Effect.fn(function* ({ fqn, olds, output }) {
+      const ownedDroplet = yield* observeByIdOrTag(output?.dropletId, yield* ownershipTagFor(fqn));
+      if (Option.isSome(ownedDroplet)) return toAttrs(ownedDroplet.value);
+      // A same-named droplet without the tag belongs to someone else
+      // until `--adopt` says otherwise.
+      if (olds.name === undefined) return undefined;
+      const foreignDroplet = yield* observeByName(olds.name);
+      return Option.getOrUndefined(
+        Option.map(foreignDroplet, (droplet) => Unowned(toAttrs(droplet))),
+      );
+    }),
+    diff: diffDroplet,
+    reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
+      yield* rejectReservedTags(news.tags);
+      const name = news.name ?? (yield* physicalName(id));
+      const generationTag = generationTagFor(instanceId);
+      const tags = Arr.dedupe([...(news.tags ?? []), yield* ownershipTagFor(fqn), generationTag]);
+
+      // The ownership tag is not a fallback here: a replacement shares
+      // it with the droplet it replaces.
+      const observed = yield* observeByIdOrTag(output?.dropletId, generationTag);
+      const droplet = yield* ensureDroplet(observed, name, news, tags);
+
+      yield* syncTags(droplet, tags);
+      yield* syncFeatures(droplet, news);
+      yield* syncName(droplet, name);
+      const convergedDroplet = yield* waitForDroplet(droplet.id, {
+        until: hasConverged(name, tags, news),
+        waitingFor: `name '${name}', its tags and features`,
+        budget: ACTION_POLL,
+      });
+      return toAttrs(convergedDroplet);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      const observed = yield* observeById(output.dropletId);
+      if (Option.isNone(observed)) return;
+      const droplet = observed.value;
+      yield* destroyDroplet(droplet.id);
+      // DigitalOcean keeps a tag after its last droplet is destroyed.
+      yield* Effect.forEach(droplet.tags.filter(isAlchemyTag), deleteTagIfUnused, {
+        concurrency: "unbounded",
+        discard: true,
+      });
+    }),
+  });

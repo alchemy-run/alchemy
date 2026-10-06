@@ -117,28 +117,28 @@ test.provider.skipIf(skipLive)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const foreign = yield* createSshKey({
+      const foreignKey = yield* createSshKey({
         name: FOREIGN_KEY_NAME,
         public_key: PUBLIC_KEY_3,
       }).pipe(Effect.map((response) => response.ssh_key));
-      yield* Effect.addFinalizer(() => deleteSshKeyIfExists(foreign.id).pipe(Effect.orDie));
+      yield* Effect.addFinalizer(() => deleteSshKeyIfExists(foreignKey.id).pipe(Effect.orDie));
 
       const refused = yield* stack
         .deploy(SshKey("Adopted", { name: KEY_NAME, publicKey: PUBLIC_KEY_3 }))
         .pipe(Effect.flip);
       expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
-      expect((yield* readSshKey(foreign.id)).name).toEqual(FOREIGN_KEY_NAME);
+      expect((yield* readSshKey(foreignKey.id)).name).toEqual(FOREIGN_KEY_NAME);
 
       const adopted = yield* stack.deploy(
         SshKey("Adopted", { name: KEY_NAME, publicKey: PUBLIC_KEY_3 }).pipe(adopt(true)),
       );
-      expect(adopted.sshKeyId).toEqual(foreign.id);
+      expect(adopted.sshKeyId).toEqual(foreignKey.id);
       expect(adopted.name).toEqual(KEY_NAME);
-      expect((yield* readSshKey(foreign.id)).name).toEqual(KEY_NAME);
+      expect((yield* readSshKey(foreignKey.id)).name).toEqual(KEY_NAME);
 
       yield* stack.destroy();
 
-      expect(yield* isSshKeyGone(foreign.id)).toBe(true);
+      expect(yield* isSshKeyGone(foreignKey.id)).toBe(true);
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );

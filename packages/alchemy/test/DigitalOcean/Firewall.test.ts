@@ -9,7 +9,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as DigitalOcean from "@/DigitalOcean";
-import { Firewall, sameRules, type FirewallInboundRule } from "@/DigitalOcean/Firewall";
+import { Firewall, haveSameRules, type FirewallInboundRule } from "@/DigitalOcean/Firewall";
 import * as Test from "@/Test/Alchemy";
 import { forgetAttributes, isGone, logLevel, skipLive } from "./support.ts";
 
@@ -36,14 +36,14 @@ const UNIT_TAGS = ["unit", "provider:digitalocean", "provider:digitalocean:firew
 const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:firewall", "live"];
 const LIVE_TIMEOUT = 180_000;
 
-describe("sameRules", { tags: UNIT_TAGS }, () => {
+describe("haveSameRules", { tags: UNIT_TAGS }, () => {
   it("ignores rule order", () => {
-    expect(sameRules(WEB_RULES, [...WEB_RULES].reverse())).toBe(true);
+    expect(haveSameRules(WEB_RULES, [...WEB_RULES].reverse())).toBe(true);
   });
 
   it("ignores address order and case", () => {
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "2001:DB8::/32"] }],
         [{ protocol: "tcp", ports: "22", addresses: ["2001:db8::/32", "0.0.0.0/0"] }],
       ),
@@ -52,7 +52,7 @@ describe("sameRules", { tags: UNIT_TAGS }, () => {
 
   it("collapses icmp ports to 0", () => {
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "icmp", ports: "22", addresses: ["0.0.0.0/0"] }],
         [{ protocol: "icmp", ports: "0", addresses: ["0.0.0.0/0"] }],
       ),
@@ -61,13 +61,13 @@ describe("sameRules", { tags: UNIT_TAGS }, () => {
 
   it("treats a missing action as allow", () => {
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0"] }],
         [{ protocol: "tcp", ports: "22", action: "allow", addresses: ["0.0.0.0/0"] }],
       ),
     ).toBe(true);
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0"] }],
         [{ protocol: "tcp", ports: "22", action: "deny", addresses: ["0.0.0.0/0"] }],
       ),
@@ -76,13 +76,13 @@ describe("sameRules", { tags: UNIT_TAGS }, () => {
 
   it("compares load balancer and kubernetes members", () => {
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "tcp", ports: "443", loadBalancerUids: ["lb-1"], kubernetesIds: ["k8s-1"] }],
         [{ protocol: "tcp", ports: "443", kubernetesIds: ["k8s-1"], loadBalancerUids: ["lb-1"] }],
       ),
     ).toBe(true);
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "tcp", ports: "443", loadBalancerUids: ["lb-1"] }],
         [{ protocol: "tcp", ports: "443", loadBalancerUids: ["lb-2"] }],
       ),
@@ -91,17 +91,17 @@ describe("sameRules", { tags: UNIT_TAGS }, () => {
 
   it("treats omitted member lists as empty", () => {
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0"] }],
         [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0"], dropletIds: [], tags: [] }],
       ),
     ).toBe(true);
-    expect(sameRules(undefined, [])).toBe(true);
+    expect(haveSameRules(undefined, [])).toBe(true);
   });
 
   it("ignores repeated members and repeated rules", () => {
     expect(
-      sameRules(
+      haveSameRules(
         [
           {
             protocol: "tcp",
@@ -118,7 +118,7 @@ describe("sameRules", { tags: UNIT_TAGS }, () => {
 
   it("keeps a single port apart from a one-port range", () => {
     expect(
-      sameRules(
+      haveSameRules(
         [{ protocol: "tcp", ports: "80", addresses: ["0.0.0.0/0"] }],
         [{ protocol: "tcp", ports: "80-80", addresses: ["0.0.0.0/0"] }],
       ),
@@ -126,8 +126,8 @@ describe("sameRules", { tags: UNIT_TAGS }, () => {
   });
 
   it("tells an empty list from a list with rules", () => {
-    expect(sameRules([], [])).toBe(true);
-    expect(sameRules([], SSH_ONLY)).toBe(false);
+    expect(haveSameRules([], [])).toBe(true);
+    expect(haveSameRules([], SSH_ONLY)).toBe(false);
   });
 });
 
@@ -245,11 +245,13 @@ test.provider.skipIf(skipLive)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const foreign = yield* createFirewall({
+      const foreignFirewall = yield* createFirewall({
         name: FOREIGN_FIREWALL_NAME,
         inbound_rules: [{ protocol: "tcp", ports: "22", sources: { addresses: EVERYWHERE } }],
       }).pipe(Effect.map((response) => response.firewall));
-      yield* Effect.addFinalizer(() => deleteFirewallIfExists(foreign.id).pipe(Effect.orDie));
+      yield* Effect.addFinalizer(() =>
+        deleteFirewallIfExists(foreignFirewall.id).pipe(Effect.orDie),
+      );
 
       const refused = yield* stack
         .deploy(Firewall("Adopted", { name: FOREIGN_FIREWALL_NAME, inboundRules: SSH_ONLY }))
@@ -261,12 +263,12 @@ test.provider.skipIf(skipLive)(
           adopt(true),
         ),
       );
-      expect(adopted.firewallId).toEqual(foreign.id);
+      expect(adopted.firewallId).toEqual(foreignFirewall.id);
       expect(adopted.inboundRules).toHaveLength(3);
 
       yield* stack.destroy();
 
-      expect(yield* isFirewallGone(foreign.id)).toBe(true);
+      expect(yield* isFirewallGone(foreignFirewall.id)).toBe(true);
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
