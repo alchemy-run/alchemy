@@ -5003,14 +5003,16 @@ export const LiveWorkerProvider = () =>
             // This is the last gradual-rollout upload receipt, not the active
             // traffic deployment. Preserve it only while that version exists.
             const uploadedVersionId = output?.versionId
-              ? yield* workers.getScriptVersion({
-                  accountId,
-                  scriptName: workerName,
-                  versionId: output.versionId,
-                }).pipe(
-                  Effect.map(() => output.versionId),
-                  Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
-                )
+              ? yield* workers
+                  .getScriptVersion({
+                    accountId,
+                    scriptName: workerName,
+                    versionId: output.versionId,
+                  })
+                  .pipe(
+                    Effect.map(() => output.versionId),
+                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                  )
               : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
