@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetServicesResponse,
   type GetEnvironmentVariablesResponse,
@@ -68,6 +67,7 @@ import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import { promoteAppObserved, waitForAppDeploymentTarget } from "./Internal/AppPromotion.ts";
 import { normalizeBundleFilePath } from "./Internal/BundlePaths.ts";
 import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import {
   startDeploymentIdempotent,
   stopDeploymentIdempotent,
@@ -1020,7 +1020,7 @@ const createApp = (
   }).pipe(
     // A replayed create would make a second App; the retry policy cannot
     // see the request, so opt out explicitly.
-    Retry.none,
+    retryThrottlingOnly,
     Effect.map((response) => response.data),
   );
 
@@ -1946,7 +1946,7 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
         }).pipe(
           // A replayed create would make a second variable; the retry policy
           // cannot see the request, so opt out explicitly.
-          Retry.none,
+          retryThrottlingOnly,
           Effect.map((response) => response.data),
         );
         createdIds.push({ key, id: created.id });
@@ -2466,7 +2466,7 @@ const ProviderLive = () =>
               }).pipe(
                 // A replayed create would make a second deployment; the retry
                 // policy cannot see the request, so opt out explicitly.
-                Retry.none,
+                retryThrottlingOnly,
                 Effect.map((response) => response.data),
               );
               createdDeploymentId = created.id;

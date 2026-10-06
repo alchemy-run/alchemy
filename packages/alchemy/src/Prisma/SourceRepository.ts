@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetServicesResponse,
   type GetProjectBranchesResponse,
@@ -23,6 +22,7 @@ import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedSourceRepository } from "./Internal/Observed.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
@@ -512,7 +512,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would link the repository twice; the retry
               // policy cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => response.data),
               Effect.catchTag("Conflict", () =>
                 Effect.fail(

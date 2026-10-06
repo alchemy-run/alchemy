@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetDatabaseResponse,
   getDatabase,
@@ -10,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import { extractConnectionSecrets } from "../Client.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
 import type { PrismaSecretConnection } from "../Types.ts";
+import { retryThrottlingOnly } from "./CreateRetry.ts";
 import type { ObservedDatabase } from "./Observed.ts";
 
 export const hasCanonicalConnectionSecrets = (secrets: PrismaSecretConnection) =>
@@ -146,7 +146,7 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <D extends O
   const rotated = yield* createConnectionRotate({ id: connectionId }).pipe(
     // Rotation mints new credentials; a replay would revoke the ones we
     // just persisted, so opt out of the retry policy.
-    Retry.none,
+    retryThrottlingOnly,
     Effect.map((response) => response.data),
   );
   if (rotated.id !== connectionId || rotated.database.id !== database.id) {

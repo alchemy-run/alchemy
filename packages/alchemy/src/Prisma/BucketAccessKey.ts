@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetBucketKeysResponse,
   deleteBucketKey,
@@ -13,6 +12,7 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Bucket } from "./Bucket.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import { attrOrRedactedString, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import { physicalInstanceName } from "./Internal/EnvName.ts";
 import { type ObservedBucketKey, requiredSecretValue } from "./Internal/Observed.ts";
@@ -259,7 +259,7 @@ const ProviderLive = () =>
           }).pipe(
             // The secret is revealed exactly once, so a replayed create
             // would leak an unusable key; opt out of the retry policy.
-            Retry.none,
+            retryThrottlingOnly,
             Effect.map((response) => response.data),
           );
           return {

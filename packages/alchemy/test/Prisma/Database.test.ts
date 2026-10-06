@@ -1,12 +1,15 @@
 import {
+  createDatabase,
   getBranch,
   getDatabase,
   getProject,
   getProjectBranches,
+  getProjectDatabases,
   updateDatabase,
 } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Prisma from "@/Prisma";
@@ -267,7 +270,7 @@ test.provider(
 );
 
 test.provider(
-  "recovers an interrupted database create as owned",
+  "recovers an interrupted database create as owned with its credentials",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -277,6 +280,11 @@ test.provider(
     const recovered = yield* stack.deploy(databaseStack());
     expect(recovered.database.databaseId).toBe(initial.database.databaseId);
     expect((yield* observeDatabase(initial.database.databaseId)).logicalId).toBe("Main");
+    // The lost create response carried the only copy of the write-only
+    // credentials; recovery restores them.
+    const direct = Redacted.value(recovered.database.directConnectionString!);
+    expect(direct).toMatch(/^postgres/);
+    expect(JSON.stringify(recovered)).not.toContain(direct);
 
     yield* stack.destroy();
     yield* expectDatabaseGone(initial.database.databaseId);
@@ -362,6 +370,196 @@ test.provider(
     yield* expectDatabaseGone(initial.first.databaseId);
     yield* expectDatabaseGone(initial.second.databaseId);
     yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+const databaseStackOn = (props: { name?: string; branchGitName?: string }) =>
+  Effect.gen(function* () {
+    const project = yield* Prisma.Project("Project", { createDatabase: false });
+    const database = yield* Prisma.Database("Main", { project, ...props });
+    return { project, database };
+  });
+
+test.provider(
+  "rejects conflicting branch inputs and a named database with a branch attachment before creating",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const conflicting = yield* failureOf(
+      stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Prisma.Project("Project", { createDatabase: false });
+          const branch = yield* Prisma.Branch("Preview", { project, gitName: "feature/db" });
+          const database = yield* Prisma.Database("Main", {
+            project,
+            branchId: branch.branchId,
+            branchGitName: "feature/db",
+          });
+          return { project, branch, database };
+        }),
+      ),
+    );
+    expect(conflicting.text).toContain("branchId and branchGitName are mutually exclusive");
+
+    // The Management API creates before it attaches and has no idempotency
+    // key, so an explicitly named create with a branch is not recoverable.
+    const named = yield* failureOf(
+      stack.deploy(databaseStackOn({ name: "named-db", branchGitName: "feature/named" })),
+    );
+    expect(named.text).toContain("cannot be distinguished from a foreign database");
+
+    const { project } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        return { project };
+      }),
+    );
+    const databases = (yield* getProjectDatabases({ projectId: project.projectId })).data;
+    expect(databases).toEqual([]);
+
+    yield* stack.destroy();
+    yield* expectProjectGone(project.projectId);
+  }),
+  { tags: [...logicalIdTags, "provider:prisma:branch"], timeout: 180_000 },
+);
+
+test.provider(
+  "keeps a branchGitName attachment stable and forces reconcile for adoption rotation",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(databaseStackOn({ branchGitName: "feature/stable" }));
+    const branches = yield* getProjectBranches({
+      projectId: initial.project.projectId,
+      gitName: "feature/stable",
+    });
+    expect(initial.database.branchId).toBe(branches.data[0]!.id);
+
+    // Observed branch ids already match: no update is planned.
+    const stable = yield* stack.plan(databaseStackOn({ branchGitName: "feature/stable" }));
+    expect(stable.resources["Main"]).toMatchObject({ action: "noop" });
+
+    const rotate = yield* stack.plan(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const database = yield* Prisma.Database("Main", {
+          project,
+          branchGitName: "feature/stable",
+          rotateCredentialsOnAdopt: true,
+        });
+        return { project, database };
+      }),
+    );
+    expect(rotate.resources["Main"]).toMatchObject({ action: "update" });
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: [...logicalIdTags, "provider:prisma:branch"], timeout: 180_000 },
+);
+
+test.provider(
+  "deletes a database whose stale state says default and refuses one observed as default",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (names: ReadonlyArray<"Main" | "Stale">) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", {});
+        const databases = yield* Effect.forEach(names, (name) =>
+          Prisma.Database(name, { project }),
+        );
+        return { project, databases };
+      });
+
+    const initial = yield* stack.deploy(resources(["Main", "Stale"]));
+    const [main, stale] = initial.databases;
+    const defaultDatabaseId = initial.project.databaseId!;
+    expect(main!.isDefault).toBe(false);
+
+    // Stale state claims default; the live database is not, so delete proceeds.
+    yield* patchStateAttr(stack, "Stale", { isDefault: true });
+    yield* stack.deploy(resources(["Main"]));
+    yield* expectDatabaseGone(stale!.databaseId);
+
+    // State now points at the project's default database while claiming it is
+    // not default; delete must observe the live flag and refuse.
+    yield* patchStateAttr(stack, "Main", { databaseId: defaultDatabaseId });
+    const refused = yield* failureOf(stack.deploy(resources([])));
+    expect(refused.text).toContain("Cannot delete default Prisma database");
+    const survivor = yield* observeDatabase(defaultDatabaseId);
+    expect(survivor.isDefault).toBe(true);
+
+    // Project deletion owns the default database (and the real "Main").
+    yield* forgetState(stack, "Main");
+    yield* stack.destroy();
+    yield* expectDatabaseGone(main!.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+// Creating a clone live fails: `POST /v1/databases` with
+// `source: { type: "database", databaseId }` answers HTTP 500 for both the
+// `db_`-prefixed and the bare ID. Set PRISMA_TEST_DATABASE_CLONE=1 to run it.
+test.provider.skipIf(!process.env.PRISMA_TEST_DATABASE_CLONE)(
+  "creates a clone database and keeps its source stable",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = Effect.gen(function* () {
+      const project = yield* Prisma.Project("Project", { createDatabase: false });
+      const source = yield* Prisma.Database("Source", { project });
+      const clone = yield* Prisma.Database("Clone", {
+        project,
+        source: { type: "database", databaseId: source.databaseId },
+      });
+      return { project, source, clone };
+    });
+
+    const initial = yield* stack.deploy(resources);
+    const plan = yield* stack.plan(resources);
+    expect(plan.resources["Clone"]).toMatchObject({ action: "noop" });
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.clone.databaseId);
+    yield* expectDatabaseGone(initial.source.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 240_000 },
+);
+
+test.provider(
+  "refuses to take over a named database created out of band before the deploy",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const { project } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        return { project };
+      }),
+    );
+    const foreign = (yield* createDatabase({ projectId: project.projectId, name: "main" })).data;
+
+    const refused = yield* failureOf(stack.deploy(databaseStack({ name: "main" })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    // The foreign database was neither claimed nor stamped with a logical ID.
+    const untouched = yield* observeDatabase(foreign.id);
+    expect(untouched.name).toBe("main");
+    expect(untouched.logicalId).toBe(foreign.logicalId);
+    expect(
+      (yield* getProjectDatabases({ projectId: project.projectId })).data.map(
+        (database) => database.id,
+      ),
+    ).toEqual([foreign.id]);
+
+    // Project deletion removes the foreign database with it.
+    yield* stack.destroy();
+    yield* expectDatabaseGone(foreign.id);
+    yield* expectProjectGone(project.projectId);
   }),
   { tags: logicalIdTags, timeout: 180_000 },
 );

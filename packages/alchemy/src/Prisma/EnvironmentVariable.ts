@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetEnvironmentVariablesResponse,
   deleteEnvironmentVariable,
@@ -14,6 +13,7 @@ import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedEnvironmentVariable } from "./Internal/Observed.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
@@ -138,9 +138,12 @@ export const EnvironmentVariable = Resource<EnvironmentVariable>("Prisma.Environ
 const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 const ENV_VALUE_MAX_BYTES = 8 * 1024;
 
+const isValidEnvironmentVariableKey = (key: string) =>
+  key.length >= 1 && key.length <= 256 && ENV_KEY_PATTERN.test(key);
+
 const validateEnvironmentVariableKey = (key: string) =>
   Effect.gen(function* () {
-    if (key.length < 1 || key.length > 256 || !ENV_KEY_PATTERN.test(key)) {
+    if (!isValidEnvironmentVariableKey(key)) {
       return yield* Effect.fail(
         new Error(
           `Prisma environment variable key '${key}' must match POSIX env-var key shape: [A-Z_][A-Z0-9_]* and be at most 256 characters.`,
@@ -334,8 +337,11 @@ const ProviderLive = () =>
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
             : yield* Effect.gen(function* () {
+                // No variable can exist under an invalid key, and the API
+                // rejects it as a filter; leave the error to reconcile's
+                // local validation.
                 const projectId = unresolvedProjectIdOf(olds.project);
-                return projectId
+                return projectId && isValidEnvironmentVariableKey(olds.key)
                   ? yield* findVariable(projectId, olds.class, olds.key, olds.branchId)
                   : undefined;
               });
@@ -380,7 +386,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would mint a second variable; the retry
               // policy cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => ({
                 variable: response.data,
                 created: true,

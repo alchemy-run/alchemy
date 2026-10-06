@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetBucketsResponse,
   deleteBucket,
@@ -15,6 +14,7 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { desiredBranchId } from "./Internal/Branches.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedBucket } from "./Internal/Observed.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
@@ -275,7 +275,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would make a second bucket; the retry policy
               // cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => response.data),
               Effect.catchTag("Conflict", (conflict) =>
                 Effect.fail(logicalIdTaken(logicalId, news.branchId, projectId, conflict)),

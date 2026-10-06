@@ -1,0 +1,11 @@
+{
+  "name": "alchemy-prisma-compute-nest-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "mkdir -p dist && cp src/main.js dist/main.js"
+  },
+  "dependencies": {
+    "@nestjs/core": "0.0.0-fixture"
+  }
+}

@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetDatabasesResponse,
   type GetProjectBranchesResponse,
@@ -25,6 +24,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { extractConnectionSecrets } from "./Client.ts";
 import { desiredBranchId } from "./Internal/Branches.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
@@ -795,7 +795,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would make a second database; the retry
               // policy cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => ({
                 database: response.data,
                 secrets: extractConnectionSecrets(response.data.connections[0]),

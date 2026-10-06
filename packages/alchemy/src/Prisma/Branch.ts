@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetProjectBranchesResponse,
   type GetProjectsResponse,
@@ -16,6 +15,7 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedBranch } from "./Internal/Observed.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
@@ -320,7 +320,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would make a second branch; the retry
               // policy cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => response.data),
               Effect.catchTag("Conflict", () =>
                 Effect.fail(

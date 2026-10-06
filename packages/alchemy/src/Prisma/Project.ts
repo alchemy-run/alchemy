@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetProjectDatabasesResponse,
   type GetProjectsResponse,
@@ -20,6 +19,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { extractConnectionSecrets } from "./Client.ts";
 import { destroyProjectApps } from "./ComputeLifecycle.ts";
+import { retryThrottlingOnly } from "./Internal/CreateRetry.ts";
 import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
@@ -502,7 +502,7 @@ const ProviderLive = () =>
             }).pipe(
               // A replayed create would make a second project; the retry
               // policy cannot see the request, so opt out explicitly.
-              Retry.none,
+              retryThrottlingOnly,
               Effect.map((response) => {
                 const project: ObservedProject = response.data;
                 return {
@@ -608,7 +608,7 @@ const ProviderLive = () =>
                 region: desiredRegion,
                 isDefault: true,
               }).pipe(
-                Retry.none,
+                retryThrottlingOnly,
                 Effect.map((response) => response.data),
                 Effect.catchTag("Conflict", () =>
                   defaultDatabase(projectId).pipe(

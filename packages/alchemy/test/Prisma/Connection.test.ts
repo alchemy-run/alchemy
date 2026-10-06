@@ -1,704 +1,378 @@
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { Unowned } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext";
-import { PrismaApiError, PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
-import { connectEnvKeys } from "@/Prisma/Connect";
-import { Connection, ConnectionProvider } from "@/Prisma/Connection";
-import type { DatabaseConnection, DatabaseConnectionWithSecrets } from "@/Prisma/Types";
-import * as Provider from "@/Provider";
 import {
-  conflict,
-  data,
-  json,
-  makeFakeManagementApi,
-  notFound,
-  page,
-  unhandled,
-} from "./fixtures/FakeManagementApi.ts";
+  createConnection,
+  deleteConnection,
+  getConnection,
+  getDatabaseConnections,
+} from "@distilled.cloud/prisma/management";
+import { expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Drift from "@/Drift.ts";
+import * as Prisma from "@/Prisma";
+import { connectEnvKeys } from "@/Prisma/Connect";
+import * as Test from "@/Test/Alchemy";
+import { restoreRowAttr } from "./fixtures/ConnectionLive.ts";
+import {
+  expectGone,
+  expectProjectGone,
+  failureOf,
+  forgetState,
+  markCreating,
+  patchStateAttr,
+} from "./fixtures/Live.ts";
 
-const createdAt = "2026-01-01T00:00:00.000Z";
-const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const live = Test.make({ providers: Prisma.providers() });
 
-const connection = (id: string, name: string): DatabaseConnection => ({
-  id,
-  type: "connection",
-  url: `https://api.prisma.test/v1/connections/${id}`,
-  name,
-  createdAt,
-  kind: "postgres",
-  endpoints: {
-    direct: { host: "db.prisma.test", port: 5432 },
-    pooled: { host: "pooled.db.prisma.test", port: 5432 },
-  },
-  database: {
-    id: "database-1",
-    url: "https://api.prisma.test/v1/databases/database-1",
-    name: "main",
-  },
+const liveTags = [
+  "provider:prisma",
+  "provider:prisma:connection",
+  "provider:prisma:database",
+  "provider:prisma:project",
+  "live",
+];
+
+const databaseStack = Effect.gen(function* () {
+  const project = yield* Prisma.Project("Project", { createDatabase: false });
+  const database = yield* Prisma.Database("Main", { project });
+  return { project, database };
 });
 
-const withSecrets = (value: DatabaseConnection, suffix: string): DatabaseConnectionWithSecrets => ({
-  ...value,
-  endpoints: {
-    direct: { host: "db.prisma.test", port: 5432, connectionString: `postgres://direct-${suffix}` },
-    pooled: {
-      host: "pooled.db.prisma.test",
-      port: 5432,
-      connectionString: `postgres://pooled-${suffix}`,
-    },
-  },
-});
-
-const liveProviderContext = Layer.succeed(AlchemyContext, {
-  dotAlchemy: ".alchemy-test",
-  dev: false,
-  adopt: false,
-});
-
-const providerLayer = (client: PrismaManagementClient) =>
-  ConnectionProvider().pipe(
-    Layer.provide(Layer.succeed(PrismaClient, client)),
-    Layer.provide(liveProviderContext),
-  );
-
-/**
- * Serve the Management API's connection routes from the same hermetic
- * handlers these suites already declare. The handlers are synchronous, so the
- * fake runs them directly and maps their results onto the wire: a handler
- * returning `undefined` is a 404, everything else a `{ data }` envelope.
- */
-interface ConnectionHandlers {
-  listDatabaseConnections?: (databaseId: string, query?: any) => Effect.Effect<any, any>;
-  getConnection?: (id: string) => Effect.Effect<any, any>;
-  createConnection?: (input: any) => Effect.Effect<any, any>;
-  rotateConnection?: (id: string) => Effect.Effect<any, any>;
-  deleteConnection?: (id: string) => Effect.Effect<any, any>;
-}
-
-const connectionApi = (handlers: ConnectionHandlers) =>
-  makeFakeManagementApi((request) => {
-    const segments = request.pathname.split("/").filter((s) => s.length > 0);
-    const respond = (value: unknown) => (value === undefined ? notFound("not found") : data(value));
-
-    if (
-      segments.length === 4 &&
-      segments[1] === "databases" &&
-      segments[3] === "connections" &&
-      request.method === "GET"
-    ) {
-      return page(Effect.runSync(handlers.listDatabaseConnections!(segments[2]!)));
-    }
-    if (request.pathname === "/v1/connections" && request.method === "POST") {
-      const created = Effect.runSync(handlers.createConnection!(request.bodyJson));
-      // A handler may answer with a Response directly to inject a status.
-      return created instanceof Response ? created : data(created, { status: 201 });
-    }
-    if (
-      segments.length === 4 &&
-      segments[1] === "connections" &&
-      segments[3] === "rotate" &&
-      request.method === "POST"
-    ) {
-      return respond(Effect.runSync(handlers.rotateConnection!(segments[2]!)));
-    }
-    if (segments.length === 3 && segments[1] === "connections") {
-      const id = segments[2]!;
-      if (request.method === "GET") {
-        return respond(Effect.runSync(handlers.getConnection!(id)));
-      }
-      if (request.method === "DELETE") {
-        if (handlers.deleteConnection) {
-          Effect.runSync(handlers.deleteConnection(id));
-        }
-        return json(null, { status: 204 });
-      }
-    }
-    return unhandled(request);
+const connectionStack = (
+  props: { name?: string; rotate?: boolean } = {},
+  options: { adopt?: boolean } = {},
+) =>
+  Effect.gen(function* () {
+    const { project, database } = yield* databaseStack;
+    const declared = Prisma.Connection("Api", { database, ...props });
+    const connection = yield* options.adopt ? declared.pipe(adopt(true)) : declared;
+    return { project, database, connection };
   });
 
-const connectionProps = { database: "database-1", name: "api" };
+const listConnections = (databaseId: string) =>
+  getDatabaseConnections({ databaseId, limit: 100 }).pipe(Effect.map((page) => page.data));
 
-const reconcileInput = (
-  output?: Connection["Attributes"],
-  olds?: typeof connectionProps,
-  reconcileInstanceId = instanceId,
-) => ({
-  id: "Connection",
-  fqn: "Connection",
-  instanceId: reconcileInstanceId,
-  news: connectionProps,
-  olds,
-  output,
-  session: undefined as never,
-  bindings: [],
-});
+const observeConnection = (id: string) =>
+  getConnection({ id }).pipe(Effect.map((response) => response.data));
 
-const readInput = (
-  connectionsOutput?: Connection["Attributes"],
-  readInstanceId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-) => ({
-  id: "Connection",
-  fqn: "Connection",
-  instanceId: readInstanceId,
-  olds: { database: "database-1", name: "api" },
-  output: connectionsOutput,
-});
+const expectConnectionGone = (id: string) =>
+  expectGone(
+    getConnection({ id }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
+  );
 
-describe(
-  "Prisma Connection provider",
-  { tags: ["unit", "provider:prisma", "provider:prisma:connection", "local"] },
-  () => {
-    it.effect(
-      "recovers a crash after create without creating another key",
-      () => {
-        const connections: DatabaseConnection[] = [];
-        let creates = 0;
-        let rotations = 0;
-        const client = {
-          listDatabaseConnections: () => Effect.succeed(connections),
-          createConnection: (input: { name: string }) =>
-            Effect.sync(() => {
-              creates += 1;
-              const created = connection("connection-1", input.name);
-              connections.push(created);
-              return withSecrets(created, "created");
-            }),
-          getConnection: (id: string) =>
-            Effect.succeed(connections.find((item) => item.id === id)!),
-          rotateConnection: (id: string) =>
-            Effect.sync(() => {
-              rotations += 1;
-              return withSecrets(
-                connections.find((item) => item.id === id)!,
-                "rotated",
-              );
-            }),
-        } as unknown as PrismaManagementClient;
+const secret = (value: Redacted.Redacted<string> | undefined) =>
+  value === undefined ? undefined : Redacted.value(value);
 
-        return Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Connection);
-          const first = yield* provider.reconcile(reconcileInput());
-          // Simulate create succeeding but state persistence failing. Refresh
-          // recovers the deterministic key without its one-time credentials.
-          const observed = yield* provider.read!(readInput(undefined, instanceId));
-          expect(observed).toBeDefined();
-          expect(Unowned.is(observed)).toBe(false);
-          expect(observed?.directConnectionString).toBeUndefined();
-          const recovered = yield* provider.reconcile(reconcileInput(observed!));
+live.test.provider(
+  "names a connection after its logical ID, materializes URLs and origins, and replaces it on rename",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
 
-          expect(creates).toBe(1);
-          expect(rotations).toBe(1);
-          expect(connections[0]?.name).toBe("api-aaaaaaaaaaaa");
-          expect(first.connectionId).toBe("connection-1");
-          expect(recovered.connectionId).toBe("connection-1");
-          expect(Redacted.value(recovered.directConnectionString!)).toBe(
-            "postgres://direct-rotated",
-          );
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
+    const initial = yield* stack.deploy(connectionStack());
+    const connection = initial.connection;
+    // name omitted -> logical ID prefix + instance identity suffix
+    expect(connection.connectionName).toMatch(/^Api-[0-9a-zA-Z]{12}$/);
+    expect(connection.databaseId).toBe(initial.database.databaseId);
+    const observed = yield* observeConnection(connection.connectionId);
+    expect(observed.name).toBe(connection.connectionName);
+    expect(observed.database.id).toBe(initial.database.databaseId);
+
+    const direct = secret(connection.directConnectionString);
+    const pooled = secret(connection.pooledConnectionString);
+    expect(direct).toBeDefined();
+    // databaseUrl prefers the pooled endpoint for application traffic.
+    expect(secret(connection.databaseUrl)).toBe(pooled ?? direct);
+    // origin parses the direct connection string into Hyperdrive's shape.
+    const directUrl = new URL(direct!);
+    expect(connection.origin?.host).toBe(directUrl.hostname);
+    expect(connection.origin?.scheme).toBe(directUrl.protocol.replace(/:$/, ""));
+    expect(connection.host).toBe(directUrl.hostname);
+    if (pooled !== undefined) {
+      expect(connection.pooledOrigin?.host).toBe(new URL(pooled).hostname);
+    }
+
+    const repeated = yield* stack.deploy(connectionStack());
+    expect(repeated.connection.connectionId).toBe(connection.connectionId);
+
+    const planned = yield* stack.plan(connectionStack({ name: "api" }));
+    expect(planned.resources.Api?.action).toBe("replace");
+    const renamed = yield* stack.deploy(connectionStack({ name: "api" }));
+    expect(renamed.connection.connectionId).not.toBe(connection.connectionId);
+    expect(renamed.connection.connectionName).toMatch(/^api-[0-9a-zA-Z]{12}$/);
+    expect((yield* observeConnection(renamed.connection.connectionId)).name).toBe(
+      renamed.connection.connectionName,
     );
+    yield* expectConnectionGone(connection.connectionId);
 
-    it.effect(
-      "recovers credentials after a generated connection create conflict",
-      () => {
-        const connections: DatabaseConnection[] = [];
-        let creates = 0;
-        let rotations = 0;
-        const client = {
-          listDatabaseConnections: () => Effect.succeed(connections),
-          // Served as a real 409 below; distilled's status matcher is what
-          // turns it into the `Conflict` tag the recovery path catches.
-          createConnection: (input: { name: string }) =>
-            Effect.sync(() => {
-              creates += 1;
-              connections.push(connection("connection-1", input.name));
-              return conflict("already exists");
-            }),
-          rotateConnection: (id: string) =>
-            Effect.sync(() => {
-              rotations += 1;
-              return withSecrets(
-                connections.find((item) => item.id === id)!,
-                "recovered",
-              );
-            }),
-        } as unknown as PrismaManagementClient;
+    yield* stack.destroy();
+    yield* expectConnectionGone(renamed.connection.connectionId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
 
-        return Effect.gen(function* () {
-          const provider = yield* Connection.Provider;
-          const recovered = yield* provider.reconcile(reconcileInput());
+live.test.provider(
+  "rotates credentials in place when rotate turns on and not again when it resets",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
 
-          expect(creates).toBe(1);
-          expect(rotations).toBe(1);
-          expect(recovered.connectionId).toBe("connection-1");
-          expect(Redacted.value(recovered.directConnectionString!)).toBe(
-            "postgres://direct-recovered",
-          );
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
+    const initial = yield* stack.deploy(connectionStack({ name: "api" }));
+    const id = initial.connection.connectionId;
+    const original = secret(initial.connection.directConnectionString);
+    expect(original).toBeDefined();
+
+    const stable = yield* stack.deploy(connectionStack({ name: "api" }));
+    expect(stable.connection.connectionId).toBe(id);
+    expect(secret(stable.connection.directConnectionString)).toBe(original);
+
+    const planned = yield* stack.plan(connectionStack({ name: "api", rotate: true }));
+    expect(planned.resources.Api?.action).toBe("update");
+    const rotated = yield* stack.deploy(connectionStack({ name: "api", rotate: true }));
+    expect(rotated.connection.connectionId).toBe(id);
+    expect(rotated.connection.connectionName).toBe(initial.connection.connectionName);
+    const first = secret(rotated.connection.directConnectionString);
+    expect(first).toBeDefined();
+    expect(first).not.toBe(original);
+
+    const kept = yield* stack.deploy(connectionStack({ name: "api", rotate: true }));
+    expect(secret(kept.connection.directConnectionString)).toBe(first);
+
+    const reset = yield* stack.deploy(connectionStack({ name: "api", rotate: false }));
+    expect(reset.connection.connectionId).toBe(id);
+    expect(secret(reset.connection.directConnectionString)).toBe(first);
+
+    const again = yield* stack.deploy(connectionStack({ name: "api", rotate: true }));
+    expect(again.connection.connectionId).toBe(id);
+    expect(secret(again.connection.directConnectionString)).not.toBe(first);
+
+    yield* stack.destroy();
+    yield* expectConnectionGone(id);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "recovers an interrupted create as owned and recovers credentials without creating another key",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(connectionStack({ name: "api" }));
+    const name = initial.connection.connectionName;
+    const before = yield* listConnections(initial.database.databaseId);
+    yield* markCreating(stack, "Api");
+
+    // The deterministic name proves ownership, so no adoption is needed.
+    const recovered = yield* stack.deploy(connectionStack({ name: "api" }));
+    expect(recovered.connection.connectionId).toBe(initial.connection.connectionId);
+    expect(recovered.connection.connectionName).toBe(name);
+    // The one-time credentials were lost with the state, so they are rotated.
+    const credentials = secret(recovered.connection.directConnectionString);
+    expect(credentials).toBeDefined();
+    expect(credentials).not.toBe(secret(initial.connection.directConnectionString));
+
+    const after = yield* listConnections(initial.database.databaseId);
+    expect(after.map((c) => c.id).sort()).toEqual(before.map((c) => c.id).sort());
+    expect(after.filter((c) => c.name === name)).toHaveLength(1);
+
+    const stable = yield* stack.deploy(connectionStack({ name: "api" }));
+    expect(secret(stable.connection.directConnectionString)).toBe(credentials);
+
+    yield* stack.destroy();
+    yield* expectConnectionGone(initial.connection.connectionId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "after lost state, adoption keeps the old generated name and rotates only on request",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(connectionStack({ name: "api" }));
+    const before = yield* listConnections(initial.database.databaseId);
+    yield* forgetState(stack, "Api");
+
+    // A new instance generates a different name, so the old key is foreign.
+    const refused = yield* failureOf(stack.deploy(connectionStack({ name: "api" })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+
+    const adopted = yield* stack.deploy(connectionStack({ name: "api" }, { adopt: true }));
+    expect(adopted.connection.connectionId).toBe(initial.connection.connectionId);
+    expect(adopted.connection.connectionName).toBe(initial.connection.connectionName);
+    expect(adopted.connection.directConnectionString).toBeUndefined();
+    const after = yield* listConnections(initial.database.databaseId);
+    expect(after.map((c) => c.id).sort()).toEqual(before.map((c) => c.id).sort());
+
+    const planned = yield* stack.plan(connectionStack({ name: "api" }));
+    expect(planned.resources.Api?.action).toBe("noop");
+
+    const rotated = yield* stack.deploy(connectionStack({ name: "api", rotate: true }));
+    expect(rotated.connection.connectionId).toBe(initial.connection.connectionId);
+    expect(rotated.connection.connectionName).toBe(initial.connection.connectionName);
+    const credentials = secret(rotated.connection.directConnectionString);
+    expect(credentials).toBeDefined();
+
+    // A refresh keeps the adopted name and the rotated credentials.
+    const detected = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+      Effect.provide(stack.state),
     );
+    const refreshed = detected.resources.Api;
+    expect(refreshed?.attr?.connectionName).toBe(initial.connection.connectionName);
+    expect(secret(refreshed?.attr?.directConnectionString)).toBe(credentials);
 
-    it.effect(
-      "recovers exact generated credentials and supports rotation",
-      () => {
-        const existing = connection("connection-1", "api-aaaaaaaaaaaa");
-        let rotations = 0;
-        const client = {
-          getConnection: () => Effect.succeed(existing),
-          rotateConnection: () =>
-            Effect.sync(() => {
-              rotations += 1;
-              return withSecrets(existing, "adopted");
-            }),
-        } as unknown as PrismaManagementClient;
-        const output: Connection["Attributes"] = {
-          connectionId: existing.id,
-          connectionName: existing.name,
-          databaseId: existing.database.id,
-          kind: existing.kind,
-          createdAt,
-          directConnectionString: undefined,
-          pooledConnectionString: undefined,
-          accelerateConnectionString: undefined,
-          host: "db.prisma.test",
-          user: undefined,
-          password: undefined,
-          databaseUrl: undefined,
-          origin: undefined,
-          pooledOrigin: undefined,
-        };
+    yield* stack.destroy();
+    yield* expectConnectionGone(initial.connection.connectionId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
 
-        return Effect.gen(function* () {
-          const provider = yield* Connection.Provider;
-          const recovered = yield* provider.reconcile({
-            ...reconcileInput(output),
-            olds: undefined,
-          });
-          expect(Redacted.value(recovered.directConnectionString!)).toBe(
-            "postgres://direct-adopted",
-          );
-          expect(rotations).toBe(1);
+live.test.provider(
+  "requires adoption for a foreign connection with the natural name and keeps that name",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
 
-          const stable = yield* provider.reconcile(reconcileInput(recovered, connectionProps));
-          expect(Redacted.value(stable.directConnectionString!)).toBe("postgres://direct-adopted");
-          expect(rotations).toBe(1);
-
-          const optedIn = yield* provider.reconcile({
-            ...reconcileInput(recovered, connectionProps),
-            news: { ...connectionProps, rotate: true },
-          });
-          expect(rotations).toBe(2);
-          expect(Redacted.value(optedIn.directConnectionString!)).toBe("postgres://direct-adopted");
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
-
-    it.effect("rejects a blank connection name before calling Prisma", () => {
-      let listed = false;
-      const client = {
-        listDatabaseConnections: () =>
-          Effect.sync(() => {
-            listed = true;
-            return [];
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Connection.Provider;
-        const error = yield* provider
-          .reconcile({ ...reconcileInput(), news: { database: "database-1", name: "   " } })
-          .pipe(Effect.flip);
-
-        expect(String(error)).toContain("must contain at least one non-space character");
-        expect(listed).toBe(false);
-      }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
+    const initial = yield* stack.deploy(databaseStack);
+    const foreign = yield* createConnection({
+      databaseId: initial.database.databaseId,
+      name: "api",
     });
 
-    it.effect(
-      "does not rotate again when the rotate flag is reset",
-      () => {
-        const existing = connection("connection-1", "api-aaaaaaaaaaaa");
-        let rotations = 0;
-        const client = {
-          getConnection: () => Effect.succeed(existing),
-          rotateConnection: () =>
-            Effect.sync(() => {
-              rotations += 1;
-              return withSecrets(existing, "unexpected");
-            }),
-        } as unknown as PrismaManagementClient;
-        const output: Connection["Attributes"] = {
-          connectionId: existing.id,
-          connectionName: existing.name,
-          databaseId: existing.database.id,
-          kind: existing.kind,
-          createdAt,
-          directConnectionString: Redacted.make("postgres://direct-current"),
-          pooledConnectionString: Redacted.make("postgres://pooled-current"),
-          accelerateConnectionString: undefined,
-          host: "db.prisma.test",
-          user: "app",
-          password: Redacted.make("current-password"),
-          databaseUrl: Redacted.make("postgres://pooled-current"),
-          origin: undefined,
-          pooledOrigin: undefined,
-        };
+    const refused = yield* failureOf(stack.deploy(connectionStack({ name: "api" })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
 
-        return Effect.gen(function* () {
-          const provider = yield* Connection.Provider;
-          const recovered = yield* provider.reconcile({
-            ...reconcileInput(output),
-            news: { ...connectionProps, rotate: false },
-            olds: { ...connectionProps, rotate: true },
-          });
-
-          expect(rotations).toBe(0);
-          expect(Redacted.value(recovered.directConnectionString!)).toBe(
-            "postgres://direct-current",
-          );
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
+    const adopted = yield* stack.deploy(connectionStack({ name: "api" }, { adopt: true }));
+    expect(adopted.connection.connectionId).toBe(foreign.data.id);
+    expect(adopted.connection.connectionName).toBe("api");
+    expect(adopted.connection.directConnectionString).toBeUndefined();
+    const named = (yield* listConnections(initial.database.databaseId)).filter((c) =>
+      c.name.startsWith("api"),
     );
+    expect(named.map((c) => c.id)).toEqual([foreign.data.id]);
 
-    it.effect(
-      "rejects a persisted connection with mismatched identity",
-      () => {
-        const wrong = {
-          ...connection("connection-1", "api-aaaaaaaaaaaa"),
-          database: {
-            id: "database-foreign",
-            url: "https://api.prisma.test/v1/databases/database-foreign",
-            name: "foreign",
-          },
-        };
-        let rotations = 0;
-        const client = {
-          getConnection: () => Effect.succeed(wrong),
-          rotateConnection: () =>
-            Effect.sync(() => {
-              rotations += 1;
-              return withSecrets(wrong, "unexpected");
-            }),
-        } as unknown as PrismaManagementClient;
-        const output: Connection["Attributes"] = {
-          connectionId: wrong.id,
-          connectionName: wrong.name,
-          databaseId: "database-foreign",
-          kind: wrong.kind,
-          createdAt,
-          directConnectionString: undefined,
-          pooledConnectionString: undefined,
-          accelerateConnectionString: undefined,
-          host: undefined,
-          user: undefined,
-          password: undefined,
-          databaseUrl: undefined,
-          origin: undefined,
-          pooledOrigin: undefined,
-        };
+    const rotated = yield* stack.deploy(connectionStack({ name: "api", rotate: true }));
+    expect(rotated.connection.connectionId).toBe(foreign.data.id);
+    expect(rotated.connection.connectionName).toBe("api");
+    expect(rotated.connection.directConnectionString).toBeDefined();
 
-        return Effect.gen(function* () {
-          const provider = yield* Connection.Provider;
-          const diff = yield* provider.diff!({
-            id: "Connection",
-            fqn: "Connection",
-            instanceId,
-            olds: connectionProps,
-            news: connectionProps,
-            output,
-            oldBindings: [],
-            newBindings: [],
-          });
-          expect(diff).toEqual({ action: "replace" });
+    yield* stack.destroy();
+    yield* expectConnectionGone(foreign.data.id);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
 
-          const error = yield* provider
-            .reconcile(reconcileInput(output, connectionProps))
-            .pipe(Effect.flip);
-          expect(String(error)).toContain("mismatched identity");
-          expect(rotations).toBe(0);
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
+live.test.provider(
+  "fails ambiguous generated-name recovery and treats a single foreign generated key as unowned",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(databaseStack);
+    const databaseId = initial.database.databaseId;
+    const first = yield* createConnection({ databaseId, name: "api-aaaaaaaaaaaa" });
+    const second = yield* createConnection({ databaseId, name: "api-bbbbbbbbbbbb" });
+
+    const ambiguous = yield* failureOf(stack.deploy(connectionStack({ name: "api" })));
+    expect(ambiguous.text).toContain("has 2 connections named");
+    expect(ambiguous.text).toContain("<instance-id>");
+
+    yield* deleteConnection({ id: second.data.id });
+    yield* expectConnectionGone(second.data.id);
+
+    const refused = yield* failureOf(stack.deploy(connectionStack({ name: "api" })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+
+    const adopted = yield* stack.deploy(connectionStack({ name: "api" }, { adopt: true }));
+    expect(adopted.connection.connectionId).toBe(first.data.id);
+    expect(adopted.connection.connectionName).toBe("api-aaaaaaaaaaaa");
+    expect(adopted.connection.directConnectionString).toBeUndefined();
+    const named = (yield* listConnections(databaseId)).filter((c) => c.name.startsWith("api"));
+    expect(named.map((c) => c.id)).toEqual([first.data.id]);
+
+    yield* stack.destroy();
+    yield* expectConnectionGone(first.data.id);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "rejects a blank connection name before calling Prisma",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(databaseStack);
+    const before = yield* listConnections(initial.database.databaseId);
+
+    const failure = yield* failureOf(stack.deploy(connectionStack({ name: "   " })));
+    expect(failure.text).toContain("must contain at least one non-space character");
+    const after = yield* listConnections(initial.database.databaseId);
+    expect(after.map((c) => c.id).sort()).toEqual(before.map((c) => c.id).sort());
+
+    yield* stack.destroy();
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "replaces a persisted connection with a mismatched database and refuses to refresh or rotate a mismatched identity",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(connectionStack({ name: "api" }));
+    const { connectionId, connectionName, databaseId } = initial.connection;
+    const original = secret(initial.connection.directConnectionString);
+
+    yield* patchStateAttr(stack, "Api", { databaseId: "database-foreign" });
+    const planned = yield* stack.plan(connectionStack({ name: "api" }));
+    expect(planned.resources.Api?.action).toBe("replace");
+    yield* patchStateAttr(stack, "Api", { databaseId });
+
+    // Persisted name no longer matches the cloud: a refresh refuses.
+    yield* patchStateAttr(stack, "Api", { connectionName: "api" });
+    const refresh = yield* failureOf(
+      Drift.detect({ name: stack.name, stage: stack.stage }).pipe(Effect.provide(stack.state)),
     );
-
-    it.effect(
-      "recovers its deterministic key as owned while creating",
-      () => {
-        const existing = connection("connection-1", "api-aaaaaaaaaaaa");
-        const client = {
-          listDatabaseConnections: () =>
-            Effect.succeed([existing, connection("connection-foreign", "api-bbbbbbbbbbbb")]),
-        } as unknown as PrismaManagementClient;
-
-        return Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Connection);
-          const output = yield* provider.read!(readInput(undefined, instanceId));
-
-          expect(output?.connectionId).toBe("connection-1");
-          expect(Unowned.is(output)).toBe(false);
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
+    const refreshError = refresh.errors.find(
+      (error): error is Drift.DriftResourceError => error instanceof Drift.DriftResourceError,
     );
+    expect(refreshError).toBeDefined();
+    expect(String(refreshError?.cause)).toContain("no longer matches persisted");
+    expect(String(refreshError?.cause)).toContain("name 'api'");
 
-    it.effect(
-      "reports a foreign generated key as unowned on a cold probe",
-      () => {
-        const existing = connection("connection-1", "api-aaaaaaaaaaaa");
-        const client = {
-          listDatabaseConnections: () => Effect.succeed([existing]),
-        } as unknown as PrismaManagementClient;
+    // A generated-looking name for a different instance: rotation refuses.
+    yield* patchStateAttr(stack, "Api", { connectionName: "api-000000000000" });
+    const rotate = yield* failureOf(stack.deploy(connectionStack({ name: "api", rotate: true })));
+    expect(rotate.text).toContain("mismatched identity");
+    yield* restoreRowAttr(stack, "Api", { connectionName });
 
-        return Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Connection);
-          const output = yield* provider.read!(readInput());
+    const observed = yield* observeConnection(connectionId);
+    expect(observed.name).toBe(connectionName);
+    expect(observed.database.id).toBe(databaseId);
+    const settled = yield* stack.deploy(connectionStack({ name: "api" }));
+    expect(settled.connection.connectionId).toBe(connectionId);
+    expect(secret(settled.connection.directConnectionString)).toBe(original);
 
-          expect(output?.connectionId).toBe("connection-1");
-          expect(Unowned.is(output)).toBe(true);
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
+    yield* stack.destroy();
+    yield* expectConnectionGone(connectionId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
 
-    it.effect(
-      "preserves an adopted connection from an older generated instance name",
-      () => {
-        const currentInstanceId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-        const existing = connection("connection-1", "api-aaaaaaaaaaaa");
-        let creates = 0;
-        let rotations = 0;
-        const client = {
-          listDatabaseConnections: () => Effect.succeed([existing]),
-          getConnection: () => Effect.succeed(existing),
-          createConnection: () =>
-            Effect.sync(() => {
-              creates += 1;
-              return withSecrets(existing, "unexpected");
-            }),
-          rotateConnection: () =>
-            Effect.sync(() => {
-              rotations += 1;
-              return withSecrets(existing, "adopted-old-generated");
-            }),
-        } as unknown as PrismaManagementClient;
+it(
+  "does not collide binding keys after lossy normalization",
+  () => {
+    const hyphenated = connectEnvKeys({ FQN: "db-a", LogicalId: "db-a" });
+    const underscored = connectEnvKeys({ FQN: "db_a", LogicalId: "db_a" });
 
-        return Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Connection);
-          const observed = yield* provider.read!(readInput(undefined, currentInstanceId));
-          expect(observed?.connectionName).toBe("api-aaaaaaaaaaaa");
-          expect(Unowned.is(observed)).toBe(true);
-
-          const adopted = yield* provider.reconcile(
-            reconcileInput(observed!, undefined, currentInstanceId),
-          );
-          expect(adopted.connectionName).toBe("api-aaaaaaaaaaaa");
-          expect(adopted.directConnectionString).toBeUndefined();
-          expect(creates).toBe(0);
-          expect(rotations).toBe(0);
-
-          const diff = yield* provider.diff!({
-            id: "Connection",
-            fqn: "Connection",
-            instanceId: currentInstanceId,
-            olds: connectionProps,
-            news: connectionProps,
-            output: adopted,
-            oldBindings: [],
-            newBindings: [],
-          });
-          expect(diff).toBeUndefined();
-
-          const rotated = yield* provider.reconcile({
-            ...reconcileInput(adopted, connectionProps, currentInstanceId),
-            news: { ...connectionProps, rotate: true },
-          });
-          expect(rotations).toBe(1);
-          expect(Redacted.value(rotated.directConnectionString!)).toBe(
-            "postgres://direct-adopted-old-generated",
-          );
-
-          const refreshed = yield* provider.read!(readInput(rotated, currentInstanceId));
-          expect(refreshed?.connectionName).toBe("api-aaaaaaaaaaaa");
-          expect(Redacted.value(refreshed!.directConnectionString!)).toBe(
-            "postgres://direct-adopted-old-generated",
-          );
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
-
-    it.effect(
-      "preserves an adopted connection with its natural name",
-      () => {
-        const existing = connection("connection-1", "api");
-        let creates = 0;
-        let rotations = 0;
-        const client = {
-          listDatabaseConnections: () => Effect.succeed([existing]),
-          getConnection: () => Effect.succeed(existing),
-          createConnection: () =>
-            Effect.sync(() => {
-              creates += 1;
-              return withSecrets(existing, "unexpected");
-            }),
-          rotateConnection: () =>
-            Effect.sync(() => {
-              rotations += 1;
-              return withSecrets(existing, "adopted-natural");
-            }),
-        } as unknown as PrismaManagementClient;
-
-        return Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Connection);
-          const observed = yield* provider.read!(readInput(undefined, instanceId));
-          expect(observed?.connectionName).toBe("api");
-          expect(Unowned.is(observed)).toBe(true);
-
-          const adopted = yield* provider.reconcile(reconcileInput(observed!));
-          expect(adopted.connectionName).toBe("api");
-          expect(adopted.directConnectionString).toBeUndefined();
-          expect(creates).toBe(0);
-          expect(rotations).toBe(0);
-
-          const rotated = yield* provider.reconcile({
-            ...reconcileInput(adopted, connectionProps),
-            news: { ...connectionProps, rotate: true },
-          });
-          expect(rotations).toBe(1);
-          expect(Redacted.value(rotated.directConnectionString!)).toBe(
-            "postgres://direct-adopted-natural",
-          );
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
-
-    it.effect(
-      "rejects drift from an adopted physical connection name",
-      () => {
-        const persisted = connection("connection-1", "api");
-        const renamed = connection("connection-1", "api-bbbbbbbbbbbb");
-        const client = {
-          getConnection: () => Effect.succeed(renamed),
-        } as unknown as PrismaManagementClient;
-        const output: Connection["Attributes"] = {
-          connectionId: persisted.id,
-          connectionName: persisted.name,
-          databaseId: persisted.database.id,
-          kind: persisted.kind,
-          createdAt: persisted.createdAt,
-          directConnectionString: undefined,
-          pooledConnectionString: undefined,
-          accelerateConnectionString: undefined,
-          host: persisted.endpoints.direct?.host,
-          user: undefined,
-          databaseUrl: undefined,
-          origin: undefined,
-          pooledOrigin: undefined,
-          password: undefined,
-        };
-
-        return Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Connection);
-          const error = yield* provider.read!(readInput(output, instanceId)).pipe(Effect.flip);
-
-          expect(String(error)).toContain("no longer matches persisted");
-          expect(String(error)).toContain("name 'api'");
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
-
-    it.effect(
-      "fails ambiguous generated-name recovery",
-      () => {
-        const client = {
-          listDatabaseConnections: () =>
-            Effect.succeed([
-              connection("connection-1", "api-aaaaaaaaaaaa"),
-              connection("connection-2", "api-bbbbbbbbbbbb"),
-            ]),
-        } as unknown as PrismaManagementClient;
-
-        return Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Connection);
-          const error = yield* provider.read!(
-            readInput(undefined, "cccccccccccccccccccccccccccccccc"),
-          ).pipe(Effect.flip);
-
-          expect(String(error)).toContain("has 2 connections named");
-          expect(String(error)).toContain("<instance-id>");
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
-
-    it(
-      "does not collide binding keys after lossy normalization",
-      () => {
-        const hyphenated = connectEnvKeys({ FQN: "db-a", LogicalId: "db-a" });
-        const underscored = connectEnvKeys({ FQN: "db_a", LogicalId: "db_a" });
-
-        expect(hyphenated.directConnectionString).not.toBe(underscored.directConnectionString);
-      },
-      { tags: ["provider:prisma:connect"] },
-    );
-
-    it.effect(
-      "defaults the connection name to the logical ID",
-      () => {
-        const created = withSecrets(connection("connection-1", "Connection-aaaaaaaaaaaa"), "new");
-        let createdName: string | undefined;
-        const client = {
-          getConnection: () => Effect.succeed(undefined),
-          listDatabaseConnections: () => Effect.succeed([]),
-          createConnection: (input: { name: string }) =>
-            Effect.sync(() => {
-              createdName = input.name;
-              return created;
-            }),
-        } as unknown as PrismaManagementClient;
-
-        return Effect.gen(function* () {
-          const provider = yield* Connection.Provider;
-          yield* provider.reconcile({ ...reconcileInput(), news: { database: "database-1" } });
-          // name omitted -> logical ID prefix + instance identity suffix
-          expect(createdName).toBe("Connection-aaaaaaaaaaaa");
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
-
-    it.effect(
-      "materializes databaseUrl and parsed origins on reconcile",
-      () => {
-        const created = withSecrets(connection("connection-1", "api-aaaaaaaaaaaa"), "new");
-        const client = {
-          getConnection: () => Effect.succeed(undefined),
-          listDatabaseConnections: () => Effect.succeed([]),
-          createConnection: () => Effect.succeed(created),
-        } as unknown as PrismaManagementClient;
-
-        return Effect.gen(function* () {
-          const provider = yield* Connection.Provider;
-          const attrs = yield* provider.reconcile(reconcileInput());
-
-          // databaseUrl prefers the pooled endpoint for application traffic.
-          expect(Redacted.value(attrs.databaseUrl!)).toBe("postgres://pooled-new");
-          // origin parses the direct connection string into Hyperdrive's shape.
-          expect(attrs.origin?.host).toBe("direct-new");
-          expect(attrs.origin?.scheme).toBe("postgres");
-          expect(attrs.pooledOrigin?.host).toBe("pooled-new");
-        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
-      },
-      { tags: ["provider:prisma:database"] },
-    );
+    expect(hyphenated.directConnectionString).not.toBe(underscored.directConnectionString);
   },
+  { tags: ["unit", "provider:prisma", "provider:prisma:connect", "local"] },
 );
