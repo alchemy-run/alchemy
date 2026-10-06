@@ -148,17 +148,10 @@ export type ExternalApi = Resource<
  */
 export const ExternalApi = Resource<ExternalApi>("GCP.ApiHub.ExternalApi");
 
-const resourceName = (
-  project: string,
-  location: string,
-  externalApiId: string,
-) => `${locationParent(project, location)}/externalApis/${externalApiId}`;
+const resourceName = (project: string, location: string, externalApiId: string) =>
+  `${locationParent(project, location)}/externalApis/${externalApiId}`;
 
-const toAttrs = (
-  api: apihub.GoogleCloudApihubV1ExternalApi,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (api: apihub.GoogleCloudApihubV1ExternalApi, project: string, region: string) => {
   const name = api.name ?? "";
   const parsed = parseName(name, "externalApis", region);
   const { text } = parseOwnership(api.description);
@@ -186,16 +179,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
-  apihub.listProjectsLocationsExternalApis
-    .pages({ parent, pageSize: 1000 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.externalApis ?? [])),
-      Stream.filter((item) => hasOwnershipMarker(item.description)),
-      Stream.map((item) => toAttrs(item, project, region)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  apihub.listProjectsLocationsExternalApis.pages({ parent, pageSize: 1000 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.externalApis ?? [])),
+    Stream.filter((item) => hasOwnershipMarker(item.description)),
+    Stream.map((item) => toAttrs(item, project, region)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const ExternalApiProvider = () =>
   Provider.succeed(ExternalApi, {
@@ -206,12 +197,8 @@ export const ExternalApiProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.externalApiId ?? output?.externalApiId,
-        nextId:
-          news.externalApiId ?? olds?.externalApiId ?? output?.externalApiId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.externalApiId ?? olds?.externalApiId ?? output?.externalApiId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -227,36 +214,23 @@ export const ExternalApiProvider = () =>
         output?.externalApiId,
         MAX_LONG_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, externalApiId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, externalApiId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-          env.region,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const externalApiId = yield* toPhysicalId(
         id,
         news.externalApiId,
@@ -297,14 +271,8 @@ export const ExternalApiProvider = () =>
       const observed = parseOwnership(current.description).text;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(observed, news.description);
-      const documentationChanged = !sameJson(
-        current.documentation,
-        news.documentation,
-      );
-      const endpointsChanged = !sameStringList(
-        current.endpoints,
-        news.endpoints,
-      );
+      const documentationChanged = !sameJson(current.documentation, news.documentation);
+      const endpointsChanged = !sameStringList(current.endpoints, news.endpoints);
       const pathsChanged = !sameStringList(current.paths, news.paths);
 
       const updateMask = updateMaskOf(

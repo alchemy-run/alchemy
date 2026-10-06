@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !!process.env.GCP_TEST_BYOIP && !process.env.FAST;
 
@@ -20,11 +17,7 @@ const parentPrefix = process.env.GCP_TEST_PAP_PARENT ?? "";
 const ipCidrRange = process.env.GCP_TEST_PDP_RANGE ?? "203.0.113.0/26";
 const region = "us-central1";
 
-const waitUntilGone = (
-  project: string,
-  regionName: string,
-  publicDelegatedPrefix: string,
-) =>
+const waitUntilGone = (project: string, regionName: string, publicDelegatedPrefix: string) =>
   compute
     .getPublicDelegatedPrefixes({
       project,
@@ -110,11 +103,7 @@ test.provider.skipIf(!runLifecycle || !parentPrefix)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.project,
-        region,
-        created.prefixName,
-      );
+      const gone = yield* waitUntilGone(created.project, region, created.prefixName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },

@@ -1,24 +1,20 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as siteVerification from "@distilled.cloud/gcp/siteVerification_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Site Verification needs a credential with the siteverification OAuth
 // scope (a Cloud Platform service-account token is rejected with
 // InsufficientAuthenticationScopes) and a site whose verification token is
 // already placed; set GCP_TEST_SITE_VERIFICATION=1 when both hold.
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_SITE_VERIFICATION === "1";
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_SITE_VERIFICATION === "1";
 
 const identifier = "https://alchemy-site-verification.test/";
 

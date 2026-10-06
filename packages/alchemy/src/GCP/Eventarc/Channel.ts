@@ -153,15 +153,11 @@ export type Channel = Resource<
  */
 export const Channel = Resource<Channel>("GCP.Eventarc.Channel");
 
-export class ChannelNotResolved extends Data.TaggedError(
-  "GCP.Eventarc.ChannelNotResolved",
-)<{
+export class ChannelNotResolved extends Data.TaggedError("GCP.Eventarc.ChannelNotResolved")<{
   name: string;
 }> {}
 
-export class ChannelStillExists extends Data.TaggedError(
-  "GCP.Eventarc.ChannelStillExists",
-)<{
+export class ChannelStillExists extends Data.TaggedError("GCP.Eventarc.ChannelStillExists")<{
   name: string;
 }> {}
 
@@ -171,10 +167,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -196,16 +190,11 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     channelId:
-      channelsAt >= 0 && parts[channelsAt + 1]
-        ? parts[channelsAt + 1]!
-        : lastSegment(name),
+      channelsAt >= 0 && parts[channelsAt + 1] ? parts[channelsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -234,11 +223,7 @@ const compact = <T extends Record<string, unknown>>(value: T): T => {
   return next as T;
 };
 
-const providerKey = (
-  provider: string | undefined,
-  project: string,
-  location: string,
-) => {
+const providerKey = (provider: string | undefined, project: string, location: string) => {
   if (provider === undefined || provider.length === 0) return "";
   if (provider.includes("/")) return provider;
   return `projects/${project}/locations/${location}/providers/${provider}`;
@@ -247,11 +232,7 @@ const providerKey = (
 const cryptoKeyKey = (name: string | undefined) =>
   name === undefined || name.length === 0 ? "" : name;
 
-const toAttrs = (
-  channel: eventarc.Channel,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (channel: eventarc.Channel, project: string, region: string) => {
   const name = channel.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -280,9 +261,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel
-        ? Effect.succeed(channel)
-        : Effect.fail(new ChannelNotResolved({ name })),
+      channel ? Effect.succeed(channel) : Effect.fail(new ChannelNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelNotResolved",
@@ -294,9 +273,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel === undefined
-        ? Effect.void
-        : Effect.fail(new ChannelStillExists({ name })),
+      channel === undefined ? Effect.void : Effect.fail(new ChannelStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelStillExists",
@@ -307,15 +284,7 @@ const waitUntilGone = (name: string) =>
 
 export const ChannelProvider = () =>
   Provider.succeed(Channel, {
-    stables: [
-      "name",
-      "channelId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-      "provider",
-    ],
+    stables: ["name", "channelId", "project", "location", "uid", "createTime", "provider"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -323,14 +292,8 @@ export const ChannelProvider = () =>
 
       const previousId = olds?.channelId ?? output?.channelId;
       const nextId = news.channelId ? rfc1035(news.channelId) : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const project = output?.project ?? "";
       const previousProvider = providerKey(
         olds?.provider ?? output?.provider,
@@ -343,9 +306,7 @@ export const ChannelProvider = () =>
           : previousProvider;
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousProvider !== nextProvider;
 
@@ -353,27 +314,19 @@ export const ChannelProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const channelId = yield* toId(id, olds?.channelId, output?.channelId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, channelId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, channelId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -387,9 +340,7 @@ export const ChannelProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.channels ?? [])),
             Stream.filter((channel) =>
-              Object.keys(channel.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(channel.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((channel) => toAttrs(channel, env.project, env.region)),
             Stream.runCollect,
@@ -401,10 +352,7 @@ export const ChannelProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const channelId = yield* toId(id, news.channelId, output?.channelId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, channelId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -414,9 +362,7 @@ export const ChannelProvider = () =>
         ? providerKey(news.provider, env.project, location)
         : undefined;
       const desiredCryptoKey =
-        news.cryptoKeyName && news.cryptoKeyName.length > 0
-          ? news.cryptoKeyName
-          : undefined;
+        news.cryptoKeyName && news.cryptoKeyName.length > 0 ? news.cryptoKeyName : undefined;
 
       let current = yield* getByName(name);
 

@@ -4,23 +4,19 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_ID_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 2048;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.AgentRegistry.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.AgentRegistry.NotResolved")<{
   name: string;
 }> {}
 
-export class ResourcePending extends Data.TaggedError(
-  "GCP.AgentRegistry.Pending",
-)<{
+export class ResourcePending extends Data.TaggedError("GCP.AgentRegistry.Pending")<{
   name: string;
 }> {}
 
@@ -44,20 +40,14 @@ export const rfc1035 = (name: string, fallback = "bind"): string => {
   return next.slice(0, MAX_ID_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `${locationParent(project, location)}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `${locationParent(project, location)}/${collection}/${id}`;
 
 export const parseResourceName = (name: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -65,14 +55,9 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -123,11 +108,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -151,9 +134,7 @@ export const replaceOnIdentity = (input: {
     return undefined;
   }
   const samePhysical =
-    !locationChanged &&
-    input.previousId !== undefined &&
-    input.nextId === input.previousId;
+    !locationChanged && input.previousId !== undefined && input.nextId === input.previousId;
   return {
     action: "replace" as const,
     deleteFirst: samePhysical,
@@ -200,9 +181,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseOwnership(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, description: string | undefined) =>
   Effect.gen(function* () {
@@ -224,11 +203,9 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 
 /** Wait for an Agent Registry operation (control plane: minutes). */
 export const waitForOperation = (operation: registry.Operation) =>
-  waitForGcpOperation(
-    operation,
-    (name) => registry.getProjectsLocationsOperations({ name }),
-    { budget: "10 minutes" },
-  );
+  waitForGcpOperation(operation, (name) => registry.getProjectsLocationsOperations({ name }), {
+    budget: "10 minutes",
+  });
 
 /**
  * Wait for a delete operation. The operation record may already be
@@ -248,9 +225,7 @@ export const waitForDeleteOperation = (operation: registry.Operation) =>
     { budget: "10 minutes" },
   );
 
-export const waitForVisible = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
@@ -272,9 +247,7 @@ export class DeleteNotConfirmed extends Data.TaggedError(
 )<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -288,12 +261,7 @@ export const waitUntilGone = <A, E, R>(
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>

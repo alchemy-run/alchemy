@@ -166,8 +166,7 @@ export const RepositoriesHook = Resource<RepositoriesHook>(
   "GCP.SecureSourceManager.RepositoriesHook",
 );
 
-const resourceName = (repository: string, hookId: string) =>
-  `${repository}/hooks/${hookId}`;
+const resourceName = (repository: string, hookId: string) => `${repository}/hooks/${hookId}`;
 
 const toEvents = (
   events: readonly (ssm.HookEventsItemEnum | (string & {}))[] | undefined,
@@ -186,9 +185,7 @@ const toAttrs = (item: ssm.Hook, project: string, region: string) => {
     events: toEvents(item.events),
     disabled: item.disabled === true,
     pushOption:
-      item.pushOption === undefined
-        ? undefined
-        : { branchFilter: item.pushOption.branchFilter },
+      item.pushOption === undefined ? undefined : { branchFilter: item.pushOption.branchFilter },
     uid: item.uid,
     createTime: item.createTime,
     updateTime: item.updateTime,
@@ -212,23 +209,13 @@ const listOnRepository = (repository: string) =>
 const listOwned = (project: string, region: string) =>
   forEachRepository(project, region, (repository) =>
     listOnRepository(repository).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasTargetUriOwnership(item.targetUri)),
-      ),
+      Effect.map((items) => items.filter((item) => hasTargetUriOwnership(item.targetUri))),
     ),
   );
 
 export const RepositoriesHookProvider = () =>
   Provider.succeed(RepositoriesHook, {
-    stables: [
-      "name",
-      "hookId",
-      "repository",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "hookId", "repository", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -239,45 +226,25 @@ export const RepositoriesHookProvider = () =>
       );
       return replaceOnIdentity({
         previousId: olds?.hookId ?? output?.hookId,
-        nextId: news.hookId
-          ? rfc1035(news.hookId, "hook")
-          : (olds?.hookId ?? output?.hookId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.hookId ? rfc1035(news.hookId, "hook") : (olds?.hookId ?? output?.hookId),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.repository ?? output?.repository,
-        nextParent: expandName(
-          news.repository,
-          env.project,
-          location,
-          "repositories",
-        ),
+        nextParent: expandName(news.repository, env.project, location, "repositories"),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const hookId = yield* toPhysicalId(
-        id,
-        olds?.hookId,
-        output?.hookId,
-        "hook",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const hookId = yield* toPhysicalId(id, olds?.hookId, output?.hookId, "hook");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const repository = expandName(
         olds?.repository ?? output?.repository ?? "",
         env.project,
         location,
         "repositories",
       );
-      const name =
-        output?.name ??
-        (repository.length > 0 ? resourceName(repository, hookId) : "");
+      const name = output?.name ?? (repository.length > 0 ? resourceName(repository, hookId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -287,10 +254,7 @@ export const RepositoriesHookProvider = () =>
       const owned =
         output !== undefined ||
         olds?.hookId === undefined ||
-        (yield* hasAlchemyLabels(
-          id,
-          parseTargetUriOwnership(existing.targetUri),
-        ));
+        (yield* hasAlchemyLabels(id, parseTargetUriOwnership(existing.targetUri)));
       return owned ? attrs : Unowned(attrs);
     }),
 
@@ -298,29 +262,14 @@ export const RepositoriesHookProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item: ssm.Hook) =>
-          toAttrs(item, env.project, env.region),
-        );
+        return items.map((item: ssm.Hook) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const hookId = yield* toPhysicalId(
-        id,
-        news.hookId,
-        output?.hookId,
-        "hook",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandName(
-        news.repository,
-        env.project,
-        location,
-        "repositories",
-      );
+      const hookId = yield* toPhysicalId(id, news.hookId, output?.hookId, "hook");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandName(news.repository, env.project, location, "repositories");
       const name = resourceName(repository, hookId);
       const targetUri = news.targetUri;
       const events = toEvents(news.events);
@@ -353,13 +302,11 @@ export const RepositoriesHookProvider = () =>
 
       const mask = fieldMask([
         !sameText(current.targetUri, targetUri) && "targetUri",
-        fingerprint(toEvents(current.events)) !== fingerprint(events) &&
-          "events",
+        fingerprint(toEvents(current.events)) !== fingerprint(events) && "events",
         (current.disabled === true) !== (news.disabled === true) && "disabled",
         !sameText(current.sensitiveQueryString, news.sensitiveQueryString) &&
           "sensitiveQueryString",
-        fingerprint(current.pushOption) !== fingerprint(news.pushOption) &&
-          "pushOption",
+        fingerprint(current.pushOption) !== fingerprint(news.pushOption) && "pushOption",
       ]);
 
       if (mask.length > 0) {
@@ -375,10 +322,7 @@ export const RepositoriesHookProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

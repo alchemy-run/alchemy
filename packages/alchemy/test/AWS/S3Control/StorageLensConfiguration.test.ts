@@ -1,34 +1,30 @@
-import * as AWS from "@/AWS";
-import { StorageLensConfiguration } from "@/AWS/S3Control";
-import * as Test from "@/Test/Alchemy";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { StorageLensConfiguration } from "@/AWS/S3Control";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const ACCOUNT_ID = "391965393224";
 
 const findConfiguration = (configId: string) =>
-  s3control
-    .getStorageLensConfiguration({ AccountId: ACCOUNT_ID, ConfigId: configId })
-    .pipe(
-      Effect.map((r) => r.StorageLensConfiguration),
-      Effect.catchTag("NoSuchConfiguration", () => Effect.succeed(undefined)),
-    );
+  s3control.getStorageLensConfiguration({ AccountId: ACCOUNT_ID, ConfigId: configId }).pipe(
+    Effect.map((r) => r.StorageLensConfiguration),
+    Effect.catchTag("NoSuchConfiguration", () => Effect.succeed(undefined)),
+  );
 
-class ConfigurationStillExists extends Data.TaggedError(
-  "ConfigurationStillExists",
-)<{ readonly configId: string }> {}
+class ConfigurationStillExists extends Data.TaggedError("ConfigurationStillExists")<{
+  readonly configId: string;
+}> {}
 
 const assertConfigurationDeleted = (configId: string) =>
   findConfiguration(configId).pipe(
     Effect.flatMap((cfg) =>
-      cfg === undefined
-        ? Effect.void
-        : Effect.fail(new ConfigurationStillExists({ configId })),
+      cfg === undefined ? Effect.void : Effect.fail(new ConfigurationStillExists({ configId })),
     ),
     Effect.retry({
       while: (e) => e._tag === "ConfigurationStillExists",
@@ -47,9 +43,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => "found" as const),
-          Effect.catchTag("NoSuchConfiguration", () =>
-            Effect.succeed("missing" as const),
-          ),
+          Effect.catchTag("NoSuchConfiguration", () => Effect.succeed("missing" as const)),
         );
       expect(result).toBe("missing");
     }),
@@ -83,11 +77,7 @@ test.provider(
           AccountId: ACCOUNT_ID,
           ConfigId: lens.configId,
         })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestLens");
 
@@ -117,11 +107,7 @@ test.provider(
           AccountId: ACCOUNT_ID,
           ConfigId: lens.configId,
         })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(updatedTags.Environment).toBe("production");
 
       yield* stack.destroy();

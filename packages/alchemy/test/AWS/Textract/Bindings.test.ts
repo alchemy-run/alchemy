@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { HELLO_PNG_TEXT } from "./constants.ts";
 import TextractTestFunctionLive, { TextractTestFunction } from "./handler.ts";
 
@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "TextractBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -66,15 +58,11 @@ const postJson = <T>(path: string) =>
   );
 
 /** Poll an async job's get route until it leaves IN_PROGRESS (bounded). */
-const pollJob = <T extends { jobStatus?: string }>(
-  path: string,
-  jobId: string,
-) =>
+const pollJob = <T extends { jobStatus?: string }>(path: string, jobId: string) =>
   getJson<T>(`${path}?jobId=${jobId}`).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (r): boolean =>
-        r.jobStatus !== undefined && r.jobStatus !== "IN_PROGRESS",
+      until: (r): boolean => r.jobStatus !== undefined && r.jobStatus !== "IN_PROGRESS",
       times: 40,
     }),
   );
@@ -93,9 +81,7 @@ describe(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Textract test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Textract test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Textract test setup: deploying fixture");
@@ -113,9 +99,7 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -127,19 +111,16 @@ describe(
       { timeout: 240_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 180_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 180_000 });
 
     describe("synchronous analysis", () => {
       test.provider(
         "AnalyzeDocument detects the rendered text",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* getJson<{
-              pages?: number;
-              lines: string[];
-            }>("/analyze-document");
+            const response = yield* getJson<{ pages?: number; lines: string[] }>(
+              "/analyze-document",
+            );
             expect(response.pages).toBe(1);
             expect(response.lines).toContain(HELLO_PNG_TEXT);
           }),
@@ -150,10 +131,9 @@ describe(
         "AnalyzeExpense analyzes the document as a receipt",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* getJson<{
-              pages?: number;
-              expenseDocuments: number;
-            }>("/analyze-expense");
+            const response = yield* getJson<{ pages?: number; expenseDocuments: number }>(
+              "/analyze-expense",
+            );
             expect(response.pages).toBe(1);
             expect(response.expenseDocuments).toBeGreaterThanOrEqual(0);
           }),
@@ -164,9 +144,7 @@ describe(
         "AnalyzeID analyzes the document as an identity document",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* getJson<{
-              identityDocuments: number;
-            }>("/analyze-id");
+            const response = yield* getJson<{ identityDocuments: number }>("/analyze-id");
             expect(response.identityDocuments).toBeGreaterThanOrEqual(1);
           }),
         { timeout: 120_000 },
@@ -178,15 +156,13 @@ describe(
         "StartDocumentTextDetection + GetDocumentTextDetection run to completion",
         (_stack) =>
           Effect.gen(function* () {
-            const { jobId } = yield* postJson<{ jobId: string }>(
-              "/start-text-detection",
-            );
+            const { jobId } = yield* postJson<{ jobId: string }>("/start-text-detection");
             expect(jobId).toBeTruthy();
 
-            const result = yield* pollJob<{
-              jobStatus?: string;
-              lines: string[];
-            }>("/get-text-detection", jobId);
+            const result = yield* pollJob<{ jobStatus?: string; lines: string[] }>(
+              "/get-text-detection",
+              jobId,
+            );
             expect(result.jobStatus).toBe("SUCCEEDED");
             expect(result.lines).toContain(HELLO_PNG_TEXT);
           }),
@@ -209,34 +185,26 @@ describe(
             expect(expense.jobId).toBeTruthy();
             expect(lending.jobId).toBeTruthy();
 
-            const [analysisResult, expenseResult, lendingResult] =
-              yield* Effect.all(
-                [
-                  pollJob<{ jobStatus?: string; blocks: number }>(
-                    "/get-analysis",
-                    analysis.jobId,
-                  ),
-                  pollJob<{ jobStatus?: string; expenseDocuments: number }>(
-                    "/get-expense",
-                    expense.jobId,
-                  ),
-                  pollJob<{ jobStatus?: string; results: number }>(
-                    "/get-lending",
-                    lending.jobId,
-                  ),
-                ],
-                { concurrency: 3 },
-              );
+            const [analysisResult, expenseResult, lendingResult] = yield* Effect.all(
+              [
+                pollJob<{ jobStatus?: string; blocks: number }>("/get-analysis", analysis.jobId),
+                pollJob<{ jobStatus?: string; expenseDocuments: number }>(
+                  "/get-expense",
+                  expense.jobId,
+                ),
+                pollJob<{ jobStatus?: string; results: number }>("/get-lending", lending.jobId),
+              ],
+              { concurrency: 3 },
+            );
             expect(analysisResult.jobStatus).toBe("SUCCEEDED");
             expect(analysisResult.blocks).toBeGreaterThan(0);
             expect(expenseResult.jobStatus).toBe("SUCCEEDED");
             expect(lendingResult.jobStatus).toBe("SUCCEEDED");
 
             // Lending summary is available once the job completed.
-            const summary = yield* getJson<{
-              jobStatus?: string;
-              documentGroups: number;
-            }>(`/get-lending-summary?jobId=${lending.jobId}`);
+            const summary = yield* getJson<{ jobStatus?: string; documentGroups: number }>(
+              `/get-lending-summary?jobId=${lending.jobId}`,
+            );
             expect(summary.jobStatus).toBe("SUCCEEDED");
             expect(summary.documentGroups).toBeGreaterThanOrEqual(0);
           }),
@@ -272,10 +240,9 @@ describe(
               deleteVersionProbe: string;
               createVersionProbe: string;
             }>("/adapter-version-probes");
-            expect([
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(probes.getVersionProbe);
+            expect(["ResourceNotFoundException", "ValidationException"]).toContain(
+              probes.getVersionProbe,
+            );
             // DeleteAdapterVersion is idempotent — deleting a nonexistent
             // version succeeds (verified live), which proves the grant.
             expect([

@@ -1,11 +1,11 @@
 import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
-import { bindFlyApiToken } from "./Credentials.ts";
+import * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import { bindFlyApiToken } from "./Credentials.ts";
 import type { Sprite } from "./Sprite.ts";
 
 /**
@@ -23,9 +23,7 @@ export const makeHttpSpriteBinding = <Client>(options: {
   makeClient: (auth: SpriteAuth, spriteName: Effect.Effect<string>) => Client;
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (sprite: Sprite) {
       yield* bindFlyApiToken().pipe(Effect.provideContext(context));
@@ -45,11 +43,7 @@ export const makeSpriteAuth = (
 ): SpriteAuth => ({
   authorize: (eff) => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
-      return eff.pipe(
-        Effect.provide(
-          Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer),
-        ),
-      );
+      return eff.pipe(Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)));
     }
     return eff.pipe(Effect.provideContext(ambient));
   },

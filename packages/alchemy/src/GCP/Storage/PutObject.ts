@@ -3,11 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  ObjectNotFound,
-  ObjectRequestFailed,
-  PutObjectContent,
-} from "./ObjectMedia.ts";
+import type { ObjectNotFound, ObjectRequestFailed, PutObjectContent } from "./ObjectMedia.ts";
 
 export type PutObjectRequest = PutObjectContent;
 
@@ -48,11 +44,7 @@ export interface PutObject extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutObjectRequest,
-    ) => Effect.Effect<
-      storage.Storage_Object,
-      ObjectNotFound | ObjectRequestFailed,
-      RuntimeContext
-    >
+    ) => Effect.Effect<storage.Storage_Object, ObjectNotFound | ObjectRequestFailed, RuntimeContext>
   >
 > {}
 

@@ -33,9 +33,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type PostureDeploymentState =
-  | securityposture.PostureDeploymentStateEnum
-  | (string & {});
+export type PostureDeploymentState = securityposture.PostureDeploymentStateEnum | (string & {});
 
 export type PostureDeploymentProps = {
   /**
@@ -184,11 +182,7 @@ export const PostureDeployment = Resource<PostureDeployment>(
   "GCP.SecurityPosture.PostureDeployment",
 );
 
-const resourceName = (
-  organization: string,
-  location: string,
-  postureDeploymentId: string,
-) =>
+const resourceName = (organization: string, location: string, postureDeploymentId: string) =>
   `${locationParent(organization, location)}/postureDeployments/${postureDeploymentId}`;
 
 const waitDeploymentOperation = (operation: securityposture.Operation) =>
@@ -197,15 +191,10 @@ const waitDeploymentOperation = (operation: securityposture.Operation) =>
 const waitDeploymentOperationGone = (operation: securityposture.Operation) =>
   waitForOperation(operation, { notFoundOk: true });
 
-const toAttrs = (
-  deployment: securityposture.PostureDeployment,
-  project: string,
-) => {
+const toAttrs = (deployment: securityposture.PostureDeployment, project: string) => {
   const name = deployment.name ?? "";
   const parsed = parseName(name, "postureDeployments");
-  const organization = parsed.organization
-    ? organizationParent(parsed.organization)
-    : "";
+  const organization = parsed.organization ? organizationParent(parsed.organization) : "";
   return {
     name,
     postureDeploymentId: parsed.id || lastSegment(name),
@@ -248,9 +237,7 @@ const waitUntilSettled = (name: string) =>
         return Effect.fail(new SecuritypostureNotResolved({ name }));
       }
       if (isBusy(current)) {
-        return Effect.fail(
-          new SecuritypostureNotResolved({ name: `${name}:${current.state}` }),
-        );
+        return Effect.fail(new SecuritypostureNotResolved({ name: `${name}:${current.state}` }));
       }
       return Effect.succeed(current);
     }),
@@ -276,20 +263,15 @@ export const PostureDeploymentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.postureDeploymentId ?? output?.postureDeploymentId;
+      const previousId = olds?.postureDeploymentId ?? output?.postureDeploymentId;
       const nextId = news.postureDeploymentId ?? previousId;
       const previousOrg = olds?.organization ?? output?.organization;
       const nextOrg =
-        news.organization !== undefined
-          ? organizationParent(news.organization)
-          : previousOrg;
+        news.organization !== undefined ? organizationParent(news.organization) : previousOrg;
       const previousTarget = olds?.targetResource ?? output?.targetResource;
       const nextTarget = news.targetResource ?? previousTarget;
       return replaceOnIdentity(
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
           (previousOrg !== undefined &&
             nextOrg !== undefined &&
             organizationParent(previousOrg) !== organizationParent(nextOrg)) ||
@@ -316,14 +298,10 @@ export const PostureDeploymentProvider = () =>
           Effect.succeed(output?.organization ?? ""),
         ),
       );
-      const location = lastSegment(
-        olds?.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = lastSegment(olds?.location ?? output?.location ?? DEFAULT_LOCATION);
       const name =
         output?.name ??
-        (organization.length > 0
-          ? resourceName(organization, location, postureDeploymentId)
-          : "");
+        (organization.length > 0 ? resourceName(organization, location, postureDeploymentId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -341,12 +319,8 @@ export const PostureDeploymentProvider = () =>
         return yield* securityposture.listOrganizationsLocationsPostureDeployments
           .pages({ parent, pageSize: 1000 })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.postureDeployments ?? []),
-            ),
-            Stream.filter((deployment) =>
-              hasAlchemyAnnotationMap(deployment.annotations),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.postureDeployments ?? [])),
+            Stream.filter((deployment) => hasAlchemyAnnotationMap(deployment.annotations)),
             Stream.map((deployment) => toAttrs(deployment, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -366,9 +340,7 @@ export const PostureDeploymentProvider = () =>
         news.organization ?? output?.organization,
         output?.organization,
       );
-      const location = lastSegment(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = lastSegment(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(organization, location);
       const name = resourceName(organization, location, postureDeploymentId);
       const targetResource = yield* news.targetResource !== undefined
@@ -409,14 +381,8 @@ export const PostureDeploymentProvider = () =>
       }
 
       const postureChanged = !sameText(current.postureId, news.postureId);
-      const revisionChanged = !sameText(
-        current.postureRevisionId,
-        news.postureRevisionId,
-      );
-      const descriptionChanged = !sameText(
-        current.description,
-        news.description,
-      );
+      const revisionChanged = !sameText(current.postureRevisionId, news.postureRevisionId);
+      const descriptionChanged = !sameText(current.description, news.description);
       const mask = fieldMask([
         postureChanged && "posture_id",
         revisionChanged && "posture_revision_id",
@@ -424,18 +390,17 @@ export const PostureDeploymentProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* securityposture.patchOrganizationsLocationsPostureDeployments({
+        const operation = yield* securityposture.patchOrganizationsLocationsPostureDeployments({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              name: current.name ?? name,
-              postureId: news.postureId,
-              postureRevisionId: news.postureRevisionId,
-              description: news.description,
-              etag: current.etag,
-            },
-          });
+            postureId: news.postureId,
+            postureRevisionId: news.postureRevisionId,
+            description: news.description,
+            etag: current.etag,
+          },
+        });
         yield* waitDeploymentOperation(operation);
         current = yield* waitUntilSettled(current.name ?? name);
       }

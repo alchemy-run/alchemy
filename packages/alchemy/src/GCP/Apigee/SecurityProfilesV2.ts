@@ -8,13 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  organizationFromName,
-  sameJson,
-  toResourceId,
-} from "./names.ts";
+import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 import {
   createInternalLabels,
   encodeOwnership,
@@ -131,9 +125,7 @@ export type SecurityProfilesV2 = Resource<
  * @resource
  * @category Apigee
  */
-export const SecurityProfilesV2 = Resource<SecurityProfilesV2>(
-  "GCP.Apigee.SecurityProfilesV2",
-);
+export const SecurityProfilesV2 = Resource<SecurityProfilesV2>("GCP.Apigee.SecurityProfilesV2");
 
 export class SecurityProfilesV2NotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityProfilesV2NotResolved",
@@ -176,24 +168,17 @@ const configsOf = (
 const toApiConfigs = (
   configs: Record<string, ProfileAssessmentConfig>,
 ): apigee.GoogleCloudApigeeV1SecurityProfileV2ProfileAssessmentConfigMap => {
-  const result: apigee.GoogleCloudApigeeV1SecurityProfileV2ProfileAssessmentConfigMap =
-    {};
+  const result: apigee.GoogleCloudApigeeV1SecurityProfileV2ProfileAssessmentConfigMap = {};
   for (const [key, value] of Object.entries(configs)) {
     result[key] = {
       weight: value.weight,
-      include:
-        value.include !== undefined
-          ? { gatewayTypes: value.include }
-          : undefined,
+      include: value.include !== undefined ? { gatewayTypes: value.include } : undefined,
     };
   }
   return result;
 };
 
-const toAttrs = (
-  profile: apigee.GoogleCloudApigeeV1SecurityProfileV2,
-  organization: string,
-) => {
+const toAttrs = (profile: apigee.GoogleCloudApigeeV1SecurityProfileV2, organization: string) => {
   const securityProfileV2Id = profileIdOf(profile);
   const name = profile.name?.includes("/")
     ? profile.name
@@ -215,11 +200,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityProfilesV2({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const toBody = (
   news: SecurityProfilesV2Props,
@@ -227,9 +208,7 @@ const toBody = (
 ): apigee.GoogleCloudApigeeV1SecurityProfileV2 => ({
   description,
   riskAssessmentType: news.riskAssessmentType,
-  profileAssessmentConfigs: toApiConfigs(
-    news.profileAssessmentConfigs ?? DEFAULT_ASSESSMENTS,
-  ),
+  profileAssessmentConfigs: toApiConfigs(news.profileAssessmentConfigs ?? DEFAULT_ASSESSMENTS),
 });
 
 export const SecurityProfilesV2Provider = () =>
@@ -238,8 +217,7 @@ export const SecurityProfilesV2Provider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.securityProfileV2Id ?? output?.securityProfileV2Id;
+      const previousId = olds?.securityProfileV2Id ?? output?.securityProfileV2Id;
       const previousOrg = olds?.organization ?? output?.organization;
       if (
         (previousId !== undefined &&
@@ -256,16 +234,14 @@ export const SecurityProfilesV2Provider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const securityProfileV2Id = yield* toResourceId(
         id,
         olds?.securityProfileV2Id,
         output?.securityProfileV2Id,
         MAX_NAME_LENGTH,
       );
-      const name =
-        output?.name ?? resourceName(organization, securityProfileV2Id);
+      const name = output?.name ?? resourceName(organization, securityProfileV2Id);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization);
@@ -282,13 +258,10 @@ export const SecurityProfilesV2Provider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.securityProfilesV2 ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.securityProfilesV2 ?? [])),
             Stream.filter(
               (profile) =>
-                profile.googleDefined !== true &&
-                hasOwnershipMarker(profile.description),
+                profile.googleDefined !== true && hasOwnershipMarker(profile.description),
             ),
             Stream.map((profile) => toAttrs(profile, env.project)),
             Stream.runCollect,
@@ -301,8 +274,7 @@ export const SecurityProfilesV2Provider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
+      const organization = news.organization ?? output?.organization ?? env.project;
       const securityProfileV2Id = yield* toResourceId(
         id,
         news.securityProfileV2Id,
@@ -312,9 +284,7 @@ export const SecurityProfilesV2Provider = () =>
       const name = resourceName(organization, securityProfileV2Id);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
-      const desiredConfigs = configsOf(
-        news.profileAssessmentConfigs ?? DEFAULT_ASSESSMENTS,
-      );
+      const desiredConfigs = configsOf(news.profileAssessmentConfigs ?? DEFAULT_ASSESSMENTS);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -333,12 +303,8 @@ export const SecurityProfilesV2Provider = () =>
         return yield* new SecurityProfilesV2NotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const configsChanged = !sameJson(
-        configsOf(current.profileAssessmentConfigs),
-        desiredConfigs,
-      );
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const configsChanged = !sameJson(configsOf(current.profileAssessmentConfigs), desiredConfigs);
       const typeChanged =
         news.riskAssessmentType !== undefined &&
         (current.riskAssessmentType ?? "") !== news.riskAssessmentType;
@@ -363,11 +329,6 @@ export const SecurityProfilesV2Provider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSecurityProfilesV2({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

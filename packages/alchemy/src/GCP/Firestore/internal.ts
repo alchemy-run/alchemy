@@ -31,9 +31,7 @@ export const parseDatabaseName = (name: string) => {
 };
 
 export const databaseIdOf = (value: string) =>
-  value.includes("/databases/")
-    ? parseDatabaseName(value).databaseId
-    : lastSegment(value);
+  value.includes("/databases/") ? parseDatabaseName(value).databaseId : lastSegment(value);
 
 export const databaseResourceName = (project: string, databaseId: string) =>
   `projects/${project}/databases/${databaseId}`;
@@ -96,17 +94,11 @@ export const stringFromMap = (
 
 export const getDatabaseByName = (name: string) =>
   firestore.getProjectsDatabases({ name }).pipe(
-    Effect.map((database) =>
-      database.deleteTime !== undefined ? undefined : database,
-    ),
+    Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-export const retryConcurrentChanges = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
   effect.pipe(

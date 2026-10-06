@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as acm from "@distilled.cloud/gcp/accesscontextmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, projectContext, runLifecycle, runProbe } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -50,10 +50,7 @@ test.provider.skipIf(!runProbe)(
           body: {
             title: "alchemy-acm-probe",
             parent: ctx.organization ?? "organizations/123456789012",
-            scopes:
-              ctx.projectNumber.length > 0
-                ? [`projects/${ctx.projectNumber}`]
-                : undefined,
+            scopes: ctx.projectNumber.length > 0 ? [`projects/${ctx.projectNumber}`] : undefined,
           },
         }),
       );
@@ -74,10 +71,7 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
 
       const ctx = yield* projectContext();
-      const scopes =
-        ctx.projectNumber.length > 0
-          ? [`projects/${ctx.projectNumber}`]
-          : undefined;
+      const scopes = ctx.projectNumber.length > 0 ? [`projects/${ctx.projectNumber}`] : undefined;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

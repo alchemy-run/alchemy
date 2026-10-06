@@ -1,13 +1,13 @@
 import type * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Alchemy from "alchemy";
 import * as GCP from "alchemy/GCP";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import {
   applyMigrations,
   inlineSqlParams,
   MigrationError,
   type SqlExecutor,
 } from "alchemy/SQL/Migrations/index";
-import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -40,8 +40,7 @@ const rowsOf = (response: sqladmin.SqlInstancesExecuteSqlResponse) => {
  * secret's latest version is the user's password.
  */
 export const migrate = Effect.gen(function* () {
-  const { instance, db, user, password, passwordSecret, schema } =
-    yield* database;
+  const { instance, db, user, password, passwordSecret, schema } = yield* database;
 
   const Migrate = Alchemy.Action(
     "Migrate",
@@ -103,9 +102,7 @@ export const migrate = Effect.gen(function* () {
         const executor: SqlExecutor = {
           dialect: "postgres",
           query: (sql, params) =>
-            run(inlineSqlParams(sql, params ?? [], "postgres")).pipe(
-              Effect.map(rowsOf),
-            ),
+            run(inlineSqlParams(sql, params ?? [], "postgres")).pipe(Effect.map(rowsOf)),
           // One request, one transaction. drizzle-kit leaves the last
           // statement of a migration without its `;`.
           batch: (statements) =>
@@ -113,9 +110,7 @@ export const migrate = Effect.gen(function* () {
               [
                 "BEGIN;",
                 ...statements.map((statement) =>
-                  statement.trim().endsWith(";")
-                    ? statement.trim()
-                    : `${statement.trim()};`,
+                  statement.trim().endsWith(";") ? statement.trim() : `${statement.trim()};`,
                 ),
                 "COMMIT;",
               ].join("\n"),
@@ -131,12 +126,7 @@ export const migrate = Effect.gen(function* () {
         );
         return input.snapshotHash;
       });
-    }).pipe(
-      Effect.provide([
-        GCP.SQL.ExecuteSqlHttp,
-        GCP.SecretManager.ReadWriteSecretHttp,
-      ]),
-    ),
+    }).pipe(Effect.provide([GCP.SQL.ExecuteSqlHttp, GCP.SecretManager.ReadWriteSecretHttp])),
   );
 
   return yield* Migrate({

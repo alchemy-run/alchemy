@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { RuleSet } from "./RuleSet.ts";
 
-export interface GetRuleSetRequest extends Omit<
-  cw.GetProjectsLocationsRuleSetsRequest,
-  "name"
-> {}
+export interface GetRuleSetRequest extends Omit<cw.GetProjectsLocationsRuleSetsRequest, "name"> {}
 
 /**
  * Runtime binding for Document AI Warehouse `ruleSets.get`.
@@ -45,6 +42,4 @@ export interface GetRuleSet extends Binding.Service<
   >
 > {}
 
-export const GetRuleSet = Binding.Service<GetRuleSet>(
-  "GCP.ContentWarehouse.GetRuleSet",
-);
+export const GetRuleSet = Binding.Service<GetRuleSet>("GCP.ContentWarehouse.GetRuleSet");

@@ -124,10 +124,9 @@ export type DatasetsConsentStoresConsentArtifact = Resource<
  * @resource
  * @category Healthcare
  */
-export const DatasetsConsentStoresConsentArtifact =
-  Resource<DatasetsConsentStoresConsentArtifact>(
-    "GCP.Healthcare.DatasetsConsentStoresConsentArtifact",
-  );
+export const DatasetsConsentStoresConsentArtifact = Resource<DatasetsConsentStoresConsentArtifact>(
+  "GCP.Healthcare.DatasetsConsentStoresConsentArtifact",
+);
 
 export class DatasetsConsentStoresConsentArtifactNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresConsentArtifactNotResolved",
@@ -149,11 +148,7 @@ const storeOf = (
   return `${datasetName}/consentStores/${consentStore}`;
 };
 
-const toAttrs = (
-  artifact: healthcare.ConsentArtifact,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (artifact: healthcare.ConsentArtifact, project: string, region: string) => {
   const name = artifact.name ?? "";
   const parsed = parseResourceName(name, "consentArtifacts", region);
   return {
@@ -177,13 +172,7 @@ const getByName = (name: string) =>
 
 export const DatasetsConsentStoresConsentArtifactProvider = () =>
   Provider.succeed(DatasetsConsentStoresConsentArtifact, {
-    stables: [
-      "name",
-      "consentArtifactId",
-      "consentStore",
-      "project",
-      "location",
-    ],
+    stables: ["name", "consentArtifactId", "consentStore", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -195,13 +184,10 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
         normalizeLocation(news.location ?? output?.location, env.region),
         news.dataset,
       );
-      const parentChanged =
-        previousParent !== undefined && previousParent !== nextParent;
-      const userChanged =
-        olds?.userId !== undefined && olds.userId !== news.userId;
+      const parentChanged = previousParent !== undefined && previousParent !== nextParent;
+      const userChanged = olds?.userId !== undefined && olds.userId !== news.userId;
       const versionChanged =
-        (olds?.consentContentVersion ?? output?.consentContentVersion) !==
-          undefined &&
+        (olds?.consentContentVersion ?? output?.consentContentVersion) !== undefined &&
         (olds?.consentContentVersion ?? output?.consentContentVersion) !==
           news.consentContentVersion;
       if (parentChanged || userChanged || versionChanged) {
@@ -218,9 +204,7 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -231,12 +215,10 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
           stores,
           (store) =>
             collectPages(
-              healthcare.listProjectsLocationsDatasetsConsentStoresConsentArtifacts.pages(
-                {
-                  parent: store.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              healthcare.listProjectsLocationsDatasetsConsentStoresConsentArtifacts.pages({
+                parent: store.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.consentArtifacts,
             ),
           { concurrency: 4 },
@@ -249,16 +231,8 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const consentStore = storeOf(
-        news.consentStore,
-        env.project,
-        location,
-        news.dataset,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const consentStore = storeOf(news.consentStore, env.project, location, news.dataset);
       const ownership = yield* createInternalLabels(id);
       const metadata = withOwnershipMetadata(news.metadata, ownership);
 
@@ -266,19 +240,17 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
 
       if (current === undefined) {
         current = yield* retryTransient(
-          healthcare.createProjectsLocationsDatasetsConsentStoresConsentArtifacts(
-            {
-              parent: consentStore,
-              body: {
-                userId: news.userId,
-                consentContentVersion: news.consentContentVersion,
-                metadata,
-                userSignature: news.userSignature,
-                guardianSignature: news.guardianSignature,
-                witnessSignature: news.witnessSignature,
-              },
+          healthcare.createProjectsLocationsDatasetsConsentStoresConsentArtifacts({
+            parent: consentStore,
+            body: {
+              userId: news.userId,
+              consentContentVersion: news.consentContentVersion,
+              metadata,
+              userSignature: news.userSignature,
+              guardianSignature: news.guardianSignature,
+              witnessSignature: news.witnessSignature,
             },
-          ),
+          }),
         );
       }
 
@@ -294,11 +266,9 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* retryTransient(
-        healthcare.deleteProjectsLocationsDatasetsConsentStoresConsentArtifacts(
-          {
-            name: output.name,
-          },
-        ),
+        healthcare.deleteProjectsLocationsDatasetsConsentStoresConsentArtifacts({
+          name: output.name,
+        }),
       ).pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

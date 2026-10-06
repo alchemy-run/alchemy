@@ -183,9 +183,7 @@ export type Conversation = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const Conversation = Resource<Conversation>(
-  "GCP.ContactCenterInsights.Conversation",
-);
+export const Conversation = Resource<Conversation>("GCP.ContactCenterInsights.Conversation");
 
 export class ConversationNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationNotResolved",
@@ -199,16 +197,11 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const resourceName = (
-  project: string,
-  location: string,
-  conversationId: string,
-) => `${locationParent(project, location)}/conversations/${conversationId}`;
+const resourceName = (project: string, location: string, conversationId: string) =>
+  `${locationParent(project, location)}/conversations/${conversationId}`;
 
 const dataSourceOf = (
-  source:
-    | cci.GoogleCloudContactcenterinsightsV1ConversationDataSource
-    | undefined,
+  source: cci.GoogleCloudContactcenterinsightsV1ConversationDataSource | undefined,
 ): ConversationDataSource | undefined => {
   if (source === undefined) return undefined;
   return {
@@ -223,9 +216,7 @@ const dataSourceOf = (
 };
 
 const callMetadataOf = (
-  metadata:
-    | cci.GoogleCloudContactcenterinsightsV1ConversationCallMetadata
-    | undefined,
+  metadata: cci.GoogleCloudContactcenterinsightsV1ConversationCallMetadata | undefined,
 ): CallMetadata | undefined => {
   if (metadata === undefined) return undefined;
   return {
@@ -267,31 +258,20 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  cci.listProjectsLocationsConversations
-    .pages({ parent, pageSize: 100, view: "BASIC" })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.conversations ?? [])),
-      Stream.filter((conversation) =>
-        Object.keys(conversation.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ),
-      Stream.map((conversation) => toAttrs(conversation, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsConversations.pages({ parent, pageSize: 100, view: "BASIC" }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.conversations ?? [])),
+    Stream.filter((conversation) =>
+      Object.keys(conversation.labels ?? {}).some((key) => key.startsWith("alchemy-")),
+    ),
+    Stream.map((conversation) => toAttrs(conversation, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const ConversationProvider = () =>
   Provider.succeed(Conversation, {
-    stables: [
-      "name",
-      "conversationId",
-      "location",
-      "project",
-      "medium",
-      "createTime",
-    ],
+    stables: ["name", "conversationId", "location", "project", "medium", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -321,44 +301,26 @@ export const ConversationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const conversationId = yield* toResourceId(
-        id,
-        olds?.conversationId,
-        output?.conversationId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, conversationId);
+      const conversationId = yield* toResourceId(id, olds?.conversationId, output?.conversationId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, conversationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
-      const conversationId = yield* toResourceId(
-        id,
-        news.conversationId,
-        output?.conversationId,
-      );
+      const conversationId = yield* toResourceId(id, news.conversationId, output?.conversationId);
       const name = resourceName(env.project, location, conversationId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -400,24 +362,18 @@ export const ConversationProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const agentChanged = !sameText(current.agentId, news.agentId);
-      const languageChanged = !sameText(
-        current.languageCode,
-        news.languageCode,
-      );
+      const languageChanged = !sameText(current.languageCode, news.languageCode);
       // Insights assigns a start time when none is given; only a
       // caller-supplied one can be updated.
       const startChanged =
-        news.startTime !== undefined &&
-        !sameText(current.startTime, news.startTime);
+        news.startTime !== undefined && !sameText(current.startTime, news.startTime);
       const expireChanged =
-        news.expireTime !== undefined &&
-        !sameText(current.expireTime, news.expireTime);
+        news.expireTime !== undefined && !sameText(current.expireTime, news.expireTime);
       const callChanged =
         news.callMetadata !== undefined &&
         ((current.callMetadata?.customerChannel ?? undefined) !==
           news.callMetadata.customerChannel ||
-          (current.callMetadata?.agentChannel ?? undefined) !==
-            news.callMetadata.agentChannel);
+          (current.callMetadata?.agentChannel ?? undefined) !== news.callMetadata.agentChannel);
 
       if (
         labelsChanged ||

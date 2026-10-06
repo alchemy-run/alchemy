@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -34,9 +29,7 @@ import {
 
 const COLLECTION = "wasmPlugins";
 
-export type WasmPluginLogLevel =
-  | networkservices.WasmPluginLogConfigMinLogLevelEnum
-  | (string & {});
+export type WasmPluginLogLevel = networkservices.WasmPluginLogConfigMinLogLevelEnum | (string & {});
 
 export type WasmPluginLogConfig = {
   /**
@@ -219,9 +212,7 @@ export type WasmPlugin = Resource<
  * @resource
  * @category NetworkServices
  */
-export const WasmPlugin = Resource<WasmPlugin>(
-  "GCP.NetworkServices.WasmPlugin",
-);
+export const WasmPlugin = Resource<WasmPlugin>("GCP.NetworkServices.WasmPlugin");
 
 const toLogConfig = (
   value: WasmPluginLogConfig | networkservices.WasmPluginLogConfig | undefined,
@@ -258,10 +249,7 @@ const toVersionMap = (
   versions: networkservices.WasmPluginVersionDetailsMap | undefined,
 ): Record<string, WasmPluginVersionDetails> =>
   Object.fromEntries(
-    Object.entries(versions ?? {}).map(([id, details]) => [
-      id,
-      toVersionDetails(details),
-    ]),
+    Object.entries(versions ?? {}).map(([id, details]) => [id, toVersionDetails(details)]),
   );
 
 const versionFingerprint = (
@@ -365,9 +353,7 @@ export const WasmPluginProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.wasmPluginId ?? output?.wasmPluginId;
-      const nextId = news.wasmPluginId
-        ? rfc1035(news.wasmPluginId, "wasm-plugin")
-        : previousId;
+      const nextId = news.wasmPluginId ? rfc1035(news.wasmPluginId, "wasm-plugin") : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         DEFAULT_GLOBAL,
@@ -377,9 +363,7 @@ export const WasmPluginProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -395,19 +379,12 @@ export const WasmPluginProvider = () =>
         output?.wasmPluginId,
         "wasm-plugin",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, wasmPluginId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, wasmPluginId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -433,16 +410,8 @@ export const WasmPluginProvider = () =>
         output?.wasmPluginId,
         "wasm-plugin",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        wasmPluginId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, wasmPluginId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -482,14 +451,11 @@ export const WasmPluginProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const mainVersionChanged =
-        news.mainVersionId !== undefined &&
-        (current.mainVersionId ?? "") !== news.mainVersionId;
+        news.mainVersionId !== undefined && (current.mainVersionId ?? "") !== news.mainVersionId;
       const logConfigChanged =
-        news.logConfig !== undefined &&
-        !sameJson(toLogConfig(current.logConfig), desiredLogConfig);
+        news.logConfig !== undefined && !sameJson(toLogConfig(current.logConfig), desiredLogConfig);
       const versionsChanged =
         news.versions !== undefined &&
         !sameJson(
@@ -506,24 +472,20 @@ export const WasmPluginProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsWasmPlugins({
+        const operation = yield* networkservices.patchProjectsLocationsWasmPlugins({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              mainVersionId: news.mainVersionId,
-              logConfig: desiredLogConfig,
-              versions: versionsChanged ? desiredVersions : undefined,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            mainVersionId: news.mainVersionId,
+            logConfig: desiredLogConfig,
+            versions: versionsChanged ? desiredVersions : undefined,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

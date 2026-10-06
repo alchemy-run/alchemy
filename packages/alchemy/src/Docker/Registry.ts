@@ -16,34 +16,24 @@ export const repositoryFromImageRef = (imageRef: string): string => {
     : imageRef;
   const tagSeparator = withoutDigest.lastIndexOf(":");
   const pathSeparator = withoutDigest.lastIndexOf("/");
-  return tagSeparator > pathSeparator
-    ? withoutDigest.slice(0, tagSeparator)
-    : withoutDigest;
+  return tagSeparator > pathSeparator ? withoutDigest.slice(0, tagSeparator) : withoutDigest;
 };
 
 /**
  * Prefixes an image reference with the registry host unless the reference
  * already carries a registry prefix (a dotted host, a host:port, or `localhost`).
  */
-export const withRegistryHost = (
-  imageRef: string,
-  registry: { server: string },
-): string => {
+export const withRegistryHost = (imageRef: string, registry: { server: string }): string => {
   const registryHost = registry.server.replace(/\/$/, "");
   const firstSegment = imageRef.split("/")[0];
   const hasRegistryPrefix =
     imageRef.includes("/") &&
-    (firstSegment.includes(".") ||
-      firstSegment.includes(":") ||
-      firstSegment === "localhost");
+    (firstSegment.includes(".") || firstSegment.includes(":") || firstSegment === "localhost");
   return hasRegistryPrefix ? imageRef : `${registryHost}/${imageRef}`;
 };
 
 /** Extracts the `repository@sha256:...` digest from `docker push` output. */
-export const parseRepoDigest = (
-  imageRef: string,
-  output: string,
-): string | undefined => {
+export const parseRepoDigest = (imageRef: string, output: string): string | undefined => {
   const match = /digest:\s+([a-z0-9]+:[a-f0-9]{64})/i.exec(output);
   if (!match) return undefined;
   return `${repositoryFromImageRef(imageRef)}@${match[1]}`;

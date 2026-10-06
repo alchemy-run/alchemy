@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -229,22 +224,12 @@ export type ActiveDirectory = Resource<
  * @resource
  * @category NetApp
  */
-export const ActiveDirectory = Resource<ActiveDirectory>(
-  "GCP.NetApp.ActiveDirectory",
-);
+export const ActiveDirectory = Resource<ActiveDirectory>("GCP.NetApp.ActiveDirectory");
 
-const resourceName = (
-  project: string,
-  location: string,
-  activeDirectoryId: string,
-) =>
+const resourceName = (project: string, location: string, activeDirectoryId: string) =>
   `projects/${project}/locations/${location}/activeDirectories/${activeDirectoryId}`;
 
-const toAttrs = (
-  item: netapp.ActiveDirectory,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: netapp.ActiveDirectory, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "activeDirectories", region);
   return {
@@ -303,22 +288,15 @@ export const ActiveDirectoryProvider = () =>
       const previousPrefix = olds?.netBiosPrefix ?? output?.netBiosPrefix;
       return replaceOnIdentity({
         previousId: olds?.activeDirectoryId ?? output?.activeDirectoryId,
-        nextId:
-          news.activeDirectoryId ??
-          olds?.activeDirectoryId ??
-          output?.activeDirectoryId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.activeDirectoryId ?? olds?.activeDirectoryId ?? output?.activeDirectoryId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
           (previousDomain !== undefined && news.domain !== previousDomain) ||
-          (previousPrefix !== undefined &&
-            news.netBiosPrefix !== previousPrefix),
+          (previousPrefix !== undefined && news.netBiosPrefix !== previousPrefix),
       });
     }),
 
@@ -330,18 +308,12 @@ export const ActiveDirectoryProvider = () =>
         output?.activeDirectoryId,
         "activedirectory",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, activeDirectoryId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, activeDirectoryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -359,10 +331,7 @@ export const ActiveDirectoryProvider = () =>
         output?.activeDirectoryId,
         "activedirectory",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, activeDirectoryId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -418,48 +387,38 @@ export const ActiveDirectoryProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const passwordChanged =
-        news.password !== undefined && news.password !== olds?.password;
+      const passwordChanged = news.password !== undefined && news.password !== olds?.password;
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.description ?? "") !== (news.description ?? "") &&
-          "description",
+        (current.description ?? "") !== (news.description ?? "") && "description",
         (current.dns ?? "") !== news.dns && "dns",
         (current.username ?? "") !== news.username && "username",
         passwordChanged && "password",
         (current.site ?? "") !== (news.site ?? "") && "site",
-        (current.organizationalUnit ?? "") !==
-          (news.organizationalUnit ?? "") && "organizationalUnit",
-        !sameStringList(current.administrators, news.administrators) &&
-          "administrators",
-        !sameStringList(current.backupOperators, news.backupOperators) &&
-          "backupOperators",
-        !sameStringList(current.securityOperators, news.securityOperators) &&
-          "securityOperators",
-        (current.encryptDcConnections ?? false) !==
-          (news.encryptDcConnections ?? false) && "encryptDcConnections",
-        (current.nfsUsersWithLdap ?? false) !==
-          (news.nfsUsersWithLdap ?? false) && "nfsUsersWithLdap",
-        (current.ldapSigning ?? false) !== (news.ldapSigning ?? false) &&
-          "ldapSigning",
-        (current.aesEncryption ?? false) !== (news.aesEncryption ?? false) &&
-          "aesEncryption",
+        (current.organizationalUnit ?? "") !== (news.organizationalUnit ?? "") &&
+          "organizationalUnit",
+        !sameStringList(current.administrators, news.administrators) && "administrators",
+        !sameStringList(current.backupOperators, news.backupOperators) && "backupOperators",
+        !sameStringList(current.securityOperators, news.securityOperators) && "securityOperators",
+        (current.encryptDcConnections ?? false) !== (news.encryptDcConnections ?? false) &&
+          "encryptDcConnections",
+        (current.nfsUsersWithLdap ?? false) !== (news.nfsUsersWithLdap ?? false) &&
+          "nfsUsersWithLdap",
+        (current.ldapSigning ?? false) !== (news.ldapSigning ?? false) && "ldapSigning",
+        (current.aesEncryption ?? false) !== (news.aesEncryption ?? false) && "aesEncryption",
         (current.kdcIp ?? "") !== (news.kdcIp ?? "") && "kdcIp",
-        (current.kdcHostname ?? "") !== (news.kdcHostname ?? "") &&
-          "kdcHostname",
+        (current.kdcHostname ?? "") !== (news.kdcHostname ?? "") && "kdcHostname",
       ]);
 
       if (mask.length > 0) {
-        const operation = yield* netapp.patchProjectsLocationsActiveDirectories(
-          {
+        const operation = yield* netapp.patchProjectsLocationsActiveDirectories({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              name: current.name ?? name,
-              ...body,
-            },
+            ...body,
           },
-        );
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

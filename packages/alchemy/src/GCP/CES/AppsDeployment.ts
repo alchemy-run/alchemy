@@ -122,9 +122,7 @@ export type AppsDeployment = Resource<
  * @resource
  * @category CES
  */
-export const AppsDeployment = Resource<AppsDeployment>(
-  "GCP.CES.AppsDeployment",
-);
+export const AppsDeployment = Resource<AppsDeployment>("GCP.CES.AppsDeployment");
 
 export class AppsDeploymentNotResolved extends Data.TaggedError(
   "GCP.CES.AppsDeploymentNotResolved",
@@ -132,23 +130,15 @@ export class AppsDeploymentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (app: string, deploymentId: string) =>
-  `${app}/deployments/${deploymentId}`;
+const resourceName = (app: string, deploymentId: string) => `${app}/deployments/${deploymentId}`;
 
-const toAttrs = (
-  deployment: ces.Deployment,
-  project: string,
-  region: string,
-  appHint?: string,
-) => {
+const toAttrs = (deployment: ces.Deployment, project: string, region: string, appHint?: string) => {
   const name = deployment.name ?? "";
   const parsed = parseResourceName(name, "deployments", region);
   return {
     name,
     deploymentId: parsed.id,
-    app: name.includes("/deployments/")
-      ? parsed.app
-      : (appHint ?? parsed.parent),
+    app: name.includes("/deployments/") ? parsed.app : (appHint ?? parsed.parent),
     location: parsed.location,
     project: parsed.project || project,
     displayName: parseOwnership(deployment.displayName).text,
@@ -185,14 +175,7 @@ const listAt = (parent: string, project: string, region: string) =>
 
 export const AppsDeploymentProvider = () =>
   Provider.succeed(AppsDeployment, {
-    stables: [
-      "name",
-      "deploymentId",
-      "app",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "deploymentId", "app", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -206,27 +189,14 @@ export const AppsDeploymentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const app = olds?.app
-        ? expandApp(olds.app, env.project, location)
-        : output?.app;
-      const deploymentId = yield* toPhysicalId(
-        id,
-        olds?.deploymentId,
-        output?.deploymentId,
-      );
-      const name =
-        output?.name ??
-        (app !== undefined ? resourceName(app, deploymentId) : "");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const app = olds?.app ? expandApp(olds.app, env.project, location) : output?.app;
+      const deploymentId = yield* toPhysicalId(id, olds?.deploymentId, output?.deploymentId);
+      const name = output?.name ?? (app !== undefined ? resourceName(app, deploymentId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, app);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -241,16 +211,9 @@ export const AppsDeploymentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const app = expandApp(news.app, env.project, location);
-      const deploymentId = yield* toPhysicalId(
-        id,
-        news.deploymentId,
-        output?.deploymentId,
-      );
+      const deploymentId = yield* toPhysicalId(id, news.deploymentId, output?.deploymentId);
       const name = output?.name ?? resourceName(app, deploymentId);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
@@ -283,17 +246,9 @@ export const AppsDeploymentProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const channelChanged = !sameJson(current.channelProfile, channelProfile);
       const versionChanged = !sameText(current.appVersion, appVersion);
-      const experimentChanged = !sameJson(
-        current.experimentConfig,
-        news.experimentConfig,
-      );
+      const experimentChanged = !sameJson(current.experimentConfig, news.experimentConfig);
 
-      if (
-        displayChanged ||
-        channelChanged ||
-        versionChanged ||
-        experimentChanged
-      ) {
+      if (displayChanged || channelChanged || versionChanged || experimentChanged) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsDeployments({
             name: currentName,
@@ -318,9 +273,9 @@ export const AppsDeploymentProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryTransient(
-        ces.deleteProjectsLocationsAppsDeployments({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryTransient(ces.deleteProjectsLocationsAppsDeployments({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name));
     }),
   });

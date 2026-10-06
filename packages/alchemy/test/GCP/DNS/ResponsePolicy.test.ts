@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/gcp/dns_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilPolicyGone = (project: string, responsePolicy: string) =>
   dns.getResponsePolicies({ project, responsePolicy }).pipe(
@@ -25,11 +22,7 @@ const waitUntilPolicyGone = (project: string, responsePolicy: string) =>
     }),
   );
 
-const waitUntilRuleGone = (
-  project: string,
-  responsePolicy: string,
-  ruleName: string,
-) =>
+const waitUntilRuleGone = (project: string, responsePolicy: string, ruleName: string) =>
   dns
     .getResponsePolicyRules({
       project,
@@ -74,16 +67,10 @@ test.provider(
       );
 
       expect(created.policy.responsePolicyName).toEqual(expect.any(String));
-      expect(created.policy.description).toEqual(
-        "alchemy test response policy",
-      );
+      expect(created.policy.description).toEqual("alchemy test response policy");
       expect(created.policy.labels).toMatchObject({ env: "test" });
-      expect(created.policy.networks.map(lastSegment)).toContain(
-        created.vpc.networkName,
-      );
-      expect(created.rule.responsePolicy).toEqual(
-        created.policy.responsePolicyName,
-      );
+      expect(created.policy.networks.map(lastSegment)).toContain(created.vpc.networkName);
+      expect(created.rule.responsePolicy).toEqual(created.policy.responsePolicyName);
       expect(created.rule.dnsName).toEqual("app.internal.example.com.");
       expect(created.rule.localData).toEqual([
         {
@@ -98,9 +85,7 @@ test.provider(
         project: created.policy.project,
         responsePolicy: created.policy.responsePolicyName,
       });
-      expect(fetched.responsePolicyName).toEqual(
-        created.policy.responsePolicyName,
-      );
+      expect(fetched.responsePolicyName).toEqual(created.policy.responsePolicyName);
       expect(fetched.description).toEqual("alchemy test response policy");
       expect(fetched.labels?.env).toEqual("test");
 
@@ -110,9 +95,7 @@ test.provider(
         responsePolicyRule: created.rule.ruleName,
       });
       expect(fetchedRule.dnsName).toEqual("app.internal.example.com.");
-      expect(fetchedRule.localData?.localDatas?.[0]?.rrdatas).toEqual([
-        "10.0.0.10",
-      ]);
+      expect(fetchedRule.localData?.localDatas?.[0]?.rrdatas).toEqual(["10.0.0.10"]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -136,12 +119,8 @@ test.provider(
         }),
       );
 
-      expect(updated.policy.responsePolicyName).toEqual(
-        created.policy.responsePolicyName,
-      );
-      expect(updated.policy.description).toEqual(
-        "updated alchemy test response policy",
-      );
+      expect(updated.policy.responsePolicyName).toEqual(created.policy.responsePolicyName);
+      expect(updated.policy.description).toEqual("updated alchemy test response policy");
       expect(updated.policy.labels).toMatchObject({
         env: "prod",
         role: "dns",
@@ -159,9 +138,7 @@ test.provider(
         project: created.policy.project,
         responsePolicy: created.policy.responsePolicyName,
       });
-      expect(fetchedUpdate.description).toEqual(
-        "updated alchemy test response policy",
-      );
+      expect(fetchedUpdate.description).toEqual("updated alchemy test response policy");
       expect(fetchedUpdate.labels?.env).toEqual("prod");
       expect(fetchedUpdate.labels?.role).toEqual("dns");
 
@@ -171,9 +148,7 @@ test.provider(
         responsePolicyRule: created.rule.ruleName,
       });
       expect(fetchedUpdatedRule.localData?.localDatas?.[0]?.ttl).toEqual(60);
-      expect(fetchedUpdatedRule.localData?.localDatas?.[0]?.rrdatas).toEqual([
-        "10.0.0.20",
-      ]);
+      expect(fetchedUpdatedRule.localData?.localDatas?.[0]?.rrdatas).toEqual(["10.0.0.20"]);
 
       const replacedRuleName = `r${created.rule.ruleName}`.slice(0, 63);
       const replaced = yield* stack.deploy(
@@ -216,10 +191,7 @@ test.provider(
       });
       expect(fetchedReplacedRule.dnsName).toEqual("api.internal.example.com.");
 
-      const replacedPolicyName = `r${created.policy.responsePolicyName}`.slice(
-        0,
-        63,
-      );
+      const replacedPolicyName = `r${created.policy.responsePolicyName}`.slice(0, 63);
       const replacedPolicy = yield* stack.deploy(
         Effect.gen(function* () {
           const vpc = yield* GCP.Compute.Network("Vpc", {
@@ -242,12 +214,8 @@ test.provider(
         }),
       );
 
-      expect(replacedPolicy.policy.responsePolicyName).toEqual(
-        replacedPolicyName,
-      );
-      expect(replacedPolicy.policy.description).toEqual(
-        "replaced alchemy test response policy",
-      );
+      expect(replacedPolicy.policy.responsePolicyName).toEqual(replacedPolicyName);
+      expect(replacedPolicy.policy.description).toEqual("replaced alchemy test response policy");
       expect(replacedPolicy.rule.responsePolicy).toEqual(replacedPolicyName);
 
       const previousPolicyGone = yield* waitUntilPolicyGone(
@@ -261,9 +229,7 @@ test.provider(
         responsePolicy: replacedPolicyName,
       });
       expect(fetchedReplacement.responsePolicyName).toEqual(replacedPolicyName);
-      expect(fetchedReplacement.description).toEqual(
-        "replaced alchemy test response policy",
-      );
+      expect(fetchedReplacement.description).toEqual("replaced alchemy test response policy");
 
       yield* stack.destroy();
 
@@ -274,10 +240,7 @@ test.provider(
       );
       expect(ruleGone).toEqual("gone");
 
-      const gone = yield* waitUntilPolicyGone(
-        created.policy.project,
-        replacedPolicyName,
-      );
+      const gone = yield* waitUntilPolicyGone(created.policy.project, replacedPolicyName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
   { tags: ["provider:gcp", "provider:gcp:dns", "live"], timeout: 120_000 },

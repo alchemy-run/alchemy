@@ -38,6 +38,4 @@ export interface GetParameter extends Binding.Service<
   >
 > {}
 
-export const GetParameter = Binding.Service<GetParameter>(
-  "GCP.ParameterManager.GetParameter",
-);
+export const GetParameter = Binding.Service<GetParameter>("GCP.ParameterManager.GetParameter");

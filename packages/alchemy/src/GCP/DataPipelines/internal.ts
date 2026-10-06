@@ -48,25 +48,19 @@ const canonical = (value: unknown): unknown =>
       : value;
 
 export const jsonEqual = (left: unknown, right: unknown) =>
-  JSON.stringify(canonical(left ?? null)) ===
-  JSON.stringify(canonical(right ?? null));
+  JSON.stringify(canonical(left ?? null)) === JSON.stringify(canonical(right ?? null));
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  pipelineId: string,
-) => `${locationParent(project, location)}/pipelines/${pipelineId}`;
+export const resourceName = (project: string, location: string, pipelineId: string) =>
+  `${locationParent(project, location)}/pipelines/${pipelineId}`;
 
 export const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -74,16 +68,11 @@ export const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const pipelinesAt = parts.lastIndexOf("pipelines");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     pipelineId:
-      pipelinesAt >= 0 && parts[pipelinesAt + 1]
-        ? parts[pipelinesAt + 1]!
-        : lastSegment(name),
+      pipelinesAt >= 0 && parts[pipelinesAt + 1] ? parts[pipelinesAt + 1]! : lastSegment(name),
     parent:
       pipelinesAt > 0
         ? parts.slice(0, pipelinesAt).join("/")
@@ -91,11 +80,7 @@ export const parseName = (name: string, fallbackLocation: string) => {
   };
 };
 
-export const rfc1035 = (
-  name: string,
-  maxLength = MAX_ID_LENGTH,
-  fallback = "pipeline",
-): string => {
+export const rfc1035 = (name: string, maxLength = MAX_ID_LENGTH, fallback = "pipeline"): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -142,10 +127,7 @@ export const toPipelineId = (
     );
   });
 
-export const toDisplayName = (
-  requested: string | undefined,
-  fallback: string,
-) =>
+export const toDisplayName = (requested: string | undefined, fallback: string) =>
   requested !== undefined && requested.length > 0
     ? sanitizeDisplayName(requested)
     : sanitizeDisplayName(fallback);
@@ -224,11 +206,7 @@ export const getPipeline = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const ignoreMissing = <A, R>(
-  effect: Effect.Effect<
-    A,
-    datapipelines.DeleteProjectsLocationsPipelinesError,
-    R
-  >,
+  effect: Effect.Effect<A, datapipelines.DeleteProjectsLocationsPipelinesError, R>,
 ) => effect.pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
@@ -267,12 +245,7 @@ export const listOwnedPipelines = (project: string, region: string) =>
     return owned;
   });
 
-export const findOwnedPipeline = (
-  id: string,
-  project: string,
-  region: string,
-  name?: string,
-) =>
+export const findOwnedPipeline = (id: string, project: string, region: string, name?: string) =>
   Effect.gen(function* () {
     const existing = yield* getPipeline(name ?? "");
     if (existing !== undefined) return existing;

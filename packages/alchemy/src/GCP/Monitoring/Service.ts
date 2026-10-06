@@ -17,13 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  compactStringMap,
-  jsonEqual,
-  lastSegment,
-  parentOf,
-  toEmptyObject,
-} from "./ownership.ts";
+import { compactStringMap, jsonEqual, lastSegment, parentOf, toEmptyObject } from "./ownership.ts";
 
 const MAX_SERVICE_ID_LENGTH = 63;
 
@@ -258,9 +252,7 @@ export type Service = Resource<
  */
 export const Service = Resource<Service>("GCP.Monitoring.Service");
 
-export class ServiceNotResolved extends Data.TaggedError(
-  "GCP.Monitoring.ServiceNotResolved",
-)<{
+export class ServiceNotResolved extends Data.TaggedError("GCP.Monitoring.ServiceNotResolved")<{
   name: string;
 }> {}
 
@@ -427,9 +419,7 @@ const listOwned = (project: string) =>
     const services = yield* listPages(project);
     return services
       .filter((service) =>
-        Object.keys(service.userLabels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(service.userLabels ?? {}).some((key) => key.startsWith("alchemy-")),
       )
       .map((service) => toAttrs(service, project));
   });
@@ -462,9 +452,7 @@ export const ServiceProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.serviceId ?? output?.serviceId;
       const idChanged =
-        news.serviceId !== undefined &&
-        previousId !== undefined &&
-        news.serviceId !== previousId;
+        news.serviceId !== undefined && previousId !== undefined && news.serviceId !== previousId;
       const previousKind = identifierKindOf({
         basicService: olds?.basicService ?? output?.basicService,
         appEngine: olds?.appEngine ?? output?.appEngine,
@@ -475,8 +463,7 @@ export const ServiceProvider = () =>
         gkeWorkload: olds?.gkeWorkload ?? output?.gkeWorkload,
         clusterIstio: olds?.clusterIstio ?? output?.clusterIstio,
         meshIstio: olds?.meshIstio ?? output?.meshIstio,
-        istioCanonicalService:
-          olds?.istioCanonicalService ?? output?.istioCanonicalService,
+        istioCanonicalService: olds?.istioCanonicalService ?? output?.istioCanonicalService,
         custom: olds?.custom ?? output?.custom ?? {},
       });
       const nextKind = identifierKindOf(news);
@@ -493,9 +480,7 @@ export const ServiceProvider = () =>
       const existing = yield* observe(env.project, id, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -534,9 +519,7 @@ export const ServiceProvider = () =>
             Effect.catchTag("Conflict", () =>
               getByName(name).pipe(
                 Effect.flatMap((existing) =>
-                  existing !== undefined
-                    ? Effect.succeed(existing)
-                    : findOwned(env.project, id),
+                  existing !== undefined ? Effect.succeed(existing) : findOwned(env.project, id),
                 ),
               ),
             ),
@@ -554,8 +537,7 @@ export const ServiceProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
       const telemetryChanged =
-        news.telemetry !== undefined &&
-        !jsonEqual(current.telemetry ?? null, news.telemetry);
+        news.telemetry !== undefined && !jsonEqual(current.telemetry ?? null, news.telemetry);
 
       const updateMask = [
         displayNameChanged ? "display_name" : undefined,

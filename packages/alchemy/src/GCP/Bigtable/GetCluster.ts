@@ -33,14 +33,8 @@ export interface GetCluster extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetClusterRequest,
-    ) => Effect.Effect<
-      bigtable.Cluster,
-      bigtable.GetProjectsInstancesClustersError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<bigtable.Cluster, bigtable.GetProjectsInstancesClustersError, RuntimeContext>
   >
 > {}
 
-export const GetCluster = Binding.Service<GetCluster>(
-  "GCP.Bigtable.GetCluster",
-);
+export const GetCluster = Binding.Service<GetCluster>("GCP.Bigtable.GetCluster");

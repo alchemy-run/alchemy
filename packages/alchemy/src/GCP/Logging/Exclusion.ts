@@ -8,11 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 100;
@@ -112,9 +108,7 @@ export type Exclusion = Resource<
  */
 export const Exclusion = Resource<Exclusion>("GCP.Logging.Exclusion");
 
-export class ExclusionNotResolved extends Data.TaggedError(
-  "GCP.Logging.ExclusionNotResolved",
-)<{
+export class ExclusionNotResolved extends Data.TaggedError("GCP.Logging.ExclusionNotResolved")<{
   name: string;
 }> {}
 
@@ -141,9 +135,7 @@ const toId = (id: string, exclusionId: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z0-9]/.test(generated)
-      ? generated
-      : `e${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z0-9]/.test(generated) ? generated : `e${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -177,9 +169,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const toAttrs = (exclusion: logging.LogExclusion, project: string) => {
   const exclusionId = exclusionIdOf(exclusion);
@@ -224,11 +214,7 @@ export const ExclusionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const exclusionId = yield* toId(
-        id,
-        olds?.exclusionId,
-        output?.exclusionId,
-      );
+      const exclusionId = yield* toId(id, olds?.exclusionId, output?.exclusionId);
       const name = output?.name ?? resourceName(env.project, exclusionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -246,12 +232,8 @@ export const ExclusionProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.exclusions ?? []),
-            ),
-            Stream.filter((exclusion) =>
-              hasOwnershipMarker(exclusion.description),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.exclusions ?? [])),
+            Stream.filter((exclusion) => hasOwnershipMarker(exclusion.description)),
             Stream.map((exclusion) => toAttrs(exclusion, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -260,11 +242,7 @@ export const ExclusionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const exclusionId = yield* toId(
-        id,
-        news.exclusionId,
-        output?.exclusionId,
-      );
+      const exclusionId = yield* toId(id, news.exclusionId, output?.exclusionId);
       const name = resourceName(env.project, exclusionId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -292,8 +270,7 @@ export const ExclusionProvider = () =>
 
       const desiredDisabled = news.disabled === true;
       const filterChanged = (current.filter ?? "") !== news.filter;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
 
       const updateMask = [

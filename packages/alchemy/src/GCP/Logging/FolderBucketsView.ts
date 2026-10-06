@@ -101,9 +101,7 @@ export type FolderBucketsView = Resource<
  * @resource
  * @category Logging
  */
-export const FolderBucketsView = Resource<FolderBucketsView>(
-  "GCP.Logging.FolderBucketsView",
-);
+export const FolderBucketsView = Resource<FolderBucketsView>("GCP.Logging.FolderBucketsView");
 
 export class FolderBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderBucketsViewNotResolved",
@@ -111,8 +109,7 @@ export class FolderBucketsViewNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (bucketName: string, viewId: string) =>
-  `${bucketName}/views/${viewId}`;
+const resourceName = (bucketName: string, viewId: string) => `${bucketName}/views/${viewId}`;
 
 const toAttrs = (view: logging.LogView, bucketName: string) => {
   const parsed = parseLoggingName(view.name ?? "");
@@ -142,12 +139,9 @@ export const FolderBucketsViewProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.viewId ?? output?.viewId;
       const idChanged =
-        previousId !== undefined &&
-        news.viewId !== undefined &&
-        news.viewId !== previousId;
+        previousId !== undefined && news.viewId !== undefined && news.viewId !== previousId;
       const previousBucket = olds?.bucketName ?? output?.bucketName;
-      const bucketChanged =
-        previousBucket !== undefined && news.bucketName !== previousBucket;
+      const bucketChanged = previousBucket !== undefined && news.bucketName !== previousBucket;
       if (!idChanged && !bucketChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -191,9 +185,7 @@ export const FolderBucketsViewProvider = () =>
               Stream.map((view) => toAttrs(view, bucket.name ?? "")),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed([] as ReturnType<typeof toAttrs>[])),
             );
           views.push(...listed);
         }
@@ -227,8 +219,7 @@ export const FolderBucketsViewProvider = () =>
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const updateMask = [
         filterChanged ? "filter" : undefined,
         descriptionChanged ? "description" : undefined,

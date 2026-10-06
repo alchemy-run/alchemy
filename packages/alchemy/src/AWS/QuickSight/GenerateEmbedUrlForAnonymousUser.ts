@@ -11,10 +11,7 @@ import type { Dashboard } from "./Dashboard.ts";
  */
 export interface GenerateEmbedUrlForAnonymousUserRequest extends Omit<
   quicksight.GenerateEmbedUrlForAnonymousUserRequest,
-  | "AwsAccountId"
-  | "Namespace"
-  | "AuthorizedResourceArns"
-  | "ExperienceConfiguration"
+  "AwsAccountId" | "Namespace" | "AuthorizedResourceArns" | "ExperienceConfiguration"
 > {
   /**
    * The QuickSight namespace the anonymous session belongs to.
@@ -72,7 +69,6 @@ export interface GenerateEmbedUrlForAnonymousUser extends Binding.Service<
     >
   >
 > {}
-export const GenerateEmbedUrlForAnonymousUser =
-  Binding.Service<GenerateEmbedUrlForAnonymousUser>(
-    "AWS.QuickSight.GenerateEmbedUrlForAnonymousUser",
-  );
+export const GenerateEmbedUrlForAnonymousUser = Binding.Service<GenerateEmbedUrlForAnonymousUser>(
+  "AWS.QuickSight.GenerateEmbedUrlForAnonymousUser",
+);

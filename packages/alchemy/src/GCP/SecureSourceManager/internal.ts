@@ -1,16 +1,12 @@
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as ssm from "@distilled.cloud/gcp/securesourcemanager_v1";
 import * as Data from "effect/Data";
-import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
-import {
-  alchemyLabelKeys,
-  hasAlchemyLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
@@ -49,31 +45,19 @@ export const rfc1035 = (name: string, fallback = "ssm"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const parseName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -115,9 +99,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -143,13 +126,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -163,8 +143,7 @@ export const replaceOnIdentity = (input: {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
     (input.nextParent ?? "") !== "" &&
-    lastSegment(input.previousParent ?? "") !==
-      lastSegment(input.nextParent ?? "");
+    lastSegment(input.previousParent ?? "") !== lastSegment(input.nextParent ?? "");
   const replace =
     (input.extra ?? false) ||
     parentChanged ||
@@ -222,9 +201,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -245,19 +222,14 @@ export const stripAlchemyQuery = (uri: string): string => {
     .slice(queryIndex + 1)
     .split("&")
     .filter((part) => {
-      const key = decodeURIComponent(
-        (part.split("=")[0] ?? "").replace(/\+/g, " "),
-      );
+      const key = decodeURIComponent((part.split("=")[0] ?? "").replace(/\+/g, " "));
       return key.length > 0 && !key.startsWith(ALCHEMY_QUERY_PREFIX);
     });
   if (kept.length === 0) return `${base}${hash}`;
   return `${base}?${kept.join("&")}${hash}`;
 };
 
-export const encodeTargetUri = (
-  uri: string,
-  labels: Record<string, string>,
-): string => {
+export const encodeTargetUri = (uri: string, labels: Record<string, string>): string => {
   const stripped = stripAlchemyQuery(uri);
   const params = [
     `${alchemyLabelKeys.stack}=${encodeURIComponent(labels[alchemyLabelKeys.stack] ?? "x")}`,
@@ -272,9 +244,7 @@ export const encodeTargetUri = (
     : `${withoutHash}?${params}${hash}`;
 };
 
-export const parseTargetUriOwnership = (
-  uri: string | undefined,
-): Record<string, string> => {
+export const parseTargetUriOwnership = (uri: string | undefined): Record<string, string> => {
   if (uri === undefined) return {};
   const withoutHash = uri.split("#")[0] ?? uri;
   const queryIndex = withoutHash.indexOf("?");
@@ -282,26 +252,18 @@ export const parseTargetUriOwnership = (
   const labels: Record<string, string> = {};
   for (const part of withoutHash.slice(queryIndex + 1).split("&")) {
     const eq = part.indexOf("=");
-    const key = decodeURIComponent(
-      (eq >= 0 ? part.slice(0, eq) : part).replace(/\+/g, " "),
-    );
+    const key = decodeURIComponent((eq >= 0 ? part.slice(0, eq) : part).replace(/\+/g, " "));
     if (!key.startsWith(ALCHEMY_QUERY_PREFIX)) continue;
-    const value = decodeURIComponent(
-      (eq >= 0 ? part.slice(eq + 1) : "").replace(/\+/g, " "),
-    );
+    const value = decodeURIComponent((eq >= 0 ? part.slice(eq + 1) : "").replace(/\+/g, " "));
     labels[key] = value;
   }
   return labels;
 };
 
 export const hasTargetUriOwnership = (uri: string | undefined) =>
-  Object.keys(parseTargetUriOwnership(uri)).some((key) =>
-    key.startsWith(ALCHEMY_QUERY_PREFIX),
-  );
+  Object.keys(parseTargetUriOwnership(uri)).some((key) => key.startsWith(ALCHEMY_QUERY_PREFIX));
 
-export const nameFromOperation = (
-  operation: ssm.Operation,
-): string | undefined => {
+export const nameFromOperation = (operation: ssm.Operation): string | undefined => {
   const from = (value: unknown): string | undefined => {
     if (value && typeof value === "object" && "name" in value) {
       const name = (value as { name?: unknown }).name;
@@ -321,10 +283,7 @@ export const nameFromOperation = (
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */
-export const waitForOperation = (
-  operation: ssm.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+export const waitForOperation = (operation: ssm.Operation, options?: { notFoundOk?: boolean }) =>
   Effect.suspend(() => {
     let latest = operation;
     return waitForLongRunningOperation(
@@ -380,8 +339,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.SecureSourceManager.ResourceNotResolved",
+      while: (error) => error._tag === "GCP.SecureSourceManager.ResourceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -397,8 +355,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.SecureSourceManager.ResourceStillExists",
+      while: (error) => error._tag === "GCP.SecureSourceManager.ResourceStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -421,18 +378,16 @@ export const collectPages = <Page, Item, E, R>(
   );
 
 const listInstancePages = (parent: string) =>
-  ssm.listProjectsLocationsInstances
-    .pages({ parent, pageSize: PAGE_SIZE })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.instances ?? [])),
-      Stream.runFold(
-        (): ssm.Instance[] => [],
-        (acc, item) => {
-          acc.push(item);
-          return acc;
-        },
-      ),
-    );
+  ssm.listProjectsLocationsInstances.pages({ parent, pageSize: PAGE_SIZE }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.instances ?? [])),
+    Stream.runFold(
+      (): ssm.Instance[] => [],
+      (acc, item) => {
+        acc.push(item);
+        return acc;
+      },
+    ),
+  );
 
 export const listInstances = (project: string, region: string) =>
   listInstancePages(`projects/${project}/locations/${region}`);
@@ -452,8 +407,7 @@ export const listRepositories = (
   Effect.gen(function* () {
     const instances = yield* listInstances(project, region);
     const named = instances.filter(
-      (instance): instance is ssm.Instance & { name: string } =>
-        (instance.name ?? "").length > 0,
+      (instance): instance is ssm.Instance & { name: string } => (instance.name ?? "").length > 0,
     );
     const pages = yield* Effect.forEach(
       named,
@@ -472,10 +426,7 @@ export const listRepositories = (
     );
     return pages
       .flat()
-      .filter(
-        (repo): repo is ssm.Repository & { name: string } =>
-          (repo.name ?? "").length > 0,
-      );
+      .filter((repo): repo is ssm.Repository & { name: string } => (repo.name ?? "").length > 0);
   });
 
 export const forEachRepository = <A, E, R>(
@@ -496,8 +447,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );

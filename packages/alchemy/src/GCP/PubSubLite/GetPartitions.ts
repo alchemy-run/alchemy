@@ -44,6 +44,4 @@ export interface GetPartitions extends Binding.Service<
   >
 > {}
 
-export const GetPartitions = Binding.Service<GetPartitions>(
-  "GCP.PubSubLite.GetPartitions",
-);
+export const GetPartitions = Binding.Service<GetPartitions>("GCP.PubSubLite.GetPartitions");

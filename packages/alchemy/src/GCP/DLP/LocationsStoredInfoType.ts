@@ -27,8 +27,7 @@ import {
 
 type StoredInfoTypeRegex = dlp.GooglePrivacyDlpV2Regex;
 type StoredInfoTypeDictionary = dlp.GooglePrivacyDlpV2Dictionary;
-type StoredInfoTypeLargeCustomDictionary =
-  dlp.GooglePrivacyDlpV2LargeCustomDictionaryConfig;
+type StoredInfoTypeLargeCustomDictionary = dlp.GooglePrivacyDlpV2LargeCustomDictionaryConfig;
 
 export type LocationsStoredInfoTypeProps = {
   /**
@@ -143,11 +142,8 @@ export class LocationsStoredInfoTypeNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  storedInfoTypeId: string,
-) => `${locationParent(project, location)}/storedInfoTypes/${storedInfoTypeId}`;
+const resourceName = (project: string, location: string, storedInfoTypeId: string) =>
+  `${locationParent(project, location)}/storedInfoTypes/${storedInfoTypeId}`;
 
 const configOf = (
   props: LocationsStoredInfoTypeProps,
@@ -160,11 +156,7 @@ const configOf = (
   largeCustomDictionary: props.largeCustomDictionary,
 });
 
-const toAttrs = (
-  stored: dlp.GooglePrivacyDlpV2StoredInfoType,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (stored: dlp.GooglePrivacyDlpV2StoredInfoType, project: string, region: string) => {
   const name = stored.name ?? "";
   const config = stored.currentVersion?.config;
   const parsed = parseOwnership(config?.description);
@@ -212,24 +204,17 @@ export const LocationsStoredInfoTypeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const storedInfoTypeId = yield* toResourceId(
         id,
         olds?.storedInfoTypeId,
         output?.storedInfoTypeId,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, storedInfoTypeId);
+      const name = output?.name ?? resourceName(env.project, location, storedInfoTypeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(
-        id,
-        existing.currentVersion?.config?.description,
-      ))
+      return (yield* ownedByAlchemy(id, existing.currentVersion?.config?.description))
         ? attrs
         : Unowned(attrs);
     }),
@@ -249,18 +234,13 @@ export const LocationsStoredInfoTypeProvider = () =>
           ),
         );
         return items
-          .filter((stored) =>
-            hasOwnershipMarker(stored.currentVersion?.config?.description),
-          )
+          .filter((stored) => hasOwnershipMarker(stored.currentVersion?.config?.description))
           .map((stored) => toAttrs(stored, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const storedInfoTypeId = yield* toResourceId(
         id,
         news.storedInfoTypeId,
@@ -291,20 +271,11 @@ export const LocationsStoredInfoTypeProvider = () =>
       }
 
       const observed = current.currentVersion?.config;
-      const displayChanged = !jsonEqual(
-        observed?.displayName,
-        news.displayName,
-      );
+      const displayChanged = !jsonEqual(observed?.displayName, news.displayName);
       const descriptionChanged = (observed?.description ?? "") !== description;
       const regexChanged = !jsonEqual(observed?.regex, news.regex);
-      const dictionaryChanged = !jsonEqual(
-        observed?.dictionary,
-        news.dictionary,
-      );
-      const largeChanged = !jsonEqual(
-        observed?.largeCustomDictionary,
-        news.largeCustomDictionary,
-      );
+      const dictionaryChanged = !jsonEqual(observed?.dictionary, news.dictionary);
+      const largeChanged = !jsonEqual(observed?.largeCustomDictionary, news.largeCustomDictionary);
 
       if (
         displayChanged ||
@@ -331,10 +302,7 @@ export const LocationsStoredInfoTypeProvider = () =>
       }
 
       const readyName = current.name ?? name;
-      current = yield* waitForStoredInfoTypeReady(
-        readyName,
-        getByName(readyName),
-      );
+      current = yield* waitForStoredInfoTypeReady(readyName, getByName(readyName));
       return toAttrs(current, env.project, env.region);
     }),
 

@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   lastSegment,
@@ -175,16 +170,11 @@ const isPendingState = (state: string | undefined) =>
 
 const toForwardingRule = (value: string) => {
   const path = toResourcePath(value);
-  const match = path.match(
-    /projects\/[^/]+\/regions\/[^/]+\/forwardingRules\/[^/]+/,
-  );
+  const match = path.match(/projects\/[^/]+\/regions\/[^/]+\/forwardingRules\/[^/]+/);
   return match ? match[0]! : path;
 };
 
-const toAttrs = (
-  deployment: networksecurity.MirroringDeployment,
-  project: string,
-) => {
+const toAttrs = (deployment: networksecurity.MirroringDeployment, project: string) => {
   const name = deployment.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -211,22 +201,19 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (deployment): deployment is networksecurity.MirroringDeployment =>
-        deployment !== undefined,
+      (deployment): deployment is networksecurity.MirroringDeployment => deployment !== undefined,
       () => new MirroringDeploymentNotResolved({ name }),
     ),
     Effect.filterOrFail(
       (deployment) => deployment.state !== "DELETE_FAILED",
-      (deployment) =>
-        new MirroringDeploymentFailed({ name, state: deployment.state }),
+      (deployment) => new MirroringDeploymentFailed({ name, state: deployment.state }),
     ),
     Effect.filterOrFail(
       (deployment) => !isPendingState(deployment.state),
       () => new MirroringDeploymentNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.MirroringDeploymentNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentNotResolved",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -240,8 +227,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new MirroringDeploymentStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.MirroringDeploymentStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentStillExists",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -254,13 +240,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.mirroringDeployments ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.mirroringDeployments ?? [])),
       Stream.filter((deployment) =>
-        Object.keys(deployment.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(deployment.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((deployment) => toAttrs(deployment, project)),
       Stream.runCollect,
@@ -282,8 +264,7 @@ export const MirroringDeploymentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.mirroringDeploymentId ?? output?.mirroringDeploymentId;
+      const previousId = olds?.mirroringDeploymentId ?? output?.mirroringDeploymentId;
       const nextId = news.mirroringDeploymentId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
@@ -294,19 +275,13 @@ export const MirroringDeploymentProvider = () =>
         DEFAULT_LOCATION,
       );
       const previousGroup = lastSegment(
-        olds?.mirroringDeploymentGroup ??
-          output?.mirroringDeploymentGroup ??
-          "",
+        olds?.mirroringDeploymentGroup ?? output?.mirroringDeploymentGroup ?? "",
       );
       const nextGroup = lastSegment(news.mirroringDeploymentGroup);
-      const previousRule = lastSegment(
-        olds?.forwardingRule ?? output?.forwardingRule ?? "",
-      );
+      const previousRule = lastSegment(olds?.forwardingRule ?? output?.forwardingRule ?? "");
       const nextRule = lastSegment(news.forwardingRule);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousGroup.length > 0 && previousGroup !== nextGroup) ||
         (previousRule.length > 0 && previousRule !== nextRule);
@@ -322,19 +297,13 @@ export const MirroringDeploymentProvider = () =>
         output?.mirroringDeploymentId,
         "mdep",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_LOCATION);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, mirroringDeploymentId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, mirroringDeploymentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -351,19 +320,9 @@ export const MirroringDeploymentProvider = () =>
         output?.mirroringDeploymentId,
         "mdep",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_LOCATION,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        mirroringDeploymentId,
-      );
-      const mirroringDeploymentGroup = toResourcePath(
-        news.mirroringDeploymentGroup,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_LOCATION);
+      const name = resourceName(env.project, location, COLLECTION, mirroringDeploymentId);
+      const mirroringDeploymentGroup = toResourcePath(news.mirroringDeploymentGroup);
       const forwardingRule = toForwardingRule(news.forwardingRule);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -405,24 +364,22 @@ export const MirroringDeploymentProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsMirroringDeployments({
+        const operation = yield* networksecurity.patchProjectsLocationsMirroringDeployments({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

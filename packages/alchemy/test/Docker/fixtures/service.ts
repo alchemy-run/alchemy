@@ -1,10 +1,10 @@
-import * as Docker from "@/Docker";
-import { ServerHost } from "@/Server/Process.ts";
 import * as Effect from "effect/Effect";
-import * as Ref from "effect/Ref";
-import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
+import * as Docker from "@/Docker";
+import { ServerHost } from "@/Server/Process.ts";
 
 /**
  * Fixed host port published through the swarm ingress. Deterministic (never

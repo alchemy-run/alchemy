@@ -1,34 +1,29 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import { quotaTolerant } from "./parent.ts";
-import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
-  discoveryengine
-    .getProjectsLocationsCollectionsEnginesServingConfigs({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  discoveryengine.getProjectsLocationsCollectionsEnginesServingConfigs({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsCollectionsEnginesServingConfigs on a missing config fails with a typed tag",
@@ -61,30 +56,20 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              location: "global",
-              displayName: "serving-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "serving engine",
-            },
-          );
-          const serving =
-            yield* GCP.DiscoveryEngine.CollectionsEnginesServingConfig(
-              "Primary",
-              {
-                engine: engine.name,
-                displayName: "primary",
-                solutionType: "SOLUTION_TYPE_SEARCH",
-              },
-            );
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            location: "global",
+            displayName: "serving-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "serving engine",
+          });
+          const serving = yield* GCP.DiscoveryEngine.CollectionsEnginesServingConfig("Primary", {
+            engine: engine.name,
+            displayName: "primary",
+            solutionType: "SOLUTION_TYPE_SEARCH",
+          });
           return { store, engine, serving };
         }),
       );
@@ -93,42 +78,31 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.serving.engine).toEqual(created.engine.name);
       expect(created.serving.displayName).toEqual("primary");
 
-      const fetched =
-        yield* discoveryengine.getProjectsLocationsCollectionsEnginesServingConfigs(
-          { name: created.serving.name },
-        );
+      const fetched = yield* discoveryengine.getProjectsLocationsCollectionsEnginesServingConfigs({
+        name: created.serving.name,
+      });
       expect(fetched.name).toEqual(created.serving.name);
       expect(fetched.displayName).toEqual("primary");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              dataStoreId: created.store.dataStoreId,
-              location: "global",
-              displayName: "serving-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              engineId: created.engine.engineId,
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "serving engine",
-            },
-          );
-          const serving =
-            yield* GCP.DiscoveryEngine.CollectionsEnginesServingConfig(
-              "Primary",
-              {
-                engine: engine.name,
-                servingConfigId: created.serving.servingConfigId,
-                displayName: "primary-prod",
-                solutionType: "SOLUTION_TYPE_SEARCH",
-              },
-            );
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            dataStoreId: created.store.dataStoreId,
+            location: "global",
+            displayName: "serving-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            engineId: created.engine.engineId,
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "serving engine",
+          });
+          const serving = yield* GCP.DiscoveryEngine.CollectionsEnginesServingConfig("Primary", {
+            engine: engine.name,
+            servingConfigId: created.serving.servingConfigId,
+            displayName: "primary-prod",
+            solutionType: "SOLUTION_TYPE_SEARCH",
+          });
           return { store, engine, serving };
         }),
       );

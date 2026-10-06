@@ -1,17 +1,13 @@
 import * as Effect from "effect/Effect";
-import type { Connection } from "./Connection.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Connection } from "./Connection.ts";
 
 /**
  * Shared HTTP scaffolding for BigQuery Connection bindings.
  * NOT exported from index.ts.
  */
-export const makeConnectionHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeConnectionHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

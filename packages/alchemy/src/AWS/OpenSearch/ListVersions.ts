@@ -25,12 +25,7 @@ export interface ListVersions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: opensearch.ListVersionsRequest,
-    ) => Effect.Effect<
-      opensearch.ListVersionsResponse,
-      opensearch.ListVersionsError
-    >
+    ) => Effect.Effect<opensearch.ListVersionsResponse, opensearch.ListVersionsError>
   >
 > {}
-export const ListVersions = Binding.Service<ListVersions>(
-  "AWS.OpenSearch.ListVersions",
-);
+export const ListVersions = Binding.Service<ListVersions>("AWS.OpenSearch.ListVersions");

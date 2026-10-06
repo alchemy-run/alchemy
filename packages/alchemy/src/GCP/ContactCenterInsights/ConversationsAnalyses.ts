@@ -10,13 +10,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { AnnotatorSelector } from "./AnalysisRule.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
-import {
-  lastSegment,
-  locationOf,
-  locationParent,
-  parentOf,
-  sameJson,
-} from "./ownership.ts";
+import { lastSegment, locationOf, locationParent, parentOf, sameJson } from "./ownership.ts";
 
 type AnalysisAnnotatorSelector = AnnotatorSelector & {
   /** Summarization annotator configuration. */
@@ -124,10 +118,7 @@ const toSelector = (
   };
 };
 
-const toAttrs = (
-  analysis: cci.GoogleCloudContactcenterinsightsV1Analysis,
-  project: string,
-) => {
+const toAttrs = (analysis: cci.GoogleCloudContactcenterinsightsV1Analysis, project: string) => {
   const name = analysis.name ?? "";
   return {
     name,
@@ -156,52 +147,37 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new ConversationsAnalysesNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.ContactCenterInsights.ConversationsAnalysesNotResolved",
+      while: (error) => error._tag === "GCP.ContactCenterInsights.ConversationsAnalysesNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
 const listConversations = (parent: string) =>
-  cci.listProjectsLocationsConversations
-    .pages({ parent, pageSize: 100, view: "BASIC" })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.conversations ?? [])),
-      Stream.filter((conversation) =>
-        Object.keys(conversation.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ),
-      Stream.map((conversation) => conversation.name ?? ""),
-      Stream.filter((name) => name.length > 0),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    );
+  cci.listProjectsLocationsConversations.pages({ parent, pageSize: 100, view: "BASIC" }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.conversations ?? [])),
+    Stream.filter((conversation) =>
+      Object.keys(conversation.labels ?? {}).some((key) => key.startsWith("alchemy-")),
+    ),
+    Stream.map((conversation) => conversation.name ?? ""),
+    Stream.filter((name) => name.length > 0),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+  );
 
 const listAtParent = (parent: string, project: string) =>
-  cci.listProjectsLocationsConversationsAnalyses
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.analyses ?? [])),
-      Stream.map((analysis) => toAttrs(analysis, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsConversationsAnalyses.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.analyses ?? [])),
+    Stream.map((analysis) => toAttrs(analysis, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const ConversationsAnalysesProvider = () =>
   Provider.succeed(ConversationsAnalyses, {
-    stables: [
-      "name",
-      "analysisId",
-      "parent",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "analysisId", "parent", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -209,14 +185,10 @@ export const ConversationsAnalysesProvider = () =>
       if (previousParent !== undefined && news.parent !== previousParent) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousSelector =
-        olds?.annotatorSelector ?? output?.annotatorSelector;
+      const previousSelector = olds?.annotatorSelector ?? output?.annotatorSelector;
       if (
         previousSelector !== undefined &&
-        !sameJson(
-          toSelector(previousSelector),
-          toSelector(news.annotatorSelector),
-        )
+        !sameJson(toSelector(previousSelector), toSelector(news.annotatorSelector))
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }

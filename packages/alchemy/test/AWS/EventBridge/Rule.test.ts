@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Rule } from "@/AWS/EventBridge/Rule.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Rule } from "@/AWS/EventBridge/Rule.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -47,11 +47,7 @@ test.provider(
 
       expect(all.some((r) => r.ruleName === rule.ruleName)).toBe(true);
       expect(
-        all.some(
-          (r) =>
-            r.ruleName === rule.ruleName &&
-            r.eventBusName === rule.eventBusName,
-        ),
+        all.some((r) => r.ruleName === rule.ruleName && r.eventBusName === rule.eventBusName),
       ).toBe(true);
 
       yield* stack.destroy();

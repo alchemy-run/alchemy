@@ -1,21 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as migrationcenter from "@distilled.cloud/gcp/migrationcenter_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const serviceAccountOf = (project: string) =>
-  `alchemy-testing@${project}.iam.gserviceaccount.com`;
+const serviceAccountOf = (project: string) => `alchemy-testing@${project}.iam.gserviceaccount.com`;
 
 const waitUntilGone = (name: string) =>
   migrationcenter.getProjectsLocationsDiscoveryClients({ name }).pipe(
@@ -83,10 +79,9 @@ test.provider(
       expect(created.client.displayName).toEqual("on-prem-agent");
       expect(created.client.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* migrationcenter.getProjectsLocationsDiscoveryClients({
-          name: created.client.name,
-        });
+      const fetched = yield* migrationcenter.getProjectsLocationsDiscoveryClients({
+        name: created.client.name,
+      });
       expect(fetched.name).toEqual(created.client.name);
       expect(fetched.source).toEqual(created.source.name);
       expect(fetched.labels?.env).toEqual("test");

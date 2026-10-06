@@ -117,9 +117,7 @@ export type DashboardsChart = Resource<
     /** Date range config. */
     dateRangeConfig: DateRangeConfig | undefined;
     /** Data source. */
-    dataSource:
-      | cci.GoogleCloudContactcenterinsightsV1ChartDataSource
-      | undefined;
+    dataSource: cci.GoogleCloudContactcenterinsightsV1ChartDataSource | undefined;
     /** Click action. */
     action: cci.GoogleCloudContactcenterinsightsV1ChartAction | undefined;
     /** RFC3339 creation timestamp. */
@@ -162,8 +160,7 @@ export class DashboardsChartNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (parent: string, chartId: string) =>
-  `${parent}/charts/${chartId}`;
+const resourceName = (parent: string, chartId: string) => `${parent}/charts/${chartId}`;
 
 const optionalString = (value: string | undefined): string | undefined => value;
 
@@ -189,10 +186,7 @@ const toDateRangeConfig = (
   };
 };
 
-const toAttrs = (
-  chart: cci.GoogleCloudContactcenterinsightsV1Chart,
-  project: string,
-) => {
+const toAttrs = (chart: cci.GoogleCloudContactcenterinsightsV1Chart, project: string) => {
   const name = chart.name ?? "";
   const parsed = parseOwnership(chart.description);
   return {
@@ -254,11 +248,7 @@ export const DashboardsChartProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.chartId ?? output?.chartId;
-      if (
-        previousId !== undefined &&
-        news.chartId !== undefined &&
-        news.chartId !== previousId
-      ) {
+      if (previousId !== undefined && news.chartId !== undefined && news.chartId !== previousId) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -268,22 +258,17 @@ export const DashboardsChartProvider = () =>
       const env = yield* GcpEnvironment.current;
       const chartId = yield* toResourceId(id, olds?.chartId, output?.chartId);
       const name =
-        output?.name ??
-        (olds?.parent !== undefined ? resourceName(olds.parent, chartId) : "");
+        output?.name ?? (olds?.parent !== undefined ? resourceName(olds.parent, chartId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const dashboards = yield* listDashboards(
-          locationParent(env.project, env.region),
-        );
+        const dashboards = yield* listDashboards(locationParent(env.project, env.region));
         const pages = yield* Effect.forEach(
           dashboards,
           (parent) => listAtParent(parent, env.project),
@@ -333,12 +318,8 @@ export const DashboardsChartProvider = () =>
       const widthChanged = (current.width ?? 0) !== (news.width ?? 0);
       const heightChanged = (current.height ?? 0) !== (news.height ?? 0);
       const vizChanged =
-        (current.chartVisualizationType ?? "") !==
-        (news.chartVisualizationType ?? "");
-      const dateRangeChanged = !sameJson(
-        current.dateRangeConfig,
-        news.dateRangeConfig,
-      );
+        (current.chartVisualizationType ?? "") !== (news.chartVisualizationType ?? "");
+      const dateRangeChanged = !sameJson(current.dateRangeConfig, news.dateRangeConfig);
       const dataSourceChanged = !sameJson(current.dataSource, news.dataSource);
       const actionChanged = !sameJson(current.action, news.action);
 

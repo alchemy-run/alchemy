@@ -1,22 +1,17 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
-import PresignRemoteWorker, {
-  PresignRemoteBucket,
-} from "./fixtures/presign/remote-worker.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
+import PresignRemoteWorker, { PresignRemoteBucket } from "./fixtures/presign/remote-worker.ts";
 import { presignRoundTrip } from "./fixtures/presign/roundtrip.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * Deployed: the Worker mints presigned URLs with S3 credentials derived from
@@ -44,19 +39,13 @@ test.provider(
       for (const url of [putUrl, getUrl]) {
         const parsed = new URL(url);
         expect(parsed.hostname).toMatch(/\.r2\.cloudflarestorage\.com$/);
-        expect(
-          parsed.pathname.startsWith(`/${deployed.bucket.bucketName}/`),
-        ).toBe(true);
+        expect(parsed.pathname.startsWith(`/${deployed.bucket.bucketName}/`)).toBe(true);
       }
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker"],
     timeout: 180_000,
   },
 );
@@ -77,10 +66,7 @@ test.provider(
             forceDestroy: true,
           });
           const worker = yield* Cloudflare.Worker("PresignAsyncWorker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/presign/async-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/presign/async-worker.ts"),
             env: {
               BUCKET: bucket,
               BUCKET_S3: Cloudflare.R2.S3Credentials(bucket, {
@@ -101,11 +87,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker"],
     timeout: 180_000,
   },
 );

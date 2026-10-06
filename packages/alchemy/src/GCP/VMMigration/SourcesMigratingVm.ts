@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -34,8 +29,7 @@ import {
 
 export type SchedulePolicy = vm.SchedulePolicy;
 export type ComputeEngineTargetDefaults = vm.ComputeEngineTargetDefaults;
-export type ComputeEngineDisksTargetDefaults =
-  vm.ComputeEngineDisksTargetDefaults;
+export type ComputeEngineDisksTargetDefaults = vm.ComputeEngineDisksTargetDefaults;
 export type MigratingVmState = vm.MigratingVmStateEnum | (string & {});
 
 export type SourcesMigratingVmProps = {
@@ -116,9 +110,7 @@ export type SourcesMigratingVm = Resource<
     /** Compute Engine VM target defaults. */
     computeEngineTargetDefaults: ComputeEngineTargetDefaults | undefined;
     /** Compute Engine disk target defaults. */
-    computeEngineDisksTargetDefaults:
-      | ComputeEngineDisksTargetDefaults
-      | undefined;
+    computeEngineDisksTargetDefaults: ComputeEngineDisksTargetDefaults | undefined;
     /** Group this migrating VM belongs to. */
     group: string | undefined;
     /** Replication state. */
@@ -172,9 +164,7 @@ const userVmTarget = (target: ComputeEngineTargetDefaults | undefined) => {
   return rest;
 };
 
-const userDisksTarget = (
-  target: ComputeEngineDisksTargetDefaults | undefined,
-) => {
+const userDisksTarget = (target: ComputeEngineDisksTargetDefaults | undefined) => {
   if (target === undefined) return undefined;
   return {
     targetProject: target.targetProject,
@@ -184,11 +174,7 @@ const userDisksTarget = (
   };
 };
 
-const toAttrs = (
-  migrating: vm.MigratingVm,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (migrating: vm.MigratingVm, project: string, region: string) => {
   const name = migrating.name ?? "";
   const parsed = parseName(name, "migratingVms", region);
   return {
@@ -203,8 +189,7 @@ const toAttrs = (
     labels: userLabels(migrating.labels),
     policy: migrating.policy,
     computeEngineTargetDefaults: migrating.computeEngineTargetDefaults,
-    computeEngineDisksTargetDefaults:
-      migrating.computeEngineDisksTargetDefaults,
+    computeEngineDisksTargetDefaults: migrating.computeEngineDisksTargetDefaults,
     group: migrating.group,
     state: migrating.state,
     createTime: migrating.createTime,
@@ -227,20 +212,11 @@ const listChildren = (parent: string) =>
       view: "MIGRATING_VM_VIEW_BASIC",
     }),
     (page) => page.migratingVms,
-  ).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([] as vm.MigratingVm[])),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as vm.MigratingVm[])));
 
 export const SourcesMigratingVmProvider = () =>
   Provider.succeed(SourcesMigratingVm, {
-    stables: [
-      "name",
-      "migratingVmId",
-      "source",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "migratingVmId", "source", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -250,12 +226,8 @@ export const SourcesMigratingVmProvider = () =>
       const nextVm = news.sourceVmId ?? previousVm;
       return replaceOnIdentity({
         previousId: olds?.migratingVmId ?? output?.migratingVmId,
-        nextId:
-          news.migratingVmId ?? olds?.migratingVmId ?? output?.migratingVmId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.migratingVmId ?? olds?.migratingVmId ?? output?.migratingVmId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -268,10 +240,7 @@ export const SourcesMigratingVmProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const migratingVmId = yield* toPhysicalId(
         id,
         olds?.migratingVmId,
@@ -282,25 +251,17 @@ export const SourcesMigratingVmProvider = () =>
         olds?.source !== undefined
           ? sourceOf(olds.source, env.project, location)
           : (output?.source ?? "");
-      const name =
-        output?.name ??
-        (source.length > 0 ? resourceName(source, migratingVmId) : "");
+      const name = output?.name ?? (source.length > 0 ? resourceName(source, migratingVmId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* forEachSource(
-          env.project,
-          listChildren,
-          env.region,
-        );
+        const items = yield* forEachSource(env.project, listChildren, env.region);
         return items
           .filter((item) => hasAlchemyLabelMap(item.labels))
           .map((item) => toAttrs(item, env.project, env.region));
@@ -308,10 +269,7 @@ export const SourcesMigratingVmProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const source = sourceOf(news.source, env.project, location);
       const migratingVmId = yield* toPhysicalId(
         id,
@@ -340,8 +298,7 @@ export const SourcesMigratingVmProvider = () =>
               labels: desiredLabels,
               policy: news.policy,
               computeEngineTargetDefaults: news.computeEngineTargetDefaults,
-              computeEngineDisksTargetDefaults:
-                news.computeEngineDisksTargetDefaults,
+              computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
@@ -364,17 +321,13 @@ export const SourcesMigratingVmProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const policyChanged =
-        fingerprint(current.policy) !== fingerprint(news.policy);
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const policyChanged = fingerprint(current.policy) !== fingerprint(news.policy);
       const vmTargetChanged =
         fingerprint(userVmTarget(current.computeEngineTargetDefaults)) !==
         fingerprint(userVmTarget(news.computeEngineTargetDefaults));
       const disksTargetChanged =
-        fingerprint(
-          userDisksTarget(current.computeEngineDisksTargetDefaults),
-        ) !==
+        fingerprint(userDisksTarget(current.computeEngineDisksTargetDefaults)) !==
         fingerprint(userDisksTarget(news.computeEngineDisksTargetDefaults));
       const mask = fieldMask([
         labelsChanged && "labels",
@@ -396,15 +349,11 @@ export const SourcesMigratingVmProvider = () =>
             labels: desiredLabels,
             policy: news.policy,
             computeEngineTargetDefaults: news.computeEngineTargetDefaults,
-            computeEngineDisksTargetDefaults:
-              news.computeEngineDisksTargetDefaults,
+            computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

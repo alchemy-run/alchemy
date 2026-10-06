@@ -1,21 +1,17 @@
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Enabler } from "@/AWS/Inspector2/Enabler.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const accountStatus = inspector2
-  .batchGetAccountStatus({})
-  .pipe(Effect.map((r) => r.accounts?.[0]));
+const accountStatus = inspector2.batchGetAccountStatus({}).pipe(Effect.map((r) => r.accounts?.[0]));
 
-const typeStatus = (
-  account: inspector2.AccountState | undefined,
-  key: "ec2" | "ecr" | "lambda",
-) => account?.resourceState?.[key]?.status;
+const typeStatus = (account: inspector2.AccountState | undefined, key: "ec2" | "ecr" | "lambda") =>
+  account?.resourceState?.[key]?.status;
 
 test.provider(
   "account scan status is observable",
@@ -24,14 +20,10 @@ test.provider(
       const account = yield* accountStatus;
       expect(account?.accountId).toBeTruthy();
       expect(
-        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
-          typeStatus(account, "ec2") ?? "",
-        ),
+        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(typeStatus(account, "ec2") ?? ""),
       ).toBe(true);
       expect(
-        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
-          typeStatus(account, "ecr") ?? "",
-        ),
+        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(typeStatus(account, "ecr") ?? ""),
       ).toBe(true);
     }),
   { tags: ["provider:aws", "provider:aws:inspector2", "live"] },
@@ -57,9 +49,7 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_ENABLER)(
       // Create — enable EC2 + ECR scanning.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Enabler("Inspector", {
-            resourceTypes: ["EC2", "ECR"],
-          });
+          return yield* Enabler("Inspector", { resourceTypes: ["EC2", "ECR"] });
         }),
       );
       expect(created.accountId).toBeTruthy();
@@ -78,9 +68,7 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_ENABLER)(
       // Update — add LAMBDA scanning.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Enabler("Inspector", {
-            resourceTypes: ["EC2", "ECR", "LAMBDA"],
-          });
+          return yield* Enabler("Inspector", { resourceTypes: ["EC2", "ECR", "LAMBDA"] });
         }),
       );
       expect(updated.resourceTypes.sort()).toEqual(["EC2", "ECR", "LAMBDA"]);
@@ -94,8 +82,5 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_ENABLER)(
       expect(typeStatus(after, "ecr")).not.toBe("ENABLED");
       expect(typeStatus(after, "lambda")).not.toBe("ENABLED");
     }),
-  {
-    tags: ["provider:aws", "provider:aws:inspector2", "live"],
-    timeout: 240_000,
-  },
+  { tags: ["provider:aws", "provider:aws:inspector2", "live"], timeout: 240_000 },
 );

@@ -155,11 +155,7 @@ const storeOf = (
 const resourceName = (consentStore: string, attributeDefinitionId: string) =>
   `${consentStore}/attributeDefinitions/${attributeDefinitionId}`;
 
-const toAttrs = (
-  definition: healthcare.AttributeDefinition,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (definition: healthcare.AttributeDefinition, project: string, region: string) => {
   const name = definition.name ?? "";
   const parsed = parseResourceName(name, "attributeDefinitions", region);
   const ownership = parseOwnership(definition.description);
@@ -188,24 +184,15 @@ const getByName = (name: string) =>
 
 export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
   Provider.succeed(DatasetsConsentStoresAttributeDefinition, {
-    stables: [
-      "name",
-      "attributeDefinitionId",
-      "consentStore",
-      "project",
-      "location",
-      "category",
-    ],
+    stables: ["name", "attributeDefinitionId", "consentStore", "project", "location", "category"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousCategory = olds?.category ?? output?.category;
-      const extra =
-        previousCategory !== undefined && previousCategory !== news.category;
+      const extra = previousCategory !== undefined && previousCategory !== news.category;
       return replaceOnIdentity({
-        previousId:
-          olds?.attributeDefinitionId ?? output?.attributeDefinitionId,
+        previousId: olds?.attributeDefinitionId ?? output?.attributeDefinitionId,
         nextId: news.attributeDefinitionId,
         previousParent: olds?.consentStore ?? output?.consentStore,
         nextParent: storeOf(
@@ -220,10 +207,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const attributeDefinitionId = yield* toPhysicalSnake(
         id,
         olds?.attributeDefinitionId,
@@ -235,15 +219,11 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
           : (output?.consentStore ?? "");
       const name =
         output?.name ??
-        (consentStore.length > 0
-          ? resourceName(consentStore, attributeDefinitionId)
-          : "");
+        (consentStore.length > 0 ? resourceName(consentStore, attributeDefinitionId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -254,12 +234,10 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
           stores,
           (store) =>
             collectPages(
-              healthcare.listProjectsLocationsDatasetsConsentStoresAttributeDefinitions.pages(
-                {
-                  parent: store.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              healthcare.listProjectsLocationsDatasetsConsentStoresAttributeDefinitions.pages({
+                parent: store.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.attributeDefinitions,
             ),
           { concurrency: 4 },
@@ -272,23 +250,14 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const consentStore = storeOf(
-        news.consentStore,
-        env.project,
-        location,
-        news.dataset,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const consentStore = storeOf(news.consentStore, env.project, location, news.dataset);
       const attributeDefinitionId = yield* toPhysicalSnake(
         id,
         news.attributeDefinitionId,
         output?.attributeDefinitionId,
       );
-      const name =
-        output?.name ?? resourceName(consentStore, attributeDefinitionId);
+      const name = output?.name ?? resourceName(consentStore, attributeDefinitionId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
 
@@ -296,19 +265,17 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
       if (current === undefined) {
         const created = yield* retryTransient(
-          healthcare.createProjectsLocationsDatasetsConsentStoresAttributeDefinitions(
-            {
-              parent: consentStore,
-              attributeDefinitionId,
-              body: {
-                category: news.category,
-                allowedValues: news.allowedValues,
-                description,
-                consentDefaultValues: news.consentDefaultValues,
-                dataMappingDefaultValue: news.dataMappingDefaultValue,
-              },
+          healthcare.createProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
+            parent: consentStore,
+            attributeDefinitionId,
+            body: {
+              category: news.category,
+              allowedValues: news.allowedValues,
+              description,
+              consentDefaultValues: news.consentDefaultValues,
+              dataMappingDefaultValue: news.dataMappingDefaultValue,
             },
-          ),
+          }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -321,10 +288,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
       const currentName = current.name ?? name;
       const descriptionChanged = !sameText(current.description, description);
-      const allowedChanged = !sameJson(
-        current.allowedValues,
-        news.allowedValues,
-      );
+      const allowedChanged = !sameJson(current.allowedValues, news.allowedValues);
       const consentDefaultChanged = !sameJson(
         current.consentDefaultValues,
         news.consentDefaultValues,
@@ -334,30 +298,23 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
         news.dataMappingDefaultValue,
       );
 
-      if (
-        descriptionChanged ||
-        allowedChanged ||
-        consentDefaultChanged ||
-        mappingDefaultChanged
-      ) {
+      if (descriptionChanged || allowedChanged || consentDefaultChanged || mappingDefaultChanged) {
         current = yield* retryTransient(
-          healthcare.patchProjectsLocationsDatasetsConsentStoresAttributeDefinitions(
-            {
-              name: currentName,
-              updateMask: updateMaskOf(
-                descriptionChanged ? "description" : undefined,
-                allowedChanged ? "allowedValues" : undefined,
-                consentDefaultChanged ? "consentDefaultValues" : undefined,
-                mappingDefaultChanged ? "dataMappingDefaultValue" : undefined,
-              ),
-              body: {
-                description,
-                allowedValues: news.allowedValues,
-                consentDefaultValues: news.consentDefaultValues,
-                dataMappingDefaultValue: news.dataMappingDefaultValue,
-              },
+          healthcare.patchProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
+            name: currentName,
+            updateMask: updateMaskOf(
+              descriptionChanged ? "description" : undefined,
+              allowedChanged ? "allowedValues" : undefined,
+              consentDefaultChanged ? "consentDefaultValues" : undefined,
+              mappingDefaultChanged ? "dataMappingDefaultValue" : undefined,
+            ),
+            body: {
+              description,
+              allowedValues: news.allowedValues,
+              consentDefaultValues: news.consentDefaultValues,
+              dataMappingDefaultValue: news.dataMappingDefaultValue,
             },
-          ),
+          }),
         );
       }
 
@@ -367,11 +324,9 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* retryTransient(
-        healthcare.deleteProjectsLocationsDatasetsConsentStoresAttributeDefinitions(
-          {
-            name: output.name,
-          },
-        ),
+        healthcare.deleteProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
+          name: output.name,
+        }),
       ).pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

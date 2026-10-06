@@ -122,11 +122,7 @@ export const ServiceConnectionToken = Resource<ServiceConnectionToken>(
   "GCP.NetworkConnectivity.ServiceConnectionToken",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  serviceConnectionTokenId: string,
-) =>
+const resourceName = (project: string, location: string, serviceConnectionTokenId: string) =>
   `projects/${project}/locations/${location}/serviceConnectionTokens/${serviceConnectionTokenId}`;
 
 const toAttrs = (
@@ -159,39 +155,24 @@ const getByName = (name: string) =>
 
 export const ServiceConnectionTokenProvider = () =>
   Provider.succeed(ServiceConnectionToken, {
-    stables: [
-      "name",
-      "serviceConnectionTokenId",
-      "project",
-      "location",
-      "network",
-      "createTime",
-    ],
+    stables: ["name", "serviceConnectionTokenId", "project", "location", "network", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.serviceConnectionTokenId ?? output?.serviceConnectionTokenId;
+      const previousId = olds?.serviceConnectionTokenId ?? output?.serviceConnectionTokenId;
       const nextId = news.serviceConnectionTokenId
         ? rfc1035(news.serviceConnectionTokenId, "service-connection-token")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousNetwork = lastSegment(
-        canonicalizeLink(olds?.network ?? output?.network),
-      );
+      const previousNetwork = lastSegment(canonicalizeLink(olds?.network ?? output?.network));
       const nextNetwork = lastSegment(canonicalizeLink(news.network));
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousNetwork.length > 0 && previousNetwork !== nextNetwork)
       ) {
@@ -208,31 +189,22 @@ export const ServiceConnectionTokenProvider = () =>
         output?.serviceConnectionTokenId,
         "service-connection-token",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, serviceConnectionTokenId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, serviceConnectionTokenId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* collectPages(
-          networkconnectivity.listProjectsLocationsServiceConnectionTokens.pages(
-            {
-              parent: parentOf(env.project, "-"),
-              pageSize: 1000,
-            },
-          ),
+          networkconnectivity.listProjectsLocationsServiceConnectionTokens.pages({
+            parent: parentOf(env.project, "-"),
+            pageSize: 1000,
+          }),
           (page) => page.serviceConnectionTokens,
         );
         return items
@@ -248,15 +220,8 @@ export const ServiceConnectionTokenProvider = () =>
         output?.serviceConnectionTokenId,
         "service-connection-token",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        serviceConnectionTokenId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, serviceConnectionTokenId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

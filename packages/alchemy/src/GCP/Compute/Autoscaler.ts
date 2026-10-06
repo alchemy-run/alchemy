@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_COOL_DOWN_SEC = 60;
@@ -243,16 +243,12 @@ export type Autoscaler = Resource<
  */
 export const Autoscaler = Resource<Autoscaler>("GCP.Compute.Autoscaler");
 
-export class AutoscalerNotResolved extends Data.TaggedError(
-  "GCP.Compute.AutoscalerNotResolved",
-)<{
+export class AutoscalerNotResolved extends Data.TaggedError("GCP.Compute.AutoscalerNotResolved")<{
   autoscalerName: string;
   zone: string;
 }> {}
 
-export class AutoscalerStillExists extends Data.TaggedError(
-  "GCP.Compute.AutoscalerStillExists",
-)<{
+export class AutoscalerStillExists extends Data.TaggedError("GCP.Compute.AutoscalerStillExists")<{
   autoscalerName: string;
   zone: string;
 }> {}
@@ -294,10 +290,7 @@ const toTargetUrl = (project: string, zone: string, target: string) =>
     ? target
     : `projects/${project}/zones/${zone}/instanceGroupManagers/${target}`;
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-): string => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>): string => {
   const packed = Object.entries(labels)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)
@@ -333,9 +326,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -365,9 +356,7 @@ const hasSignal = (policy: AutoscalingPolicyProps) =>
   policy.loadBalancingUtilization !== undefined ||
   (policy.customMetricUtilizations?.length ?? 0) > 0;
 
-const desiredPolicy = (
-  policy: AutoscalingPolicyProps,
-): compute.AutoscalingPolicy => ({
+const desiredPolicy = (policy: AutoscalingPolicyProps): compute.AutoscalingPolicy => ({
   maxNumReplicas: policy.maxNumReplicas,
   minNumReplicas: policy.minNumReplicas ?? DEFAULT_MIN_REPLICAS,
   coolDownPeriodSec: policy.coolDownPeriodSec ?? DEFAULT_COOL_DOWN_SEC,
@@ -419,15 +408,13 @@ const canonPolicy = (policy: compute.AutoscalingPolicy | undefined) => {
     loadBalancingUtilization: policy.loadBalancingUtilization
       ? { utilizationTarget: policy.loadBalancingUtilization.utilizationTarget }
       : undefined,
-    customMetricUtilizations: (policy.customMetricUtilizations ?? []).map(
-      (metric) => ({
-        metric: metric.metric,
-        filter: metric.filter,
-        utilizationTarget: metric.utilizationTarget,
-        utilizationTargetType: metric.utilizationTargetType,
-        singleInstanceAssignment: metric.singleInstanceAssignment,
-      }),
-    ),
+    customMetricUtilizations: (policy.customMetricUtilizations ?? []).map((metric) => ({
+      metric: metric.metric,
+      filter: metric.filter,
+      utilizationTarget: metric.utilizationTarget,
+      utilizationTargetType: metric.utilizationTargetType,
+      singleInstanceAssignment: metric.singleInstanceAssignment,
+    })),
     scaleInControl: policy.scaleInControl
       ? {
           maxScaledInReplicas: policy.scaleInControl.maxScaledInReplicas
@@ -446,9 +433,7 @@ const canonPolicy = (policy: compute.AutoscalingPolicy | undefined) => {
 const samePolicy = (
   observed: compute.AutoscalingPolicy | undefined,
   desired: compute.AutoscalingPolicy,
-) =>
-  JSON.stringify(canonPolicy(observed)) ===
-  JSON.stringify(canonPolicy(desired));
+) => JSON.stringify(canonPolicy(observed)) === JSON.stringify(canonPolicy(desired));
 
 const getByName = (project: string, zone: string, autoscaler: string) =>
   compute
@@ -467,9 +452,7 @@ const waitPresent = (project: string, zone: string, autoscalerName: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.AutoscalerNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.Compute.AutoscalerNotResolved", () => Effect.succeed(undefined)),
   );
 
 const waitGone = (project: string, zone: string, autoscalerName: string) =>
@@ -488,14 +471,7 @@ const waitGone = (project: string, zone: string, autoscalerName: string) =>
 
 export const AutoscalerProvider = () =>
   Provider.succeed(Autoscaler, {
-    stables: [
-      "autoscalerName",
-      "autoscalerId",
-      "project",
-      "zone",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["autoscalerName", "autoscalerId", "project", "zone", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -504,9 +480,7 @@ export const AutoscalerProvider = () =>
       const previousZone = lastSegment(olds?.zone ?? output?.zone);
       const nextZone = lastSegment(news.zone ?? DEFAULT_ZONE);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const zoneChanged = previousZone.length > 0 && previousZone !== nextZone;
       if (!nameChanged && !zoneChanged) {
         return undefined;
@@ -520,11 +494,7 @@ export const AutoscalerProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const autoscalerName = yield* toName(
-        id,
-        olds?.autoscalerName,
-        output?.autoscalerName,
-      );
+      const autoscalerName = yield* toName(id, olds?.autoscalerName, output?.autoscalerName);
       const zone = lastSegment(olds?.zone ?? output?.zone ?? DEFAULT_ZONE);
       const existing = yield* getByName(env.project, zone, autoscalerName);
       if (existing === undefined) return undefined;
@@ -548,8 +518,7 @@ export const AutoscalerProvider = () =>
             (scoped?.autoscalers ?? [])
               .filter(
                 (autoscaler) =>
-                  (autoscaler.zone ?? "").length > 0 &&
-                  hasOwnershipMarker(autoscaler.description),
+                  (autoscaler.zone ?? "").length > 0 && hasOwnershipMarker(autoscaler.description),
               )
               .map((autoscaler) => toAttrs(autoscaler, env.project)),
           ),
@@ -558,11 +527,7 @@ export const AutoscalerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const autoscalerName = yield* toName(
-        id,
-        news.autoscalerName,
-        output?.autoscalerName,
-      );
+      const autoscalerName = yield* toName(id, news.autoscalerName, output?.autoscalerName);
       const zone = lastSegment(news.zone ?? output?.zone ?? DEFAULT_ZONE);
       const target = toTargetUrl(env.project, zone, news.target);
       const desiredLabels = {
@@ -606,8 +571,7 @@ export const AutoscalerProvider = () =>
       const descriptionChanged = (current.description ?? "") !== description;
       const policyChanged = !samePolicy(current.autoscalingPolicy, policy);
       const targetChanged =
-        lastSegment(current.target) !== lastSegment(target) &&
-        (current.target ?? "") !== target;
+        lastSegment(current.target) !== lastSegment(target) && (current.target ?? "") !== target;
 
       if (descriptionChanged || policyChanged || targetChanged) {
         yield* compute
@@ -623,17 +587,14 @@ export const AutoscalerProvider = () =>
             },
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitZoneOperation(env.project, zone, operation),
-            ),
+            Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
           );
-        current =
-          (yield* getByName(env.project, zone, autoscalerName)) ?? current;
+        current = (yield* getByName(env.project, zone, autoscalerName)) ?? current;
       }
 
       return toAttrs(current, env.project);

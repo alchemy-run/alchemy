@@ -26,10 +26,7 @@ export interface DescribeEngagement extends Binding.Service<
   () => Effect.Effect<
     (
       request: ssm.DescribeEngagementRequest,
-    ) => Effect.Effect<
-      ssm.DescribeEngagementResult,
-      ssm.DescribeEngagementError
-    >
+    ) => Effect.Effect<ssm.DescribeEngagementResult, ssm.DescribeEngagementError>
   >
 > {}
 export const DescribeEngagement = Binding.Service<DescribeEngagement>(

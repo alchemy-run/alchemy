@@ -129,11 +129,7 @@ export class AppsFirewallIngressRuleNotResolved extends Data.TaggedError(
   priority: number;
 }> {}
 
-const toAttrs = (
-  rule: appengine.FirewallRule,
-  appsId: string,
-  project: string,
-) => ({
+const toAttrs = (rule: appengine.FirewallRule, appsId: string, project: string) => ({
   appsId,
   project,
   priority: rule.priority ?? 0,
@@ -158,11 +154,7 @@ export const AppsFirewallIngressRuleProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousApp = olds?.appsId ?? output?.appsId;
       const nextApp = news.appsId ?? previousApp;
-      if (
-        previousApp !== undefined &&
-        nextApp !== undefined &&
-        nextApp !== previousApp
-      ) {
+      if (previousApp !== undefined && nextApp !== undefined && nextApp !== previousApp) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousPriority = olds?.priority ?? output?.priority;
@@ -180,21 +172,13 @@ export const AppsFirewallIngressRuleProvider = () =>
       const env = yield* GcpEnvironment.current;
       const appsId = yield* resolveAppsId(olds?.appsId, output?.appsId);
       const priority = olds?.priority ?? output?.priority;
-      let existing =
-        priority === undefined
-          ? undefined
-          : yield* getByPriority(appsId, priority);
+      let existing = priority === undefined ? undefined : yield* getByPriority(appsId, priority);
       if (existing === undefined) {
-        existing = yield* findOwnedFirewallRule(
-          id,
-          yield* listFirewallRules(appsId),
-        );
+        existing = yield* findOwnedFirewallRule(id, yield* listFirewallRules(appsId));
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, appsId, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -210,21 +194,14 @@ export const AppsFirewallIngressRuleProvider = () =>
       const env = yield* GcpEnvironment.current;
       const appsId = yield* resolveAppsId(news.appsId, output?.appsId);
       const ownership = yield* ownershipLabels(id);
-      const description = encodeOwnership(
-        ownership,
-        news.description,
-        MAX_DESCRIPTION_LENGTH,
-      );
+      const description = encodeOwnership(ownership, news.description, MAX_DESCRIPTION_LENGTH);
       const priority = yield* toPriority(id, news.priority, output?.priority);
       const action = news.action ?? DEFAULT_ACTION;
       const sourceRange = news.sourceRange ?? DEFAULT_SOURCE_RANGE;
 
       let current = yield* getByPriority(appsId, priority);
       if (current === undefined) {
-        current = yield* findOwnedFirewallRule(
-          id,
-          yield* listFirewallRules(appsId),
-        );
+        current = yield* findOwnedFirewallRule(id, yield* listFirewallRules(appsId));
       }
 
       if (current === undefined) {
@@ -238,9 +215,7 @@ export const AppsFirewallIngressRuleProvider = () =>
               description,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getByPriority(appsId, priority)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByPriority(appsId, priority)));
         current = created ?? undefined;
       }
 

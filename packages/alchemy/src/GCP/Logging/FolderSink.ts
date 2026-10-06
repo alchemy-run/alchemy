@@ -198,14 +198,11 @@ export type FolderSink = Resource<
  */
 export const FolderSink = Resource<FolderSink>("GCP.Logging.FolderSink");
 
-export class FolderSinkNotResolved extends Data.TaggedError(
-  "GCP.Logging.FolderSinkNotResolved",
-)<{
+export class FolderSinkNotResolved extends Data.TaggedError("GCP.Logging.FolderSinkNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (parent: string, sinkId: string) =>
-  `${parent}/sinks/${sinkId}`;
+const resourceName = (parent: string, sinkId: string) => `${parent}/sinks/${sinkId}`;
 
 const folderIdOf = (parent: string) =>
   parent.startsWith("folders/") ? lastSegment(parent) : undefined;
@@ -219,8 +216,7 @@ const sinkIdOf = (sink: logging.LogSink) => {
 const toAttrs = (sink: logging.LogSink, parent: string) => {
   const sinkId = sinkIdOf(sink);
   const parsed = parseDescription(sink.description);
-  const name =
-    sink.resourceName ?? (sinkId ? resourceName(parent, sinkId) : "");
+  const name = sink.resourceName ?? (sinkId ? resourceName(parent, sinkId) : "");
   const resolvedParent = parseLoggingName(name).parent || parent;
   const bq = sink.bigqueryOptions;
   return {
@@ -274,22 +270,16 @@ export const FolderSinkProvider = () =>
       if (!isResolved(news)) return undefined;
       const previous = olds?.sinkId ?? output?.sinkId;
       const idChanged =
-        previous !== undefined &&
-        news.sinkId !== undefined &&
-        news.sinkId !== previous;
+        previous !== undefined && news.sinkId !== undefined && news.sinkId !== previous;
       const previousFolder = olds?.folderId ?? output?.folderId;
-      const folderChanged =
-        news.folderId !== undefined && news.folderId !== previousFolder;
+      const folderChanged = news.folderId !== undefined && news.folderId !== previousFolder;
       if (!idChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = scopeParent(
-        env.project,
-        olds?.folderId ?? output?.folderId,
-      );
+      const parent = scopeParent(env.project, olds?.folderId ?? output?.folderId);
       const sinkId = yield* toPhysicalId(id, olds?.sinkId, output?.sinkId, "s");
       const name = output?.name ?? resourceName(parent, sinkId);
       const existing = yield* getByName(name);
@@ -318,17 +308,13 @@ export const FolderSinkProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = scopeParent(
-        env.project,
-        news.folderId ?? output?.folderId,
-      );
+      const parent = scopeParent(env.project, news.folderId ?? output?.folderId);
       const sinkId = yield* toPhysicalId(id, news.sinkId, output?.sinkId, "s");
       const name = resourceName(parent, sinkId);
       const ownership = yield* createOwnership(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const uniqueWriterIdentity =
-        news.uniqueWriterIdentity ??
-        (news.folderId !== undefined ? true : undefined);
+        news.uniqueWriterIdentity ?? (news.folderId !== undefined ? true : undefined);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -354,18 +340,12 @@ export const FolderSinkProvider = () =>
       const desiredBq = news.bigqueryOptions?.usePartitionedTables === true;
       const observedBq = current.bigqueryOptions?.usePartitionedTables === true;
 
-      const destinationChanged =
-        (current.destination ?? "") !== news.destination;
+      const destinationChanged = (current.destination ?? "") !== news.destination;
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
-      const exclusionsChanged = !sameExclusions(
-        current.exclusions,
-        news.exclusions,
-      );
-      const bqChanged =
-        news.bigqueryOptions !== undefined && desiredBq !== observedBq;
+      const exclusionsChanged = !sameExclusions(current.exclusions, news.exclusions);
+      const bqChanged = news.bigqueryOptions !== undefined && desiredBq !== observedBq;
       const includeChildrenChanged =
         news.includeChildren !== undefined &&
         (current.includeChildren === true) !== desiredIncludeChildren;

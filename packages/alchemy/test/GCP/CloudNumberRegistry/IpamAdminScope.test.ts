@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -18,17 +18,11 @@ const { test } = Test.make({ providers: GCP.providers() });
 const organizationScope = () => {
   const fromEnv = process.env.GCP_CNR_ORG;
   if (fromEnv && fromEnv.length > 0) {
-    return Effect.succeed(
-      fromEnv.includes("/") ? fromEnv : `organizations/${fromEnv}`,
-    );
+    return Effect.succeed(fromEnv.includes("/") ? fromEnv : `organizations/${fromEnv}`);
   }
   return currentProject.pipe(
-    Effect.flatMap((project) =>
-      resourcemanager.getProjects({ name: `projects/${project}` }),
-    ),
-    Effect.map((item) =>
-      item.parent?.startsWith("organizations/") ? item.parent : undefined,
-    ),
+    Effect.flatMap((project) => resourcemanager.getProjects({ name: `projects/${project}` })),
+    Effect.map((item) => (item.parent?.startsWith("organizations/") ? item.parent : undefined)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 };
@@ -96,11 +90,9 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

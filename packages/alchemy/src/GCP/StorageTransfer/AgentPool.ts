@@ -165,18 +165,12 @@ export const AgentPoolProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const agentPoolId = yield* toAgentPoolId(
-        id,
-        olds?.agentPoolId,
-        output?.agentPoolId,
-      );
+      const agentPoolId = yield* toAgentPoolId(id, olds?.agentPoolId, output?.agentPoolId);
       const name = output?.name ?? agentPoolName(env.project, agentPoolId);
       const existing = yield* getAgentPool(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -194,11 +188,7 @@ export const AgentPoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const agentPoolId = yield* toAgentPoolId(
-        id,
-        news.agentPoolId,
-        output?.agentPoolId,
-      );
+      const agentPoolId = yield* toAgentPoolId(id, news.agentPoolId, output?.agentPoolId);
       const name = agentPoolName(env.project, agentPoolId);
       const ownership = yield* createOwnership(id);
       const desiredDisplayName = encodeOwnership(
@@ -237,10 +227,7 @@ export const AgentPoolProvider = () =>
       }
 
       const displayChanged = (current.displayName ?? "") !== desiredDisplayName;
-      const limitChanged = !sameValue(
-        toBandwidth(current.bandwidthLimit),
-        desiredLimit,
-      );
+      const limitChanged = !sameValue(toBandwidth(current.bandwidthLimit), desiredLimit);
       const updateMask = fieldMask([
         displayChanged ? "display_name" : undefined,
         limitChanged ? "bandwidth_limit" : undefined,
@@ -262,15 +249,13 @@ export const AgentPoolProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (output.agentPoolId === DEFAULT_AGENT_POOL) return;
-      yield* storagetransfer
-        .deleteProjectsAgentPools({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.exponential("500 millis"),
-          }),
-        );
+      yield* storagetransfer.deleteProjectsAgentPools({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.exponential("500 millis"),
+        }),
+      );
     }),
   });

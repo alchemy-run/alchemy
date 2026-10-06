@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Output from "@/Output";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Scratch bucket the Word Count template writes to. */

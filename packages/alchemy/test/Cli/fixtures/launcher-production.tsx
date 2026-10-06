@@ -1,8 +1,8 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { Box } from "@alchemy.run/sigil";
-import { makeRuntime } from "../../../src/Cli/components/view/Runtime";
 import { runMain } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
+import { makeRuntime } from "../../../src/Cli/components/view/Runtime";
 
 Effect.gen(function* () {
   const { service } = makeRuntime(
@@ -25,8 +25,6 @@ Effect.gen(function* () {
     if (process.env.NODE_ENV !== "production" || "_store" in element) {
       throw new Error("The CLI must use the production JSX runtime");
     }
-    console.log(
-      JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }),
-    );
+    console.log(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));
   });
 }).pipe(Effect.scoped, runMain);

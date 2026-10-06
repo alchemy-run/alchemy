@@ -108,17 +108,11 @@ export type IapDestGroup = Resource<
  */
 export const IapDestGroup = Resource<IapDestGroup>("GCP.IAP.IapDestGroup");
 
-export class IapDestGroupNotResolved extends Data.TaggedError(
-  "GCP.IAP.IapDestGroupNotResolved",
-)<{
+export class IapDestGroupNotResolved extends Data.TaggedError("GCP.IAP.IapDestGroupNotResolved")<{
   name: string;
 }> {}
 
-const toAttrs = (
-  group: iap.TunnelDestGroup,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (group: iap.TunnelDestGroup, project: string, region: string) => {
   const name = group.name ?? "";
   const parsed = parseDestGroupName(name, project, region);
   return {
@@ -141,30 +135,17 @@ export const IapDestGroupProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.destGroupId ?? output?.destGroupId,
         nextId: news.destGroupId,
-        previousParent: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousParent: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextParent:
-          news.location !== undefined
-            ? normalizeLocation(news.location, env.region)
-            : undefined,
+          news.location !== undefined ? normalizeLocation(news.location, env.region) : undefined,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const destGroupId = yield* toDestGroupId(
-        id,
-        olds?.destGroupId,
-        output?.destGroupId,
-      );
-      const name =
-        output?.name ?? destGroupNameOf(env.project, location, destGroupId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const destGroupId = yield* toDestGroupId(id, olds?.destGroupId, output?.destGroupId);
+      const name = output?.name ?? destGroupNameOf(env.project, location, destGroupId);
       const existing = yield* getDestGroup(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -174,15 +155,8 @@ export const IapDestGroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const destGroupId = yield* toDestGroupId(
-        id,
-        news.destGroupId,
-        output?.destGroupId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const destGroupId = yield* toDestGroupId(id, news.destGroupId, output?.destGroupId);
       const name = destGroupNameOf(env.project, location, destGroupId);
       const parent = destGroupParent(env.project, location);
       const cidrs = uniqueStrings(news.cidrs);

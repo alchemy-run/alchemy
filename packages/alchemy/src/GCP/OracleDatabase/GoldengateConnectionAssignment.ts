@@ -133,19 +133,16 @@ export type GoldengateConnectionAssignment = Resource<
  * @resource
  * @category OracleDatabase
  */
-export const GoldengateConnectionAssignment =
-  Resource<GoldengateConnectionAssignment>(
-    "GCP.OracleDatabase.GoldengateConnectionAssignment",
-  );
+export const GoldengateConnectionAssignment = Resource<GoldengateConnectionAssignment>(
+  "GCP.OracleDatabase.GoldengateConnectionAssignment",
+);
 
 const mergedProperties = (
   news: GoldengateConnectionAssignmentProps,
 ): GoldengateConnectionAssignmentPropertiesInput => ({
   ...(news.properties ?? {}),
-  goldengateConnection:
-    news.goldengateConnection ?? news.properties?.goldengateConnection,
-  goldengateDeployment:
-    news.goldengateDeployment ?? news.properties?.goldengateDeployment,
+  goldengateConnection: news.goldengateConnection ?? news.properties?.goldengateConnection,
+  goldengateDeployment: news.goldengateDeployment ?? news.properties?.goldengateDeployment,
 });
 
 const toCreateBody = (
@@ -168,10 +165,7 @@ const toCreateBody = (
   return body;
 };
 
-const toAttrs = (
-  assignment: oracle.GoldengateConnectionAssignment,
-  project: string,
-) => {
+const toAttrs = (assignment: oracle.GoldengateConnectionAssignment, project: string) => {
   const name = assignment.name ?? "";
   const parsed = parseName(name, COLLECTION);
   return {
@@ -192,9 +186,9 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  retryQuota(
-    oracle.getProjectsLocationsGoldengateConnectionAssignments({ name }),
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  retryQuota(oracle.getProjectsLocationsGoldengateConnectionAssignments({ name })).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const listAssignments = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -204,11 +198,7 @@ const listAssignments = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.goldengateConnectionAssignments,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -234,29 +224,22 @@ export const GoldengateConnectionAssignmentProvider = () =>
         output?.goldengateConnection ??
         "";
       const nextConn =
-        news.goldengateConnection ??
-        news.properties?.goldengateConnection ??
-        previousConn;
+        news.goldengateConnection ?? news.properties?.goldengateConnection ?? previousConn;
       const previousDep =
         olds?.goldengateDeployment ??
         olds?.properties?.goldengateDeployment ??
         output?.goldengateDeployment ??
         "";
       const nextDep =
-        news.goldengateDeployment ??
-        news.properties?.goldengateDeployment ??
-        previousDep;
+        news.goldengateDeployment ?? news.properties?.goldengateDeployment ?? previousDep;
       return replaceOnIdentity({
         previousId:
-          olds?.goldengateConnectionAssignmentId ??
-          output?.goldengateConnectionAssignmentId,
+          olds?.goldengateConnectionAssignmentId ?? output?.goldengateConnectionAssignmentId,
         nextId:
           news.goldengateConnectionAssignmentId ??
           olds?.goldengateConnectionAssignmentId ??
           output?.goldengateConnectionAssignmentId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -272,23 +255,14 @@ export const GoldengateConnectionAssignmentProvider = () =>
         output?.goldengateConnectionAssignmentId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
         output?.name ??
-        resourceNameOf(
-          env.project,
-          location,
-          COLLECTION,
-          goldengateConnectionAssignmentId,
-        );
+        resourceNameOf(env.project, location, COLLECTION, goldengateConnectionAssignmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -306,9 +280,7 @@ export const GoldengateConnectionAssignmentProvider = () =>
         output?.goldengateConnectionAssignmentId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceNameOf(
         env.project,
         location,

@@ -1,21 +1,18 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import * as servers from "@distilled.cloud/hetzner/servers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
 import * as pathe from "pathe";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -73,9 +70,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const client = yield* HttpClient.HttpClient;
       const health = yield* client.get(`${url!}/health`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`health returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`health returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -96,12 +91,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       ),
     ),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:service",
-      "provider:hetzner:website",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:website", "live"],
     timeout: 180_000,
   },
 );

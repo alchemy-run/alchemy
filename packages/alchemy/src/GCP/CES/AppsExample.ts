@@ -127,21 +127,13 @@ export type AppsExample = Resource<
  */
 export const AppsExample = Resource<AppsExample>("GCP.CES.AppsExample");
 
-export class AppsExampleNotResolved extends Data.TaggedError(
-  "GCP.CES.AppsExampleNotResolved",
-)<{
+export class AppsExampleNotResolved extends Data.TaggedError("GCP.CES.AppsExampleNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (app: string, exampleId: string) =>
-  `${app}/examples/${exampleId}`;
+const resourceName = (app: string, exampleId: string) => `${app}/examples/${exampleId}`;
 
-const toAttrs = (
-  example: ces.Example,
-  project: string,
-  region: string,
-  appHint?: string,
-) => {
+const toAttrs = (example: ces.Example, project: string, region: string, appHint?: string) => {
   const name = example.name ?? "";
   const parsed = parseResourceName(name, "examples", region);
   return {
@@ -196,26 +188,14 @@ export const AppsExampleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const app = olds?.app
-        ? expandApp(olds.app, env.project, location)
-        : output?.app;
-      const exampleId = yield* toPhysicalId(
-        id,
-        olds?.exampleId,
-        output?.exampleId,
-      );
-      const name =
-        output?.name ?? (app !== undefined ? resourceName(app, exampleId) : "");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const app = olds?.app ? expandApp(olds.app, env.project, location) : output?.app;
+      const exampleId = yield* toPhysicalId(id, olds?.exampleId, output?.exampleId);
+      const name = output?.name ?? (app !== undefined ? resourceName(app, exampleId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, app);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -230,16 +210,9 @@ export const AppsExampleProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const app = expandApp(news.app, env.project, location);
-      const exampleId = yield* toPhysicalId(
-        id,
-        news.exampleId,
-        output?.exampleId,
-      );
+      const exampleId = yield* toPhysicalId(id, news.exampleId, output?.exampleId);
       const name = output?.name ?? resourceName(app, exampleId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -273,12 +246,7 @@ export const AppsExampleProvider = () =>
       const entryChanged = !sameText(current.entryAgent, news.entryAgent);
       const messagesChanged = !sameJson(current.messages, news.messages);
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        entryChanged ||
-        messagesChanged
-      ) {
+      if (displayChanged || descriptionChanged || entryChanged || messagesChanged) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsExamples({
             name: currentName,
@@ -303,9 +271,9 @@ export const AppsExampleProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryTransient(
-        ces.deleteProjectsLocationsAppsExamples({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryTransient(ces.deleteProjectsLocationsAppsExamples({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name));
     }),
   });

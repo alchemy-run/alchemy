@@ -7,8 +7,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import type { Providers } from "../Providers.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
+import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -141,9 +141,7 @@ export type SingleTenantHsmInstanceProposalAttrs = {
   /** Remove-quorum-member payload, if any. */
   removeQuorumMember: SingleTenantHsmRemoveQuorumMember | undefined;
   /** Register-2FA payload, if any. */
-  registerTwoFactorAuthKeys:
-    | SingleTenantHsmRegisterTwoFactorAuthKeys
-    | undefined;
+  registerTwoFactorAuthKeys: SingleTenantHsmRegisterTwoFactorAuthKeys | undefined;
 };
 
 export type SingleTenantHsmInstanceProposal = Resource<
@@ -193,10 +191,9 @@ export type SingleTenantHsmInstanceProposal = Resource<
  * @resource
  * @category KMS
  */
-export const SingleTenantHsmInstanceProposal =
-  Resource<SingleTenantHsmInstanceProposal>(
-    "GCP.KMS.SingleTenantHsmInstanceProposal",
-  );
+export const SingleTenantHsmInstanceProposal = Resource<SingleTenantHsmInstanceProposal>(
+  "GCP.KMS.SingleTenantHsmInstanceProposal",
+);
 
 export class SingleTenantHsmInstanceProposalNotResolved extends Data.TaggedError(
   "GCP.KMS.SingleTenantHsmInstanceProposalNotResolved",
@@ -233,20 +230,14 @@ const parseName = (name: string, fallbackLocation: string) => {
   const instancesAt = parts.lastIndexOf("singleTenantHsmInstances");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const instance =
-    instancesAt >= 0 ? parts.slice(0, instancesAt + 2).join("/") : "";
+  const instance = instancesAt >= 0 ? parts.slice(0, instancesAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     singleTenantHsmInstance: instance,
     proposalId:
-      proposalsAt >= 0 && parts[proposalsAt + 1]
-        ? parts[proposalsAt + 1]!
-        : lastSegment(name),
+      proposalsAt >= 0 && parts[proposalsAt + 1] ? parts[proposalsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -275,8 +266,7 @@ const resolveParent = (
   };
 };
 
-const resourceName = (parent: string, proposalId: string) =>
-  `${parent}/proposals/${proposalId}`;
+const resourceName = (parent: string, proposalId: string) => `${parent}/proposals/${proposalId}`;
 
 const toId = (id: string, proposalId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -312,18 +302,10 @@ const toAttrs = (
     deleteTime: proposal.deleteTime,
     purgeTime: proposal.purgeTime,
     failureReason: proposal.failureReason,
-    refreshSingleTenantHsmInstance: present(
-      proposal.refreshSingleTenantHsmInstance,
-    ),
-    enableSingleTenantHsmInstance: present(
-      proposal.enableSingleTenantHsmInstance,
-    ),
-    disableSingleTenantHsmInstance: present(
-      proposal.disableSingleTenantHsmInstance,
-    ),
-    deleteSingleTenantHsmInstance: present(
-      proposal.deleteSingleTenantHsmInstance,
-    ),
+    refreshSingleTenantHsmInstance: present(proposal.refreshSingleTenantHsmInstance),
+    enableSingleTenantHsmInstance: present(proposal.enableSingleTenantHsmInstance),
+    disableSingleTenantHsmInstance: present(proposal.disableSingleTenantHsmInstance),
+    deleteSingleTenantHsmInstance: present(proposal.deleteSingleTenantHsmInstance),
     addQuorumMember: proposal.addQuorumMember,
     removeQuorumMember: proposal.removeQuorumMember,
     registerTwoFactorAuthKeys: proposal.registerTwoFactorAuthKeys,
@@ -334,18 +316,10 @@ const toBody = (
   news: SingleTenantHsmInstanceProposalProps,
 ): kms.SingleTenantHsmInstanceProposal => ({
   ttl: news.ttl,
-  refreshSingleTenantHsmInstance: news.refreshSingleTenantHsmInstance
-    ? {}
-    : undefined,
-  enableSingleTenantHsmInstance: news.enableSingleTenantHsmInstance
-    ? {}
-    : undefined,
-  disableSingleTenantHsmInstance: news.disableSingleTenantHsmInstance
-    ? {}
-    : undefined,
-  deleteSingleTenantHsmInstance: news.deleteSingleTenantHsmInstance
-    ? {}
-    : undefined,
+  refreshSingleTenantHsmInstance: news.refreshSingleTenantHsmInstance ? {} : undefined,
+  enableSingleTenantHsmInstance: news.enableSingleTenantHsmInstance ? {} : undefined,
+  disableSingleTenantHsmInstance: news.disableSingleTenantHsmInstance ? {} : undefined,
+  deleteSingleTenantHsmInstance: news.deleteSingleTenantHsmInstance ? {} : undefined,
   addQuorumMember: news.addQuorumMember,
   removeQuorumMember: news.removeQuorumMember,
   registerTwoFactorAuthKeys: news.registerTwoFactorAuthKeys,
@@ -461,11 +435,9 @@ const listProposalsAt = (locationParent: string) =>
   });
 
 const waitOperation = (operation: kms.Operation) =>
-  waitForGcpOperation(
-    operation,
-    (name) => kms.getProjectsLocationsOperations({ name }),
-    { budget: "10 minutes" },
-  ).pipe(
+  waitForGcpOperation(operation, (name) => kms.getProjectsLocationsOperations({ name }), {
+    budget: "10 minutes",
+  }).pipe(
     // Re-read the finished operation for its typed response.
     Effect.flatMap(() =>
       operation.name === undefined
@@ -495,13 +467,10 @@ const waitReady = (
         proposal,
       ): Effect.Effect<
         kms.SingleTenantHsmInstanceProposal,
-        | SingleTenantHsmInstanceProposalNotResolved
-        | SingleTenantHsmInstanceProposalPending
+        SingleTenantHsmInstanceProposalNotResolved | SingleTenantHsmInstanceProposalPending
       > => {
         if (proposal === undefined) {
-          return Effect.fail(
-            new SingleTenantHsmInstanceProposalNotResolved({ name }),
-          );
+          return Effect.fail(new SingleTenantHsmInstanceProposalNotResolved({ name }));
         }
         if (proposal.state === "CREATING") {
           return Effect.fail(
@@ -517,8 +486,7 @@ const waitReady = (
   );
   return probe.pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.KMS.SingleTenantHsmInstanceProposalPending",
+      while: (error) => error._tag === "GCP.KMS.SingleTenantHsmInstanceProposalPending",
       times: 8,
       schedule: Schedule.spaced("500 millis"),
     }),
@@ -533,14 +501,7 @@ const nameFromOperation = (operation: kms.Operation) => {
 
 export const SingleTenantHsmInstanceProposalProvider = () =>
   Provider.succeed(SingleTenantHsmInstanceProposal, {
-    stables: [
-      "name",
-      "proposalId",
-      "singleTenantHsmInstance",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "proposalId", "singleTenantHsmInstance", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -548,20 +509,12 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
 
       const previousId = olds?.proposalId ?? output?.proposalId;
       const nextId = news.proposalId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
       const previousParent =
         output?.singleTenantHsmInstance ??
         (olds?.singleTenantHsmInstance
-          ? resolveParent(
-              "",
-              olds.singleTenantHsmInstance,
-              olds.location,
-              env.region,
-            ).parent
+          ? resolveParent("", olds.singleTenantHsmInstance, olds.location, env.region).parent
           : undefined);
       const nextParent = resolveParent(
         output?.project ?? "",
@@ -569,31 +522,24 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
         news.location ?? output?.location,
         env.region,
       ).parent;
-      const parentChanged =
-        previousParent !== undefined && previousParent !== nextParent;
+      const parentChanged = previousParent !== undefined && previousParent !== nextParent;
 
       const previousOp = operationKey({
         refreshSingleTenantHsmInstance:
-          olds?.refreshSingleTenantHsmInstance ??
-          output?.refreshSingleTenantHsmInstance,
+          olds?.refreshSingleTenantHsmInstance ?? output?.refreshSingleTenantHsmInstance,
         enableSingleTenantHsmInstance:
-          olds?.enableSingleTenantHsmInstance ??
-          output?.enableSingleTenantHsmInstance,
+          olds?.enableSingleTenantHsmInstance ?? output?.enableSingleTenantHsmInstance,
         disableSingleTenantHsmInstance:
-          olds?.disableSingleTenantHsmInstance ??
-          output?.disableSingleTenantHsmInstance,
+          olds?.disableSingleTenantHsmInstance ?? output?.disableSingleTenantHsmInstance,
         deleteSingleTenantHsmInstance:
-          olds?.deleteSingleTenantHsmInstance ??
-          output?.deleteSingleTenantHsmInstance,
+          olds?.deleteSingleTenantHsmInstance ?? output?.deleteSingleTenantHsmInstance,
         addQuorumMember: olds?.addQuorumMember ?? output?.addQuorumMember,
-        removeQuorumMember:
-          olds?.removeQuorumMember ?? output?.removeQuorumMember,
+        removeQuorumMember: olds?.removeQuorumMember ?? output?.removeQuorumMember,
         registerTwoFactorAuthKeys:
           olds?.registerTwoFactorAuthKeys ?? output?.registerTwoFactorAuthKeys,
       });
       const nextOp = operationKey(news);
-      const operationChanged =
-        previousOp.length > 0 && nextOp.length > 0 && previousOp !== nextOp;
+      const operationChanged = previousOp.length > 0 && nextOp.length > 0 && previousOp !== nextOp;
 
       if (!idChanged && !parentChanged && !operationChanged) {
         return undefined;
@@ -610,9 +556,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
           ? resourceName(
               resolveParent(
                 env.project,
-                olds?.singleTenantHsmInstance ??
-                  output?.singleTenantHsmInstance ??
-                  "",
+                olds?.singleTenantHsmInstance ?? output?.singleTenantHsmInstance ?? "",
                 olds?.location ?? output?.location,
                 env.region,
               ).parent,
@@ -641,11 +585,9 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
           const parents = (response.locations ?? [])
             .map((location) => location.name)
             .filter((name): name is string => !!name);
-          const batches = yield* Effect.forEach(
-            parents,
-            (parent) => listProposalsAt(parent),
-            { concurrency: 4 },
-          );
+          const batches = yield* Effect.forEach(parents, (parent) => listProposalsAt(parent), {
+            concurrency: 4,
+          });
           for (const proposals of batches) {
             for (const proposal of proposals) {
               found.push(toAttrs(proposal, env.project, env.region));
@@ -679,9 +621,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitOperation(operation).pipe(
-                Effect.map((done) => nameFromOperation(done) ?? name),
-              ),
+              waitOperation(operation).pipe(Effect.map((done) => nameFromOperation(done) ?? name)),
             ),
             Effect.flatMap((resolved) => getByName(resolved)),
             Effect.catchTag("Conflict", () => getByName(name)),

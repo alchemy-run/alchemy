@@ -177,15 +177,9 @@ export type SecurityGateway = Resource<
  * @resource
  * @category BeyondCorp
  */
-export const SecurityGateway = Resource<SecurityGateway>(
-  "GCP.BeyondCorp.SecurityGateway",
-);
+export const SecurityGateway = Resource<SecurityGateway>("GCP.BeyondCorp.SecurityGateway");
 
-const resourceName = (
-  project: string,
-  location: string,
-  securityGatewayId: string,
-) =>
+const resourceName = (project: string, location: string, securityGatewayId: string) =>
   `projects/${project}/locations/${location}/securityGateways/${securityGatewayId}`;
 
 const hubKeys = (hubs: Record<string, SecurityGatewayHub> | undefined) =>
@@ -212,9 +206,7 @@ const toHubs = (
 };
 
 const toServiceDiscovery = (
-  value:
-    | beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ServiceDiscovery
-    | undefined,
+  value: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ServiceDiscovery | undefined,
 ): SecurityGatewayServiceDiscovery | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -229,9 +221,7 @@ const toServiceDiscovery = (
 };
 
 const toContextualHeaders = (
-  value:
-    | beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ContextualHeaders
-    | undefined,
+  value: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ContextualHeaders | undefined,
 ): SecurityGatewayContextualHeaders | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -246,35 +236,26 @@ const toContextualHeaders = (
     userInfo: value.userInfo
       ? {
           outputType:
-            value.userInfo.outputType === undefined
-              ? undefined
-              : `${value.userInfo.outputType}`,
+            value.userInfo.outputType === undefined ? undefined : `${value.userInfo.outputType}`,
         }
       : undefined,
     groupInfo: value.groupInfo
       ? {
           outputType:
-            value.groupInfo.outputType === undefined
-              ? undefined
-              : `${value.groupInfo.outputType}`,
+            value.groupInfo.outputType === undefined ? undefined : `${value.groupInfo.outputType}`,
         }
       : undefined,
-    outputType:
-      value.outputType === undefined ? undefined : `${value.outputType}`,
+    outputType: value.outputType === undefined ? undefined : `${value.outputType}`,
   };
 };
 
 const toProxyProtocolConfig = (
-  value:
-    | beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ProxyProtocolConfig
-    | undefined,
+  value: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ProxyProtocolConfig | undefined,
 ): SecurityGatewayProxyProtocolConfig | undefined => {
   if (value === undefined) return undefined;
   const metadataHeaders = value.metadataHeaders;
   return {
-    allowedClientHeaders: value.allowedClientHeaders
-      ? [...value.allowedClientHeaders]
-      : undefined,
+    allowedClientHeaders: value.allowedClientHeaders ? [...value.allowedClientHeaders] : undefined,
     metadataHeaders:
       metadataHeaders === undefined
         ? undefined
@@ -283,10 +264,7 @@ const toProxyProtocolConfig = (
               header === undefined ? [] : [[key, header]],
             ),
           ),
-    gatewayIdentity:
-      value.gatewayIdentity === undefined
-        ? undefined
-        : `${value.gatewayIdentity}`,
+    gatewayIdentity: value.gatewayIdentity === undefined ? undefined : `${value.gatewayIdentity}`,
     contextualHeaders: toContextualHeaders(value.contextualHeaders),
     clientIp: value.clientIp,
   };
@@ -330,15 +308,10 @@ const listOwned = (project: string) =>
       }),
       (
         page,
-      ):
-        | readonly beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1SecurityGateway[]
-        | undefined => page.securityGateways,
+      ): readonly beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1SecurityGateway[] | undefined =>
+        page.securityGateways,
     ),
-  ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasOwnershipMarker(item.displayName)),
-    ),
-  );
+  ).pipe(Effect.map((items) => items.filter((item) => hasOwnershipMarker(item.displayName))));
 
 const desiredHubs = (
   hubs: Record<string, SecurityGatewayHub>,
@@ -361,10 +334,7 @@ export const SecurityGatewayProvider = () =>
         nextId: news.securityGatewayId
           ? rfc1035(news.securityGatewayId, "securitygateway")
           : (olds?.securityGatewayId ?? output?.securityGatewayId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          DEFAULT_GLOBAL,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           DEFAULT_GLOBAL,
@@ -380,18 +350,12 @@ export const SecurityGatewayProvider = () =>
         output?.securityGatewayId,
         "securitygateway",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, securityGatewayId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, securityGatewayId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -409,16 +373,10 @@ export const SecurityGatewayProvider = () =>
         output?.securityGatewayId,
         "securitygateway",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, securityGatewayId);
       const ownership = yield* createInternalLabels(id);
-      const desiredDisplayName = encodeOwnershipLine(
-        ownership,
-        news.displayName,
-      );
+      const desiredDisplayName = encodeOwnershipLine(ownership, news.displayName);
       // An unset `hubs` keeps the existing hubs (a previous default or an
       // adopted gateway's) so a changed stack region never moves them.
       const hubSpec: Record<string, SecurityGatewayHub> = news.hubs ??
@@ -456,25 +414,20 @@ export const SecurityGatewayProvider = () =>
 
       const mask = fieldMask([
         (current.displayName ?? "") !== desiredDisplayName && "display_name",
-        fingerprint(hubKeys(toHubs(current.hubs))) !==
-          fingerprint(hubKeys(hubSpec)) && "hubs",
+        fingerprint(hubKeys(toHubs(current.hubs))) !== fingerprint(hubKeys(hubSpec)) && "hubs",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* beyondcorp.patchProjectsLocationsSecurityGateways({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              displayName: desiredDisplayName,
-              hubs,
-            },
-          });
+        const operation = yield* beyondcorp.patchProjectsLocationsSecurityGateways({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            displayName: desiredDisplayName,
+            hubs,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

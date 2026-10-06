@@ -1,7 +1,7 @@
-import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import * as Layer from "effect/Layer";
+import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { makeManagedKafkaHttpBinding } from "./BindingHttp.ts";
 import type { ConnectCluster } from "./ConnectCluster.ts";
 import { GetConnectCluster } from "./GetConnectCluster.ts";

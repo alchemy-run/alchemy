@@ -23,9 +23,7 @@ import {
 } from "./internal.ts";
 
 export type CloudSqlProperties = dlp.GooglePrivacyDlpV2CloudSqlProperties;
-export type ConnectionState =
-  | dlp.GooglePrivacyDlpV2ConnectionStateEnum
-  | (string & {});
+export type ConnectionState = dlp.GooglePrivacyDlpV2ConnectionStateEnum | (string & {});
 export type ConnectionError = dlp.GooglePrivacyDlpV2Error;
 
 export type OrganizationsLocationsConnectionProps = {
@@ -112,10 +110,9 @@ export type OrganizationsLocationsConnection = Resource<
  * @resource
  * @category DLP
  */
-export const OrganizationsLocationsConnection =
-  Resource<OrganizationsLocationsConnection>(
-    "GCP.DLP.OrganizationsLocationsConnection",
-  );
+export const OrganizationsLocationsConnection = Resource<OrganizationsLocationsConnection>(
+  "GCP.DLP.OrganizationsLocationsConnection",
+);
 
 const DEFAULT_STATE = "MISSING_CREDENTIALS" satisfies ConnectionState;
 
@@ -149,56 +146,36 @@ const getByName = (name: string) =>
 const findByConnectionName = (parent: string, connectionName: string) =>
   connectionName.length === 0
     ? Effect.succeed(undefined)
-    : dlp.listOrganizationsLocationsConnections
-        .pages({ parent, pageSize: 100 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.connections ?? [])),
-          Stream.filter(
-            (connection) =>
-              (connection.cloudSql?.connectionName ?? "") === connectionName,
-          ),
-          Stream.runHead,
-          Effect.map((option) =>
-            option._tag === "Some" ? option.value : undefined,
-          ),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+    : dlp.listOrganizationsLocationsConnections.pages({ parent, pageSize: 100 }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.connections ?? [])),
+        Stream.filter(
+          (connection) => (connection.cloudSql?.connectionName ?? "") === connectionName,
+        ),
+        Stream.runHead,
+        Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
 
 const stateOf = (value: string | undefined) => value ?? DEFAULT_STATE;
 
 export const OrganizationsLocationsConnectionProvider = () =>
   Provider.succeed(OrganizationsLocationsConnection, {
-    stables: [
-      "name",
-      "connectionId",
-      "organization",
-      "organizationId",
-      "location",
-      "project",
-    ],
+    stables: ["name", "connectionId", "organization", "organizationId", "location", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousInstance =
-        olds?.cloudSql?.connectionName ?? output?.cloudSql?.connectionName;
+      const previousInstance = olds?.cloudSql?.connectionName ?? output?.cloudSql?.connectionName;
       const nextInstance = news.cloudSql.connectionName ?? previousInstance;
-      const previousEngine =
-        olds?.cloudSql?.databaseEngine ?? output?.cloudSql?.databaseEngine;
+      const previousEngine = olds?.cloudSql?.databaseEngine ?? output?.cloudSql?.databaseEngine;
       const nextEngine = news.cloudSql.databaseEngine ?? previousEngine;
       return (
-        replaceOn(
-          olds?.organization ?? output?.organization,
-          news.organization,
-        ) ??
+        replaceOn(olds?.organization ?? output?.organization, news.organization) ??
         replaceOn(previousLocation, nextLocation) ??
         replaceOn(previousInstance, nextInstance) ??
         replaceOn(previousEngine, nextEngine)
@@ -211,18 +188,13 @@ export const OrganizationsLocationsConnectionProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parent = organizationLocationParent(organization, location);
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) {
         existing = yield* findByConnectionName(
           parent,
-          olds?.cloudSql?.connectionName ??
-            output?.cloudSql?.connectionName ??
-            "",
+          olds?.cloudSql?.connectionName ?? output?.cloudSql?.connectionName ?? "",
         );
       }
       if (existing === undefined) return undefined;
@@ -234,14 +206,8 @@ export const OrganizationsLocationsConnectionProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = organizationLocationParent(organization, location);
       const state = stateOf(news.state);
       const cloudSql = news.cloudSql;
@@ -281,8 +247,7 @@ export const OrganizationsLocationsConnectionProvider = () =>
 
       const currentName = current.name ?? "";
       const stateChanged = !sameText(current.state, state);
-      const sqlChanged =
-        fingerprint(current.cloudSql) !== fingerprint(cloudSql);
+      const sqlChanged = fingerprint(current.cloudSql) !== fingerprint(cloudSql);
       const updateMask = updateMaskOf(
         stateChanged ? "state" : undefined,
         sqlChanged ? "cloudSql" : undefined,

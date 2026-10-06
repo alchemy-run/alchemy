@@ -152,13 +152,7 @@ const hasFile = (
 
 export const EnvironmentsResourcefileProvider = () =>
   Provider.succeed(EnvironmentsResourcefile, {
-    stables: [
-      "parent",
-      "fileId",
-      "fileType",
-      "organizationId",
-      "environmentId",
-    ],
+    stables: ["parent", "fileId", "fileType", "organizationId", "environmentId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -167,9 +161,7 @@ export const EnvironmentsResourcefileProvider = () =>
       const previousOrg = olds?.organization ?? output?.organizationId;
       const previousEnv = olds?.environment ?? output?.environmentId;
       const idChanged =
-        previousId !== undefined &&
-        news.fileId !== undefined &&
-        news.fileId !== previousId;
+        previousId !== undefined && news.fileId !== undefined && news.fileId !== previousId;
       const typeChanged =
         previousType !== undefined &&
         news.fileType !== undefined &&
@@ -177,8 +169,7 @@ export const EnvironmentsResourcefileProvider = () =>
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -194,15 +185,12 @@ export const EnvironmentsResourcefileProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
       const fileType = fileTypeOf(olds?.fileType ?? output?.fileType);
       const fileId = yield* toResourceId(id, olds?.fileId, output?.fileId, {
         maxLength: MAX_NAME_LENGTH,
       });
-      const parent =
-        output?.parent ?? environmentNameOf(organizationId, environmentId);
+      const parent = output?.parent ?? environmentNameOf(organizationId, environmentId);
       const existing = yield* getById(parent, fileType, fileId);
       if (existing === undefined) return undefined;
       return toAttrs(fileId, fileType, organizationId, environmentId);
@@ -250,11 +238,7 @@ export const EnvironmentsResourcefileProvider = () =>
             name: fileId,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getById(parent, fileType, fileId),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getById(parent, fileType, fileId)));
         current = yield* getById(parent, fileType, fileId);
       } else if (news.content !== undefined) {
         yield* apigee.updateOrganizationsEnvironmentsResourcefiles({
@@ -266,10 +250,7 @@ export const EnvironmentsResourcefileProvider = () =>
       }
 
       const listed = yield* listFiles(parent, fileType);
-      if (
-        current === undefined &&
-        !hasFile(listed.resourceFile, fileId, fileType)
-      ) {
+      if (current === undefined && !hasFile(listed.resourceFile, fileId, fileType)) {
         return yield* new EnvironmentsResourcefileNotResolved({
           parent,
           fileType,
@@ -287,11 +268,6 @@ export const EnvironmentsResourcefileProvider = () =>
           type: output.fileType,
           name: output.fileId,
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

@@ -1,14 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Kubernetes from "@/Kubernetes";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import {
-  SmokeBucket,
-  SmokeCluster,
-  SmokeNamespace,
-  smokeResources,
-} from "./smoke-resources.ts";
+import * as GCP from "@/GCP";
+import * as Kubernetes from "@/Kubernetes";
+import { SmokeBucket, SmokeCluster, SmokeNamespace, smokeResources } from "./smoke-resources.ts";
 
 /**
  * Effect-native `Kubernetes.Deployment` behind a GKE LoadBalancer. The
@@ -20,9 +15,7 @@ import {
  * - `PUT /objects/<key>` — write the request body, read it back.
  * - `GET /objects/<key>` — read an object (404 when missing).
  */
-export class GkeSmokeApi extends Kubernetes.Deployment<GkeSmokeApi>()(
-  "GkeSmokeApi",
-) {}
+export class GkeSmokeApi extends Kubernetes.Deployment<GkeSmokeApi>()("GkeSmokeApi") {}
 
 export default GkeSmokeApi.make(
   Effect.gen(function* () {

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -207,9 +202,7 @@ const toFile = (value: firebasedataconnect.File) => ({
   path: value.path,
 });
 
-const toSource = (
-  value: firebasedataconnect.Source | undefined,
-): Source | undefined =>
+const toSource = (value: firebasedataconnect.Source | undefined): Source | undefined =>
   value === undefined ? undefined : { files: value.files?.map(toFile) };
 
 const toClientCache = (
@@ -267,15 +260,7 @@ const listOwned = (project: string) =>
 
 export const ServicesConnectorProvider = () =>
   Provider.succeed(ServicesConnector, {
-    stables: [
-      "name",
-      "connectorId",
-      "service",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "connectorId", "service", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -284,10 +269,7 @@ export const ServicesConnectorProvider = () =>
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const previousParent =
         (olds?.service ?? output?.service)
           ? expandParent(
@@ -297,12 +279,7 @@ export const ServicesConnectorProvider = () =>
               "services",
             )
           : undefined;
-      const nextParent = expandParent(
-        news.service,
-        env.project,
-        location,
-        "services",
-      );
+      const nextParent = expandParent(news.service, env.project, location, "services");
       return replaceOnIdentity({
         previousId: olds?.connectorId ?? output?.connectorId,
         nextId: news.connectorId ?? olds?.connectorId ?? output?.connectorId,
@@ -322,25 +299,16 @@ export const ServicesConnectorProvider = () =>
         "connector",
         MAX_CONNECTOR_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const service =
         output?.service ??
-        (olds?.service
-          ? expandParent(olds.service, env.project, location, "services")
-          : undefined);
-      const name =
-        output?.name ??
-        (service ? resourceName(service, connectorId) : undefined);
+        (olds?.service ? expandParent(olds.service, env.project, location, "services") : undefined);
+      const name = output?.name ?? (service ? resourceName(service, connectorId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -359,16 +327,8 @@ export const ServicesConnectorProvider = () =>
         "connector",
         MAX_CONNECTOR_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const service = expandParent(
-        news.service,
-        env.project,
-        location,
-        "services",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const service = expandParent(news.service, env.project, location, "services");
       const name = resourceName(service, connectorId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -407,13 +367,12 @@ export const ServicesConnectorProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.displayName, news.displayName) && "displayName",
-        fingerprint(toSource(current.source)) !== fingerprint(news.source) &&
-          "source",
-        fingerprint(toClientCache(current.clientCache)) !==
-          fingerprint(news.clientCache) && "clientCache",
+        fingerprint(toSource(current.source)) !== fingerprint(news.source) && "source",
+        fingerprint(toClientCache(current.clientCache)) !== fingerprint(news.clientCache) &&
+          "clientCache",
       ]);
 
       if (mask.length > 0) {
@@ -427,16 +386,10 @@ export const ServicesConnectorProvider = () =>
             })
             .pipe(Effect.flatMap((operation) => waitForOperation(operation))),
         );
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
-      current = yield* waitUntilReady(
-        getByName(current.name ?? name),
-        current.name ?? name,
-      );
+      current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
       return toAttrs(current, env.project, env.region);
     }),
 

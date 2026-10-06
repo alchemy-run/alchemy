@@ -1,18 +1,18 @@
 onlyBuiltDependencies:
   - "@parcel/watcher"
   - esbuild
-  - msgpackr-extract
   - sharp
   - workerd
+
 allowBuilds:
   "@parcel/watcher": true
   core-js: false
   es5-ext: false
   esbuild: true
-  msgpackr-extract: true
   sharp: true
   vue-demi: false
   workerd: true
+
 packages:
   - website
   - packages/*
@@ -25,6 +25,7 @@ packages:
   - submodules/distilled/packages/*
   - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
+
 catalog:
   "@alchemy.run/sigil": "0.1.0-alpha.1"
   "@astrojs/check": "0.9.10"
@@ -44,19 +45,18 @@ catalog:
   "@cloudflare/containers": "^0.3.7"
   "@cloudflare/puppeteer": "^1.1.0"
   "@cloudflare/unenv-preset": "^2.16.1"
-  "@cloudflare/vitest-plugin": "^1.0.0"
+  "@cloudflare/vitest-plugin": "^1.3.4"
   "@cloudflare/workers-types": "5.20260918.1"
-  "@effect/atom-react": ">=4.0.0-rc.118 || >=4.0.0"
-  "@effect/language-service": "^0.87.2"
-  "@effect/platform-bun": ">=4.0.0-rc.118 || >=4.0.0"
-  "@effect/platform-node": ">=4.0.0-rc.118 || >=4.0.0"
-  "@effect/sql-d1": ">=4.0.0-rc.118 || >=4.0.0"
-  "@effect/sql-mysql2": ">=4.0.0-rc.118 || >=4.0.0"
-  "@effect/sql-pg": ">=4.0.0-rc.118 || >=4.0.0"
-  "@effect/sql-sqlite-do": ">=4.0.0-rc.118 || >=4.0.0"
-  "@effect/tsgo": "0.36.4"
-  "@effect/vitest": ">=4.0.0-rc.118 || >=4.0.0"
-  "@foldkit/vite-plugin": "^0.22.0"
+  "@effect/atom-react": "^4.0.0"
+  "@effect/platform-bun": "^4.0.0"
+  "@effect/platform-node": "^4.0.0"
+  "@effect/sql-d1": "^4.0.0"
+  "@effect/sql-mysql2": "^4.0.0"
+  "@effect/sql-pg": "^4.0.0"
+  "@effect/sql-sqlite-do": "^4.0.0"
+  "@effect/tsgo": "^0.47.2"
+  "@effect/vitest": "^4.0.0"
+  "@foldkit/vite-plugin": "^0.26.0"
   "@fontsource-variable/caveat": "^5.3.0"
   "@fontsource-variable/inter": "^5.3.0"
   "@fontsource-variable/jetbrains-mono": "^5.3.0"
@@ -88,6 +88,11 @@ catalog:
   "@puppeteer/browsers": "^3.2.0"
   "@react-router/dev": "^7.16.0"
   "@react-router/node": "^7.16.0"
+  "@remotion/bundler": "4.0.526"
+  "@remotion/cli": "4.0.526"
+  "@remotion/google-fonts": "4.0.526"
+  "@remotion/player": "4.0.526"
+  "@remotion/renderer": "4.0.526"
   "@smithy/shared-ini-file-loader": "^4.7.0"
   "@smithy/types": "^4.17.2"
   "@smithy/util-base64": "^4.6.0"
@@ -133,14 +138,15 @@ catalog:
   cuelume: "^0.2.2"
   dedent: "^1.7.2"
   devalue: "5.8.1"
+  diff: "^9.0.0"
   dotenv: "^17.4.2"
   drizzle-kit: "1.0.0-rc.5-ab785fc"
   drizzle-orm: "1.0.0-rc.5-ab785fc"
-  effect: ">=4.0.0-rc.118 || >=4.0.0"
+  effect: "^4.0.0"
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.10.1"
-  foldkit: "^0.160.0"
+  foldkit: "^0.165.0"
   heap-js: "^2.5.0"
   hono: "^4.12.14"
   http-cache-semantics: "^4.2.0"
@@ -161,8 +167,9 @@ catalog:
   npm-run-all2: "^8.0.4"
   nuxt: "4.5.1"
   octane: "0.1.22"
-  oxfmt: "^0.66.0"
-  oxlint: "^1.82.0"
+  oxfmt: "^0.71.0"
+  oxlint: "^1.86.0"
+  oxlint-tsgolint: "7.0.2003"
   pathe: "^2.0.3"
   pg: "^8.22.0"
   picomatch: "^4.0.4"
@@ -173,9 +180,11 @@ catalog:
   react-dom: "^19.3.0"
   react-router: "^7.16.0"
   react-server-dom-webpack: "~19.3.0"
+  remotion: "4.0.526"
   rolldown: "1.2.5"
   satteri: "^0.10.5"
   sharp: "^0.35.3"
+  shiki: "^4.4.3"
   solid-devtools: "^0.34.3"
   solid-js: "^1.9.12"
   srvx: "1.0.5"
@@ -184,6 +193,7 @@ catalog:
   svelte: "^5.56.6"
   tailwindcss: "^4.1.18"
   takumi-js: "^2.13.5"
+  termcut: "1.4.2"
   toucan-js: "4.0.0"
   tsdown: "^0.22.4"
   tsx: "^4.20.6"
@@ -195,7 +205,7 @@ catalog:
   vite: "^8.0.7"
   vite-plugin-solid: "^2.11.12"
   vite-plugin-vue-devtools: "^8.1.1"
-  vitest: "^4.1.8"
+  vitest: "^5.0.3"
   vocs: "2.8.2"
   vue: "beta"
   vue-router: "^5.0.4"
@@ -206,7 +216,11 @@ catalog:
   ws: "^8.21.0"
   yaml: "^2.9.0"
   yauzl: "^3.4.0"
+
 catalogs:
+  # Cloudflare's worker test plugin does not yet support Vitest 5.
+  cloudflare-test-compat:
+    vitest: "^4.1.8"
   # SvelteKit requires the TypeScript JavaScript compiler API.
   typescript-classic:
     typescript: "6.0.3"
@@ -233,11 +247,12 @@ catalogs:
   tanstack-start-legacy:
     "@types/node": "^22.10.2"
     "@vitejs/plugin-react": "^5.1.4"
+
 overrides:
   "@cloudflare/workers-types": 5.20260918.1
   workerd: 1.20260918.1
-  effect: 4.0.0-rc.118
-  "@effect/platform-browser": 4.0.0-rc.118
+  effect: 4.0.0
+  "@effect/platform-browser": 4.0.0
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   # Keep drizzle-orm's optional peer graph identical across workspace
@@ -245,23 +260,26 @@ overrides:
   mysql2: 3.24.2
   zod: 4.5.4
   rolldown: 1.2.5
+
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
+
 minimumReleaseAgeExclude:
+  - typescript@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1
   - "@alchemy.run/sigil@0.1.0-alpha.1"
-  - "@effect/atom-react@4.0.0-rc.118"
-  - "@effect/platform-bun@4.0.0-rc.118"
-  - "@effect/platform-node-shared@4.0.0-rc.118"
-  - "@effect/platform-node@4.0.0-rc.118"
-  - "@effect/sql-d1@4.0.0-rc.118"
-  - "@effect/sql-mysql2@4.0.0-rc.118"
-  - "@effect/sql-pg@4.0.0-rc.118"
-  - "@effect/sql-sqlite-do@4.0.0-rc.118"
-  - "@effect/vitest@4.0.0-rc.118"
-  - "@foldkit/vite-plugin@0.22.0"
-  - effect@4.0.0-rc.118
-  - foldkit@0.160.0
+  - "@effect/atom-react@4.0.0"
+  - "@effect/platform-bun@4.0.0"
+  - "@effect/platform-node-shared@4.0.0"
+  - "@effect/platform-node@4.0.0"
+  - "@effect/sql-d1@4.0.0"
+  - "@effect/sql-mysql2@4.0.0"
+  - "@effect/sql-pg@4.0.0"
+  - "@effect/sql-sqlite-do@4.0.0"
+  - "@effect/vitest@4.0.0"
+  - "@foldkit/vite-plugin@0.26.0"
+  - effect@4.0.0
+  - foldkit@0.165.0
   - "@solidjs/start@2.0.4"
   - "@cloudflare/workers-types@5.20260918.1"
   - "@cloudflare/workerd-darwin-64@1.20260918.1"
@@ -270,16 +288,26 @@ minimumReleaseAgeExclude:
   - "@cloudflare/workerd-linux-arm64@1.20260918.1"
   - "@cloudflare/workerd-windows-64@1.20260918.1"
   - workerd@1.20260918.1
-  - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-linux-arm@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-linux-x64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1"
-  - "@typescript/typescript-win32-x64@7.1.0-dev.20260905.1"
-  - typescript@7.1.0-dev.20260905.1
+  - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
+  - "@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
+  - "@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
+  - "@typescript/typescript-linux-arm@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
+  - "@typescript/typescript-linux-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
+  - "@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
+  - "@typescript/typescript-win32-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
   - "@neon/config-runtime@1.6.1"
   - "@neon/config@1.7.1"
   - neon@4.21.1
   - neonctl@4.21.1
-  - '@effect/platform-browser@4.0.0-rc.118'
+  - "@effect/platform-browser@4.0.0"
+  - vitest@5.0.3
+  - "@vitest/expect@5.0.3"
+  - "@vitest/runner@5.0.3"
+  - "@vitest/snapshot@5.0.3"
+  - "@vitest/spy@5.0.3"
+  - "@vitest/utils@5.0.3"
+  - "@vitest/pretty-format@5.0.3"
+  - "@vitest/mocker@5.0.3"
+  - "@cloudflare/vitest-plugin@1.3.4"
+  - miniflare@5.20260930.0-alpha
+  - wrangler@4.145.0

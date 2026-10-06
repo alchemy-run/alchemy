@@ -34,10 +34,7 @@ export interface IsMemberInGroups extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.IsMemberInGroupsRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.IsMemberInGroupsResponse,
-      identitystore.IsMemberInGroupsError
-    >
+    ) => Effect.Effect<identitystore.IsMemberInGroupsResponse, identitystore.IsMemberInGroupsError>
   >
 > {}
 export const IsMemberInGroups = Binding.Service<IsMemberInGroups>(

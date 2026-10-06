@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  location,
-  logLevel,
-  currentProject,
-  runLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { location, logLevel, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -65,11 +59,9 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.kind.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

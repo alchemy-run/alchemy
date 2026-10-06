@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type ApiWorkload,
@@ -328,9 +323,7 @@ const toAttrs = (
 ): Workload["Attributes"] => {
   const name = workload.name ?? "";
   const parsed = parseName(name, region);
-  const organization = parsed.organization
-    ? organizationParent(parsed.organization)
-    : "";
+  const organization = parsed.organization ? organizationParent(parsed.organization) : "";
   return {
     name,
     workloadId: parsed.id || lastSegment(name),
@@ -342,8 +335,7 @@ const toAttrs = (
     complianceRegime: workload.complianceRegime,
     billingAccount: workload.billingAccount,
     labels: userLabels(workload.labels),
-    violationNotificationsEnabled:
-      workload.violationNotificationsEnabled ?? true,
+    violationNotificationsEnabled: workload.violationNotificationsEnabled ?? true,
     partner: workload.partner,
     partnerServicesBillingAccount: workload.partnerServicesBillingAccount,
     partnerPermissions: workload.partnerPermissions,
@@ -377,12 +369,7 @@ const findOwned = (id: string, organization: string, location: string) =>
     return undefined;
   });
 
-const observe = (
-  id: string,
-  name: string | undefined,
-  organization: string,
-  location: string,
-) =>
+const observe = (id: string, name: string | undefined, organization: string, location: string) =>
   Effect.gen(function* () {
     if (name !== undefined && name.length > 0) {
       const byName = yield* getByName(name);
@@ -426,50 +413,39 @@ export const WorkloadProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousOrg = olds?.organization ?? output?.organization;
       const nextOrg =
-        news.organization !== undefined
-          ? organizationParent(news.organization)
-          : previousOrg;
+        news.organization !== undefined ? organizationParent(news.organization) : previousOrg;
       const previousLocation = olds?.location ?? output?.location;
       const previousRegime = olds?.complianceRegime ?? output?.complianceRegime;
       const previousBilling = olds?.billingAccount ?? output?.billingAccount;
       const previousPartner = olds?.partner ?? output?.partner;
       const previousPartnerBilling =
-        olds?.partnerServicesBillingAccount ??
-        output?.partnerServicesBillingAccount;
+        olds?.partnerServicesBillingAccount ?? output?.partnerServicesBillingAccount;
       const previousParent = olds?.provisionedResourcesParent ?? undefined;
-      const previousSovereign =
-        olds?.enableSovereignControls ?? output?.enableSovereignControls;
+      const previousSovereign = olds?.enableSovereignControls ?? output?.enableSovereignControls;
       return replaceOnIdentity(
         (previousOrg !== undefined &&
           nextOrg !== undefined &&
           organizationParent(previousOrg) !== organizationParent(nextOrg)) ||
           (previousLocation !== undefined &&
             news.location !== undefined &&
-            normalizeLocation(previousLocation) !==
-              normalizeLocation(news.location)) ||
-          (previousRegime !== undefined &&
-            previousRegime !== news.complianceRegime) ||
+            normalizeLocation(previousLocation) !== normalizeLocation(news.location)) ||
+          (previousRegime !== undefined && previousRegime !== news.complianceRegime) ||
           !sameText(previousBilling, news.billingAccount) ||
           !sameText(previousPartner, news.partner) ||
-          !sameText(
-            previousPartnerBilling,
-            news.partnerServicesBillingAccount,
-          ) ||
+          !sameText(previousPartnerBilling, news.partnerServicesBillingAccount) ||
           !sameText(previousParent, news.provisionedResourcesParent) ||
           (news.enableSovereignControls !== undefined &&
             previousSovereign !== undefined &&
             previousSovereign !== news.enableSovereignControls) ||
           (news.resourceSettings !== undefined &&
             olds?.resourceSettings !== undefined &&
-            fingerprint(olds.resourceSettings) !==
-              fingerprint(news.resourceSettings)) ||
+            fingerprint(olds.resourceSettings) !== fingerprint(news.resourceSettings)) ||
           (news.kmsSettings !== undefined &&
             olds?.kmsSettings !== undefined &&
             fingerprint(olds.kmsSettings) !== fingerprint(news.kmsSettings)) ||
           (news.workloadOptions !== undefined &&
             olds?.workloadOptions !== undefined &&
-            fingerprint(olds.workloadOptions) !==
-              fingerprint(news.workloadOptions)),
+            fingerprint(olds.workloadOptions) !== fingerprint(news.workloadOptions)),
       );
     }),
 
@@ -483,15 +459,11 @@ export const WorkloadProvider = () =>
           Effect.succeed(output?.organization ?? ""),
         ),
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const existing = yield* observe(id, output?.name, organization, location);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -500,9 +472,7 @@ export const WorkloadProvider = () =>
         const organization = yield* tryResolveOrganization();
         if (organization === undefined) return [];
         const workloads = yield* listOwnedWorkloads(organization, env.region);
-        return workloads.map((workload) =>
-          toAttrs(workload, env.project, env.region),
-        );
+        return workloads.map((workload) => toAttrs(workload, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -511,19 +481,13 @@ export const WorkloadProvider = () =>
         news.organization ?? output?.organization,
         output?.organization,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(organization, location);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
 
       let current = yield* observe(id, output?.name, organization, location);
 
@@ -539,26 +503,18 @@ export const WorkloadProvider = () =>
           // ALREADY_EXISTS (code 6) is a create race: find the winner below.
           const settled = yield* waitForOperation(created).pipe(
             Effect.catchIf(
-              (error) =>
-                error._tag === "GCP.OperationFailed" && error.code === 6,
+              (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
               () => Effect.succeed(created),
             ),
           );
           const createdName =
-            resourceNameFromOperation(settled) ??
-            resourceNameFromOperation(created);
+            resourceNameFromOperation(settled) ?? resourceNameFromOperation(created);
           current =
             createdName !== undefined
               ? yield* waitUntilExists(getByName(createdName), createdName)
-              : yield* waitUntilExists(
-                  findOwned(id, organization, location),
-                  parent,
-                );
+              : yield* waitUntilExists(findOwned(id, organization, location), parent);
         } else {
-          current = yield* waitUntilExists(
-            findOwned(id, organization, location),
-            parent,
-          );
+          current = yield* waitUntilExists(findOwned(id, organization, location), parent);
         }
       }
 
@@ -575,10 +531,7 @@ export const WorkloadProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const notifyChanged =
         news.violationNotificationsEnabled !== undefined &&
-        !sameBool(
-          current.violationNotificationsEnabled,
-          news.violationNotificationsEnabled,
-        );
+        !sameBool(current.violationNotificationsEnabled, news.violationNotificationsEnabled);
       const mask = fieldMask([
         displayChanged && "display_name",
         labelsChanged && "labels",
@@ -594,8 +547,7 @@ export const WorkloadProvider = () =>
             displayName,
             labels: desiredLabels,
             violationNotificationsEnabled:
-              news.violationNotificationsEnabled ??
-              current.violationNotificationsEnabled,
+              news.violationNotificationsEnabled ?? current.violationNotificationsEnabled,
             etag: current.etag,
           },
         });
@@ -603,20 +555,16 @@ export const WorkloadProvider = () =>
 
       const partnerChanged =
         news.partnerPermissions !== undefined &&
-        fingerprint(current.partnerPermissions) !==
-          fingerprint(news.partnerPermissions);
+        fingerprint(current.partnerPermissions) !== fingerprint(news.partnerPermissions);
       if (partnerChanged) {
-        current =
-          yield* assuredworkloads.mutatePartnerPermissionsOrganizationsLocationsWorkloads(
-            {
-              name,
-              body: {
-                etag: current.etag,
-                partnerPermissions: news.partnerPermissions,
-                updateMask: "partner_permissions",
-              },
-            },
-          );
+        current = yield* assuredworkloads.mutatePartnerPermissionsOrganizationsLocationsWorkloads({
+          name,
+          body: {
+            etag: current.etag,
+            partnerPermissions: news.partnerPermissions,
+            updateMask: "partner_permissions",
+          },
+        });
       }
 
       if (current === undefined) {
@@ -639,8 +587,7 @@ export const WorkloadProvider = () =>
         });
       }).pipe(
         Effect.retry({
-          while: (error) =>
-            error._tag === "BadRequest" || error._tag === "Conflict",
+          while: (error) => error._tag === "BadRequest" || error._tag === "Conflict",
           times: 8,
           schedule: Schedule.spaced("3 seconds"),
         }),

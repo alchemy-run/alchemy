@@ -1,34 +1,29 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
-  networkconnectivity
-    .getProjectsLocationsServiceConnectionPolicies({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  networkconnectivity.getProjectsLocationsServiceConnectionPolicies({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsServiceConnectionPolicies on a missing policy fails with a typed tag",
@@ -68,18 +63,15 @@ test.provider.skipIf(!runLifecycle)(
             ipCidrRange: "10.22.0.0/24",
             privateIpGoogleAccess: true,
           });
-          const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy(
-            "Redis",
-            {
-              serviceClass: "gcp-memorystore-redis",
-              network: network.selfLink.as<string>(),
-              pscConfig: {
-                subnetworks: [subnet.selfLink.as<string>()],
-              },
-              description: "policy a",
-              labels: { env: "test" },
+          const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy("Redis", {
+            serviceClass: "gcp-memorystore-redis",
+            network: network.selfLink.as<string>(),
+            pscConfig: {
+              subnetworks: [subnet.selfLink.as<string>()],
             },
-          );
+            description: "policy a",
+            labels: { env: "test" },
+          });
           return { network, subnet, policy };
         }),
       );
@@ -90,18 +82,15 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.policy.description).toEqual("policy a");
       expect(created.policy.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networkconnectivity.getProjectsLocationsServiceConnectionPolicies(
-          { name: created.policy.name },
-        );
+      const fetched = yield* networkconnectivity.getProjectsLocationsServiceConnectionPolicies({
+        name: created.policy.name,
+      });
       expect(fetched.name).toEqual(created.policy.name);
       expect(fetched.serviceClass).toEqual("gcp-memorystore-redis");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -115,22 +104,18 @@ test.provider.skipIf(!runLifecycle)(
             ipCidrRange: "10.22.0.0/24",
             privateIpGoogleAccess: true,
           });
-          const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy(
-            "Redis",
-            {
-              serviceConnectionPolicyId:
-                created.policy.serviceConnectionPolicyId,
-              location: created.policy.location,
-              serviceClass: "gcp-memorystore-redis",
-              network: network.selfLink.as<string>(),
-              pscConfig: {
-                subnetworks: [subnet.selfLink.as<string>()],
-                limit: "4",
-              },
-              description: "policy b",
-              labels: { env: "prod", role: "psc" },
+          const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy("Redis", {
+            serviceConnectionPolicyId: created.policy.serviceConnectionPolicyId,
+            location: created.policy.location,
+            serviceClass: "gcp-memorystore-redis",
+            network: network.selfLink.as<string>(),
+            pscConfig: {
+              subnetworks: [subnet.selfLink.as<string>()],
+              limit: "4",
             },
-          );
+            description: "policy b",
+            labels: { env: "prod", role: "psc" },
+          });
           return { network, subnet, policy };
         }),
       );

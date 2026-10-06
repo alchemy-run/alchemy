@@ -1,5 +1,5 @@
-import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as servicenetworking from "@distilled.cloud/gcp/servicenetworking_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,8 +9,8 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import type { Providers } from "../Providers.ts";
 import { waitForOperation as waitForLongRunning } from "../Operation.ts";
+import type { Providers } from "../Providers.ts";
 
 const DEFAULT_SERVICE = "servicenetworking.googleapis.com";
 const DEFAULT_PEERING = "servicenetworking-googleapis-com";
@@ -116,9 +116,7 @@ export type Connection = Resource<
  * @resource
  * @category ServiceNetworking
  */
-export const Connection = Resource<Connection>(
-  "GCP.ServiceNetworking.Connection",
-);
+export const Connection = Resource<Connection>("GCP.ServiceNetworking.Connection");
 
 export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.ServiceNetworking.ConnectionNotResolved",
@@ -177,9 +175,7 @@ const connectionNameOf = (parent: string, peering: string | undefined) =>
   `${parent}/connections/${peering && peering.length > 0 ? peering : "-"}`;
 
 const rangeNamesOf = (ranges: readonly string[] | undefined) =>
-  [...(ranges ?? [])]
-    .map((range) => lastSegment(range))
-    .filter((range) => range.length > 0);
+  [...(ranges ?? [])].map((range) => lastSegment(range)).filter((range) => range.length > 0);
 
 const rangesKey = (ranges: readonly string[] | undefined) =>
   [...rangeNamesOf(ranges)].sort().join("\n");
@@ -230,9 +226,7 @@ const listForNetwork = (parent: string, consumerNetwork: string) =>
     })
     .pipe(
       Effect.map((page) => page.connections ?? []),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as servicenetworking.Connection[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as servicenetworking.Connection[])),
     );
 
 const getByNetwork = (parent: string, consumerNetwork: string) =>
@@ -243,8 +237,7 @@ const getByNetwork = (parent: string, consumerNetwork: string) =>
       }
       const match = connections.find(
         (connection) =>
-          linkKey(connection.network) === linkKey(consumerNetwork) ||
-          connections.length === 1,
+          linkKey(connection.network) === linkKey(consumerNetwork) || connections.length === 1,
       );
       return match ?? connections[0];
     }),
@@ -260,11 +253,9 @@ const waitForOperation = (
   operation: servicenetworking.Operation,
   options?: { notFoundOk?: boolean; ignoreRangeConflict?: boolean },
 ) =>
-  waitForLongRunning(
-    operation,
-    (name) => servicenetworking.getOperations({ name }),
-    { budget: "10 minutes" },
-  ).pipe(
+  waitForLongRunning(operation, (name) => servicenetworking.getOperations({ name }), {
+    budget: "10 minutes",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
@@ -282,8 +273,7 @@ const waitForOperation = (
 const waitUntilPresent = (parent: string, consumerNetwork: string) =>
   getByNetwork(parent, consumerNetwork).pipe(
     Effect.filterOrFail(
-      (connection): connection is servicenetworking.Connection =>
-        connection !== undefined,
+      (connection): connection is servicenetworking.Connection => connection !== undefined,
       () =>
         new ConnectionNotResolved({
           network: consumerNetwork,
@@ -291,8 +281,7 @@ const waitUntilPresent = (parent: string, consumerNetwork: string) =>
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ServiceNetworking.ConnectionNotResolved",
+      while: (error) => error._tag === "GCP.ServiceNetworking.ConnectionNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -310,8 +299,7 @@ const waitUntilGone = (parent: string, consumerNetwork: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ServiceNetworking.ConnectionStillExists",
+      while: (error) => error._tag === "GCP.ServiceNetworking.ConnectionStillExists",
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
@@ -338,15 +326,7 @@ const patchRanges = (
 
 export const ConnectionProvider = () =>
   Provider.succeed(Connection, {
-    stables: [
-      "network",
-      "networkName",
-      "service",
-      "peering",
-      "name",
-      "project",
-      "projectNumber",
-    ],
+    stables: ["network", "networkName", "service", "peering", "name", "project", "projectNumber"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -370,20 +350,13 @@ export const ConnectionProvider = () =>
       );
       if (networkName.length === 0) return undefined;
       const parent = parentServiceOf(olds?.service ?? output?.service);
-      const projectNumber =
-        output?.projectNumber ?? (yield* getProjectNumber(env.project));
+      const projectNumber = output?.projectNumber ?? (yield* getProjectNumber(env.project));
       const consumerNetwork = consumerNetworkOf(projectNumber, networkName);
       const existing = yield* getByNetwork(parent, consumerNetwork);
       if (existing === undefined) return undefined;
       // Connections have no labels. Existence at (network, service) is
       // ownership — the API allows only one PSA peering per pair.
-      return toAttrs(
-        existing,
-        env.project,
-        projectNumber,
-        consumerNetwork,
-        parent,
-      );
+      return toAttrs(existing, env.project, projectNumber, consumerNetwork, parent);
     }),
 
     list: () =>
@@ -404,10 +377,7 @@ export const ConnectionProvider = () =>
             if (!networkName) {
               return Effect.succeed([] as ReturnType<typeof toAttrs>[]);
             }
-            const consumerNetwork = consumerNetworkOf(
-              projectNumber,
-              networkName,
-            );
+            const consumerNetwork = consumerNetworkOf(projectNumber, networkName);
             return listForNetwork("services/-", consumerNetwork).pipe(
               Effect.map((connections) =>
                 connections.map((connection) =>
@@ -432,13 +402,11 @@ export const ConnectionProvider = () =>
       const networkName = lastSegment(news.network ?? output?.network ?? "");
       if (networkName.length === 0) {
         return yield* new ConnectionNetworkMissing({
-          message:
-            "Service Networking connections require `network` (VPC name or URL).",
+          message: "Service Networking connections require `network` (VPC name or URL).",
         });
       }
       const parent = parentServiceOf(news.service ?? output?.service);
-      const projectNumber =
-        output?.projectNumber ?? (yield* getProjectNumber(env.project));
+      const projectNumber = output?.projectNumber ?? (yield* getProjectNumber(env.project));
       const consumerNetwork = consumerNetworkOf(projectNumber, networkName);
       const desiredRanges = rangeNamesOf(news.reservedPeeringRanges);
 
@@ -448,8 +416,7 @@ export const ConnectionProvider = () =>
         if (desiredRanges.length === 0) {
           return yield* new ConnectionRangesMissing({
             network: consumerNetwork,
-            message:
-              "Service Networking connections require `reservedPeeringRanges`.",
+            message: "Service Networking connections require `reservedPeeringRanges`.",
           });
         }
         const created = yield* servicenetworking
@@ -478,16 +445,8 @@ export const ConnectionProvider = () =>
           desiredRanges.length > 0 &&
           rangesKey(current.reservedPeeringRanges) !== rangesKey(desiredRanges)
         ) {
-          yield* patchRanges(
-            parent,
-            current.peering,
-            consumerNetwork,
-            desiredRanges,
-          ).pipe(
-            Effect.catchTag(
-              ["Conflict", "ConnectionAlreadyExists"],
-              () => Effect.void,
-            ),
+          yield* patchRanges(parent, current.peering, consumerNetwork, desiredRanges).pipe(
+            Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () => Effect.void),
           );
           current = yield* waitUntilPresent(parent, consumerNetwork).pipe(
             Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () =>
@@ -508,12 +467,7 @@ export const ConnectionProvider = () =>
         desiredRanges.length > 0 &&
         rangesKey(current.reservedPeeringRanges) !== rangesKey(desiredRanges)
       ) {
-        yield* patchRanges(
-          parent,
-          current.peering,
-          consumerNetwork,
-          desiredRanges,
-        );
+        yield* patchRanges(parent, current.peering, consumerNetwork, desiredRanges);
         current = yield* waitUntilPresent(parent, consumerNetwork);
       }
 
@@ -524,13 +478,7 @@ export const ConnectionProvider = () =>
         });
       }
 
-      return toAttrs(
-        current,
-        env.project,
-        projectNumber,
-        consumerNetwork,
-        parent,
-      );
+      return toAttrs(current, env.project, projectNumber, consumerNetwork, parent);
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {

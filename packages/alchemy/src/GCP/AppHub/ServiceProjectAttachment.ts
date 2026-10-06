@@ -101,11 +101,7 @@ export const ServiceProjectAttachment = Resource<ServiceProjectAttachment>(
   "GCP.AppHub.ServiceProjectAttachment",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  attachmentId: string,
-) =>
+const resourceName = (project: string, location: string, attachmentId: string) =>
   `${locationParent(project, location)}/serviceProjectAttachments/${attachmentId}`;
 
 const toAttrs = (item: apphub.ServiceProjectAttachment, project: string) => {
@@ -144,18 +140,13 @@ export const ServiceProjectAttachmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousProject = projectIdOf(
-        olds?.serviceProject ?? output?.serviceProject,
-        "",
-      );
+      const previousProject = projectIdOf(olds?.serviceProject ?? output?.serviceProject, "");
       const nextProject = projectIdOf(
         news.serviceProject ?? olds?.serviceProject ?? output?.serviceProject,
         previousProject,
       );
       return replaceOnIdentity({
-        previousId:
-          olds?.serviceProjectAttachmentId ??
-          output?.serviceProjectAttachmentId,
+        previousId: olds?.serviceProjectAttachmentId ?? output?.serviceProjectAttachmentId,
         nextId:
           news.serviceProjectAttachmentId ??
           olds?.serviceProjectAttachmentId ??
@@ -163,9 +154,7 @@ export const ServiceProjectAttachmentProvider = () =>
         previousLocation: GLOBAL_LOCATION,
         nextLocation: GLOBAL_LOCATION,
         extra:
-          previousProject.length > 0 &&
-          nextProject.length > 0 &&
-          previousProject !== nextProject,
+          previousProject.length > 0 && nextProject.length > 0 && previousProject !== nextProject,
       });
     }),
 
@@ -176,18 +165,12 @@ export const ServiceProjectAttachmentProvider = () =>
         env.project,
       );
       const attachmentId =
-        olds?.serviceProjectAttachmentId ??
-        output?.serviceProjectAttachmentId ??
-        serviceProjectId;
-      const name =
-        output?.name ??
-        resourceName(env.project, GLOBAL_LOCATION, attachmentId);
+        olds?.serviceProjectAttachmentId ?? output?.serviceProjectAttachmentId ?? serviceProjectId;
+      const name = output?.name ?? resourceName(env.project, GLOBAL_LOCATION, attachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return attrs.serviceProjectAttachmentId === attachmentId
-        ? attrs
-        : Unowned(attrs);
+      return attrs.serviceProjectAttachmentId === attachmentId ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -199,17 +182,12 @@ export const ServiceProjectAttachmentProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.serviceProjectAttachments ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.serviceProjectAttachments ?? [])),
             Stream.filter(
               (item) =>
                 projectIdOf(item.serviceProject, "") === env.project ||
-                parseName(
-                  item.name ?? "",
-                  "serviceProjectAttachments",
-                  GLOBAL_LOCATION,
-                ).id === env.project,
+                parseName(item.name ?? "", "serviceProjectAttachments", GLOBAL_LOCATION).id ===
+                  env.project,
             ),
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,

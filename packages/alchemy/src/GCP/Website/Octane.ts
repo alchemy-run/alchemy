@@ -1,12 +1,10 @@
 import { frameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Octane build. */
-export const OCTANE_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/octane";
+export const OCTANE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/octane";
 
 /** The Node container deploy target for the Octane build. */
-export const OCTANE_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/octane/node";
+export const OCTANE_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/octane/node";
 
 export interface OctaneProps extends FrameworkSiteProps {}
 

@@ -29,9 +29,7 @@ export interface ReadFlags extends Binding.Service<
   (app: App) => Effect.Effect<ReadFlagsClient>
 > {}
 
-export const ReadFlags = Binding.Service<ReadFlags>(
-  "Cloudflare.Flagship.ReadFlags",
-);
+export const ReadFlags = Binding.Service<ReadFlags>("Cloudflare.Flagship.ReadFlags");
 
 export class FlagshipError extends Data.TaggedError("FlagshipError")<{
   message: string;

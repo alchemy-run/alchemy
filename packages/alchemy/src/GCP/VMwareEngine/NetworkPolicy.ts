@@ -143,15 +143,10 @@ export type NetworkPolicy = Resource<
  * @resource
  * @category VMwareEngine
  */
-export const NetworkPolicy = Resource<NetworkPolicy>(
-  "GCP.VMwareEngine.NetworkPolicy",
-);
+export const NetworkPolicy = Resource<NetworkPolicy>("GCP.VMwareEngine.NetworkPolicy");
 
-const resourceName = (
-  project: string,
-  location: string,
-  networkPolicyId: string,
-) => `${parentOf(project, location)}/${COLLECTION}/${networkPolicyId}`;
+const resourceName = (project: string, location: string, networkPolicyId: string) =>
+  `${parentOf(project, location)}/${COLLECTION}/${networkPolicyId}`;
 
 const serviceOf = (
   value: vmwareengine.NetworkService | NetworkService | undefined,
@@ -163,11 +158,7 @@ const serviceOf = (
   };
 };
 
-const toAttrs = (
-  item: vmwareengine.NetworkPolicy,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: vmwareengine.NetworkPolicy, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
@@ -195,14 +186,7 @@ const getByName = (name: string) =>
 
 export const NetworkPolicyProvider = () =>
   Provider.succeed(NetworkPolicy, {
-    stables: [
-      "name",
-      "networkPolicyId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "networkPolicyId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -216,18 +200,12 @@ export const NetworkPolicyProvider = () =>
         nextId: news.networkPolicyId
           ? rfc1035(news.networkPolicyId, "networkpolicy")
           : (olds?.networkPolicyId ?? output?.networkPolicyId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
-        extra:
-          previousVen.length > 0 &&
-          nextVen.length > 0 &&
-          previousVen !== nextVen,
+        extra: previousVen.length > 0 && nextVen.length > 0 && previousVen !== nextVen,
       });
     }),
 
@@ -239,12 +217,8 @@ export const NetworkPolicyProvider = () =>
         output?.networkPolicyId,
         "networkpolicy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, networkPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, networkPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -255,17 +229,14 @@ export const NetworkPolicyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsNetworkPolicies.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.networkPolicies,
-            ),
+        const items = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsNetworkPolicies.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.networkPolicies,
+          ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
@@ -280,21 +251,13 @@ export const NetworkPolicyProvider = () =>
         output?.networkPolicyId,
         "networkpolicy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, networkPolicyId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
       const edgeServicesCidr = news.edgeServicesCidr ?? DEFAULT_EDGE_CIDR;
       const vmwareEngineNetwork = news.vmwareEngineNetwork
-        ? expandName(
-            news.vmwareEngineNetwork,
-            env.project,
-            DEFAULT_GLOBAL,
-            VEN_COLLECTION,
-          )
+        ? expandName(news.vmwareEngineNetwork, env.project, DEFAULT_GLOBAL, VEN_COLLECTION)
         : undefined;
       const internetEnabled = news.internetAccess?.enabled === true;
       const externalIpEnabled = news.externalIp?.enabled === true;
@@ -332,13 +295,10 @@ export const NetworkPolicyProvider = () =>
         return yield* new VmwareengineNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const cidrChanged = (current.edgeServicesCidr ?? "") !== edgeServicesCidr;
-      const internetChanged =
-        (current.internetAccess?.enabled === true) !== internetEnabled;
-      const externalIpChanged =
-        (current.externalIp?.enabled === true) !== externalIpEnabled;
+      const internetChanged = (current.internetAccess?.enabled === true) !== internetEnabled;
+      const externalIpChanged = (current.externalIp?.enabled === true) !== externalIpEnabled;
       const updateMask = changedFields([
         ["description", descriptionChanged],
         ["edgeServicesCidr", cidrChanged],
@@ -347,23 +307,19 @@ export const NetworkPolicyProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsNetworkPolicies({
+        const operation = yield* vmwareengine.patchProjectsLocationsNetworkPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              edgeServicesCidr,
-              internetAccess: { enabled: internetEnabled },
-              externalIp: { enabled: externalIpEnabled },
-            },
-          });
+            description: desiredDescription,
+            edgeServicesCidr,
+            internetAccess: { enabled: internetEnabled },
+            externalIp: { enabled: externalIpEnabled },
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

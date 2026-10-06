@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as observability from "@distilled.cloud/gcp/observability_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   observability.getProjectsLocationsTraceScopes({ name }).pipe(
@@ -97,10 +94,9 @@ test.provider(
       expect(updated.description).toEqual("all application traces");
       expect(updated.createTime).toEqual(created.createTime);
 
-      const fetchedUpdate =
-        yield* observability.getProjectsLocationsTraceScopes({
-          name: created.name,
-        });
+      const fetchedUpdate = yield* observability.getProjectsLocationsTraceScopes({
+        name: created.name,
+      });
       expect(fetchedUpdate.description).toContain("all application traces");
 
       const last = created.traceScopeId.at(-1) ?? "a";
@@ -122,10 +118,9 @@ test.provider(
       );
       expect(replaced.description).toEqual("replaced scope");
 
-      const fetchedReplacement =
-        yield* observability.getProjectsLocationsTraceScopes({
-          name: replaced.name,
-        });
+      const fetchedReplacement = yield* observability.getProjectsLocationsTraceScopes({
+        name: replaced.name,
+      });
       expect(fetchedReplacement.name).toEqual(replaced.name);
 
       const previousGone = yield* waitUntilGone(created.name);

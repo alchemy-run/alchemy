@@ -114,9 +114,7 @@ export type AccessPolicy = Resource<
  * @resource
  * @category AccessContextManager
  */
-export const AccessPolicy = Resource<AccessPolicy>(
-  "GCP.AccessContextManager.AccessPolicy",
-);
+export const AccessPolicy = Resource<AccessPolicy>("GCP.AccessContextManager.AccessPolicy");
 
 export class AccessPolicyNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPolicyNotResolved",
@@ -185,16 +183,11 @@ export const AccessPolicyProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const organization = yield* resolveOrganization(
-        olds?.parent,
-        output?.parent,
-      );
+      const organization = yield* resolveOrganization(olds?.parent, output?.parent);
       const existing = yield* observe(id, output?.name, organization);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* ownedByAlchemy(id, existing.title))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.title)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -209,16 +202,9 @@ export const AccessPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.parent,
-        output?.parent,
-      );
+      const organization = yield* resolveOrganization(news.parent, output?.parent);
       const ownership = yield* createInternalLabels(id);
-      const desiredTitle = encodeOwnershipLine(
-        ownership,
-        news.title,
-        MAX_TITLE_LENGTH,
-      );
+      const desiredTitle = encodeOwnershipLine(ownership, news.title, MAX_TITLE_LENGTH);
       const projectNumber = yield* projectNumberOf(env.project);
       const desiredScopes =
         news.scopes !== undefined
@@ -250,15 +236,9 @@ export const AccessPolicyProvider = () =>
           current =
             createdName !== undefined
               ? yield* waitUntilExists(getByName(createdName), createdName)
-              : yield* waitUntilExists(
-                  findOwned(id, organization),
-                  organization,
-                );
+              : yield* waitUntilExists(findOwned(id, organization), organization);
         } else {
-          current = yield* waitUntilExists(
-            findOwned(id, organization),
-            organization,
-          );
+          current = yield* waitUntilExists(findOwned(id, organization), organization);
         }
       }
 

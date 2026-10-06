@@ -1,20 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as composer from "@distilled.cloud/gcp/composer_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
-import { defaultComputeServiceAccount } from "./serviceAccount.ts";
+import * as Test from "@/Test/Alchemy";
 import { CAPACITY_REGION } from "../zones.ts";
+import { defaultComputeServiceAccount } from "./serviceAccount.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Composer environments take 20-45 minutes to provision.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -23,17 +20,15 @@ const missingParentOf = (project: string) =>
   `projects/${project}/locations/${CAPACITY_REGION}/environments/alchemy-composer-missing`;
 
 const waitUntilGone = (name: string) =>
-  composer
-    .getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  composer.getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps on a missing config map fails with NotFound",
@@ -83,13 +78,10 @@ test.provider.skipIf(!runLifecycle)(
               softwareConfig: { imageVersion: "composer-3-airflow-2" },
             },
           });
-          const config = yield* GCP.Composer.EnvironmentsUserWorkloadsConfigMap(
-            "TaskConfig",
-            {
-              environmentName: airflow.name,
-              data: { LOG_LEVEL: "INFO" },
-            },
-          );
+          const config = yield* GCP.Composer.EnvironmentsUserWorkloadsConfigMap("TaskConfig", {
+            environmentName: airflow.name,
+            data: { LOG_LEVEL: "INFO" },
+          });
           return { airflow, config };
         }),
       );
@@ -99,10 +91,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.config.data).toMatchObject({ LOG_LEVEL: "INFO" });
       expect(created.config.data["alchemy-id"]).toBeUndefined();
 
-      const fetched =
-        yield* composer.getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps(
-          { name: created.config.name },
-        );
+      const fetched = yield* composer.getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({
+        name: created.config.name,
+      });
       expect(fetched.name).toEqual(created.config.name);
       expect(fetched.data?.LOG_LEVEL).toEqual("INFO");
       expect(fetched.data?.["alchemy-id"]).toBeUndefined();
@@ -118,14 +109,11 @@ test.provider.skipIf(!runLifecycle)(
               softwareConfig: { imageVersion: "composer-3-airflow-2" },
             },
           });
-          const config = yield* GCP.Composer.EnvironmentsUserWorkloadsConfigMap(
-            "TaskConfig",
-            {
-              environmentName: airflow.name,
-              configMapId: created.config.configMapId,
-              data: { LOG_LEVEL: "DEBUG", REGION: "us-central1" },
-            },
-          );
+          const config = yield* GCP.Composer.EnvironmentsUserWorkloadsConfigMap("TaskConfig", {
+            environmentName: airflow.name,
+            configMapId: created.config.configMapId,
+            data: { LOG_LEVEL: "DEBUG", REGION: "us-central1" },
+          });
           return { airflow, config };
         }),
       );
@@ -136,10 +124,9 @@ test.provider.skipIf(!runLifecycle)(
         REGION: "us-central1",
       });
 
-      const refetched =
-        yield* composer.getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps(
-          { name: created.config.name },
-        );
+      const refetched = yield* composer.getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({
+        name: created.config.name,
+      });
       expect(refetched.data?.LOG_LEVEL).toEqual("DEBUG");
       expect(refetched.data?.REGION).toEqual("us-central1");
 

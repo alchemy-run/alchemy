@@ -52,6 +52,4 @@ export interface PatchDocument extends Binding.Service<
   >
 > {}
 
-export const PatchDocument = Binding.Service<PatchDocument>(
-  "GCP.Firestore.PatchDocument",
-);
+export const PatchDocument = Binding.Service<PatchDocument>("GCP.Firestore.PatchDocument");

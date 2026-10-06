@@ -101,10 +101,7 @@ export class IssueModelsIssueNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  issue: cci.GoogleCloudContactcenterinsightsV1Issue,
-  project: string,
-) => {
+const toAttrs = (issue: cci.GoogleCloudContactcenterinsightsV1Issue, project: string) => {
   const name = issue.name ?? "";
   const parsed = parseOwnership(issue.displayDescription);
   return {
@@ -131,13 +128,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((issue) =>
-      issue
-        ? Effect.succeed(issue)
-        : Effect.fail(new IssueModelsIssueNotResolved({ name })),
+      issue ? Effect.succeed(issue) : Effect.fail(new IssueModelsIssueNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ContactCenterInsights.IssueModelsIssueNotResolved",
+      while: (error) => error._tag === "GCP.ContactCenterInsights.IssueModelsIssueNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -146,9 +140,7 @@ const waitUntilExists = (name: string) =>
 const listModels = (parent: string) =>
   cci.listProjectsLocationsIssueModels({ parent }).pipe(
     Effect.map((page) =>
-      (page.issueModels ?? [])
-        .map((model) => model.name ?? "")
-        .filter((name) => name.length > 0),
+      (page.issueModels ?? []).map((model) => model.name ?? "").filter((name) => name.length > 0),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
   );
@@ -163,11 +155,7 @@ const listAtParent = (parent: string, project: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
-const findOwned = (
-  parent: string,
-  displayDescription: string,
-  displayName: string | undefined,
-) =>
+const findOwned = (parent: string, displayDescription: string, displayName: string | undefined) =>
   cci.listProjectsLocationsIssueModelsIssues({ parent }).pipe(
     Effect.map((page) =>
       (page.issues ?? []).find(
@@ -197,60 +185,37 @@ export const IssueModelsIssueProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing !== undefined) {
         const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.displayDescription))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* ownedByAlchemy(id, existing.displayDescription)) ? attrs : Unowned(attrs);
       }
       if (olds?.parent === undefined) return undefined;
       const ownership = yield* createInternalLabels(id);
-      const displayDescription = encodeOwnership(
-        ownership,
-        olds.displayDescription,
-      );
-      const found = yield* findOwned(
-        olds.parent,
-        displayDescription,
-        olds.displayName,
-      );
+      const displayDescription = encodeOwnership(ownership, olds.displayDescription);
+      const found = yield* findOwned(olds.parent, displayDescription, olds.displayName);
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
-      return (yield* ownedByAlchemy(id, found.displayDescription))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, found.displayDescription)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const models = yield* listModels(
-          locationParent(env.project, env.region),
-        );
-        const pages = yield* Effect.forEach(
-          models,
-          (parent) => listAtParent(parent, env.project),
-          { concurrency: 4 },
-        );
+        const models = yield* listModels(locationParent(env.project, env.region));
+        const pages = yield* Effect.forEach(models, (parent) => listAtParent(parent, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const ownership = yield* createInternalLabels(id);
-      const displayDescription = encodeOwnership(
-        ownership,
-        news.displayDescription,
-      );
+      const displayDescription = encodeOwnership(ownership, news.displayDescription);
       const displayName =
-        news.displayName ??
-        encodeOwnershipLine(ownership, news.displayDescription);
+        news.displayName ?? encodeOwnershipLine(ownership, news.displayDescription);
 
       let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
-        current = yield* findOwned(
-          news.parent,
-          displayDescription,
-          displayName,
-        );
+        current = yield* findOwned(news.parent, displayDescription, displayName);
       }
 
       if (current === undefined) {
@@ -271,11 +236,7 @@ export const IssueModelsIssueProvider = () =>
           }
         }
         if (current === undefined) {
-          current = yield* findOwned(
-            news.parent,
-            displayDescription,
-            displayName,
-          );
+          current = yield* findOwned(news.parent, displayDescription, displayName);
         }
       }
 
@@ -287,8 +248,7 @@ export const IssueModelsIssueProvider = () =>
 
       const name = current.name ?? "";
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.displayDescription ?? "") !== displayDescription;
+      const descriptionChanged = (current.displayDescription ?? "") !== displayDescription;
 
       if (displayChanged || descriptionChanged) {
         current = yield* cci.patchProjectsLocationsIssueModelsIssues({
