@@ -51,7 +51,12 @@ export interface ImageProps {
   name?: string;
   /** Image tag. @default "latest" */
   tag?: string;
-  /** Registry credentials for push. */
+  /**
+   * Registry credentials. The image is pushed to this registry, and the
+   * build itself authenticates with them, so private base images and
+   * `type=registry` caches hosted there resolve without a host
+   * `docker login`.
+   */
   registry?: ImageRegistry;
   /** Skip registry push even when `registry` is set. @default false */
   skipPush?: boolean;
@@ -119,6 +124,26 @@ export interface Image extends Resource<
  *     server: "ghcr.io",
  *     username: "octocat",
  *     password: Config.Redacted("GITHUB_TOKEN"),
+ *   },
+ * });
+ * ```
+ *
+ * ### Private Base Images and Registry Caches
+ * **Example:** Build FROM a private base image with a registry cache
+ * ```typescript
+ * // Dockerfile: FROM registry.example.com/base:v1
+ * const image = yield* Docker.Image("app", {
+ *   name: "registry.example.com/app",
+ *   build: {
+ *     context: "./app",
+ *     cacheFrom: ["type=registry,ref=registry.example.com/app:buildcache"],
+ *     cacheTo: ["type=registry,ref=registry.example.com/app:buildcache,mode=max"],
+ *   },
+ *   // Authenticates the base-image pull and cache import/export, then the push.
+ *   registry: {
+ *     server: "registry.example.com",
+ *     username: "deploy",
+ *     password: Config.Redacted("REGISTRY_PASSWORD"),
  *   },
  * });
  * ```
