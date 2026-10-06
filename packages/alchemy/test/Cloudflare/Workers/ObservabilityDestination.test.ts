@@ -403,8 +403,12 @@ test.provider(
         const state = yield* yield* State;
         const address = { stack: stack.name, stage: stack.stage, fqn: "RedactedDest" };
         const stored = yield* state.get(address);
-        if (!stored || isActionState(stored) || stored.status !== "created") {
-          return yield* Effect.die(new Error("Expected a created destination row"));
+        if (
+          !stored ||
+          isActionState(stored) ||
+          (stored.status !== "created" && stored.status !== "updated")
+        ) {
+          return yield* Effect.die(new Error("Expected a settled destination row"));
         }
         yield* state.set({
           ...address,
