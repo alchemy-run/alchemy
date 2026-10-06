@@ -1800,6 +1800,13 @@ export const DBInstanceProvider = () =>
             if (!instance?.DBInstanceArn) {
               return { action: "update", stables: [] } as const;
             }
+            // The identifier names a different physical instance than the one
+            // recorded, e.g. after a point-in-time restore renamed into place.
+            // Nothing in the props changed, but the attributes did: reconcile
+            // re-reads the instance so dependents see the new one.
+            if (instance.DbiResourceId !== output.dbiResourceId) {
+              return { action: "update" } as const;
+            }
             if (!instanceReady(instance)) {
               return { action: "update" } as const;
             }
