@@ -30,12 +30,7 @@ export interface StartFlow extends Binding.Service<
   (
     flow: Flow,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      mediaconnect.StartFlowResponse,
-      mediaconnect.StartFlowError
-    >
+    () => Effect.Effect<mediaconnect.StartFlowResponse, mediaconnect.StartFlowError>
   >
 > {}
-export const StartFlow = Binding.Service<StartFlow>(
-  "AWS.MediaConnect.StartFlow",
-);
+export const StartFlow = Binding.Service<StartFlow>("AWS.MediaConnect.StartFlow");

@@ -1,15 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import KafkaTestFunctionLive, {
-  FixtureCluster,
-  KafkaTestFunction,
-} from "./kafka-handler.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import KafkaTestFunctionLive, { FixtureCluster, KafkaTestFunction } from "./kafka-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,13 +20,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 describe.sequential(
   "AWS.Kafka.KafkaEventSource",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:ec2",
-      "provider:aws:kafka",
-      "provider:aws:lambda",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:kafka", "provider:aws:lambda", "live"],
   },
   () => {
     test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
@@ -52,10 +43,7 @@ describe.sequential(
           // carries the configured topic. MSK ESMs progress
           // CREATING -> ENABLING -> ENABLED; assert it reached at least CREATING
           // and never FAILED.
-          const mapping = yield* waitForMapping(
-            fn.functionName,
-            cluster.clusterArn,
-          );
+          const mapping = yield* waitForMapping(fn.functionName, cluster.clusterArn);
           expect(mapping.Topics).toEqual(["orders"]);
           expect(mapping.State).not.toBe("Failed");
 
@@ -66,10 +54,7 @@ describe.sequential(
           const baseUrl = fn.functionUrl!.replace(/\/+$/, "");
           const get = (path: string) =>
             HttpClient.get(`${baseUrl}${path}`).pipe(
-              Effect.retry({
-                schedule: Schedule.exponential("500 millis"),
-                times: 10,
-              }),
+              Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
               Effect.flatMap((res) => res.json),
             );
 
@@ -112,26 +97,18 @@ describe.sequential(
 
 class MappingNotReady extends Data.TaggedError("MappingNotReady")<{}> {}
 
-const waitForMapping = Effect.fn(function* (
-  functionName: string,
-  eventSourceArn: string,
-) {
+const waitForMapping = Effect.fn(function* (functionName: string, eventSourceArn: string) {
   return yield* Lambda.listEventSourceMappings({
     FunctionName: functionName,
     EventSourceArn: eventSourceArn,
   }).pipe(
     Effect.flatMap((result) => {
       const mapping = result.EventSourceMappings?.[0];
-      return mapping?.UUID
-        ? Effect.succeed(mapping)
-        : Effect.fail(new MappingNotReady());
+      return mapping?.UUID ? Effect.succeed(mapping) : Effect.fail(new MappingNotReady());
     }),
     Effect.retry({
       while: (e) => e._tag === "MappingNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 });

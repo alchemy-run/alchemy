@@ -69,9 +69,4 @@ export * from "./StartInsightsRefreshHttp.ts";
  * imports compiling for one release; existing state migrates in place via
  * type aliases.
  */
-export {
-  Deployment,
-  HelmChart,
-  Job,
-  Manifest,
-} from "../../Kubernetes/index.ts";
+export { Deployment, HelmChart, Job, Manifest } from "../../Kubernetes/index.ts";

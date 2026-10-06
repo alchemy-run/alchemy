@@ -31,9 +31,7 @@ export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
             policyStatements: [
               {
                 Effect: "Allow",
-                Action: [
-                  "application-signals:GetInstrumentationConfigurationStatus",
-                ],
+                Action: ["application-signals:GetInstrumentationConfigurationStatus"],
                 // The dynamic-instrumentation actions do not document
                 // resource-level permission support.
                 Resource: ["*"],
@@ -45,11 +43,7 @@ export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
       return Effect.fn(`${tag}(${configuration.LogicalId})`)(function* (
         request?: Omit<
           appsignals.GetInstrumentationConfigurationStatusRequest,
-          | "InstrumentationType"
-          | "Service"
-          | "Environment"
-          | "SignalType"
-          | "LocationIdentifier"
+          "InstrumentationType" | "Service" | "Environment" | "SignalType" | "LocationIdentifier"
         >,
       ) {
         return yield* op({

@@ -1,10 +1,7 @@
 import type { Workflow } from "@cloudflare/workers-types";
 
 export default {
-  async fetch(
-    request: Request,
-    env: { MY_WORKFLOW: Workflow<{ value: string }> },
-  ) {
+  async fetch(request: Request, env: { MY_WORKFLOW: Workflow<{ value: string }> }) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/workflow/start/")) {
       const value = url.pathname.split("/workflow/start/")[1] ?? "world";

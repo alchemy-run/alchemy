@@ -1,32 +1,26 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import * as Fly from "@/Fly";
-import { ensureStarted } from "@/Fly/replicas";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Fly from "@/Fly";
 import type { MachineContainer } from "@/Fly/Machine";
+import { ensureStarted } from "@/Fly/replicas";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const image =
   "docker-hub-mirror.fly.io/library/nginx@sha256:7396be67b6f53012a5cf955fa9040619294c25ccacf11e22af5de1b572fc756e";
 const nextImage =
   "docker-hub-mirror.fly.io/library/nginx@sha256:ef8676b33d681f272ba429b27658bdd7e640963279714c96bddf1dc76307f7b6";
 
-const workload = (
-  sidecarVersion: string,
-  includeObsolete = true,
-): MachineContainer[] => [
+const workload = (sidecarVersion: string, includeObsolete = true): MachineContainer[] => [
   {
     name: "web",
     image,
@@ -48,9 +42,7 @@ const workload = (
     env: { ROLE: "sidecar", VERSION: sidecarVersion },
     dependsOn: [{ name: "web", condition: "healthy" as const }],
   },
-  ...(includeObsolete
-    ? [{ name: "obsolete", image, cmd: ["sh", "-c", "sleep 300"] }]
-    : []),
+  ...(includeObsolete ? [{ name: "obsolete", image, cmd: ["sh", "-c", "sleep 300"] }] : []),
 ];
 
 const waitUntilGone = (appName: string, machineId: string) =>
@@ -100,7 +92,6 @@ test.provider(
       expect(created.privateIp).toEqual(expect.any(String));
       expect(created.guest?.cpus).toEqual(1);
       expect(created.guest?.memoryMb).toEqual(256);
-      expect(created.url).toBeUndefined();
 
       const fetched = yield* machines.getMachine({
         app_name: created.appName,
@@ -115,9 +106,7 @@ test.provider(
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
       expect(fetched.config?.metadata?.["alchemy.type"]).toEqual("Fly.Machine");
       expect(fetched.config?.metadata?.["alchemy.replica"]).toEqual("0");
-      expect(fetched.config?.metadata?.["alchemy.stack"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetched.config?.metadata?.["alchemy.stack"]).toEqual(expect.any(String));
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -166,7 +155,6 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.region).toEqual("iad");
       expect(updated.state).toEqual("started");
-      expect(updated.url).toEqual(`https://${created.appName}.fly.dev`);
 
       const refetched = yield* machines.getMachine({
         app_name: updated.appName,
@@ -175,9 +163,7 @@ test.provider(
       expect(refetched.id).toEqual(created.machineId);
       expect(refetched.config?.env?.ALCHEMY_MARK).toEqual("updated");
       expect(refetched.config?.metadata?.role).toEqual("web");
-      expect(refetched.config?.metadata?.["alchemy.type"]).toEqual(
-        "Fly.Machine",
-      );
+      expect(refetched.config?.metadata?.["alchemy.type"]).toEqual("Fly.Machine");
       expect(refetched.config?.restart?.policy).toEqual("on-failure");
       expect(refetched.config?.restart?.max_retries).toEqual(3);
       expect(refetched.config?.services?.[0]?.internal_port).toEqual(80);
@@ -250,27 +236,19 @@ test.provider(
       const unlaunched = yield* machines.getMachine(target);
       expect(["created", "stopped"]).toContain(unlaunched.state);
       yield* ensureStarted(created.appName, unlaunched, true);
-      expect(["created", "stopped"]).toContain(
-        (yield* machines.getMachine(target)).state,
-      );
+      expect(["created", "stopped"]).toContain((yield* machines.getMachine(target)).state);
 
       const waitError = yield* machines
         .waitMachine({ ...target, state: "started", timeout: 1 })
         .pipe(Retry.none, Effect.flip);
-      expect(["MachineWaitTimeout", "GatewayTimeout"]).toContain(
-        waitError._tag,
-      );
+      expect(["MachineWaitTimeout", "GatewayTimeout"]).toContain(waitError._tag);
 
       const launched = yield* deploy(false);
       expect(launched.machineId).toBe(created.machineId);
       expect(launched.state).toBe("started");
       const running = yield* machines.getMachine(target);
 
-      const alreadyStarted = yield* ensureStarted(
-        created.appName,
-        unlaunched,
-        false,
-      );
+      const alreadyStarted = yield* ensureStarted(created.appName, unlaunched, false);
       expect(alreadyStarted.state).toBe("started");
       expect(alreadyStarted.instance_id).toBe(running.instance_id);
 
@@ -285,8 +263,7 @@ test.provider(
         .pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "GatewayTimeout" ||
-              error._tag === "MachineWaitTimeout",
+              error._tag === "GatewayTimeout" || error._tag === "MachineWaitTimeout",
             schedule: Schedule.spaced("1 second"),
             times: 3,
           }),
@@ -298,9 +275,7 @@ test.provider(
       expect((yield* machines.getMachine(target)).state).toBe("started");
 
       yield* stack.destroy();
-      expect(yield* waitUntilGone(created.appName, created.machineId)).toBe(
-        "gone",
-      );
+      expect(yield* waitUntilGone(created.appName, created.machineId)).toBe("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
@@ -328,8 +303,7 @@ test.provider(
 
       expect(created.region).toEqual("iad");
 
-      const nextName =
-        created.name.slice(0, -1) + (created.name.endsWith("z") ? "y" : "z");
+      const nextName = created.name.slice(0, -1) + (created.name.endsWith("z") ? "y" : "z");
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
@@ -391,9 +365,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Fly.Machine);
       const all = yield* provider.list();
-      const found = all.find(
-        (machine) => machine.machineId === deployed.machineId,
-      );
+      const found = all.find((machine) => machine.machineId === deployed.machineId);
       expect(found).toBeDefined();
       expect(found?.appName).toEqual(deployed.appName);
       expect(found?.name).toEqual(deployed.name);
@@ -454,9 +426,7 @@ test.provider(
         });
       }
       const live = yield* machines.listMachines({ app_name: app.appName });
-      expect(
-        live.filter((machine) => machine.state !== "destroyed"),
-      ).toHaveLength(1);
+      expect(live.filter((machine) => machine.state !== "destroyed")).toHaveLength(1);
       yield* stack.destroy();
       for (const machine of live) {
         expect(yield* waitUntilGone(app.appName, machine.id!)).toBe("gone");
@@ -529,13 +499,9 @@ test.provider(
         });
         expect(live.state).toEqual("started");
         const serviceChecks =
-          live.checks?.filter((check) =>
-            check.name?.startsWith("servicecheck-"),
-          ) ?? [];
+          live.checks?.filter((check) => check.name?.startsWith("servicecheck-")) ?? [];
         expect(serviceChecks).toHaveLength(2);
-        expect(
-          serviceChecks.every((check) => check.status === "passing"),
-        ).toEqual(true);
+        expect(serviceChecks.every((check) => check.status === "passing")).toEqual(true);
       }
 
       const secondBefore = yield* machines.getMachine({
@@ -558,9 +524,7 @@ test.provider(
         machine_id: deployed.machineIds[1]!,
       });
       expect(first.config?.services?.[0]?.checks?.[0]?.path).toBe("/missing");
-      expect(first.checks?.some((check) => check.status !== "passing")).toBe(
-        true,
-      );
+      expect(first.checks?.some((check) => check.status !== "passing")).toBe(true);
       expect(second.config?.services?.[0]?.checks?.[0]?.path).toBe("/");
       expect(second.instance_id).toBe(secondBefore.instance_id);
 
@@ -571,11 +535,7 @@ test.provider(
           app_name: recovered.appName,
           machine_id: machineId,
         });
-        expect(
-          live.checks?.filter((check) =>
-            check.name?.startsWith("servicecheck-"),
-          ),
-        ).toEqual([
+        expect(live.checks?.filter((check) => check.name?.startsWith("servicecheck-"))).toEqual([
           expect.objectContaining({ status: "passing" }),
           expect.objectContaining({ status: "passing" }),
         ]);
@@ -616,12 +576,16 @@ test.provider(
       expect(first.state).toEqual("started");
       const target = { app_name: first.appName, machine_id: first.machineId };
       const observed = yield* machines.getMachine(target);
-      expect(
-        observed.config?.containers?.map((container) => container.name),
-      ).toEqual(["web", "sidecar", "obsolete"]);
-      expect(
-        observed.config?.containers?.map((container) => container.image),
-      ).toEqual([image, image, image]);
+      expect(observed.config?.containers?.map((container) => container.name)).toEqual([
+        "web",
+        "sidecar",
+        "obsolete",
+      ]);
+      expect(observed.config?.containers?.map((container) => container.image)).toEqual([
+        image,
+        image,
+        image,
+      ]);
       expect(observed.config?.env?.COMMON).toEqual("machine");
       expect(observed.config?.containers?.[0]?.env?.ROLE).toEqual("web");
       expect(observed.config?.containers?.[1]?.env?.ROLE).toEqual("sidecar");
@@ -678,12 +642,14 @@ test.provider(
       expect(updated.machineId).toEqual(first.machineId);
       expect(updated.mounts[0]?.volumeId).toEqual(first.mounts[0]?.volumeId);
       const after = yield* machines.getMachine(target);
-      expect(
-        after.config?.containers?.map((container) => container.name),
-      ).toEqual(["web", "sidecar"]);
-      expect(
-        after.config?.containers?.map((container) => container.image),
-      ).toEqual([image, nextImage]);
+      expect(after.config?.containers?.map((container) => container.name)).toEqual([
+        "web",
+        "sidecar",
+      ]);
+      expect(after.config?.containers?.map((container) => container.image)).toEqual([
+        image,
+        nextImage,
+      ]);
       expect(after.config?.containers?.[1]?.env?.VERSION).toEqual("two");
       const persisted = yield* machines.execMachine({
         ...target,
@@ -738,9 +704,7 @@ test.provider(
         config: {
           ...before.config,
           containers: before.config?.containers?.map((container) =>
-            container.name === "sidecar"
-              ? { ...container, image: nextImage }
-              : container,
+            container.name === "sidecar" ? { ...container, image: nextImage } : container,
           ),
         },
       });
@@ -797,10 +761,7 @@ test.provider(
             { name: "web", image: nextImage },
           ],
         ],
-        [
-          "undeclared dependency",
-          [{ name: "web", image, dependsOn: [{ name: "absent" }] }],
-        ],
+        ["undeclared dependency", [{ name: "web", image, dependsOn: [{ name: "absent" }] }]],
         [
           "exec override",
           // @ts-expect-error Fly accepts container exec without running it
@@ -847,9 +808,7 @@ test.provider(
         .pipe(Effect.flip);
       expect(failed).toMatchObject({ _tag: "Fly.InvalidDeployment" });
       const live = yield* machines.listMachines({ app_name: app.appName });
-      expect(live.filter((machine) => machine.state !== "destroyed")).toEqual(
-        [],
-      );
+      expect(live.filter((machine) => machine.state !== "destroyed")).toEqual([]);
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },

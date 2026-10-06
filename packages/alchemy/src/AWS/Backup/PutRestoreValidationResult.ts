@@ -40,7 +40,6 @@ export interface PutRestoreValidationResult extends Binding.Service<
     >
   >
 > {}
-export const PutRestoreValidationResult =
-  Binding.Service<PutRestoreValidationResult>(
-    "AWS.Backup.PutRestoreValidationResult",
-  );
+export const PutRestoreValidationResult = Binding.Service<PutRestoreValidationResult>(
+  "AWS.Backup.PutRestoreValidationResult",
+);

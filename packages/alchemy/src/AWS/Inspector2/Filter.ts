@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -117,14 +112,10 @@ export const FilterProvider = () =>
     FilterResource,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string }) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 128 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
       const findByArn = (arn: string) =>
-        inspector2
-          .listFilters({ arns: [arn] })
-          .pipe(Effect.map((r) => r.filters[0]));
+        inspector2.listFilters({ arns: [arn] }).pipe(Effect.map((r) => r.filters[0]));
 
       const findByName = (name: string) =>
         inspector2.listFilters.items({}).pipe(
@@ -151,9 +142,7 @@ export const FilterProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (!live) return undefined;
           const attrs = buildAttrs(live);
-          return (yield* hasAlchemyTags(id, live.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, live.tags)) ? attrs : Unowned(attrs);
         }),
         list: () =>
           inspector2.listFilters
@@ -167,9 +156,7 @@ export const FilterProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative. The ARN (if we have
           // one) survives renames; fall back to a name lookup otherwise.
-          let live = output?.arn
-            ? yield* findByArn(output.arn)
-            : yield* findByName(name);
+          let live = output?.arn ? yield* findByArn(output.arn) : yield* findByName(name);
 
           // 2. ENSURE — create when missing. A BadRequestException here is
           // a duplicate-name race: re-observe and converge on the winner.
@@ -184,9 +171,7 @@ export const FilterProvider = () =>
                 tags: desiredTags,
               })
               .pipe(
-                Effect.catchTag("BadRequestException", () =>
-                  Effect.succeed({ arn: undefined }),
-                ),
+                Effect.catchTag("BadRequestException", () => Effect.succeed({ arn: undefined })),
               );
             live = arn ? yield* findByArn(arn) : yield* findByName(name);
             if (!live) {
@@ -200,11 +185,9 @@ export const FilterProvider = () =>
           const drift =
             live.name !== name ||
             live.action !== news.action ||
-            (news.description !== undefined &&
-              live.description !== news.description) ||
+            (news.description !== undefined && live.description !== news.description) ||
             (news.reason !== undefined && live.reason !== news.reason) ||
-            JSON.stringify(live.criteria) !==
-              JSON.stringify(news.filterCriteria);
+            JSON.stringify(live.criteria) !== JSON.stringify(news.filterCriteria);
           if (drift) {
             yield* inspector2.updateFilter({
               filterArn: live.arn,
@@ -218,10 +201,7 @@ export const FilterProvider = () =>
 
           // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
           // converges foreign tags too.
-          const { upsert, removed } = diffTags(
-            tagRecord(live.tags),
-            desiredTags,
-          );
+          const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
           if (upsert.length > 0) {
             yield* inspector2.tagResource({
               resourceArn: live.arn,
@@ -244,9 +224,7 @@ export const FilterProvider = () =>
           // Idempotent — the filter may already be gone.
           yield* inspector2
             .deleteFilter({ arn: output.arn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

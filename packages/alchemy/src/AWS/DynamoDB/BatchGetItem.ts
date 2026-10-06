@@ -9,10 +9,7 @@ type BatchGetItemKeysAndAttributes = NonNullable<
   DynamoDB.BatchGetItemInput["RequestItems"]
 >[string];
 
-export interface BatchGetItemRequest extends Omit<
-  DynamoDB.BatchGetItemInput,
-  "RequestItems"
-> {
+export interface BatchGetItemRequest extends Omit<DynamoDB.BatchGetItemInput, "RequestItems"> {
   RequestItems: Record<string, BatchGetItemKeysAndAttributes>;
 }
 
@@ -52,6 +49,4 @@ export interface BatchGetItem extends Binding.Service<
     ) => Effect.Effect<DynamoDB.BatchGetItemOutput, DynamoDB.BatchGetItemError>
   >
 > {}
-export const BatchGetItem = Binding.Service<BatchGetItem>(
-  "AWS.DynamoDB.BatchGetItem",
-);
+export const BatchGetItem = Binding.Service<BatchGetItem>("AWS.DynamoDB.BatchGetItem");

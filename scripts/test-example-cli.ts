@@ -6,9 +6,7 @@ import { forwardSignals } from "../packages/alchemy-test/src/DevCli.ts";
 
 const example = process.argv[2];
 if (example === undefined) {
-  throw new Error(
-    "Usage: bun scripts/test-example-cli.ts <example-directory> [--dev-only]",
-  );
+  throw new Error("Usage: bun scripts/test-example-cli.ts <example-directory> [--dev-only]");
 }
 const devOnly = process.argv.includes("--dev-only");
 
@@ -17,13 +15,7 @@ const exampleRoot = path.resolve(repositoryRoot, example);
 // The real launcher, not `bin/alchemy.js`: it pins bun's tsconfig to
 // alchemy's own, so the CLI's .tsx files are not transpiled with the
 // example's JSX settings (solid-js examples otherwise crash the CLI).
-const alchemyBin = path.join(
-  repositoryRoot,
-  "packages",
-  "alchemy",
-  "bin",
-  "cli.js",
-);
+const alchemyBin = path.join(repositoryRoot, "packages", "alchemy", "bin", "cli.js");
 const stage = "cli-example-test";
 // The summary line the CLI prints once a run converges. In non-TTY mode every
 // line carries a `[time] LEVEL (#fiber): ` prefix, so anchor on the text.
@@ -62,10 +54,7 @@ const command = (name: "dev" | "deploy" | "destroy") => [
   ...(name === "dev" ? [] : ["--yes"]),
 ];
 
-const run = (
-  name: "deploy" | "destroy",
-  timeout = timeoutMs,
-): Promise<CommandResult> =>
+const run = (name: "deploy" | "destroy", timeout = timeoutMs): Promise<CommandResult> =>
   new Promise((resolve, reject) => {
     const child = spawn(command(name)[0]!, command(name).slice(1), {
       cwd: exampleRoot,
@@ -154,10 +143,7 @@ const runDev = (): Promise<CommandResult> =>
     }, timeoutMs);
   });
 
-const assertSuccess = (
-  name: "dev" | "deploy" | "destroy",
-  result: CommandResult,
-) => {
+const assertSuccess = (name: "dev" | "deploy" | "destroy", result: CommandResult) => {
   if (result.exitCode !== 0) {
     throw new Error(
       `${example}: alchemy ${name} failed (exit ${result.exitCode ?? "signal"})\n${result.output}`,
@@ -188,11 +174,7 @@ try {
   if (!devOnly) {
     const deployed = await run("deploy");
     assertSuccess("deploy", deployed);
-    assertOutput("deploy", deployed, [
-      new RegExp(`Deploy · ${stage}`),
-      DONE,
-      /https?:\/\//,
-    ]);
+    assertOutput("deploy", deployed, [new RegExp(`Deploy · ${stage}`), DONE, /https?:\/\//]);
   }
 } catch (error) {
   primaryFailure = error;
@@ -204,14 +186,9 @@ try {
         `${example}: alchemy destroy failed (exit ${destroyed.exitCode ?? "signal"})\n${destroyed.output}`,
       );
     } else if (destroyed.exitCode !== 0) {
-      console.error(
-        `${example}: cleanup destroy also failed\n${destroyed.output}`,
-      );
+      console.error(`${example}: cleanup destroy also failed\n${destroyed.output}`);
     } else if (primaryFailure === undefined) {
-      assertOutput("destroy", destroyed, [
-        new RegExp(`Destroy · ${stage}`),
-        DONE,
-      ]);
+      assertOutput("destroy", destroyed, [new RegExp(`Destroy · ${stage}`), DONE]);
     }
   } catch (error) {
     if (primaryFailure === undefined) primaryFailure = error;

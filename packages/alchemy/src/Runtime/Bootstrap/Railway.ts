@@ -9,17 +9,12 @@
 import { NodeServices } from "@effect/platform-node";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { NodeHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import {
-  entrypointLayer,
-  resolveProgram,
-  runProcess,
-  stackFromEnv,
-} from "./Process.ts";
+import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
 
 /**
  * Resolve the bundled program (the runners registered via `host.run` /

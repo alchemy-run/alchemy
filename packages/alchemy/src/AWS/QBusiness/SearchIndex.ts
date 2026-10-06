@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type IndexStatus = qbusiness.IndexStatus;
@@ -125,10 +120,7 @@ export interface Index extends Resource<
  */
 export const Index = Resource<Index>("AWS.QBusiness.Index");
 
-const createDisplayName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createDisplayName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -136,14 +128,8 @@ const createDisplayName = (
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
-  return Object.fromEntries(
-    (response?.tags ?? []).map((tag) => [tag.key, tag.value]),
-  );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
 interface IndexState {
@@ -151,17 +137,10 @@ interface IndexState {
   described: qbusiness.GetIndexResponse;
 }
 
-const readIndexById = Effect.fn(function* (
-  applicationId: string,
-  indexId: string,
-) {
+const readIndexById = Effect.fn(function* (applicationId: string, indexId: string) {
   const described = yield* qbusiness
     .getIndex({ applicationId, indexId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.indexArn;
   if (arn === undefined) return undefined;
@@ -180,23 +159,15 @@ const readIndexById = Effect.fn(function* (
   return state;
 });
 
-const findIndexByName = Effect.fn(function* (
-  applicationId: string,
-  displayName: string,
-) {
+const findIndexByName = Effect.fn(function* (applicationId: string, displayName: string) {
   const summaries = yield* qbusiness.listIndices.pages({ applicationId }).pipe(
     EffectStream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.indices ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.indices ?? [])),
     // The parent application may itself be gone.
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed([] as qbusiness.Index[]),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as qbusiness.Index[])),
   );
   const match = summaries.find(
-    (summary) =>
-      summary.displayName === displayName && summary.status !== "DELETING",
+    (summary) => summary.displayName === displayName && summary.status !== "DELETING",
   );
   if (!match?.indexId) return undefined;
   return yield* readIndexById(applicationId, match.indexId);
@@ -215,9 +186,7 @@ class IndexNotReady extends Data.TaggedError("QBusinessIndexNotReady")<{
  * An index whose asynchronous provisioning converged to the terminal
  * `FAILED` status.
  */
-export class IndexProvisioningFailed extends Data.TaggedError(
-  "QBusinessIndexProvisioningFailed",
-)<{
+export class IndexProvisioningFailed extends Data.TaggedError("QBusinessIndexProvisioningFailed")<{
   readonly indexId: string;
   readonly message: string | undefined;
 }> {}
@@ -232,31 +201,18 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "QBusinessIndexNotReady",
     // Index provisioning takes several minutes; poll every 15s up to ~30 min.
-    schedule: Schedule.max([
-      Schedule.spaced("15 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(120)]),
   });
 
-const waitForIndexStatus = (
-  applicationId: string,
-  indexId: string,
-  target: "ACTIVE" | "DELETED",
-) =>
+const waitForIndexStatus = (applicationId: string, indexId: string, target: "ACTIVE" | "DELETED") =>
   retryWhileNotReady(
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getIndex({ applicationId, indexId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new IndexNotReady({ indexId, status: described.status }),
-        );
+        return yield* Effect.fail(new IndexNotReady({ indexId, status: described.status }));
       }
       if (described?.status === "ACTIVE") return;
       if (described?.status === "FAILED") {
@@ -267,9 +223,7 @@ const waitForIndexStatus = (
           }),
         );
       }
-      return yield* Effect.fail(
-        new IndexNotReady({ indexId, status: described?.status }),
-      );
+      return yield* Effect.fail(new IndexNotReady({ indexId, status: described?.status }));
     }),
   );
 
@@ -288,10 +242,7 @@ export const IndexProvider = () =>
           if (applicationId === undefined) return undefined;
           const state = output?.indexId
             ? yield* readIndexById(applicationId, output.indexId)
-            : yield* findIndexByName(
-                applicationId,
-                yield* createDisplayName(id, olds ?? {}),
-              );
+            : yield* findIndexByName(applicationId, yield* createDisplayName(id, olds ?? {}));
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -310,9 +261,7 @@ export const IndexProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("QBusiness Index requires props"),
-            );
+            return yield* Effect.fail(new Error("QBusiness Index requires props"));
           }
           const applicationId = news.applicationId;
           const displayName = yield* createDisplayName(id, news);
@@ -340,20 +289,14 @@ export const IndexProvider = () =>
             });
             if (!created.indexId) {
               return yield* Effect.fail(
-                new Error(
-                  `CreateIndex for '${displayName}' returned no indexId`,
-                ),
+                new Error(`CreateIndex for '${displayName}' returned no indexId`),
               );
             }
-            yield* session.note(
-              `Creating index ${displayName} (${created.indexId})...`,
-            );
+            yield* session.note(`Creating index ${displayName} (${created.indexId})...`);
             yield* waitForIndexStatus(applicationId, created.indexId, "ACTIVE");
             state = yield* readIndexById(applicationId, created.indexId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created index ${displayName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created index ${displayName}`));
             }
           }
 
@@ -373,14 +316,9 @@ export const IndexProvider = () =>
               displayName,
               description: news.description,
               capacityConfiguration: news.capacityConfiguration,
-              documentAttributeConfigurations:
-                news.documentAttributeConfigurations,
+              documentAttributeConfigurations: news.documentAttributeConfigurations,
             });
-            yield* waitForIndexStatus(
-              applicationId,
-              state.attrs.indexId,
-              "ACTIVE",
-            );
+            yield* waitForIndexStatus(applicationId, state.attrs.indexId, "ACTIVE");
             yield* session.note(`Updated index ${displayName}`);
           }
 
@@ -404,14 +342,9 @@ export const IndexProvider = () =>
 
           yield* session.note(state.attrs.indexArn);
 
-          const final = yield* readIndexById(
-            applicationId,
-            state.attrs.indexId,
-          );
+          const final = yield* readIndexById(applicationId, state.attrs.indexId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled index ${displayName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled index ${displayName}`));
           }
           return final.attrs;
         }),
@@ -421,14 +354,8 @@ export const IndexProvider = () =>
               applicationId: output.applicationId,
               indexId: output.indexId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
-          yield* waitForIndexStatus(
-            output.applicationId,
-            output.indexId,
-            "DELETED",
-          );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* waitForIndexStatus(output.applicationId, output.indexId, "DELETED");
         }),
       };
     }),

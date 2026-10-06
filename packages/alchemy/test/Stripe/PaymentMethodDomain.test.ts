@@ -1,19 +1,16 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetPaymentMethodDomain } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -21,9 +18,7 @@ const waitUntilDisabled = (id: string) =>
   GetPaymentMethodDomain({
     payment_method_domain: id,
   }).pipe(
-    Effect.map((domain) =>
-      domain.enabled ? ("enabled" as const) : ("disabled" as const),
-    ),
+    Effect.map((domain) => (domain.enabled ? ("enabled" as const) : ("disabled" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("disabled" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -82,9 +77,7 @@ test.provider(
         payment_method_domain: updated.id,
       });
       expect(refetched.id).toEqual(updated.id);
-      expect(refetched.domain_name).toEqual(
-        "alchemy-pmd-lifecycle.example.com",
-      );
+      expect(refetched.domain_name).toEqual("alchemy-pmd-lifecycle.example.com");
       expect(refetched.enabled).toEqual(false);
 
       yield* stack.destroy();

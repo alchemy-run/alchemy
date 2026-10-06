@@ -48,7 +48,6 @@ export interface GetTimeSeriesServiceStatistics extends Binding.Service<
     >
   >
 > {}
-export const GetTimeSeriesServiceStatistics =
-  Binding.Service<GetTimeSeriesServiceStatistics>(
-    "AWS.XRay.GetTimeSeriesServiceStatistics",
-  );
+export const GetTimeSeriesServiceStatistics = Binding.Service<GetTimeSeriesServiceStatistics>(
+  "AWS.XRay.GetTimeSeriesServiceStatistics",
+);

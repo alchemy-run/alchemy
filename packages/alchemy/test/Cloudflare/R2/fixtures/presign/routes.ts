@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import type { Bucket } from "@/Cloudflare/R2/Bucket.ts";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Shared Worker implementation for the presign fixtures: mints presigned
@@ -38,10 +38,7 @@ export const presignWorker = (bucket: Effect.Effect<Bucket, never, any>) =>
           case "/read": {
             const object = yield* r2.get(key).pipe(Effect.orDie);
             return yield* HttpServerResponse.json({
-              value:
-                object === null
-                  ? null
-                  : yield* object.text().pipe(Effect.orDie),
+              value: object === null ? null : yield* object.text().pipe(Effect.orDie),
               contentType: object?.httpMetadata?.contentType ?? null,
             });
           }

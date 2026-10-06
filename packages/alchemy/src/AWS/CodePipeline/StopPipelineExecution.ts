@@ -34,10 +34,7 @@ export interface StopPipelineExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StopPipelineExecutionRequest,
-    ) => Effect.Effect<
-      SVC.StopPipelineExecutionOutput,
-      SVC.StopPipelineExecutionError
-    >
+    ) => Effect.Effect<SVC.StopPipelineExecutionOutput, SVC.StopPipelineExecutionError>
   >
 > {}
 export const StopPipelineExecution = Binding.Service<StopPipelineExecution>(
