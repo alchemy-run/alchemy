@@ -1,8 +1,8 @@
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { awaitDrained, produce } from "./fixtures/queue-sink-client.ts";
 import { ResultQueue, SourceQueue } from "./fixtures/queue-sink-shared.ts";
 import QueueSinkWorker from "./fixtures/queue-sink-worker.ts";
@@ -14,7 +14,10 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
 
 /**
  * Under `alchemy dev` `QueueSinkBinding` rides the local Worker's native

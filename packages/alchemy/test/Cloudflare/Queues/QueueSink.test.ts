@@ -1,10 +1,10 @@
+import { Action } from "@/Action";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
-import { Action } from "@/Action";
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { awaitDrained, produce } from "./fixtures/queue-sink-client.ts";
 import QueueSinkHttpWorker from "./fixtures/queue-sink-http-worker.ts";
 import { type Click, SourceQueue } from "./fixtures/queue-sink-shared.ts";
@@ -12,7 +12,10 @@ import QueueSinkWorker from "./fixtures/queue-sink-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
 
 /**
  * `Cloudflare.Queues.QueueSink` end to end against real Cloudflare Queues:

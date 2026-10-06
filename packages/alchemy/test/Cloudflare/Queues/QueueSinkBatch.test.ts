@@ -1,7 +1,3 @@
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Stream from "effect/Stream";
 import {
   makeQueueSink,
   MAX_BATCH_BYTES,
@@ -12,6 +8,10 @@ import {
 import { SendError, type SendMessage } from "@/Cloudflare/Queues/QueueTypes.ts";
 import type { WriteQueueClient } from "@/Cloudflare/Queues/WriteQueue.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Stream from "effect/Stream";
 
 /**
  * Pure tests of the Cloudflare `QueueSink` batching with a fake
@@ -67,14 +67,23 @@ describe("Cloudflare QueueSink batching", { tags: ["unit", "local"] }, () => {
 
   it("ships an oversized message alone", () => {
     const huge = "x".repeat(MAX_BATCH_BYTES);
-    expect(packQueueSinkBatches(["a", huge, "b"]).map((b) => b.length)).toEqual([1, 1, 1]);
+    expect(packQueueSinkBatches(["a", huge, "b"]).map((b) => b.length)).toEqual(
+      [1, 1, 1],
+    );
   });
 
   it.effect("sends one sendBatch per chunk", () =>
     Effect.gen(function* () {
       const { client, batches } = fakeClient();
-      yield* run(Stream.fromIterable([1, 2, 3, 4, 5]).pipe(Stream.rechunk(2)), client);
-      expect(batches.map((b) => b.map((m) => m.body))).toEqual([[1, 2], [3, 4], [5]]);
+      yield* run(
+        Stream.fromIterable([1, 2, 3, 4, 5]).pipe(Stream.rechunk(2)),
+        client,
+      );
+      expect(batches.map((b) => b.map((m) => m.body))).toEqual([
+        [1, 2],
+        [3, 4],
+        [5],
+      ]);
     }),
   );
 
@@ -83,7 +92,11 @@ describe("Cloudflare QueueSink batching", { tags: ["unit", "local"] }, () => {
       const { client, batches } = fakeClient();
       const bodies = Array.from({ length: 250 }, (_, i) => ({ i }));
       yield* run(Stream.fromIterable(bodies), client);
-      expect(batches.map((b) => b.length)).toEqual([MAX_BATCH_MESSAGES, MAX_BATCH_MESSAGES, 50]);
+      expect(batches.map((b) => b.length)).toEqual([
+        MAX_BATCH_MESSAGES,
+        MAX_BATCH_MESSAGES,
+        50,
+      ]);
       expect(batches.flat().map((m) => m.body)).toEqual(bodies);
     }),
   );
