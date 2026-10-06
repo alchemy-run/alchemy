@@ -270,42 +270,47 @@ test.provider.skipIf(!!process.env.FAST)(
 // Cloudflare test zone to a fresh Route 53 zone. The delegation is deployed
 // first so ACM never sees (and negatively caches) the undelegated name.
 const cloudflareZoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-const wildcardDomain = `alchemy-acm-wildcard.${cloudflareZoneName}`;
+// One delegated subdomain per test stage (`test_$USER` by default), so
+// concurrent runs by different developers never share NS records.
+const wildcardDomainFor = (stage: string) =>
+  `acm-wildcard-${stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.${cloudflareZoneName}`;
 
-const delegatedZone = Effect.gen(function* () {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const parent = yield* findZoneByName({ accountId, name: cloudflareZoneName });
-  if (!parent) {
-    return yield* Effect.die(new Error(`Cloudflare zone ${cloudflareZoneName} not found`));
-  }
-  const zone = yield* HostedZone("WildcardZone", {
-    name: wildcardDomain,
-    forceDestroy: true,
-  });
-  // Route 53 always assigns four name servers to a public hosted zone.
-  yield* Effect.forEach([0, 1, 2, 3], (i) =>
-    Cloudflare.DNS.Record(`WildcardZoneNs${i}`, {
-      zoneId: parent.id,
+const delegatedZone = (wildcardDomain: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const parent = yield* findZoneByName({ accountId, name: cloudflareZoneName });
+    if (!parent) {
+      return yield* Effect.die(new Error(`Cloudflare zone ${cloudflareZoneName} not found`));
+    }
+    const zone = yield* HostedZone("WildcardZone", {
       name: wildcardDomain,
-      type: "NS",
-      content: zone.nameServers.pipe(Output.map((nameServers) => nameServers[i]!)),
-      ttl: 60,
-    }),
-  );
-  return zone;
-});
+      forceDestroy: true,
+    });
+    // Route 53 always assigns four name servers to a public hosted zone.
+    yield* Effect.forEach([0, 1, 2, 3], (i) =>
+      Cloudflare.DNS.Record(`WildcardZoneNs${i}`, {
+        zoneId: parent.id,
+        name: wildcardDomain,
+        type: "NS",
+        content: zone.nameServers.pipe(Output.map((nameServers) => nameServers[i]!)),
+        ttl: 60,
+      }),
+    );
+    return zone;
+  });
 
 test.provider.skipIf(!!process.env.FAST)(
   "validates an apex + wildcard certificate through one shared record",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const wildcardDomain = wildcardDomainFor(stack.stage);
 
-      yield* stack.deploy(delegatedZone);
+      yield* stack.deploy(delegatedZone(wildcardDomain));
 
       const { zone, certificate } = yield* stack.deploy(
         Effect.gen(function* () {
-          const zone = yield* delegatedZone;
+          const zone = yield* delegatedZone(wildcardDomain);
           const certificate = yield* Certificate("WildcardCertificate", {
             domainName: wildcardDomain,
             subjectAlternativeNames: [wildcardDomain, `*.${wildcardDomain}`],
