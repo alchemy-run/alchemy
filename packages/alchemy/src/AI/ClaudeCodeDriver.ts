@@ -41,6 +41,12 @@ export interface ClaudeCodeOptions {
   readonly env?: Record<string, string | undefined>;
   /** Default working directory. @default "/workspace" */
   readonly cwd?: string;
+  /**
+   * Resolve a session's `account` to the environment its `claude` process
+   * runs with (e.g. `{ CLAUDE_CODE_OAUTH_TOKEN }`). Returning `undefined`
+   * rejects the account. Omit to ignore `account`.
+   */
+  readonly accountEnv?: (account: string | undefined) => Record<string, string> | undefined;
 }
 
 /** Claude Code natively steers mid-turn, forks sessions, and runs subagents. */
@@ -137,6 +143,13 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
             message: `@anthropic-ai/claude-agent-sdk is not installed: ${String(cause)}`,
           }),
       });
+      const accountEnv = options.accountEnv ? options.accountEnv(session.account) : {};
+      if (accountEnv === undefined) {
+        return yield* new SessionError({
+          sessionId: session.id,
+          message: `unknown Claude account ${JSON.stringify(session.account)}`,
+        });
+      }
       const input = yield* Queue.unbounded<SDKUserMessage, Cause.Done<void>>();
       const permissions = new Map<string, Deferred.Deferred<PermissionResult>>();
       let nextPermission = 0;
@@ -194,17 +207,21 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
                   }
                 : {}),
               ...(options.executable ? { pathToClaudeCodeExecutable: options.executable } : {}),
-              env: {
-                ...process.env,
-                // Claude Code refuses to skip permission prompts as root unless
-                // told it is inside a sandbox — which a harness container is.
-                ...(!ask &&
-                (options.permissionMode ?? "bypassPermissions") === "bypassPermissions" &&
-                process.getuid?.() === 0
-                  ? { IS_SANDBOX: "1" }
-                  : {}),
-                ...options.env,
-              },
+              // An empty value removes a variable (an account replacing a default key).
+              env: Object.fromEntries(
+                Object.entries({
+                  ...process.env,
+                  // Claude Code refuses to skip permission prompts as root unless
+                  // told it is inside a sandbox — which a harness container is.
+                  ...(!ask &&
+                  (options.permissionMode ?? "bypassPermissions") === "bypassPermissions" &&
+                  process.getuid?.() === 0
+                    ? { IS_SANDBOX: "1" }
+                    : {}),
+                  ...options.env,
+                  ...accountEnv,
+                }).filter(([, value]) => value !== ""),
+              ),
             },
           }),
         catch: (cause) =>

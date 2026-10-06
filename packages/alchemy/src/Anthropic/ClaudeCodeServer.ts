@@ -8,6 +8,10 @@ import {
 } from "../AI/ClaudeCodeDriver.ts";
 import { makeHarnessServer, npmInstallLayer } from "../AI/HarnessServer.ts";
 
+/** The container env var carrying a named account's token. */
+const accountEnvKey = (name: string) =>
+  `ALCHEMY_CLAUDE_ACCOUNT_${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+
 export interface ClaudeCodeServerProps {
   /**
    * Anthropic API key for the `claude` process (`ANTHROPIC_API_KEY`). Bound
@@ -20,6 +24,17 @@ export interface ClaudeCodeServerProps {
    * Claude Code binary on your own subscription.
    */
   oauthToken?: string | Redacted.Redacted<string>;
+  /**
+   * Several Claude subscriptions by name — each a token from
+   * `claude setup-token` for one of YOUR accounts. A session picks one with
+   * `start({ account: "work" })`; with no account it uses `oauthToken` /
+   * `apiKey`, or the only account when there is exactly one.
+   *
+   * Each token only ever reaches the unmodified `claude` binary for sessions
+   * that name it. There is deliberately no automatic rotation across
+   * accounts: pick explicitly, under your own agreement with Anthropic.
+   */
+  accounts?: Record<string, string | Redacted.Redacted<string>>;
   /** Default model for sessions (e.g. `claude-opus-5-5`). */
   model?: string;
   /**
@@ -78,10 +93,22 @@ export const ClaudeCodeServer = (id = "ClaudeCode", props: ClaudeCodeServerProps
     env: {
       ...(props.apiKey !== undefined ? { ANTHROPIC_API_KEY: props.apiKey } : {}),
       ...(props.oauthToken !== undefined ? { CLAUDE_CODE_OAUTH_TOKEN: props.oauthToken } : {}),
+      ...Object.fromEntries(
+        Object.entries(props.accounts ?? {}).map(([name, token]) => [accountEnvKey(name), token]),
+      ),
     },
     driver: Effect.sync(() =>
       claudeCodeDriver({
         cwd: process.env.ALCHEMY_WORKDIR ?? "/workspace",
+        accountEnv: (account): Record<string, string> | undefined => {
+          const names = Object.keys(props.accounts ?? {});
+          const hasDefault = props.apiKey !== undefined || props.oauthToken !== undefined;
+          const name = account ?? (!hasDefault && names.length === 1 ? names[0] : undefined);
+          if (name === undefined) return account === undefined ? {} : undefined;
+          const token = process.env[accountEnvKey(name)];
+          // The account's token replaces any default credential for this session.
+          return token ? { CLAUDE_CODE_OAUTH_TOKEN: token, ANTHROPIC_API_KEY: "" } : undefined;
+        },
         ...(props.model ? { model: props.model } : {}),
         ...(props.permissionMode ? { permissionMode: props.permissionMode } : {}),
       }),
