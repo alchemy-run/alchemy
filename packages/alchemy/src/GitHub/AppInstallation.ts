@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -22,6 +23,7 @@ import {
   acceptInstallationPermissions,
   installApp,
   setInstallationRepositorySelection,
+  setInstallationSuspension,
 } from "./WebFlows.ts";
 
 export interface AppInstallationProps {
@@ -38,6 +40,14 @@ export interface AppInstallationProps {
   repositorySelection: "all" | "selected";
   /** Repository names in `account`, when `repositorySelection` is `selected`. */
   repositories?: string[];
+  /**
+   * Suspend the installation: the app keeps its installation but loses
+   * access to the account's resources until it is unsuspended. A
+   * suspension made in the GitHub UI can only be lifted there, so lifting
+   * one needs a browser session.
+   * @default false
+   */
+  suspended?: boolean;
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise).
@@ -59,6 +69,15 @@ export interface AppInstallation extends Resource<
     events: string[];
     /** The installation's settings page. */
     htmlUrl: string;
+    /** Whether the installation is suspended, through the API or the UI. */
+    suspended: boolean;
+    /** When the installation was suspended (ISO 8601). */
+    suspendedAt: string | undefined;
+    /**
+     * Login that suspended the installation: the app's bot
+     * (`<slug>[bot]`) for the API, a user for the GitHub UI.
+     */
+    suspendedBy: string | undefined;
   },
   never,
   GitHub.Providers
@@ -115,6 +134,20 @@ export interface AppInstallation extends Resource<
  * sign-in. Pass an options object instead to pin the profile directory,
  * host, or credentials.
  *
+ * ### Suspending an installation
+ * **Example:** Suspend the app on an account
+ * ```typescript
+ * yield* GitHub.AppInstallation("bot-install", {
+ *   appId: app.appId,
+ *   privateKey: app.privateKey,
+ *   account: "my-org",
+ *   repositorySelection: "all",
+ *   suspended: true,
+ * });
+ * ```
+ * Setting `suspended: false` lifts a suspension made through the API
+ * directly, and one made in the GitHub UI through the browser session.
+ *
  * @resource
  * @product App
  */
@@ -127,16 +160,48 @@ export const AppInstallation = Resource<AppInstallation>(
 export class GitHubAppInstallationDrift extends Data.TaggedError(
   "GitHubAppInstallationDrift",
 )<{
-  readonly reason: "repository-selection" | "permissions-pending";
+  readonly reason: "repository-selection" | "permissions-pending" | "suspended";
   readonly url: string;
   readonly slug: string;
   readonly account: string;
 }> {
   readonly [UserFacingError] = true;
   override get message(): string {
+    if (this.reason === "suspended") {
+      return `GitHub App ${this.slug} was suspended on ${this.account} in the GitHub UI, and GitHub has no API to lift that. Unsuspend it in your browser, then deploy again: ${this.url}`;
+    }
     return this.reason === "repository-selection"
       ? `GitHub has no API to change which repositories GitHub App ${this.slug} can access on ${this.account}. Change it in your browser, then deploy again: ${this.url}`
       : `GitHub App ${this.slug} asks for new permissions on ${this.account}, and GitHub has no API to approve them. Approve them in your browser, then deploy again: ${this.url}`;
+  }
+}
+
+/** GitHub did not apply a suspension change before the deploy gave up. */
+export class GitHubAppInstallationSuspensionNotApplied extends Data.TaggedError(
+  "GitHubAppInstallationSuspensionNotApplied",
+)<{
+  readonly desired: boolean;
+  readonly url: string;
+  readonly slug: string;
+  readonly account: string;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    return `GitHub did not ${this.desired ? "suspend" : "unsuspend"} GitHub App ${this.slug} on ${this.account} in time. Check the installation, then deploy again: ${this.url}`;
+  }
+}
+
+/** The installation was removed while the deploy was changing it. */
+export class GitHubAppInstallationNotFound extends Data.TaggedError(
+  "GitHubAppInstallationNotFound",
+)<{
+  readonly installationId: number;
+  readonly slug: string;
+  readonly account: string;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    return `GitHub App ${this.slug}'s installation ${this.installationId} on ${this.account} was removed during the deploy. Deploy again to install it.`;
   }
 }
 
@@ -179,19 +244,42 @@ export const installationRepositoryDelta = (
   remove: live.filter((name) => !desired.includes(name)),
 });
 
+/**
+ * The step that moves an installation's suspension to `desired`. A
+ * suspension by the app's bot was made through the API and is lifted
+ * there; any other was made in the GitHub UI and is lifted in the browser.
+ */
+export const installationSuspensionAction = (options: {
+  readonly suspendedAt: string | undefined;
+  readonly suspendedBy: string | undefined;
+  readonly slug: string;
+  readonly desired: boolean;
+}): "none" | "suspend" | "unsuspend" | "unsuspend-in-browser" => {
+  if ((options.suspendedAt !== undefined) === options.desired) return "none";
+  if (options.desired) return "suspend";
+  return options.suspendedBy?.toLowerCase() ===
+    `${options.slug}[bot]`.toLowerCase()
+    ? "unsuspend"
+    : "unsuspend-in-browser";
+};
+
+// A deleted app answers its own JWT with 404, which means no installation.
 const findInstallation = (app: () => RestOctokit, account: string) =>
-  Effect.tryPromise(async () => {
+  unlessStatus([404], () => {
     const octokit = app();
-    const installations = await octokit.paginate(
-      octokit.rest.apps.listInstallations,
-      { per_page: 100 },
-    );
-    return installations.find(
-      (installation) =>
-        accountLogin(installation.account)?.toLowerCase() ===
-        account.toLowerCase(),
-    );
-  }).pipe(retryFreshAppKey);
+    return octokit.paginate(octokit.rest.apps.listInstallations, {
+      per_page: 100,
+    });
+  }).pipe(
+    retryFreshAppKey,
+    Effect.map((installations) =>
+      installations?.find(
+        (installation) =>
+          accountLogin(installation.account)?.toLowerCase() ===
+          account.toLowerCase(),
+      ),
+    ),
+  );
 
 const getInstallation = (app: () => RestOctokit, installationId: number) =>
   unlessStatus([404], () =>
@@ -237,6 +325,15 @@ const listRepositories = (octokit: RestOctokit, installationId: number) =>
     ),
   );
 
+const suspensionOf = (installation: LiveInstallation) => ({
+  suspended: installation.suspended_at !== null,
+  suspendedAt: installation.suspended_at ?? undefined,
+  suspendedBy:
+    installation.suspended_at === null
+      ? undefined
+      : installation.suspended_by?.login,
+});
+
 const attrsOf = (
   installation: LiveInstallation,
   target: InstallationTarget,
@@ -252,6 +349,7 @@ const attrsOf = (
   permissions: Object.fromEntries(Object.entries(installation.permissions)),
   events: [...installation.events].sort(),
   htmlUrl: installationSettingsUrl(target),
+  ...suspensionOf(installation),
 });
 
 // Drift only the account owner can fix. A browser session applies `fix`
@@ -274,6 +372,93 @@ const repairInstallationDrift = (options: {
       Option.getOrUndefined(repaired) ?? options.installation;
     if (options.drifted(installation)) return yield* options.error;
     return installation;
+  });
+
+// Suspension reads are eventually consistent: poll until `settled`.
+const awaitInstallation = (options: {
+  readonly app: () => RestOctokit;
+  readonly installation: LiveInstallation;
+  readonly settled: (installation: LiveInstallation) => boolean;
+  readonly missing: GitHubAppInstallationNotFound;
+}) =>
+  getInstallation(options.app, options.installation.id).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (found) => found === undefined || options.settled(found),
+      times: 10,
+    }),
+    Effect.flatMap((found) =>
+      found === undefined
+        ? Effect.fail(options.missing)
+        : Effect.succeed(found),
+    ),
+  );
+
+// API and UI suspensions are separate flags, each lifted only where it was
+// set, so lifting one can uncover the other. Up to two steps run, and the
+// installation must end with nothing left to apply.
+const syncInstallationSuspension = (options: {
+  readonly installation: LiveInstallation;
+  readonly desired: boolean;
+  readonly slug: string;
+  readonly account: string;
+  readonly app: () => RestOctokit;
+  readonly settingsUrl: string;
+}) =>
+  Effect.gen(function* () {
+    const { app, desired, slug, account, settingsUrl } = options;
+    const actionOf = (installation: LiveInstallation) => {
+      const observed = suspensionOf(installation);
+      return installationSuspensionAction({ ...observed, slug, desired });
+    };
+    const uiSuspended = new GitHubAppInstallationDrift({
+      reason: "suspended",
+      slug,
+      account,
+      url: settingsUrl,
+    });
+    let installation = options.installation;
+    for (let step = 0; step < 2; step++) {
+      const action = actionOf(installation);
+      if (action === "none") return installation;
+      if (action === "suspend") {
+        yield* Effect.tryPromise(() =>
+          app().rest.apps.suspendInstallation({
+            installation_id: installation.id,
+          }),
+        ).pipe(retryFreshAppKey);
+      } else if (action === "unsuspend") {
+        yield* Effect.tryPromise(() =>
+          app().rest.apps.unsuspendInstallation({
+            installation_id: installation.id,
+          }),
+        ).pipe(retryFreshAppKey);
+      } else {
+        const repaired = yield* withBrowser(
+          setInstallationSuspension({ settingsUrl, suspended: false }),
+        );
+        if (Option.isNone(repaired)) return yield* uiSuspended;
+      }
+      installation = yield* awaitInstallation({
+        app,
+        installation,
+        settled: (live) => actionOf(live) !== action,
+        missing: new GitHubAppInstallationNotFound({
+          installationId: installation.id,
+          slug,
+          account,
+        }),
+      });
+    }
+    const remaining = actionOf(installation);
+    if (remaining === "none") return installation;
+    if (remaining === "unsuspend-in-browser") return yield* uiSuspended;
+    return yield* new GitHubAppInstallationSuspensionNotApplied({
+      desired,
+      slug,
+      account,
+      url: settingsUrl,
+    });
   });
 
 export const AppInstallationProvider = () =>
@@ -316,10 +501,23 @@ export const AppInstallationProvider = () =>
           }),
         }));
       const target = targetOf(found, news.account, baseUrl);
+      const suspended = news.suspended ?? false;
+      const syncSuspension = (installation: LiveInstallation) =>
+        syncInstallationSuspension({
+          installation,
+          desired: suspended,
+          slug,
+          account: news.account,
+          app,
+          settingsUrl: installationSettingsUrl(target),
+        });
+
+      // Sync — lift a suspension before the other syncs, apply one after.
+      const active = suspended ? found : yield* syncSuspension(found);
 
       // Sync — what only the account owner can change.
       const selected = yield* repairInstallationDrift({
-        installation: found,
+        installation: active,
         drifted: (installation) =>
           installation.repository_selection !== news.repositorySelection,
         fix: setInstallationRepositorySelection({
@@ -383,7 +581,11 @@ export const AppInstallationProvider = () =>
         }
       }
 
-      return attrsOf(installation, target, desired);
+      const synced = suspended
+        ? yield* syncSuspension(installation)
+        : installation;
+
+      return attrsOf(synced, target, desired);
     }),
 
     // With state, the installation is read by id. Without state, the one on

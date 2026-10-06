@@ -4,7 +4,8 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import { randomUUID } from "node:crypto";
+import * as Schedule from "effect/Schedule";
+import { createPrivateKey, randomUUID } from "node:crypto";
 import http from "node:http";
 import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual } from "../Diff.ts";
@@ -21,10 +22,15 @@ import {
 } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import {
+  appGeneralSettingsFormDrift,
   deleteApp,
+  readAppVisibility,
   registerAppFromManifest,
+  setAppVisibility,
+  syncAppGeneralSettings,
   updateAppPermissions,
-  updateAppSettings,
+  type AppGeneralSettings,
+  type DesiredAppGeneralSettings,
 } from "./WebFlows.ts";
 
 export type AppPermissionAccess = "read" | "write" | "admin";
@@ -38,6 +44,12 @@ export interface AppWebhook {
   contentType?: "json" | "form";
   /** @default false */
   insecureSsl?: boolean;
+  /**
+   * Whether GitHub delivers events to `url`. No API reads or writes it after
+   * registration; a browser session keeps it in sync.
+   * @default true
+   */
+  active?: boolean;
 }
 
 export interface AppProps {
@@ -71,11 +83,40 @@ export interface AppProps {
   /** Webhook delivery settings, synced through `PATCH /app/hook/config`. */
   webhook?: AppWebhook;
   /**
-   * Request user authorization (OAuth) during installation. GitHub never
-   * returns it.
+   * Request user authorization (OAuth) during installation. No API reads or
+   * writes it after registration; a browser session keeps it in sync.
+   * GitHub disables `setupUrl` while it is set, so the two are mutually
+   * exclusive.
    * @default false
    */
   requestOauthOnInstall?: boolean;
+  /**
+   * URLs GitHub may redirect to after a user authorizes the app, at most 10.
+   * No API reads or writes them after registration; a browser session keeps
+   * them in sync.
+   */
+  callbackUrls?: string[];
+  /**
+   * URL GitHub redirects to after the app is installed, for setup the app
+   * needs. No API reads or writes it after registration; a browser session
+   * keeps it in sync. Cannot be combined with `requestOauthOnInstall`.
+   */
+  setupUrl?: string;
+  /**
+   * Also redirect to `setupUrl` after an installation is updated. No API
+   * reads or writes it after registration; a browser session keeps it in
+   * sync.
+   * @default false
+   */
+  setupOnUpdate?: boolean;
+  /**
+   * Whether any account can install the app. A private app installs only on
+   * its owner. GitHub refuses to make an app private while it is installed
+   * on other accounts. No API reads or writes it after registration; a
+   * browser session keeps it in sync.
+   * @default false
+   */
+  public?: boolean;
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise).
@@ -98,11 +139,26 @@ export interface App extends Resource<
     clientSecret: Redacted.Redacted<string> | undefined;
     /** PEM private key returned once at registration, or passed in. */
     privateKey: Redacted.Redacted<string>;
+    /**
+     * `privateKey` re-encoded as PKCS#8 PEM (`-----BEGIN PRIVATE KEY-----`).
+     * GitHub issues PKCS#1 keys; hand this one to JWT libraries that only
+     * accept PKCS#8.
+     */
+    privateKeyPkcs8: Redacted.Redacted<string>;
+    /** Login of the app's bot user, `<slug>[bot]`. */
+    botLogin: string;
+    /**
+     * Numeric ID of the bot user, as in its noreply commit email
+     * `<botUserId>+<botLogin>@users.noreply.github.com`.
+     */
+    botUserId: number;
     webhookSecret: Redacted.Redacted<string> | undefined;
     /** Public page of the app, `https://github.com/apps/<slug>`. */
     htmlUrl: string;
     permissions: Record<string, string>;
     events: string[];
+    /** Whether any account can install the app. */
+    public: boolean;
   },
   never,
   GitHub.Providers
@@ -119,13 +175,24 @@ export interface App extends Resource<
  * Otherwise a human does, and without an interactive terminal both fail
  * with `GitHubManualStepRequired`.
  *
- * Apps register private; visibility is managed in GitHub's UI only.
+ * Apps register private unless `public` is set.
  *
  * Later deploys never prompt. Webhook settings are synced through the API.
  * Any other difference from the live registration (name, description, URL,
- * permissions, events) is repaired through the browser session when there
- * is one, and otherwise fails with `GitHubAppDrift` and the settings URL to
- * fix it at.
+ * permissions, events, visibility) is repaired through the browser session
+ * when there is one, and otherwise fails with `GitHubAppDrift` and the
+ * settings URL to fix it at.
+ *
+ * No API reports visibility, so the browser session reads and sets it on
+ * the app's Advanced settings page. Without a session, changing `public`
+ * fails with `GitHubAppDrift` and that page's URL, and adopting an app
+ * fails with `GitHubAppVisibilityNeedsBrowser`.
+ *
+ * Callback URLs, the setup URL, redirect-on-update, OAuth on install and
+ * the webhook's Active checkbox cannot be read through any API. The
+ * browser session syncs them whenever the browser is needed anyway, when
+ * one of them changes, and on adoption. Without a session, changing one
+ * fails with `GitHubAppDrift`.
  *
  * Apps default to **retain** on removal: destroying the stack drops the
  * state and leaves the registration (and every installation) in place.
@@ -176,7 +243,11 @@ export interface App extends Resource<
  * URL is only known after it deploys. Give the Worker a URL known up front —
  * a custom domain or route — and pass that string as `webhook.url`. GitHub
  * requires `webhook.url` in the manifest whenever `events` is set, so the
- * URL cannot be filled in by a later step.
+ * URL cannot be filled in by a later step. Bind `app.privateKeyPkcs8`
+ * rather than `app.privateKey` for JWT libraries that only accept
+ * `-----BEGIN PRIVATE KEY-----`. `botLogin` and `botUserId` give commits
+ * made as the app the author `<botLogin>` and the email
+ * `<botUserId>+<botLogin>@users.noreply.github.com`.
  * ```typescript
  * const secret = yield* Alchemy.Random("WebhookSecret");
  * const app = yield* GitHub.App("bot", {
@@ -189,7 +260,27 @@ export interface App extends Resource<
  * });
  * yield* Cloudflare.Worker("Bot", {
  *   domains: ["bot.example.com"],
- *   bindings: { APP_ID: app.appId, PRIVATE_KEY: app.privateKey, WEBHOOK_SECRET: secret.text },
+ *   bindings: {
+ *     APP_ID: app.appId,
+ *     PRIVATE_KEY: app.privateKeyPkcs8,
+ *     WEBHOOK_SECRET: secret.text,
+ *     BOT_LOGIN: app.botLogin,
+ *     BOT_USER_ID: app.botUserId,
+ *   },
+ * });
+ * ```
+ *
+ * ### Callback and setup URLs
+ * **Example:** OAuth callbacks and a post-install setup page
+ * ```typescript
+ * const app = yield* GitHub.App("bot", {
+ *   owner: "my-org",
+ *   name: "my-org-bot",
+ *   url: "https://example.com",
+ *   permissions: { issues: "write" },
+ *   callbackUrls: ["https://example.com/auth/callback"],
+ *   setupUrl: "https://example.com/setup",
+ *   setupOnUpdate: true,
  * });
  * ```
  *
@@ -243,6 +334,35 @@ export class GitHubAppKeyRejected extends Data.TaggedError(
   }
 }
 
+/** The private key is not a valid PEM private key. */
+export class GitHubAppKeyInvalid extends Data.TaggedError(
+  "GitHubAppKeyInvalid",
+)<{
+  readonly slug: string;
+  readonly cause: unknown;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    return `The private key of GitHub App ${this.slug} is not a valid PEM private key. Pass the key generated on its settings page as \`privateKey\`.`;
+  }
+}
+
+/** The app's private key as PKCS#8 PEM, whether it was PKCS#1 or PKCS#8. */
+export const appPrivateKeyPkcs8 = (
+  slug: string,
+  privateKey: Redacted.Redacted<string>,
+) =>
+  Effect.try({
+    try: () =>
+      Redacted.make(
+        createPrivateKey(Redacted.value(privateKey)).export({
+          type: "pkcs8",
+          format: "pem",
+        }),
+      ),
+    catch: (cause) => new GitHubAppKeyInvalid({ slug, cause }),
+  });
+
 /** The callback `state` does not match the registration's. */
 export class GitHubAppManifestStateMismatch extends Data.TaggedError(
   "GitHubAppManifestStateMismatch",
@@ -270,6 +390,66 @@ export class GitHubAppEventsRequireWebhook extends Data.TaggedError(
   readonly [UserFacingError] = true;
 }
 
+/** GitHub accepts at most 10 callback URLs. */
+export class GitHubAppTooManyCallbackUrls extends Data.TaggedError(
+  "GitHubAppTooManyCallbackUrls",
+)<{
+  readonly message: string;
+}> {
+  readonly [UserFacingError] = true;
+}
+
+/** GitHub rejects a callback URL listed twice. */
+export class GitHubAppDuplicateCallbackUrls extends Data.TaggedError(
+  "GitHubAppDuplicateCallbackUrls",
+)<{
+  readonly message: string;
+}> {
+  readonly [UserFacingError] = true;
+}
+
+/** GitHub disables the setup URL while the app requests OAuth on install. */
+export class GitHubAppSetupUrlRequiresNoOauth extends Data.TaggedError(
+  "GitHubAppSetupUrlRequiresNoOauth",
+)<{
+  readonly message: string;
+}> {
+  readonly [UserFacingError] = true;
+}
+
+const MAX_CALLBACK_URLS = 10;
+
+/** Props GitHub would reject, caught before any API call or manual step. */
+export const validateAppProps = (props: AppProps) =>
+  Effect.gen(function* () {
+    if (props.events?.length && props.webhook === undefined) {
+      return yield* new GitHubAppEventsRequireWebhook({
+        message: `GitHub App ${props.name} subscribes to events (${props.events.join(", ")}) but has no webhook. Set \`webhook.url\`, or remove \`events\`.`,
+      });
+    }
+    if ((props.callbackUrls?.length ?? 0) > MAX_CALLBACK_URLS) {
+      return yield* new GitHubAppTooManyCallbackUrls({
+        message: `GitHub App ${props.name} has ${props.callbackUrls?.length} callback URLs; GitHub accepts at most ${MAX_CALLBACK_URLS}.`,
+      });
+    }
+    const callbackUrls = props.callbackUrls ?? [];
+    const duplicates = [
+      ...new Set(
+        callbackUrls.filter((url, i) => callbackUrls.indexOf(url) !== i),
+      ),
+    ];
+    if (duplicates.length > 0) {
+      return yield* new GitHubAppDuplicateCallbackUrls({
+        message: `GitHub App ${props.name} lists callback URLs more than once (${duplicates.join(", ")}); list each once.`,
+      });
+    }
+    if (props.setupUrl && props.requestOauthOnInstall) {
+      return yield* new GitHubAppSetupUrlRequiresNoOauth({
+        message: `GitHub App ${props.name} sets \`setupUrl\` and \`requestOauthOnInstall\`, but GitHub ignores the setup URL while OAuth on install is requested. Remove one of them.`,
+      });
+    }
+  });
+
 export interface AppDriftField {
   readonly field:
     | "name"
@@ -277,7 +457,12 @@ export interface AppDriftField {
     | "url"
     | "permissions"
     | "events"
-    | "requestOauthOnInstall";
+    | "requestOauthOnInstall"
+    | "public"
+    | "callbackUrls"
+    | "setupUrl"
+    | "setupOnUpdate"
+    | "webhookActive";
   readonly desired: unknown;
   /** `undefined` for settings GitHub never returns. */
   readonly live: unknown;
@@ -297,7 +482,12 @@ export class GitHubAppDrift extends Data.TaggedError("GitHubAppDrift")<{
           `${f.field} to ${JSON.stringify(f.desired)}${f.live === undefined ? "" : ` (now ${JSON.stringify(f.live)})`}`,
       )
       .join(", ");
-    return `GitHub has no API to change GitHub App ${this.slug}. In your browser, set ${changes}, then deploy again: ${this.url}`;
+    // Settings GitHub's API cannot read are only verified by a browser session.
+    const unobservable = this.fields.every((f) => f.live === undefined);
+    const again = unobservable
+      ? "then deploy again with a browser session (GitHub.providers({ browser: true }))"
+      : "then deploy again";
+    return `GitHub has no API to change GitHub App ${this.slug}. In your browser, set ${changes}, ${again}: ${this.url}`;
   }
 }
 
@@ -327,13 +517,22 @@ export const appManifest = (
   name: props.name,
   url: props.url,
   description: props.description,
-  public: false,
+  public: props.public ?? false,
   default_permissions: props.permissions,
   default_events: props.events,
   hook_attributes:
-    props.webhook === undefined ? undefined : { url: props.webhook.url },
+    props.webhook === undefined
+      ? undefined
+      : { url: props.webhook.url, active: props.webhook.active ?? true },
   redirect_url: options.redirectUrl,
   request_oauth_on_install: props.requestOauthOnInstall ?? false,
+  ...(props.callbackUrls === undefined
+    ? {}
+    : { callback_urls: props.callbackUrls }),
+  ...(props.setupUrl === undefined ? {} : { setup_url: props.setupUrl }),
+  ...(props.setupOnUpdate === undefined
+    ? {}
+    : { setup_on_update: props.setupOnUpdate }),
 });
 
 /** The slug GitHub derives from an app name, unless `slug` is given. */
@@ -424,6 +623,61 @@ export const appDrift = (
   return fields;
 };
 
+const desiredGeneralSettings = (
+  props: AppProps,
+): DesiredAppGeneralSettings => ({
+  callbackUrls: props.callbackUrls ?? [],
+  requestOauthOnInstall: props.requestOauthOnInstall ?? false,
+  setupUrl: props.setupUrl || undefined,
+  setupOnUpdate: props.setupOnUpdate ?? false,
+  webhookActive:
+    props.webhook === undefined ? undefined : (props.webhook.active ?? true),
+});
+
+/**
+ * Differences between the desired props and the General settings page,
+ * which no API reads. The webhook's Active checkbox only counts when
+ * `webhook` is set.
+ */
+export const appGeneralSettingsDrift = (
+  desired: AppProps,
+  observed: AppGeneralSettings,
+): AppDriftField[] =>
+  appGeneralSettingsFormDrift(desiredGeneralSettings(desired), observed);
+
+/**
+ * General settings that differ between two sets of props, with unknown
+ * live values. An app registered without `webhook` has Active unticked.
+ */
+export const changedAppGeneralSettings = (
+  olds: AppProps,
+  news: AppProps,
+): AppDriftField[] =>
+  appGeneralSettingsDrift(news, {
+    ...desiredGeneralSettings(olds),
+    webhookActive:
+      olds.webhook === undefined ? false : (olds.webhook.active ?? true),
+  }).map((field) => ({ ...field, live: undefined }));
+
+/** `public` against the visibility the Advanced settings page shows. */
+export const appVisibilityDrift = (
+  desired: AppProps,
+  live: boolean,
+): AppDriftField[] =>
+  (desired.public ?? false) === live
+    ? []
+    : [{ field: "public", desired: desired.public ?? false, live }];
+
+/** A `public` prop that differs between two sets of props, live unknown. */
+export const changedAppVisibility = (
+  olds: AppProps,
+  news: AppProps,
+): AppDriftField[] =>
+  appVisibilityDrift(news, olds.public ?? false).map((field) => ({
+    ...field,
+    live: undefined,
+  }));
+
 /**
  * Dropdown values that make the live permissions match `desired`: every
  * live permission the props drop becomes `none`, except GitHub's implicit
@@ -456,6 +710,8 @@ interface LiveApp {
   readonly html_url: string;
   readonly permissions: LivePermissions;
   readonly events: ReadonlyArray<string>;
+  /** As the Advanced settings page shows it; `undefined` when not read. */
+  readonly public: boolean | undefined;
 }
 
 type AppSecrets = Pick<
@@ -463,17 +719,68 @@ type AppSecrets = Pick<
   "clientSecret" | "privateKey" | "webhookSecret"
 >;
 
-const attrsOf = (live: LiveApp, secrets: AppSecrets): App["Attributes"] => ({
-  appId: live.id,
-  slug: live.slug ?? "",
-  name: live.name,
-  owner: "login" in live.owner ? live.owner.login : live.owner.slug,
-  clientId: live.client_id ?? "",
-  ...secrets,
-  htmlUrl: live.html_url,
-  permissions: definedPermissions(live.permissions),
-  events: [...live.events].sort(),
-});
+/** The app's bot user does not resolve by its login. */
+export class GitHubAppBotUserNotFound extends Data.TaggedError(
+  "GitHubAppBotUserNotFound",
+)<{
+  readonly login: string;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    return `GitHub has no bot user ${this.login}.`;
+  }
+}
+
+const botUserId = (octokit: RestOctokit, login: string) =>
+  unlessStatus([404], () =>
+    octokit.rest.users.getByUsername({ username: login }),
+  ).pipe(
+    Effect.flatMap((found) =>
+      found === undefined
+        ? Effect.fail(new GitHubAppBotUserNotFound({ login }))
+        : Effect.succeed(found.data.id),
+    ),
+    Effect.retry({
+      while: (error) => error instanceof GitHubAppBotUserNotFound,
+      schedule: Schedule.spaced("3 seconds"),
+      times: 10,
+    }),
+  );
+
+// `previous` is the stored attributes of the same registration, whose bot
+// user ID is reused while the bot login is unchanged. `knownPublic` stands
+// when the browser did not read the visibility.
+const attrsOf = (options: {
+  readonly live: LiveApp;
+  readonly knownPublic: boolean;
+  readonly secrets: AppSecrets;
+  readonly privateKeyPkcs8: Redacted.Redacted<string>;
+  readonly octokit: RestOctokit;
+  readonly previous: App["Attributes"] | undefined;
+}) =>
+  Effect.gen(function* () {
+    const { live, secrets, previous } = options;
+    const slug = live.slug ?? "";
+    const botLogin = `${slug}[bot]`;
+    return {
+      appId: live.id,
+      slug,
+      name: live.name,
+      owner: "login" in live.owner ? live.owner.login : live.owner.slug,
+      clientId: live.client_id ?? "",
+      ...secrets,
+      privateKeyPkcs8: options.privateKeyPkcs8,
+      botLogin,
+      botUserId:
+        previous?.botLogin === botLogin
+          ? previous.botUserId
+          : yield* botUserId(options.octokit, botLogin),
+      htmlUrl: live.html_url,
+      permissions: definedPermissions(live.permissions),
+      events: [...live.events].sort(),
+      public: live.public ?? options.knownPublic,
+    } satisfies App["Attributes"];
+  });
 
 const appBySlug = (octokit: RestOctokit, slug: string) =>
   unlessStatus([404], () =>
@@ -484,7 +791,7 @@ const appBySlug = (octokit: RestOctokit, slug: string) =>
 // rejection only means "gone" once the slug no longer resolves either. The
 // token alone never decides: one that cannot see the app would call a
 // living registration gone.
-const observeApp = (
+const observeRegistration = (
   app: {
     readonly appId: number;
     readonly slug: string;
@@ -512,6 +819,57 @@ const observeApp = (
     return undefined;
   });
 
+/** Adopting the registration needs a browser session to read its visibility. */
+export class GitHubAppVisibilityNeedsBrowser extends Data.TaggedError(
+  "GitHubAppVisibilityNeedsBrowser",
+)<{
+  readonly slug: string;
+  readonly url: string;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    return `Adopting GitHub App ${this.slug} needs a browser session (GitHub.providers({ browser: true })): no API reports whether it is public, so its visibility is read from its Advanced settings page: ${this.url}`;
+  }
+}
+
+/** GitHub refused to change the app's visibility. */
+export class GitHubAppVisibilityRefused extends Data.TaggedError(
+  "GitHubAppVisibilityRefused",
+)<{
+  readonly slug: string;
+  readonly reason: string;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    return `GitHub refused to change the visibility of GitHub App ${this.slug}: ${this.reason}.`;
+  }
+}
+
+const advancedSettingsUrl = (
+  owner: string | undefined,
+  slug: string,
+  baseUrl: string | undefined,
+) => appSettingsUrl({ owner, slug, page: "advanced", baseUrl });
+
+// The registration, with its visibility read in the browser session when
+// there is one.
+const observeApp = (
+  app: Parameters<typeof observeRegistration>[0],
+  octokit: RestOctokit,
+  baseUrl: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const data = yield* observeRegistration(app, octokit, baseUrl);
+    if (data === undefined) return undefined;
+    const visibility = yield* withBrowser(
+      readAppVisibility({
+        advancedUrl: advancedSettingsUrl(app.owner, app.slug, baseUrl),
+        slug: app.slug,
+      }),
+    );
+    return { ...data, public: Option.getOrUndefined(visibility) };
+  });
+
 // Props override stored secrets, so a rotated key can be handed over.
 const credentials = (
   news: AppProps,
@@ -521,6 +879,13 @@ const credentials = (
   clientSecret: news.clientSecret ?? output.clientSecret,
   webhookSecret: output.webhookSecret,
 });
+
+// Signing the app JWT fails opaquely on a malformed key, so the key is
+// parsed first to fail with `GitHubAppKeyInvalid`.
+const withPkcs8 = (slug: string, secrets: AppSecrets) =>
+  appPrivateKeyPkcs8(slug, secrets.privateKey).pipe(
+    Effect.map((privateKeyPkcs8) => ({ secrets, privateKeyPkcs8 })),
+  );
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
@@ -627,33 +992,55 @@ const registerApp = (
   }).pipe(Effect.scoped);
 
 // Settings only the UI can change. A browser session sets them and the
-// registration is observed again; whatever still differs is reported.
+// registration is observed again; whatever still differs is reported. The
+// General settings and the visibility no API reads are only observed in the
+// browser, so `olds` and `knownPublic` decide whether a session is worth
+// opening for them alone.
 const repairAppDrift = (
   news: AppProps,
+  olds: AppProps | undefined,
   live: LiveApp,
+  knownPublic: boolean,
   privateKey: Redacted.Redacted<string>,
   octokit: RestOctokit,
   baseUrl: string | undefined,
 ) =>
   Effect.gen(function* () {
     const drift = appDrift(news, live);
-    if (drift.length === 0) return { live, drift };
+    const generalChanges =
+      olds === undefined ? [] : changedAppGeneralSettings(olds, news);
+    const changedVisibility =
+      olds === undefined ? [] : changedAppVisibility(olds, news);
+    const visibility =
+      changedVisibility.length > 0
+        ? changedVisibility
+        : appVisibilityDrift(news, knownPublic);
+    if (
+      drift.length === 0 &&
+      olds !== undefined &&
+      generalChanges.length === 0 &&
+      visibility.length === 0
+    ) {
+      return { live, drift };
+    }
     const slug = live.slug ?? "";
     const fields = new Set(drift.map((f) => f.field));
+    const identity =
+      fields.has("name") || fields.has("description") || fields.has("url");
+    const desiredPublic = news.public ?? false;
     const repaired = yield* withBrowser(
       Effect.gen(function* () {
-        if (
-          fields.has("name") ||
-          fields.has("description") ||
-          fields.has("url")
-        ) {
-          yield* updateAppSettings({
-            settingsUrl: appSettingsUrl({ owner: news.owner, slug, baseUrl }),
-            name: news.name,
-            description: news.description ?? "",
-            url: news.url,
-          });
-        }
+        const general = yield* syncAppGeneralSettings({
+          settingsUrl: appSettingsUrl({ owner: news.owner, slug, baseUrl }),
+          ...(identity
+            ? {
+                name: news.name,
+                description: news.description ?? "",
+                url: news.url,
+              }
+            : {}),
+          desired: desiredGeneralSettings(news),
+        });
         if (fields.has("permissions") || fields.has("events")) {
           yield* updateAppPermissions({
             permissionsUrl: appSettingsUrl({
@@ -669,15 +1056,45 @@ const repairAppDrift = (
             events: news.events ?? [],
           });
         }
-        return yield* observeApp(
+        const outcome = yield* setAppVisibility({
+          advancedUrl: advancedSettingsUrl(news.owner, slug, baseUrl),
+          slug,
+          public: desiredPublic,
+        });
+        if (!outcome.set) {
+          return yield* new GitHubAppVisibilityRefused({
+            slug,
+            reason: outcome.reason,
+          });
+        }
+        const registration = yield* observeRegistration(
           { appId: live.id, slug, privateKey, owner: news.owner },
           octokit,
           baseUrl,
         );
+        const app =
+          registration === undefined
+            ? undefined
+            : { ...registration, public: desiredPublic };
+        return { app, general };
       }),
     );
-    const observed = Option.getOrUndefined(repaired) ?? live;
-    return { live: observed, drift: appDrift(news, observed) };
+    return Option.match(repaired, {
+      onNone: () => ({
+        live,
+        drift: [...drift, ...generalChanges, ...visibility],
+      }),
+      onSome: ({ app, general }) => {
+        const observed = app ?? live;
+        return {
+          live: observed,
+          drift: [
+            ...appDrift(news, observed),
+            ...appGeneralSettingsDrift(news, general),
+          ],
+        };
+      },
+    });
   });
 
 export const AppProvider = () =>
@@ -685,43 +1102,64 @@ export const AppProvider = () =>
     // There is no create API and no transfer API, so the registration is
     // never replaced: every change goes through `reconcile`, which either
     // syncs it, asks the human, or fails with the settings URL.
-    reconcile: Effect.fn(function* ({ news, output, session }) {
-      if (news.events?.length && news.webhook === undefined) {
-        return yield* new GitHubAppEventsRequireWebhook({
-          message: `GitHub App ${news.name} subscribes to events (${news.events.join(", ")}) but has no webhook. Set \`webhook.url\`, or remove \`events\`.`,
-        });
-      }
+    reconcile: Effect.fn(function* ({ news, olds, output, session }) {
+      yield* validateAppProps(news);
       const octokit = yield* octokitFor(news.baseUrl);
       const baseUrl = yield* effectiveGitHubBaseUrl(news.baseUrl);
 
       // Observe — only the private key can read the registration.
-      const observed: LiveApp | undefined =
+      const held =
         output === undefined
           ? undefined
-          : yield* observeApp(
-              { ...output, ...credentials(news, output), owner: news.owner },
+          : {
+              output,
+              ...(yield* withPkcs8(output.slug, credentials(news, output))),
+            };
+      const registration =
+        held === undefined
+          ? undefined
+          : yield* observeRegistration(
+              { ...held.output, ...held.secrets, owner: news.owner },
               octokit,
               baseUrl,
             );
+      const observed: LiveApp | undefined =
+        registration === undefined
+          ? undefined
+          : { ...registration, public: undefined };
 
       // Ensure — a human registers the app from the manifest.
       const registered = observed === undefined;
-      const { live: found, secrets } =
-        observed === undefined || output === undefined
-          ? yield* registerApp(news, octokit, baseUrl).pipe(
-              Effect.map((data) => ({
-                live: data,
-                secrets: {
-                  clientSecret: Redacted.make(data.client_secret),
-                  privateKey: Redacted.make(data.pem),
-                  webhookSecret:
-                    data.webhook_secret === null
-                      ? undefined
-                      : Redacted.make(data.webhook_secret),
-                } satisfies AppSecrets,
-              })),
-            )
-          : { live: observed, secrets: credentials(news, output) };
+      const {
+        live: found,
+        secrets,
+        privateKeyPkcs8,
+        knownPublic,
+      } = observed === undefined || held === undefined
+        ? yield* registerApp(news, octokit, baseUrl).pipe(
+            Effect.flatMap((data) =>
+              withPkcs8(data.slug ?? "", {
+                clientSecret: Redacted.make(data.client_secret),
+                privateKey: Redacted.make(data.pem),
+                webhookSecret:
+                  data.webhook_secret === null
+                    ? undefined
+                    : Redacted.make(data.webhook_secret),
+              }).pipe(
+                Effect.map((fresh) => ({
+                  live: { ...data, public: undefined },
+                  ...fresh,
+                  knownPublic: news.public ?? false,
+                })),
+              ),
+            ),
+          )
+        : {
+            live: observed,
+            secrets: held.secrets,
+            privateKeyPkcs8: held.privateKeyPkcs8,
+            knownPublic: held.output.public,
+          };
 
       // Sync — registration settings have no API: a browser session sets
       // them, otherwise they are reported.
@@ -729,7 +1167,9 @@ export const AppProvider = () =>
         ? { live: found, drift: [] }
         : yield* repairAppDrift(
             news,
+            olds,
             found,
+            knownPublic,
             secrets.privateKey,
             octokit,
             baseUrl,
@@ -741,11 +1181,13 @@ export const AppProvider = () =>
           url: appSettingsUrl({
             owner: news.owner,
             slug,
-            page: drift.every(
-              (f) => f.field === "permissions" || f.field === "events",
-            )
-              ? "permissions"
-              : undefined,
+            page: drift.every((f) => f.field === "public")
+              ? "advanced"
+              : drift.every(
+                    (f) => f.field === "permissions" || f.field === "events",
+                  )
+                ? "permissions"
+                : undefined,
             baseUrl,
           }),
           fields: drift,
@@ -791,23 +1233,44 @@ export const AppProvider = () =>
         if (applied) webhookSecret = webhook.secret ?? webhookSecret;
       }
 
-      return attrsOf(live, { ...secrets, webhookSecret });
+      return yield* attrsOf({
+        live,
+        knownPublic,
+        secrets: { ...secrets, webhookSecret },
+        privateKeyPkcs8,
+        octokit,
+        previous: registered ? undefined : output,
+      });
     }),
 
-    // With state, the registration is read through its private key. Without
-    // state, one found by slug belongs to someone else until `--adopt`
-    // takes it over with the key passed in `privateKey`.
+    // With state, the registration is read through its private key and its
+    // visibility in the browser session, keeping the stored one without a
+    // session. Without state, one found by slug belongs to someone else
+    // until `--adopt` takes it over with the key passed in `privateKey`;
+    // its visibility can only be read in the browser session.
     read: Effect.fn(function* ({ olds, output }) {
       const octokit = yield* octokitFor(olds.baseUrl);
       const baseUrl = yield* effectiveGitHubBaseUrl(olds.baseUrl);
       if (output !== undefined) {
-        const secrets = credentials(olds, output);
+        const { secrets, privateKeyPkcs8 } = yield* withPkcs8(
+          output.slug,
+          credentials(olds, output),
+        );
         const live = yield* observeApp(
           { ...output, ...secrets, owner: olds.owner },
           octokit,
           baseUrl,
         );
-        return live === undefined ? undefined : attrsOf(live, secrets);
+        return live === undefined
+          ? undefined
+          : yield* attrsOf({
+              live,
+              knownPublic: output.public,
+              secrets,
+              privateKeyPkcs8,
+              octokit,
+              previous: output,
+            });
       }
       const slug = appSlug(olds);
       const found = yield* appBySlug(octokit, slug);
@@ -816,6 +1279,11 @@ export const AppProvider = () =>
       if (olds.privateKey === undefined) {
         return yield* new GitHubAppAdoptionNeedsKey({ slug, url });
       }
+      const { secrets, privateKeyPkcs8 } = yield* withPkcs8(slug, {
+        privateKey: olds.privateKey,
+        clientSecret: olds.clientSecret,
+        webhookSecret: undefined,
+      });
       const live = yield* observeApp(
         {
           appId: found.id,
@@ -827,11 +1295,21 @@ export const AppProvider = () =>
         baseUrl,
       );
       if (live === undefined) return undefined;
+      const visibility = live.public;
+      if (visibility === undefined) {
+        return yield* new GitHubAppVisibilityNeedsBrowser({
+          slug,
+          url: advancedSettingsUrl(olds.owner, slug, baseUrl),
+        });
+      }
       return Unowned(
-        attrsOf(live, {
-          privateKey: olds.privateKey,
-          clientSecret: olds.clientSecret,
-          webhookSecret: undefined,
+        yield* attrsOf({
+          live,
+          knownPublic: visibility,
+          secrets,
+          privateKeyPkcs8,
+          octokit,
+          previous: undefined,
         }),
       );
     }),
@@ -839,7 +1317,7 @@ export const AppProvider = () =>
     delete: Effect.fn(function* ({ olds, output }) {
       const octokit = yield* octokitFor(olds.baseUrl);
       const baseUrl = yield* effectiveGitHubBaseUrl(olds.baseUrl);
-      const gone = observeApp(
+      const gone = observeRegistration(
         { ...output, ...credentials(olds, output), owner: olds.owner },
         octokit,
         baseUrl,

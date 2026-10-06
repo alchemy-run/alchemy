@@ -27,10 +27,16 @@ import {
   failureOf,
   fixtureRepos,
   listTestAppsInUi,
+  orgSettings,
   owner,
+  readAppGeneralSettingsInUi,
+  readAppVisibilityInUi,
+  setAppGeneralSettingsInUi,
   setAppPermission,
+  setAppVisibilityInUi,
   withManualStepTimeout,
 } from "./app-harness.ts";
+import { pkcs1PrivateKey, pkcs8PrivateKey } from "./fixtures/app-keys.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(
@@ -42,9 +48,11 @@ const { test } = Test.make({
 const apiTags = ["provider:github", "provider:github:app", "live"] as const;
 // Needs the logged-in test browser profile (see app-harness.ts); runs only
 // when selected explicitly with `--tags browser`.
+// Browser tests share one Chromium profile, so none of them run concurrently.
 const browserTest = {
   tags: [...apiTags, "browser"],
   optInTags: ["browser"],
+  exclusive: true,
   timeout: 300_000,
 };
 
@@ -150,7 +158,7 @@ describe(
         public: false,
         default_permissions: { issues: "read" },
         default_events: ["issues"],
-        hook_attributes: { url: "https://example.com/hook" },
+        hook_attributes: { url: "https://example.com/hook", active: true },
         redirect_url: "http://127.0.0.1:4321/callback",
         request_oauth_on_install: false,
       });
@@ -169,6 +177,236 @@ describe(
       });
       expect(manifest.hook_attributes).toBeUndefined();
       expect(manifest.public).toBe(false);
+    });
+
+    it("carries callback, setup and webhook Active settings in the manifest", () => {
+      const manifest = GitHub.appManifest(
+        appProps("unit", {
+          callbackUrls: ["https://example.com/a", "https://example.com/b"],
+          setupUrl: "https://example.com/setup",
+          setupOnUpdate: true,
+          webhook: { url: "https://example.com/hook", active: false },
+        }),
+        { redirectUrl: "http://127.0.0.1:4321/callback" },
+      );
+      expect(manifest).toMatchObject({
+        callback_urls: ["https://example.com/a", "https://example.com/b"],
+        setup_url: "https://example.com/setup",
+        setup_on_update: true,
+        hook_attributes: { url: "https://example.com/hook", active: false },
+      });
+    });
+
+    it("omits unset general settings from the manifest", () => {
+      const manifest = GitHub.appManifest(appProps("unit"), {
+        redirectUrl: "http://127.0.0.1:4321/callback",
+      });
+      expect(Object.keys(manifest)).not.toContain("callback_urls");
+      expect(Object.keys(manifest)).not.toContain("setup_url");
+      expect(Object.keys(manifest)).not.toContain("setup_on_update");
+    });
+
+    it("reports general settings drift, ignoring callback URL order", () => {
+      const observed = {
+        callbackUrls: ["https://example.com/b", "https://example.com/a"],
+        requestOauthOnInstall: false,
+        setupUrl: "https://example.com/setup",
+        setupOnUpdate: true,
+        webhookActive: false,
+      };
+      const desired = appProps("unit", {
+        callbackUrls: ["https://example.com/a", "https://example.com/b"],
+        setupUrl: "https://example.com/setup",
+        setupOnUpdate: true,
+        webhook: { url: "https://example.com/hook", active: false },
+      });
+      expect(GitHub.appGeneralSettingsDrift(desired, observed)).toEqual([]);
+      expect(
+        GitHub.appGeneralSettingsDrift(
+          appProps("unit", {
+            callbackUrls: ["https://example.com/c"],
+            setupUrl: "https://example.com/other",
+            webhook: { url: "https://example.com/hook" },
+          }),
+          { ...observed, requestOauthOnInstall: true },
+        ),
+      ).toEqual([
+        {
+          field: "callbackUrls",
+          desired: ["https://example.com/c"],
+          live: ["https://example.com/b", "https://example.com/a"],
+        },
+        {
+          field: "setupUrl",
+          desired: "https://example.com/other",
+          live: "https://example.com/setup",
+        },
+        { field: "setupOnUpdate", desired: false, live: true },
+        { field: "requestOauthOnInstall", desired: false, live: true },
+        { field: "webhookActive", desired: true, live: false },
+      ]);
+    });
+
+    it("ignores the setup URL under OAuth on install and Active without a webhook", () => {
+      expect(
+        GitHub.appGeneralSettingsDrift(
+          appProps("unit", { requestOauthOnInstall: true }),
+          {
+            callbackUrls: [],
+            requestOauthOnInstall: true,
+            setupUrl: "https://example.com/setup",
+            setupOnUpdate: false,
+            webhookActive: false,
+          },
+        ),
+      ).toEqual([]);
+    });
+
+    it("opens the browser to tick Active when a webhook is added later", () => {
+      expect(
+        GitHub.changedAppGeneralSettings(
+          appProps("unit"),
+          appProps("unit", { webhook: { url: "https://example.com/hook" } }),
+        ),
+      ).toEqual([{ field: "webhookActive", desired: true, live: undefined }]);
+      expect(
+        GitHub.changedAppGeneralSettings(
+          appProps("unit", { webhook: { url: "https://example.com/hook" } }),
+          appProps("unit", { webhook: { url: "https://example.com/other" } }),
+        ),
+      ).toEqual([]);
+    });
+
+    it("rejects duplicate callback URLs with a typed error", () => {
+      const duplicated = Effect.runSync(
+        Effect.result(
+          GitHub.validateAppProps(
+            appProps("unit", {
+              callbackUrls: [
+                "https://example.com/a",
+                "https://example.com/b",
+                "https://example.com/a",
+              ],
+            }),
+          ),
+        ),
+      );
+      expect(Result.isFailure(duplicated) && duplicated.failure).toMatchObject({
+        _tag: "GitHubAppDuplicateCallbackUrls",
+        message: expect.stringContaining("https://example.com/a"),
+      });
+      expect(
+        Result.isFailure(duplicated) && isUserFacing(duplicated.failure),
+      ).toBe(true);
+    });
+
+    it("rejects props GitHub would refuse with typed errors", () => {
+      const conflict = Effect.runSync(
+        Effect.result(
+          GitHub.validateAppProps(
+            appProps("unit", {
+              setupUrl: "https://example.com/setup",
+              requestOauthOnInstall: true,
+            }),
+          ),
+        ),
+      );
+      expect(Result.isFailure(conflict) && conflict.failure).toMatchObject({
+        _tag: "GitHubAppSetupUrlRequiresNoOauth",
+        message: expect.stringContaining("setupUrl"),
+      });
+      expect(Result.isFailure(conflict) && isUserFacing(conflict.failure)).toBe(
+        true,
+      );
+
+      const tooMany = Effect.runSync(
+        Effect.result(
+          GitHub.validateAppProps(
+            appProps("unit", {
+              callbackUrls: Array.from(
+                { length: 11 },
+                (_, i) => `https://example.com/${i}`,
+              ),
+            }),
+          ),
+        ),
+      );
+      expect(Result.isFailure(tooMany) && tooMany.failure).toMatchObject({
+        _tag: "GitHubAppTooManyCallbackUrls",
+      });
+
+      const valid = Effect.runSync(
+        Effect.result(
+          GitHub.validateAppProps(
+            appProps("unit", {
+              callbackUrls: Array.from(
+                { length: 10 },
+                (_, i) => `https://example.com/${i}`,
+              ),
+              setupUrl: "https://example.com/setup",
+            }),
+          ),
+        ),
+      );
+      expect(Result.isSuccess(valid)).toBe(true);
+    });
+
+    it("registers the app public only when asked", () => {
+      const redirectUrl = "http://127.0.0.1:4321/callback";
+      expect(
+        GitHub.appManifest(appProps("unit", { public: true }), { redirectUrl })
+          .public,
+      ).toBe(true);
+      expect(
+        GitHub.appManifest(appProps("unit", { public: false }), {
+          redirectUrl,
+        }).public,
+      ).toBe(false);
+    });
+
+    it("reports visibility drift against the Advanced page, private by default", () => {
+      expect(GitHub.appVisibilityDrift(appProps("unit"), true)).toEqual([
+        { field: "public", desired: false, live: true },
+      ]);
+      expect(
+        GitHub.appVisibilityDrift(appProps("unit", { public: true }), true),
+      ).toEqual([]);
+      expect(
+        GitHub.appVisibilityDrift(appProps("unit", { public: true }), false),
+      ).toEqual([{ field: "public", desired: true, live: false }]);
+    });
+
+    it("reports a changed public prop with the live visibility unknown", () => {
+      expect(
+        GitHub.changedAppVisibility(
+          appProps("unit"),
+          appProps("unit", { public: true }),
+        ),
+      ).toEqual([{ field: "public", desired: true, live: undefined }]);
+      expect(
+        GitHub.changedAppVisibility(
+          appProps("unit", { public: true }),
+          appProps("unit", { public: false }),
+        ),
+      ).toEqual([{ field: "public", desired: false, live: undefined }]);
+      expect(
+        GitHub.changedAppVisibility(
+          appProps("unit", { public: false }),
+          appProps("unit"),
+        ),
+      ).toEqual([]);
+    });
+
+    it("leaves visibility out of the API drift", () => {
+      expect(
+        GitHub.appDrift(appProps("unit", { public: true }), {
+          name: appName("unit"),
+          description: "alchemy GitHub App integration test",
+          external_url: "https://alchemy.run",
+          permissions: { issues: "read" },
+          events: [],
+        }),
+      ).toEqual([]);
     });
 
     it("derives the slug from the name unless one is given", () => {
@@ -312,6 +550,45 @@ describe(
       );
       expect(drift).toHaveLength(5);
     });
+
+    it("re-encodes a PKCS#1 private key as PKCS#8", () => {
+      const converted = Effect.runSync(
+        GitHub.appPrivateKeyPkcs8("my-app", Redacted.make(pkcs1PrivateKey)),
+      );
+      expect(Redacted.isRedacted(converted)).toBe(true);
+      expect(
+        Redacted.value(converted).startsWith("-----BEGIN PRIVATE KEY-----"),
+      ).toBe(true);
+      expect(Redacted.value(converted)).toBe(pkcs8PrivateKey);
+    });
+
+    it("passes a PKCS#8 private key through unchanged", () => {
+      const converted = Effect.runSync(
+        GitHub.appPrivateKeyPkcs8("my-app", Redacted.make(pkcs8PrivateKey)),
+      );
+      expect(Redacted.value(converted)).toBe(pkcs8PrivateKey);
+    });
+
+    it("rejects a malformed private key with a typed error naming the slug", () => {
+      const malformed = Effect.runSync(
+        Effect.result(
+          GitHub.appPrivateKeyPkcs8(
+            "my-app",
+            Redacted.make(
+              "-----BEGIN RSA PRIVATE KEY-----\nnot-a-key\n-----END RSA PRIVATE KEY-----\n",
+            ),
+          ),
+        ),
+      );
+      expect(Result.isFailure(malformed) && malformed.failure).toMatchObject({
+        _tag: "GitHubAppKeyInvalid",
+        slug: "my-app",
+        message: expect.stringContaining("GitHub App my-app"),
+      });
+      expect(
+        Result.isFailure(malformed) && isUserFacing(malformed.failure),
+      ).toBe(true);
+    });
   },
 );
 
@@ -426,6 +703,18 @@ test.provider(
       );
       expect(live?.id).toBe(app.appId);
       expect(live?.slug).toBe(app.slug);
+
+      expect(
+        Redacted.value(app.privateKeyPkcs8).startsWith(
+          "-----BEGIN PRIVATE KEY-----",
+        ),
+      ).toBe(true);
+      expect(app.botLogin).toBe(`${app.slug}[bot]`);
+      const octokit = yield* Octokit;
+      const { data: bot } = yield* Effect.tryPromise(() =>
+        octokit.rest.users.getByUsername({ username: `${app.slug}[bot]` }),
+      );
+      expect(app.botUserId).toBe(bot.id);
 
       const detected = yield* Drift.detect({
         name: stack.name,
@@ -711,11 +1000,13 @@ test.provider(
       const settingsUrl = `https://github.com/organizations/${owner}/settings/apps/${app.slug}`;
       expect(human.launched).toContain(settingsUrl);
       expect(human.launched).toContain(`${settingsUrl}/permissions`);
+      expect(human.launched).toContain(`${settingsUrl}/advanced`);
 
       const { data: live } = yield* Effect.tryPromise(() =>
         appOctokit(app.appId, app.privateKey).rest.apps.getAuthenticated(),
       );
       expect(live ? GitHub.appDrift(props, live) : undefined).toEqual([]);
+      expect(yield* readAppVisibilityInUi(app.slug)).toBe(false);
 
       const detected = yield* Drift.detect(identity(stack));
       expect(detected.resources["App"]?.action).toBe("unchanged");
@@ -723,6 +1014,290 @@ test.provider(
       Effect.ensuring(cleanup(stack, appName("repair")).pipe(Effect.ignore)),
     ),
   { ...browserTest, timeout: 240_000 },
+);
+
+test.provider(
+  "registers a public app and makes it private unattended",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "public";
+      yield* cleanup(stack, appName(id));
+
+      const app = yield* autopilot()
+        .run(
+          unattended(stack.deploy(deployApp(appProps(id, { public: true })))),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(app.public).toBe(true);
+      expect(yield* readAppVisibilityInUi(app.slug)).toBe(true);
+
+      const human = autopilot();
+      const made = yield* human
+        .run(
+          unattended(stack.deploy(deployApp(appProps(id, { public: false })))),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(made.appId).toBe(app.appId);
+      expect(made.public).toBe(false);
+      expect(human.prompts).toEqual([]);
+      expect(human.launched).toContain(
+        `${orgSettings(owner)}/apps/${app.slug}/advanced`,
+      );
+      expect(yield* readAppVisibilityInUi(app.slug)).toBe(false);
+
+      yield* autopilot()
+        .run(unattended(stack.destroy()))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
+      expect(yield* persistedApp(stack)).toBeUndefined();
+    }).pipe(
+      Effect.ensuring(cleanup(stack, appName("public")).pipe(Effect.ignore)),
+    ),
+  browserTest,
+);
+
+test.provider(
+  "repairs visibility changed out of band",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "oobpublic";
+      const props = appProps(id);
+      yield* cleanup(stack, props.name);
+
+      const app = yield* autopilot()
+        .run(stack.deploy(deployApp(props)))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(app.public).toBe(false);
+
+      expect(yield* setAppVisibilityInUi(app.slug, true)).toEqual({
+        set: true,
+      });
+      expect(yield* readAppVisibilityInUi(app.slug)).toBe(true);
+
+      // No API reads the visibility: without a browser session drift
+      // detection keeps the stored one.
+      const blind = yield* Drift.detect(identity(stack));
+      expect(blind.resources["App"]?.action).toBe("unchanged");
+
+      // A deploy with unchanged props never reaches the provider; drift
+      // detection reads the visibility in the browser and repair makes it
+      // private again.
+      const detected = yield* autopilot().run(Drift.detect(identity(stack)));
+      expect(detected.resources["App"]?.action).toBe("drifted");
+
+      const human = autopilot();
+      const repaired = yield* human
+        .run(unattended(Drift.repair(identity(stack))))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(repaired.resources["App"]?.action).toBe("repaired");
+      const attrs: GitHub.App["Attributes"] = repaired.resources["App"]?.attr;
+      expect(attrs.appId).toBe(app.appId);
+      expect(attrs.public).toBe(false);
+      expect(human.prompts).toEqual([]);
+      expect(human.launched).toContain(
+        `${orgSettings(owner)}/apps/${app.slug}/advanced`,
+      );
+
+      expect(yield* readAppVisibilityInUi(app.slug)).toBe(false);
+      const { data: live } = yield* Effect.tryPromise(() =>
+        appOctokit(app.appId, app.privateKey).rest.apps.getAuthenticated(),
+      );
+      expect(live ? GitHub.appDrift(props, live) : undefined).toEqual([]);
+
+      const after = yield* autopilot().run(Drift.detect(identity(stack)));
+      expect(after.resources["App"]?.action).toBe("unchanged");
+
+      yield* autopilot()
+        .run(unattended(stack.destroy()))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
+      expect(yield* persistedApp(stack)).toBeUndefined();
+    }).pipe(
+      Effect.ensuring(cleanup(stack, appName("oobpublic")).pipe(Effect.ignore)),
+    ),
+  browserTest,
+);
+
+test.provider(
+  "manages general settings unattended",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "general";
+      yield* cleanup(stack, appName(id));
+      const webhook = { url: "https://example.com/hook" };
+
+      const app = yield* autopilot()
+        .run(
+          unattended(
+            stack.deploy(
+              deployApp(
+                appProps(id, {
+                  callbackUrls: ["https://example.com/callback-a"],
+                  setupUrl: "https://example.com/setup-a",
+                  setupOnUpdate: true,
+                  webhook: { ...webhook, active: false },
+                }),
+              ),
+            ),
+          ),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(yield* readAppGeneralSettingsInUi(app.slug)).toEqual({
+        callbackUrls: ["https://example.com/callback-a"],
+        requestOauthOnInstall: false,
+        setupUrl: "https://example.com/setup-a",
+        setupOnUpdate: true,
+        webhookActive: false,
+      });
+
+      const settingsUrl = `${orgSettings(owner)}/apps/${app.slug}`;
+      const human = autopilot();
+      const updated = yield* human
+        .run(
+          unattended(
+            stack.deploy(
+              deployApp(
+                appProps(id, {
+                  callbackUrls: [
+                    "https://example.com/callback-b",
+                    "https://example.com/callback-c",
+                  ],
+                  setupUrl: "https://example.com/setup-b",
+                  setupOnUpdate: false,
+                  webhook: { ...webhook, active: true },
+                }),
+              ),
+            ),
+          ),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(updated.appId).toBe(app.appId);
+      expect(human.prompts).toEqual([]);
+      expect(human.launched).toContain(settingsUrl);
+      const synced = yield* readAppGeneralSettingsInUi(app.slug);
+      expect([...synced.callbackUrls].sort()).toEqual([
+        "https://example.com/callback-b",
+        "https://example.com/callback-c",
+      ]);
+      expect(synced).toMatchObject({
+        requestOauthOnInstall: false,
+        setupUrl: "https://example.com/setup-b",
+        setupOnUpdate: false,
+        webhookActive: true,
+      });
+
+      // OAuth on install and a setup URL are mutually exclusive on GitHub.
+      yield* autopilot()
+        .run(
+          unattended(
+            stack.deploy(
+              deployApp(
+                appProps(id, {
+                  callbackUrls: [
+                    "https://example.com/callback-b",
+                    "https://example.com/callback-c",
+                  ],
+                  requestOauthOnInstall: true,
+                  webhook: { ...webhook, active: true },
+                }),
+              ),
+            ),
+          ),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      const oauth = yield* readAppGeneralSettingsInUi(app.slug);
+      expect([...oauth.callbackUrls].sort()).toEqual([
+        "https://example.com/callback-b",
+        "https://example.com/callback-c",
+      ]);
+      expect(oauth).toMatchObject({
+        requestOauthOnInstall: true,
+        setupOnUpdate: false,
+        webhookActive: true,
+      });
+
+      yield* autopilot()
+        .run(unattended(stack.destroy()))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
+      expect(yield* persistedApp(stack)).toBeUndefined();
+    }).pipe(
+      Effect.ensuring(cleanup(stack, appName("general")).pipe(Effect.ignore)),
+    ),
+  browserTest,
+);
+
+test.provider(
+  "reports general settings drift without a browser",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "generaldrift";
+      yield* cleanup(stack, appName(id));
+
+      const app = yield* autopilot()
+        .run(
+          stack.deploy(
+            deployApp(
+              appProps(id, {
+                callbackUrls: ["https://example.com/callback-a"],
+              }),
+            ),
+          ),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+
+      yield* setAppGeneralSettingsInUi(app.slug, { setupOnUpdate: true });
+
+      // No API reads these settings: without a browser session a change to
+      // them can only be reported.
+      const changed = appProps(id, {
+        callbackUrls: ["https://example.com/callback-b"],
+      });
+      const human = autopilot({ idle: true });
+      const error = failureOf(
+        yield* Effect.exit(human.run(stack.deploy(deployApp(changed)))),
+      );
+      const settingsUrl = `${orgSettings(owner)}/apps/${app.slug}`;
+      expect(error).toMatchObject({
+        _tag: "GitHubAppDrift",
+        url: settingsUrl,
+        message: expect.stringContaining(settingsUrl),
+        fields: [
+          {
+            field: "callbackUrls",
+            desired: ["https://example.com/callback-b"],
+            live: undefined,
+          },
+        ],
+      });
+      expect(isUserFacing(error)).toBe(true);
+      expect(human.launched).toEqual([]);
+
+      // The browser observes the page, so the out-of-band change is
+      // repaired along with the prop change.
+      const repairer = autopilot();
+      const repaired = yield* repairer
+        .run(unattended(stack.deploy(deployApp(changed))))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(repaired.appId).toBe(app.appId);
+      expect(repairer.prompts).toEqual([]);
+      expect(repairer.launched).toContain(settingsUrl);
+      expect(yield* readAppGeneralSettingsInUi(app.slug)).toMatchObject({
+        callbackUrls: ["https://example.com/callback-b"],
+        setupOnUpdate: false,
+      });
+
+      yield* autopilot()
+        .run(unattended(stack.destroy()))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
+      expect(yield* persistedApp(stack)).toBeUndefined();
+    }).pipe(
+      Effect.ensuring(
+        cleanup(stack, appName("generaldrift")).pipe(Effect.ignore),
+      ),
+    ),
+  browserTest,
 );
 
 test.provider(
@@ -862,14 +1437,26 @@ test.provider(
       });
       expect(isUserFacing(keyless)).toBe(true);
 
+      // ...and a browser session to read its visibility...
       const withKey = { ...props, privateKey: app.privateKey };
+      const blind = failureOf(
+        yield* Effect.exit(stack.deploy(deployApp(withKey).pipe(adopt(true)))),
+      );
+      expect(blind).toMatchObject({
+        _tag: "GitHubAppVisibilityNeedsBrowser",
+        url: `${settingsUrl}/advanced`,
+        message: expect.stringContaining(`${settingsUrl}/advanced`),
+      });
+      expect(isUserFacing(blind)).toBe(true);
+
       const foreign = failureOf(
-        yield* Effect.exit(stack.deploy(deployApp(withKey))),
+        yield* Effect.exit(autopilot().run(stack.deploy(deployApp(withKey)))),
       );
       expect(foreign).toMatchObject({ _tag: "OwnedBySomeoneElse" });
       expect(yield* appExists(yield* Octokit, props.name)).toBe(true);
 
-      // ...until --adopt takes it over, without a browser.
+      // ...until --adopt takes it over, without a prompt. The browser reads
+      // the visibility, then syncs the settings no API reads.
       const quiet = autopilot();
       const adopted = yield* quiet.run(
         stack.deploy(deployApp(withKey).pipe(adopt(true))),
@@ -880,7 +1467,12 @@ test.provider(
       expect(Redacted.value(adopted.privateKey)).toBe(
         Redacted.value(app.privateKey),
       );
-      expect(quiet.launched).toEqual([]);
+      expect(adopted.public).toBe(false);
+      expect(quiet.launched).toEqual([
+        `${settingsUrl}/advanced`,
+        settingsUrl,
+        `${settingsUrl}/advanced`,
+      ]);
       expect(quiet.prompts).toEqual([]);
 
       // Opted into destroy(): the browser delete step runs.

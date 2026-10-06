@@ -109,7 +109,7 @@ const sharedBrowser = Effect.runSync(
 export const browserLayer: Layer.Layer<GitHub.GitHubBrowser> =
   Layer.effectContext(sharedBrowser);
 
-const orgSettings = (org: string) =>
+export const orgSettings = (org: string) =>
   `https://github.com/organizations/${org}/settings`;
 
 /** UI step an installation owner takes after the app raised permissions. */
@@ -117,6 +117,55 @@ export const acceptPermissionsInUi = (reviewUrl: string) =>
   GitHub.WebFlows.acceptInstallationPermissions({ reviewUrl }).pipe(
     Effect.provide(browserLayer),
   );
+
+/** UI step an installation owner takes: suspend the app on the account. */
+export const suspendInstallationInUi = (settingsUrl: string) =>
+  GitHub.WebFlows.setInstallationSuspension({
+    settingsUrl,
+    suspended: true,
+  }).pipe(Effect.provide(browserLayer));
+
+const appAdvancedSettingsInUi = (slug: string) =>
+  `${orgSettings(owner)}/apps/${slug}/advanced`;
+
+/** UI change a human would make: make the app public or private. */
+export const setAppVisibilityInUi = (slug: string, visible: boolean) =>
+  GitHub.WebFlows.setAppVisibility({
+    advancedUrl: appAdvancedSettingsInUi(slug),
+    slug,
+    public: visible,
+  }).pipe(Effect.provide(browserLayer));
+
+/** Whether the app is public, as its Advanced settings page shows it. */
+export const readAppVisibilityInUi = (slug: string) =>
+  GitHub.WebFlows.readAppVisibility({
+    advancedUrl: appAdvancedSettingsInUi(slug),
+    slug,
+  }).pipe(Effect.provide(browserLayer));
+
+const appSettingsInUi = (slug: string) => `${orgSettings(owner)}/apps/${slug}`;
+
+/** The General settings no API reads, as the settings page shows them. */
+export const readAppGeneralSettingsInUi = (slug: string) =>
+  GitHub.WebFlows.readAppGeneralSettings({
+    settingsUrl: appSettingsInUi(slug),
+  }).pipe(Effect.provide(browserLayer));
+
+/** UI change a human would make on the General settings page. */
+export const setAppGeneralSettingsInUi = (
+  slug: string,
+  settings: Partial<GitHub.WebFlows.AppGeneralSettings>,
+) =>
+  Effect.gen(function* () {
+    const settingsUrl = appSettingsInUi(slug);
+    const current = yield* GitHub.WebFlows.readAppGeneralSettings({
+      settingsUrl,
+    });
+    return yield* GitHub.WebFlows.syncAppGeneralSettings({
+      settingsUrl,
+      desired: { ...current, ...settings },
+    });
+  }).pipe(Effect.provide(browserLayer));
 
 /** UI fix a human would make: raise one permission on the app registration. */
 export const setAppPermission = (input: {

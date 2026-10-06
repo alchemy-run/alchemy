@@ -8,6 +8,7 @@ import { isUserFacing } from "@/UserFacingError.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import {
   acceptPermissionsInUi,
   appName,
@@ -21,6 +22,7 @@ import {
   installationOctokit,
   owner,
   setAppPermission,
+  suspendInstallationInUi,
   withManualStepTimeout,
 } from "./app-harness.ts";
 
@@ -30,6 +32,7 @@ const { test } = Test.make({
 
 // Needs the logged-in test browser profile (see app-harness.ts); runs only
 // when selected explicitly with `--tags browser`.
+// Browser tests share one Chromium profile, so none of them run concurrently.
 const browserTest = {
   tags: [
     "provider:github",
@@ -39,6 +42,7 @@ const browserTest = {
     "browser",
   ],
   optInTags: ["browser"],
+  exclusive: true,
   timeout: 300_000,
 };
 
@@ -103,6 +107,17 @@ const installedRepos = (
     );
     return repos.map((repo) => repo.name).sort();
   });
+
+const liveInstallation = (
+  appId: number,
+  privateKey: Redacted.Redacted<string>,
+  installationId: number,
+) =>
+  Effect.tryPromise(() =>
+    appOctokit(appId, privateKey).rest.apps.getInstallation({
+      installation_id: installationId,
+    }),
+  ).pipe(Effect.map(({ data }) => data));
 
 const cleanup = (stack: Test.ScratchStack, slug: string) =>
   Effect.gen(function* () {
@@ -187,6 +202,105 @@ describe(
         add: [],
         remove: [],
       });
+    });
+
+    it("reports unapplied suspensions and vanished installations to the user", () => {
+      const url =
+        "https://github.com/organizations/FD-Test-Org/settings/installations/123";
+      const notApplied = new GitHub.GitHubAppInstallationSuspensionNotApplied({
+        desired: false,
+        slug: "my-app",
+        account: "FD-Test-Org",
+        url,
+      });
+      expect(isUserFacing(notApplied)).toBe(true);
+      expect(notApplied.message).toContain("unsuspend GitHub App my-app");
+      expect(notApplied.message).toContain(url);
+      expect(
+        new GitHub.GitHubAppInstallationSuspensionNotApplied({
+          desired: true,
+          slug: "my-app",
+          account: "FD-Test-Org",
+          url,
+        }).message,
+      ).toContain("did not suspend");
+      const missing = new GitHub.GitHubAppInstallationNotFound({
+        installationId: 123,
+        slug: "my-app",
+        account: "FD-Test-Org",
+      });
+      expect(isUserFacing(missing)).toBe(true);
+      expect(missing.message).toContain("installation 123 on FD-Test-Org");
+    });
+
+    it("lifts an API suspension through the API and a UI one in the browser", () => {
+      const at = "2026-10-06T00:00:00Z";
+      const action = GitHub.installationSuspensionAction;
+      const slug = "my-app";
+      expect(
+        action({
+          suspendedAt: undefined,
+          suspendedBy: undefined,
+          slug,
+          desired: false,
+        }),
+      ).toBe("none");
+      expect(
+        action({
+          suspendedAt: at,
+          suspendedBy: "my-app[bot]",
+          slug,
+          desired: true,
+        }),
+      ).toBe("none");
+      expect(
+        action({
+          suspendedAt: at,
+          suspendedBy: "pattobrien",
+          slug,
+          desired: true,
+        }),
+      ).toBe("none");
+      expect(
+        action({
+          suspendedAt: undefined,
+          suspendedBy: undefined,
+          slug,
+          desired: true,
+        }),
+      ).toBe("suspend");
+      expect(
+        action({
+          suspendedAt: at,
+          suspendedBy: "My-App[bot]",
+          slug,
+          desired: false,
+        }),
+      ).toBe("unsuspend");
+      expect(
+        action({
+          suspendedAt: at,
+          suspendedBy: "pattobrien",
+          slug,
+          desired: false,
+        }),
+      ).toBe("unsuspend-in-browser");
+      expect(
+        action({
+          suspendedAt: at,
+          suspendedBy: "other-app[bot]",
+          slug,
+          desired: false,
+        }),
+      ).toBe("unsuspend-in-browser");
+      expect(
+        action({
+          suspendedAt: at,
+          suspendedBy: undefined,
+          slug,
+          desired: false,
+        }),
+      ).toBe("unsuspend-in-browser");
     });
   },
 );
@@ -559,6 +673,146 @@ test.provider(
     }).pipe(
       Effect.ensuring(
         cleanup(stack, appName("perms-auto")).pipe(Effect.ignore),
+      ),
+    ),
+  unattended,
+);
+
+test.provider(
+  "suspends and unsuspends through the API",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "suspend";
+      yield* cleanup(stack, appName(id));
+      yield* ensureFixtureRepos(yield* Octokit);
+
+      const { app, installation } = yield* autopilot()
+        .run(
+          stack.deploy(
+            program(id, {
+              installation: { ...selected(repoA), suspended: true },
+            }),
+          ),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(installation!.suspended).toBe(true);
+      expect(installation!.suspendedAt).toEqual(expect.any(String));
+      expect(installation!.suspendedBy).toBe(`${app.slug}[bot]`);
+      const suspended = yield* liveInstallation(
+        app.appId,
+        app.privateKey,
+        installation!.installationId,
+      );
+      expect(suspended.suspended_at).not.toBeNull();
+      expect(suspended.suspended_by?.login).toMatch(/\[bot\]$/);
+
+      const quiet = autopilot();
+      const lifted = yield* quiet.run(
+        stack.deploy(
+          program(id, {
+            installation: { ...selected(repoA, repoB), suspended: false },
+          }),
+        ),
+      );
+      expect(lifted.installation!.installationId).toBe(
+        installation!.installationId,
+      );
+      expect(lifted.installation!.suspended).toBe(false);
+      expect(lifted.installation!.suspendedAt).toBeUndefined();
+      expect(lifted.installation!.suspendedBy).toBeUndefined();
+      expect(lifted.installation!.repositories).toEqual([repoA, repoB]);
+      const live = yield* liveInstallation(
+        app.appId,
+        app.privateKey,
+        installation!.installationId,
+      );
+      expect(live.suspended_at).toBeNull();
+      expect(
+        yield* installedRepos(
+          app.appId,
+          app.privateKey,
+          installation!.installationId,
+        ),
+      ).toEqual([repoA, repoB]);
+      expect(quiet.launched).toEqual([]);
+      expect(quiet.prompts).toEqual([]);
+    }).pipe(
+      Effect.ensuring(cleanup(stack, appName("suspend")).pipe(Effect.ignore)),
+    ),
+  unattended,
+);
+
+test.provider(
+  "lifts a UI suspension through the browser and reports it without one",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "suspend-ui";
+      yield* cleanup(stack, appName(id));
+      yield* ensureFixtureRepos(yield* Octokit);
+
+      const { app, installation } = yield* autopilot()
+        .run(stack.deploy(program(id, { installation: selected(repoA) })))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(installation!.suspended).toBe(false);
+      const settingsUrl = `https://github.com/organizations/${owner}/settings/installations/${installation!.installationId}`;
+
+      yield* suspendInstallationInUi(settingsUrl);
+      const suspended = yield* liveInstallation(
+        app.appId,
+        app.privateKey,
+        installation!.installationId,
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (live) => live.suspended_at !== null,
+          times: 10,
+        }),
+      );
+      expect(suspended.suspended_at).not.toBeNull();
+      expect(suspended.suspended_by?.login).not.toMatch(/\[bot\]$/);
+
+      const unsuspend = {
+        installation: { ...selected(repoA), suspended: false },
+      };
+      const idle = autopilot({ idle: true });
+      const reported = failureOf(
+        yield* Effect.exit(idle.run(stack.deploy(program(id, unsuspend)))),
+      );
+      expect(reported).toMatchObject({
+        _tag: "GitHubAppInstallationDrift",
+        reason: "suspended",
+        url: settingsUrl,
+        message: expect.stringContaining(settingsUrl),
+      });
+      expect(isUserFacing(reported)).toBe(true);
+      expect(idle.launched).toEqual([]);
+      expect(idle.prompts).toEqual([]);
+
+      const pilot = autopilot();
+      const lifted = yield* pilot
+        .run(stack.deploy(program(id, unsuspend)))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(lifted.installation!.installationId).toBe(
+        installation!.installationId,
+      );
+      expect(lifted.installation!.suspended).toBe(false);
+      expect(lifted.installation!.suspendedAt).toBeUndefined();
+      expect(pilot.launched).toContain(settingsUrl);
+      expect(pilot.prompts).toEqual([]);
+      const live = yield* liveInstallation(
+        app.appId,
+        app.privateKey,
+        installation!.installationId,
+      );
+      expect(live.suspended_at).toBeNull();
+
+      yield* pilot
+        .run(stack.destroy())
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
+    }).pipe(
+      Effect.ensuring(
+        cleanup(stack, appName("suspend-ui")).pipe(Effect.ignore),
       ),
     ),
   unattended,
