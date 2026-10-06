@@ -1060,17 +1060,21 @@ export const ProviderLive = () =>
               jurisdiction,
             })
             .pipe(
-              Effect.map((response) => (response.rules ?? []).map(toLockRule)),
+              Effect.map((response) => sortLockRules((response.rules ?? []).map(toLockRule))),
               Effect.retry({
                 while: (e) => e._tag === "NoSuchBucket",
                 schedule: r2BucketEndpointConsistencySchedule,
               }),
             );
 
-          const desiredRules = desired.map((rule): Bucket.LockRule => ({
-            ...rule,
-            prefix: rule.prefix ?? "",
-          }));
+          // R2 returns rules sorted by id, not in the order they were PUT,
+          // so compare (and report) both sides in id order.
+          const desiredRules = sortLockRules(
+            desired.map((rule): Bucket.LockRule => ({
+              ...rule,
+              prefix: rule.prefix ?? "",
+            })),
+          );
 
           if (deepEqual(observed, desiredRules)) {
             return desiredRules;
@@ -1635,6 +1639,9 @@ const toLifecyclePutPayload = (
 });
 
 type LockRuleResponse = NonNullable<r2.GetBucketLockResponse["rules"]>[number];
+
+const sortLockRules = (rules: Bucket.LockRule[]): Bucket.LockRule[] =>
+  [...rules].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
 // The condition decodes as an unchecked union; copy only the known fields so
 // the drift comparison against the desired rules is exact.

@@ -591,12 +591,14 @@ test.provider(
         }),
       );
 
+      // R2 lists rules sorted by id, not in declaration order.
       const updatedLocks = yield* r2.getBucketLock({ accountId, bucketName: initial.bucketName });
       expect(updatedLocks.rules).toHaveLength(2);
-      expect(updatedLocks.rules?.[0]?.enabled).toEqual(false);
-      expect(updatedLocks.rules?.[0]?.condition).toEqual({ type: "Age", maxAgeSeconds: 120 });
-      expect(updatedLocks.rules?.[1]?.id).toEqual("all-objects");
-      expect(updatedLocks.rules?.[1]?.prefix ?? "").toEqual("");
+      const ruleById = (ruleId: string) => updatedLocks.rules?.find((r) => r.id === ruleId);
+      expect(ruleById("raw-retention")?.enabled).toEqual(false);
+      expect(ruleById("raw-retention")?.condition).toEqual({ type: "Age", maxAgeSeconds: 120 });
+      expect(ruleById("all-objects")?.enabled).toEqual(true);
+      expect(ruleById("all-objects")?.prefix ?? "").toEqual("");
 
       // Remove `locks` from the props: the managed rules are cleared.
       const cleared = yield* stack.deploy(
@@ -1415,6 +1417,26 @@ describe(
 
         expect(lockCalls.map((c) => c.method)).toEqual(["GET"]);
         expect(output.locks).toEqual([{ ...retention, prefix: "" }]);
+      }),
+    );
+
+    it.effect("rules declared out of id order match R2's sorted listing", () =>
+      Effect.gen(function* () {
+        const allObjects: Cloudflare.R2.BucketLockRule = {
+          id: "all-objects",
+          enabled: true,
+          prefix: "",
+          condition: { type: "Age", maxAgeSeconds: 30 },
+        };
+        const { output, lockCalls } = yield* recordReconcile({
+          // Declared raw-retention first; R2 lists rules sorted by id.
+          news: { locks: [retention, allObjects] },
+          olds: { locks: [retention, allObjects] },
+          observedLocks: [allObjects, retention],
+        });
+
+        expect(lockCalls.map((c) => c.method)).toEqual(["GET"]);
+        expect(output.locks?.map((r) => r.id)).toEqual(["all-objects", "raw-retention"]);
       }),
     );
 
