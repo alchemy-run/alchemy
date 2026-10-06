@@ -1,8 +1,12 @@
 import {
+  createServiceDeployment,
+  deleteDeployment,
   getDeployment,
   getEnvironmentVariables,
   getService,
+  getServiceDeployments,
 } from "@distilled.cloud/prisma/management";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -106,6 +110,44 @@ export const environmentKeys = (
     ),
   );
 
+/** Checked-in Bun server whose crash and health behavior is chosen by env (see its source). */
+export const faultServerDir = `${import.meta.dirname}/compute/fault-server`;
+
+/** Checked-in app that builds like a NestJS app and listens only on port 3000. */
+export const nestAppDir = `${import.meta.dirname}/compute/nest-app`;
+
+/** Sorted IDs of every deployment of an App. */
+export const deploymentIds = (serviceId: string) =>
+  getServiceDeployments({ serviceId }).pipe(
+    Effect.map((response) => response.data.map(({ id }) => id).sort()),
+  );
+
+export const latestDeploymentId = (serviceId: string) =>
+  getService({ serviceId }).pipe(Effect.map((response) => response.data.latestDeploymentId));
+
+/** Poll the App until it reports `deploymentId` as latest. */
+export const expectLatestDeployment = (serviceId: string, deploymentId: string) =>
+  latestDeploymentId(serviceId).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 15,
+      until: (latest) => latest === deploymentId,
+    }),
+    Effect.tap((latest) => Effect.sync(() => expect(latest).toBe(deploymentId))),
+  );
+
+/**
+ * A well-formed deployment ID that no longer exists: create an empty
+ * deployment on the App and delete it.
+ */
+export const deletedDeploymentId = (serviceId: string) =>
+  Effect.gen(function* () {
+    const created = (yield* createServiceDeployment({ serviceId })).data;
+    yield* deleteDeployment({ deploymentId: created.id });
+    yield* expectDeploymentGone(created.id);
+    return created.id;
+  });
+
 export const expectServiceGone = (serviceId: string) =>
   expectGone(
     getService({ serviceId }).pipe(
@@ -131,6 +173,32 @@ export const snapshotState = (stack: Test.ScratchStack, fqn: string) =>
       return yield* Effect.die(new Error(`Expected a resource state row for '${fqn}'`));
     }
     return stored;
+  }).pipe(Effect.provide(stack.state));
+
+/**
+ * Overwrite fields of a resource's persisted attributes. Unlike
+ * `patchStateAttr`, this also patches rows a successful update (`updated`)
+ * or a failed one (`updating`, whose attributes are the last stable ones)
+ * left behind.
+ */
+export const patchAttr = (stack: Test.ScratchStack, fqn: string, patch: Record<string, unknown>) =>
+  Effect.gen(function* () {
+    const state = yield* yield* State;
+    const address = { stack: stack.name, stage: stack.stage, fqn };
+    const stored = yield* state.get(address);
+    if (
+      !stored ||
+      isActionState(stored) ||
+      (stored.status !== "created" && stored.status !== "updated" && stored.status !== "updating")
+    ) {
+      return yield* Effect.die(
+        new Error(`Expected a resource state row with attributes for '${fqn}'`),
+      );
+    }
+    yield* state.set({
+      ...address,
+      value: { ...stored, attr: { ...(stored.attr as object), ...patch } },
+    });
   }).pipe(Effect.provide(stack.state));
 
 export const restoreState = (

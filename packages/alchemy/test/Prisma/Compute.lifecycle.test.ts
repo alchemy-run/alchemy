@@ -2,6 +2,7 @@ import {
   createEnvironmentVariable,
   createService,
   deleteService,
+  getDeployment,
   getProject,
   getServiceDeployments,
   getServices,
@@ -16,6 +17,7 @@ import * as Prisma from "@/Prisma";
 import type { ComputeProps } from "@/Prisma/Compute";
 import * as Test from "@/Test/Alchemy";
 import { Api, ComputeBuildProject } from "./fixtures/ComputeEffectApp.ts";
+import EffectDefaultApp from "./fixtures/ComputeEffectDefaultApp.ts";
 import {
   environmentKeys,
   expectDeploymentGone,
@@ -398,7 +400,7 @@ test.provider(
 );
 
 test.provider(
-  "builds with a command, auto-builds a Bun app, and serves an effect-native named export",
+  "builds with a command, auto-builds a Bun app, and serves effect-native named and default exports",
   Effect.fn(function* (stack: Test.ScratchStack) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -436,7 +438,8 @@ test.provider(
           destroyOldDeployment: true,
         });
         const effect = yield* Api;
-        return { project, built, effect };
+        const effectDefault = yield* EffectDefaultApp;
+        return { project, built, effect, effectDefault };
       });
 
     const first = yield* stack.deploy(
@@ -452,6 +455,11 @@ test.provider(
     );
     yield* expectServes(`${first.built.url}/`, "hello-build");
     yield* expectServes(`${first.effect.url}/`, `effect-native-ok ${stack.name}/${stack.stage}`);
+    // The default export is bundled and served on its declared port.
+    expect(
+      (yield* getDeployment({ deploymentId: first.effectDefault.deploymentId! })).data.portMapping,
+    ).toEqual({ http: 4555 });
+    yield* expectServes(`${first.effectDefault.url}/`, "effect-native-default-ok");
 
     const second = yield* stack.deploy(program("auto"));
     expect(second.built.appId).toBe(first.built.appId);
@@ -461,6 +469,7 @@ test.provider(
     yield* stack.destroy();
     yield* expectServiceGone(first.built.appId);
     yield* expectServiceGone(first.effect.appId);
+    yield* expectServiceGone(first.effectDefault.appId);
     yield* expectProjectGone(first.project.projectId);
   }),
   { tags: liveTags, timeout: 240_000 },
