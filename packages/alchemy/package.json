@@ -35,6 +35,9 @@
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
     "./AI": "./src/AI/index.ts",
+    "./Anthropic": "./src/Anthropic/index.ts",
+    "./OpenAI": "./src/OpenAI/index.ts",
+    "./OpenCode": "./src/OpenCode/index.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
@@ -116,6 +119,21 @@
         "types": "./lib/AI/index.d.ts",
         "bun": "./src/AI/index.ts",
         "default": "./lib/AI/index.js"
+      },
+      "./Anthropic": {
+        "types": "./lib/Anthropic/index.d.ts",
+        "bun": "./src/Anthropic/index.ts",
+        "default": "./lib/Anthropic/index.js"
+      },
+      "./OpenAI": {
+        "types": "./lib/OpenAI/index.d.ts",
+        "bun": "./src/OpenAI/index.ts",
+        "default": "./lib/OpenAI/index.js"
+      },
+      "./OpenCode": {
+        "types": "./lib/OpenCode/index.d.ts",
+        "bun": "./src/OpenCode/index.ts",
+        "default": "./lib/OpenCode/index.js"
       },
       "./Auth": {
         "types": "./lib/Auth/index.d.ts",

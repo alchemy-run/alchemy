@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { acpDriver } from "@/AI/AcpDriver.ts";
 import { claudeCodeDriver } from "@/AI/ClaudeCodeDriver.ts";
+import { codexDriver } from "@/AI/CodexDriver.ts";
 import { makeHarness, type HarnessDriver } from "@/AI/HarnessEngine.ts";
 import type { SessionError } from "@/AI/Session.ts";
 import { MemorySessionStore } from "@/AI/SessionStore.ts";
@@ -81,5 +82,30 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
         }) as Effect.Effect<void>,
       ),
     { timeout: 120_000 },
+  );
+
+  test.skipIf(!process.env.OPENAI_API_KEY || !process.env.CODEX_LIVE)(
+    "Codex runs a turn over codex app-server",
+    () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const { result, types } = yield* roundTrip(
+            codexDriver({
+              command: "npx",
+              args: ["-y", "@openai/codex"],
+              env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY },
+            }),
+            workdir(),
+          );
+          // A funded key completes with "pong"; an unfunded one fails the turn
+          // with a quota error — either way the turn lifecycle round-trips.
+          expect(["completed", "failed"]).toContain(result.status);
+          if (result.status === "completed") {
+            expect(JSON.stringify(result.message).toLowerCase()).toContain("pong");
+          }
+          expect(types.has("turn.started")).toBe(true);
+        }) as Effect.Effect<void>,
+      ),
+    { timeout: 180_000 },
   );
 });

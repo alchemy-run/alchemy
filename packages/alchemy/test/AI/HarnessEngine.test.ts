@@ -1,14 +1,17 @@
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as RpcTest from "effect/rpc/RpcTest";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { makeHarness, type HarnessDriver } from "@/AI/HarnessEngine.ts";
+import { serveHarnessHttp } from "@/AI/HarnessServer.ts";
 import { emptyUsage, type Capabilities } from "@/AI/Session.ts";
-import { HarnessRpcs, remoteHarness, serveHarness } from "@/AI/SessionRpcs.ts";
+import { connectHarness, HarnessRpcs, remoteHarness, serveHarness } from "@/AI/SessionRpcs.ts";
 import { MemorySessionStore } from "@/AI/SessionStore.ts";
+import { toHttpClient } from "@/Cloudflare/Fetcher.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const capabilities: Capabilities = {
@@ -160,5 +163,32 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
     expect(out.name).toBe("echo");
     expect(out.result.message).toEqual([{ type: "text", text: "echo: over rpc" }]);
     expect(out.count).toBe(1);
+  });
+
+  test("a harness served over HTTP (NDJSON) drives through connectHarness", async () => {
+    const out = await run(
+      Effect.gen(function* () {
+        const local = yield* harness;
+        const handler = yield* serveHarnessHttp(local);
+        const http = toHttpClient({
+          fetch: (request) => handler.pipe(Effect.provideService(HttpServerRequest, request)),
+        });
+        const remote = yield* connectHarness(http);
+        const session = yield* remote.start({ id: "h1" });
+        const turn = yield* session.prompt("over http");
+        const result = yield* session.result(turn.turnId);
+        yield* session.close();
+        const events = Array.from(yield* Stream.runCollect(session.events()));
+        return { result, types: events.map((e) => e.type) };
+      }),
+    );
+    expect(out.result.message).toEqual([{ type: "text", text: "echo: over http" }]);
+    expect(out.types).toEqual([
+      "state",
+      "turn.started",
+      "message.delta",
+      "turn.completed",
+      "state",
+    ]);
   });
 });

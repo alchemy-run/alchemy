@@ -22,6 +22,10 @@ import {
   type Usage,
 } from "./Session.ts";
 
+/** The Agent SDK package (and the version server images install). */
+export const CLAUDE_AGENT_SDK: string = "@anthropic-ai/claude-agent-sdk";
+export const CLAUDE_AGENT_SDK_VERSION = "0.3.284";
+
 export interface ClaudeCodeOptions {
   /**
    * Default permission mode for sessions. Sessions started with
@@ -120,7 +124,13 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
   open: (session: DriverSessionOptions) =>
     Effect.gen(function* () {
       const { query } = yield* Effect.tryPromise({
-        try: () => import("@anthropic-ai/claude-agent-sdk"),
+        // Resolved at runtime from the image (the server's install layer puts
+        // it in /app/node_modules with its platform-native `claude` binary);
+        // a non-literal specifier keeps bundlers from inlining it.
+        try: () =>
+          import(/* @vite-ignore */ [CLAUDE_AGENT_SDK, ""].join("")) as Promise<
+            typeof import("@anthropic-ai/claude-agent-sdk")
+          >,
         catch: (cause) =>
           new SessionError({
             sessionId: session.id,
@@ -184,7 +194,17 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
                   }
                 : {}),
               ...(options.executable ? { pathToClaudeCodeExecutable: options.executable } : {}),
-              ...(options.env ? { env: { ...process.env, ...options.env } } : {}),
+              env: {
+                ...process.env,
+                // Claude Code refuses to skip permission prompts as root unless
+                // told it is inside a sandbox — which a harness container is.
+                ...(!ask &&
+                (options.permissionMode ?? "bypassPermissions") === "bypassPermissions" &&
+                process.getuid?.() === 0
+                  ? { IS_SANDBOX: "1" }
+                  : {}),
+                ...options.env,
+              },
             },
           }),
         catch: (cause) =>
@@ -341,9 +361,28 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
 
       yield* Stream.fromAsyncIterable(q, (cause) => cause).pipe(
         Stream.runForEach(handle),
-        Effect.catchCause((cause) =>
-          session.emit({ type: "error", message: `claude exited: ${Cause.pretty(cause)}` }),
-        ),
+        Effect.catchCause((cause) => {
+          const message = `claude exited: ${Cause.pretty(cause)}`;
+          const running = turn;
+          turn = undefined;
+          return Effect.andThen(
+            session.emit({ type: "error", message }),
+            // A dead process can't finish its turn — fail it so `result()` returns.
+            running
+              ? session.emit({
+                  type: "turn.completed",
+                  turnId: running.turnId,
+                  result: {
+                    turnId: running.turnId,
+                    status: "failed",
+                    message: [{ type: "text", text: running.text }],
+                    usage: { inputTokens: 0, outputTokens: 0 },
+                    error: message,
+                  },
+                })
+              : Effect.void,
+          );
+        }),
         Effect.forkScoped,
       );
 

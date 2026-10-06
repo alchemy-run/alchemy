@@ -1,9 +1,13 @@
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Rpc from "effect/rpc/Rpc";
-import type * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import {
   Answer,
@@ -116,21 +120,41 @@ export class HarnessRpcs extends RpcGroup.make(
  * {@link SessionRpcs} handlers for the session `id` on `harness` — a pure
  * mapping onto the {@link Session} methods. `start` creates the session
  * under `id` (idempotent); every other call resolves it.
+ *
+ * `harness` may be an Effect, resolved on every call in the call's own
+ * scope. Use that form whenever reaching the harness does I/O (connecting to
+ * a container): a Durable Object must not do I/O while it is constructed.
  */
-export const SessionHandlers = (options: { readonly harness: Harness; readonly id: string }) => {
-  const { harness, id } = options;
-  const session = Effect.suspend(() => harness.get(id));
+export const SessionHandlers = <R = never>(options: {
+  readonly harness: Harness | Effect.Effect<Harness, SessionError, R | Scope.Scope>;
+  readonly id: string;
+}) => {
+  const { id } = options;
+  const harness: Effect.Effect<Harness, SessionError, R | Scope.Scope> = Effect.isEffect(
+    options.harness,
+  )
+    ? options.harness
+    : Effect.succeed(options.harness);
+  const session = Effect.flatMap(harness, (h) => h.get(id));
+  const call = <A, E, R2>(f: (s: Session) => Effect.Effect<A, E, R2>) =>
+    Effect.scoped(Effect.flatMap(session, f));
   return SessionRpcs.toLayer({
-    start: (opts) => harness.start({ ...opts, id }).pipe(Effect.flatMap((s) => s.info())),
-    prompt: ({ prompt }) => Effect.flatMap(session, (s) => s.prompt(prompt)),
-    steer: ({ prompt }) => Effect.flatMap(session, (s) => s.steer(prompt)),
-    interrupt: () => Effect.flatMap(session, (s) => s.interrupt()),
-    respond: ({ requestId, answer }) =>
-      Effect.flatMap(session, (s) => s.respond(requestId, answer)),
-    result: ({ turnId }) => Effect.flatMap(session, (s) => s.result(turnId)),
-    events: ({ after }) => Stream.unwrap(Effect.map(session, (s) => s.events({ after }))),
-    info: () => Effect.flatMap(session, (s) => s.info()),
-    close: () => Effect.flatMap(session, (s) => s.close()),
+    start: (opts) =>
+      Effect.scoped(
+        harness.pipe(
+          Effect.flatMap((h) => h.start({ ...opts, id })),
+          Effect.flatMap((s) => s.info()),
+        ),
+      ),
+    prompt: ({ prompt }) => call((s) => s.prompt(prompt)),
+    steer: ({ prompt }) => call((s) => s.steer(prompt)),
+    interrupt: () => call((s) => s.interrupt()),
+    respond: ({ requestId, answer }) => call((s) => s.respond(requestId, answer)),
+    result: ({ turnId }) => call((s) => s.result(turnId)),
+    events: ({ after }) =>
+      Stream.unwrap(Effect.map(session, (s) => s.events({ after }))).pipe(Stream.scoped),
+    info: () => call((s) => s.info()),
+    close: () => call((s) => s.close()),
   });
 };
 
@@ -232,3 +256,27 @@ export const followEvents = <E, R>(
       ),
     ) as Stream.Stream<SessionEvent, E, R>;
   });
+
+/**
+ * Connect to a harness served with `AI.serveHarnessHttp` through any
+ * `HttpClient` — e.g. a container port from a Durable Object
+ * (`Cloudflare.toHttpClient(yield* sandbox.getTcpPort(3000))`). The client
+ * lives in the ambient `Scope`.
+ */
+export const connectHarness = (
+  httpClient: HttpClient.HttpClient,
+  options?: { readonly url?: string },
+): Effect.Effect<Harness, SessionError, Scope.Scope> =>
+  RpcClient.make(HarnessRpcs).pipe(
+    Effect.provide(
+      RpcClient.layerProtocolHttp({ url: options?.url ?? "http://harness/" }).pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(HttpClient.HttpClient, httpClient),
+            RpcSerialization.layerNdjson,
+          ),
+        ),
+      ),
+    ),
+    Effect.flatMap(remoteHarness),
+  );
