@@ -1,7 +1,6 @@
 import * as Codex from "@distilled.cloud/codex";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -15,6 +14,7 @@ import {
   type SessionEventInput,
   type TurnStatus,
 } from "./Session.ts";
+import { spawnStdio } from "./Stdio.ts";
 
 export interface CodexOptions {
   /** The `codex` executable. @default "codex" */
@@ -92,7 +92,7 @@ export const codexDriver = (
         return yield* Deferred.await(answer);
       });
 
-    const handlers = Codex.handlers({
+    const handlers: Codex.InboundHandlers = {
       itemCommandExecutionRequestApproval: (req) =>
         approve(req.threadId, req.command ?? "command", "shell", req).pipe(
           Effect.map(
@@ -109,23 +109,19 @@ export const codexDriver = (
               ({ decision: ok ? "accept" : "decline" }) as Codex.FileChangeRequestApprovalResponse,
           ),
         ),
-    });
+    };
 
-    const connection = yield* Layer.build(
-      Codex.layerChildProcess({
+    const connection = yield* Codex.connect(
+      yield* spawnStdio({
         command: options.command ?? "codex",
         args: [...(options.args ?? []), "app-server"],
         ...(options.env ? { env: options.env } : {}),
-        handlers,
       }),
-    ).pipe(
-      Effect.mapError(
-        (e) => new SessionError({ message: `failed to start codex app-server: ${e.message}` }),
-      ),
+      { handlers },
     );
     const run = <A, E>(effect: Effect.Effect<A, E, Codex.CodexConnection>) =>
       effect.pipe(
-        Effect.provideContext(connection),
+        Effect.provideService(Codex.CodexConnection, connection),
         Effect.mapError(
           (e) => new SessionError({ message: String((e as { message?: string }).message ?? e) }),
         ),
@@ -273,7 +269,7 @@ export const codexDriver = (
         }),
       ],
       { concurrency: "unbounded", discard: true },
-    ).pipe(Effect.provideContext(connection), Effect.forkScoped);
+    ).pipe(Effect.provideService(Codex.CodexConnection, connection), Effect.forkScoped);
 
     const open = (session: DriverSessionOptions) =>
       Effect.gen(function* () {

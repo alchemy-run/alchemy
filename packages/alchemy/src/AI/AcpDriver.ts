@@ -1,7 +1,6 @@
 import * as Acp from "@distilled.cloud/acp";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -17,6 +16,7 @@ import {
   type ToolKind,
   type TurnStatus,
 } from "./Session.ts";
+import { spawnStdio } from "./Stdio.ts";
 
 /** How to launch an ACP agent inside the sandbox. */
 export interface AcpAgentOptions {
@@ -171,21 +171,17 @@ export const acpDriver = (
         }),
     };
 
-    const connection = yield* Layer.build(
-      Acp.layerChildProcess({
+    const connection = yield* Acp.connect(
+      yield* spawnStdio({
         command: agent.command,
         ...(agent.args ? { args: agent.args } : {}),
         ...(agent.env ? { env: agent.env } : {}),
-        handlers,
       }),
-    ).pipe(
-      Effect.mapError(
-        (e) => new SessionError({ message: `failed to start ${agent.command}: ${e.message}` }),
-      ),
+      { handlers },
     );
     const run = <A, E>(effect: Effect.Effect<A, E, Acp.AcpConnection>) =>
       effect.pipe(
-        Effect.provideContext(connection),
+        Effect.provideService(Acp.AcpConnection, connection),
         Effect.mapError(
           (e) => new SessionError({ message: String((e as { message?: string }).message ?? e) }),
         ),
@@ -264,7 +260,7 @@ export const acpDriver = (
             return Effect.void;
         }
       }),
-      Effect.provideContext(connection),
+      Effect.provideService(Acp.AcpConnection, connection),
       Effect.forkScoped,
     );
 
