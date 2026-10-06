@@ -1,53 +1,120 @@
 ---
 title: Setup
-description: Connect Alchemy to DigitalOcean — create an API token and store it in a profile.
+description: Install Alchemy and connect it to DigitalOcean — create a project, generate an API token, and store it in a profile.
 ---
 
-Everything you need before deploying to DigitalOcean: an account and
-a personal access token stored in a profile.
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../versions";
+
+export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+
+Everything you need before deploying to DigitalOcean: the alchemy
+package, a DigitalOcean account, and a personal access token stored
+in a profile.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) or Node.js 22+
+- A [DigitalOcean](https://cloud.digitalocean.com) account
 
 ## Generate an API token
 
-In the [DigitalOcean control panel](https://cloud.digitalocean.com/account/api/tokens):
+In the
+[DigitalOcean control panel](https://cloud.digitalocean.com/account/api/tokens):
 
 1. Go to **API** → **Tokens**.
 2. Click **Generate New Token**.
-3. Select **Full Access**, or custom scopes with read and write on
-   **droplet**, **ssh_key**, **firewall**, and **tag**.
+3. Select **Full Access**, or **Custom Scopes** with:
+   - **droplet**: read, create, update, delete
+   - **ssh_key**: read, create, update, delete
+   - **firewall**: read, create, update, delete
+   - **tag**: read, create, delete
 4. Copy the token — DigitalOcean shows it **only once**.
 
-The **tag** scope is required. Alchemy tags every droplet it creates
-to find it again, see
+The **tag** scope is required: Alchemy tags every droplet it creates
+so it can find the droplet again — see
 [Ownership and adoption](/digitalocean#ownership-and-adoption).
 
-## Add the provider
+## Create a project directory
 
-```typescript
-// alchemy.run.ts
-import * as DigitalOcean from "alchemy/DigitalOcean";
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir my-app && cd my-app && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir my-app && cd my-app && yarn init -y" lang="sh" />
+  </TabItem>
+</Tabs>
 
-providers: DigitalOcean.providers(),
-```
+## Install
 
-## Connect Alchemy to DigitalOcean
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Connect alchemy to DigitalOcean
 
 There is no separate credentials step. The first time you run
-`alchemy deploy` (or `plan`, `destroy`) on a stack that uses
-`DigitalOcean.providers()`, Alchemy prompts for the token you
+`alchemy deploy` (or `plan`, `dev`, `destroy`) on a stack that uses
+`DigitalOcean.providers()`, alchemy prompts for the token you
 generated above (and, optionally, an API base URL override). It is
 saved under `~/.alchemy/credentials/<profile>/` in the selected
 [profile](/environments/profiles) and reused on subsequent commands.
 
-In CI (`CI=true`) Alchemy skips the prompt and reads the token from
+A minimal stack that triggers the prompt:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as DigitalOcean from "alchemy/DigitalOcean";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyStack",
+  {
+    providers: DigitalOcean.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const host = yield* DigitalOcean.Droplet("app", {
+      region: "sfo3",
+      size: "s-1vcpu-1gb",
+      image: "ubuntu-24-04-x64",
+    });
+    return { ip: host.ipv4 };
+  }),
+);
+```
+
+In CI (`CI=true`) alchemy skips the prompt and reads the token from
 the environment instead:
 
 | Variable | Purpose |
 | --- | --- |
 | `DIGITALOCEAN_TOKEN` | The token. The name the Terraform provider reads. |
 | `DIGITALOCEAN_ACCESS_TOKEN` | Read when `DIGITALOCEAN_TOKEN` is not set. The name `doctl` reads. |
+| `DIGITALOCEAN_API_KEY` | Read when neither of the above is set. |
 | `DIGITALOCEAN_API_BASE_URL` | Optional. Overrides the API base URL. |
 
-To re-run the setup later:
+To re-run the setup later (e.g. to rotate the token, or configure a
+separate `prod` profile):
 
 ```sh
 # Re-run the interactive setup (e.g. to rotate the token)
@@ -61,6 +128,25 @@ alchemy profile edit --profile prod --add DigitalOcean
 alchemy profile edit --add DigitalOcean --method stored --set apiToken=env:DIGITALOCEAN_TOKEN
 ```
 
+Inspect what's stored (secrets are redacted):
+
+```sh
+alchemy profile show
+```
+
+## State storage
+
+DigitalOcean has no object-storage state backend of its own, so pick
+one of:
+
+- **`Alchemy.localState()`** — state on disk under `.alchemy/` next
+  to your code. Zero setup; right for solo projects and trying
+  things out.
+- **A cloud state store** — if you also use Cloudflare or AWS, pass
+  `Cloudflare.state()` or `AWS.state()` so state is shared with
+  your team and CI. See [State Store](/state-store).
+
 ## Next steps
 
-- [DigitalOcean overview](/digitalocean) — resources and compositions.
+- [DigitalOcean overview](/digitalocean) — Droplets, SSH keys, and
+  Firewalls, and how they compose with the rest of your cloud.

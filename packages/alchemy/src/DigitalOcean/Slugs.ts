@@ -1,4 +1,8 @@
-/** Datacenter region slug. Unlisted slugs are also accepted. */
+/**
+ * Datacenter region slug. The literals are the regions DigitalOcean listed
+ * in October 2026 and give editor completion; any other string is accepted
+ * so new regions work without an Alchemy release.
+ */
 export type RegionSlug =
   | "ams3"
   | "atl1"
@@ -18,7 +22,10 @@ export type RegionSlug =
   | "tor1"
   | (string & {});
 
-/** Droplet size slug. Unlisted slugs are also accepted. */
+/**
+ * Droplet size slug. The literals are the common sizes DigitalOcean listed
+ * in October 2026, not the full catalog; any other string is accepted.
+ */
 export type SizeSlug =
   | "s-1vcpu-512mb-10gb"
   | "s-1vcpu-1gb"

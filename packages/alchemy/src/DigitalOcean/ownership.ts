@@ -8,9 +8,8 @@ const GENERATION_TAG_PREFIX = `${OWNERSHIP_TAG_PREFIX}generation:`;
 
 /**
  * Names the logical resource. Every generation of it carries this tag, so
- * a resource whose state was lost is found again.
- *
- * @internal exported for unit testing
+ * a resource whose state was lost is found again. DigitalOcean tags are
+ * flat strings, so the stack, stage and name are hashed into one.
  */
 export const hashOwnershipTag = (stack: string, stage: string, fqn: string) =>
   Effect.map(sha256(`${stack}\0${stage}\0${fqn}`), (digest) => OWNERSHIP_TAG_PREFIX + digest);

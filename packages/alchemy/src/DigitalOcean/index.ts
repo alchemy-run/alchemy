@@ -6,14 +6,13 @@ export {
   DropletActionTimedOut,
   DropletCreateFailed,
   DropletProvider,
-  DropletReplacementRequired,
   DropletStillExists,
   DropletTagReserved,
   DropletWaitTimedOut,
   type DropletAttributes,
   type DropletProps,
-} from "./Droplets/Droplet.ts";
-export type { ImageSlug, RegionSlug, SizeSlug } from "./Droplets/Slugs.ts";
+  type DropletStatus,
+} from "./Droplet.ts";
 export {
   Firewall,
   FirewallApplyFailed,
@@ -24,16 +23,19 @@ export {
   type FirewallInboundRule,
   type FirewallOutboundRule,
   type FirewallProps,
+  type FirewallRuleAction,
   type FirewallRulePorts,
   type FirewallRuleProtocol,
-} from "./Firewalls/Firewall.ts";
-export { DigitalOceanPageOverflow } from "./pagination.ts";
+  type FirewallStatus,
+} from "./Firewall.ts";
 export * from "./Providers.ts";
+export type { ImageSlug, RegionSlug, SizeSlug } from "./Slugs.ts";
 export {
   SshKey,
   SshKeyProvider,
   SshKeyStillExists,
+  SshKeyUnparseable,
   SshKeyWaitTimedOut,
   type SshKeyAttributes,
   type SshKeyProps,
-} from "./SshKeys/SshKey.ts";
+} from "./SshKey.ts";

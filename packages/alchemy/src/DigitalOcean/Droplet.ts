@@ -2,9 +2,11 @@ import * as DO from "@distilled.cloud/digitalocean";
 import type {
   ActionStatus,
   Droplet as ApiDroplet,
-  DropletActionRename,
   DropletSingleCreateInput,
   DropletStatus,
+  NetworkV4,
+  NetworkV6,
+  PostDropletActionRequestBody,
 } from "@distilled.cloud/digitalocean";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
@@ -13,24 +15,26 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
-import { Unowned } from "../../AdoptPolicy.ts";
-import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
-import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
-import { sameMembers, unique } from "../members.ts";
-import { ignoreNotFound, noneIfNotFound } from "../notFound.ts";
+import * as Stream from "effect/Stream";
+import { Unowned } from "../AdoptPolicy.ts";
+import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { setEquals } from "../Util/equal.ts";
+import { pollUntil, type PollBudget } from "../Util/poll.ts";
+import { ignoreNotFound, noneIfNotFound } from "./notFound.ts";
 import {
   generationTagFor,
   isAlchemyTag,
   ownershipTagFor,
   withoutAlchemyTags,
-} from "../ownership.ts";
-import { collectPages } from "../pagination.ts";
-import { pollUntil, type PollBudget } from "../poll.ts";
-import type { Providers } from "../Providers.ts";
+} from "./ownership.ts";
+import type { Providers } from "./Providers.ts";
 import type { ImageSlug, RegionSlug, SizeSlug } from "./Slugs.ts";
+
+export type { DropletStatus } from "@distilled.cloud/digitalocean";
 
 export type DropletProps = {
   /**
@@ -64,7 +68,8 @@ export type DropletProps = {
   backups?: boolean;
 
   /**
-   * Enable IPv6. A change replaces the droplet.
+   * Enable IPv6. Enabling updates the droplet in place. Disabling replaces
+   * it, because DigitalOcean cannot remove an IPv6 address.
    *
    * @default false
    */
@@ -92,17 +97,17 @@ export type DropletProps = {
 
   /**
    * Block storage volume ids to attach at create. A change replaces the
-   * droplet.
+   * droplet. A volume attaches to one droplet at a time, so a droplet that
+   * holds volumes is deleted before its replacement is created.
    */
   volumes?: string[];
 
   /**
-   * Maximum droplet age, in milliseconds or as a duration string
-   * (`"30 days"`). The age counts from `createdAt`. When the droplet is
-   * older, the next deploy replaces it and its public IP. A change to this
-   * value alone does not replace.
+   * Maximum droplet age, for example `"30 days"`. The age counts from
+   * `createdAt`. When the droplet is older, the next deploy replaces it and
+   * its public IP. A change to this value alone does not replace.
    */
-  replaceAfter?: number | (Duration.Input & string);
+  replaceAfter?: Duration.Input;
 
   /**
    * VPC for the droplet. A change replaces the droplet.
@@ -158,15 +163,17 @@ export type Droplet = Resource<
 export type DropletAttributes = Droplet["Attributes"];
 
 /**
- * A DigitalOcean Droplet: a Linux virtual machine. `name` and `tags` update
- * in place. A change to any other property replaces the droplet. The old
- * droplet is deleted first, because the name is its hostname. Put all setup
- * in `userData` (cloud-init) so a new droplet configures itself.
+ * A DigitalOcean Droplet: a Linux virtual machine. `name` and `tags`
+ * update in place, and so does enabling `ipv6`. A change to any other
+ * property replaces the droplet: the new droplet is created first, then
+ * the old one is deleted. Put all setup in `userData` (cloud-init) so
+ * a new droplet configures itself.
  *
  * Droplet names are not unique. Alchemy adds an `alchemy:` ownership tag at
- * create, built from the stack, stage, and resource name. If the state
- * store is lost, alchemy finds the droplet again through that tag. A
- * droplet with the same name but no tag is `Unowned` and needs `--adopt`.
+ * create, built from the stack, stage, and fully-qualified resource name.
+ * If the state store is lost, alchemy finds the droplet again through that
+ * tag. A droplet with the same name but no tag is `Unowned` and needs
+ * `--adopt`.
  *
  * ### Creating a Droplet
  * **Example:** Host reachable over SSH
@@ -231,7 +238,7 @@ export type DropletAttributes = Droplet["Attributes"];
  */
 export const Droplet = Resource<Droplet>("DigitalOcean.Droplet");
 
-export class DropletWaitTimedOut extends Data.TaggedError("DropletWaitTimedOut")<{
+export class DropletWaitTimedOut extends Data.TaggedError("DigitalOcean.DropletWaitTimedOut")<{
   readonly dropletId: number;
   readonly waitingFor: string;
   readonly lastStatus: DropletStatus | undefined;
@@ -242,7 +249,7 @@ export class DropletWaitTimedOut extends Data.TaggedError("DropletWaitTimedOut")
   }
 }
 
-export class DropletStillExists extends Data.TaggedError("DropletStillExists")<{
+export class DropletStillExists extends Data.TaggedError("DigitalOcean.DropletStillExists")<{
   readonly dropletId: number;
 }> {
   override get message() {
@@ -250,7 +257,7 @@ export class DropletStillExists extends Data.TaggedError("DropletStillExists")<{
   }
 }
 
-export class DropletActionFailed extends Data.TaggedError("DropletActionFailed")<{
+export class DropletActionFailed extends Data.TaggedError("DigitalOcean.DropletActionFailed")<{
   readonly dropletId: number;
   readonly actionId: number;
   readonly status: ActionStatus;
@@ -260,7 +267,7 @@ export class DropletActionFailed extends Data.TaggedError("DropletActionFailed")
   }
 }
 
-export class DropletActionTimedOut extends Data.TaggedError("DropletActionTimedOut")<{
+export class DropletActionTimedOut extends Data.TaggedError("DigitalOcean.DropletActionTimedOut")<{
   readonly dropletId: number;
   readonly actionId: number;
 }> {
@@ -269,7 +276,7 @@ export class DropletActionTimedOut extends Data.TaggedError("DropletActionTimedO
   }
 }
 
-export class DropletCreateFailed extends Data.TaggedError("DropletCreateFailed")<{
+export class DropletCreateFailed extends Data.TaggedError("DigitalOcean.DropletCreateFailed")<{
   readonly name: string;
   readonly reason: string;
 }> {
@@ -278,19 +285,7 @@ export class DropletCreateFailed extends Data.TaggedError("DropletCreateFailed")
   }
 }
 
-export class DropletReplacementRequired extends Data.TaggedError("DropletReplacementRequired")<{
-  readonly dropletId: number;
-  readonly reasons: ReadonlyArray<string>;
-}> {
-  override get message() {
-    return (
-      `Droplet ${this.dropletId} cannot change ${this.reasons.join(", ")} ` +
-      "in place. Deploy again so the plan replaces the droplet."
-    );
-  }
-}
-
-export class DropletTagReserved extends Data.TaggedError("DropletTagReserved")<{
+export class DropletTagReserved extends Data.TaggedError("DigitalOcean.DropletTagReserved")<{
   readonly tag: string;
 }> {
   override get message() {
@@ -301,12 +296,14 @@ export class DropletTagReserved extends Data.TaggedError("DropletTagReserved")<{
 // Hostname label limit.
 const NAME_MAX_LENGTH = 63;
 
+const PAGE_SIZE = 200;
+
 // A droplet takes one to two minutes to create or destroy.
-const DROPLET_POLL: PollBudget = { every: "5 seconds", times: 36 };
+const PROVISIONING_POLL: PollBudget = { every: "5 seconds", times: 36 };
 
-const REPLACE = { action: "replace", deleteFirst: true } as const;
+// An action or a rename shows within seconds.
+const ACTION_POLL: PollBudget = { every: "3 seconds", times: 20 };
 
-const FEATURE_FLAGS = ["backups", "ipv6", "monitoring"] as const;
 const REPLACING_VALUES = [
   "region",
   "size",
@@ -316,12 +313,17 @@ const REPLACING_VALUES = [
   // `undefined` keeps the image default, which is not `false`.
   "withDropletAgent",
 ] as const;
+const REPLACING_FLAGS = ["backups", "monitoring"] as const;
 const REPLACING_LISTS = ["sshKeys", "volumes"] as const;
+// Enabling `ipv6` is an action; only turning it off needs a new droplet.
 const REPLACING_PROPS: ReadonlySet<string> = new Set([
   ...REPLACING_VALUES,
-  ...FEATURE_FLAGS,
+  ...REPLACING_FLAGS,
   ...REPLACING_LISTS,
+  "ipv6",
 ]);
+
+const isOn = (flag: boolean | undefined) => flag ?? false;
 
 /**
  * Props that replace the droplet and differ from the previous deploy.
@@ -332,8 +334,9 @@ const REPLACING_PROPS: ReadonlySet<string> = new Set([
  */
 export const propsChangedSinceLastDeploy = (news: DropletProps, olds: DropletProps): string[] => [
   ...REPLACING_VALUES.filter((prop) => news[prop] !== olds[prop]),
-  ...FEATURE_FLAGS.filter((flag) => (news[flag] ?? false) !== (olds[flag] ?? false)),
-  ...REPLACING_LISTS.filter((prop) => !sameMembers(news[prop], olds[prop])),
+  ...REPLACING_FLAGS.filter((flag) => isOn(news[flag]) !== isOn(olds[flag])),
+  ...REPLACING_LISTS.filter((prop) => !setEquals(news[prop], olds[prop])),
+  ...(isOn(olds.ipv6) && !isOn(news.ipv6) ? ["ipv6"] : []),
 ];
 
 // Snapshots and retired images report no slug to compare with.
@@ -344,6 +347,8 @@ const imageDrifted = (image: ImageSlug | number, observed: DropletAttributes): b
 
 /**
  * Props that replace the droplet and differ from the observed droplet.
+ * The droplet's `features` list lags its real settings, so feature flags
+ * are compared with the previous deploy only.
  *
  * @internal exported for unit testing
  */
@@ -356,34 +361,26 @@ export const propsDriftedFromCloud = (
     ...(observed.region !== news.region ? ["region"] : []),
     ...(observed.sizeSlug !== news.size ? ["size"] : []),
     ...(imageDrifted(news.image, observed) ? ["image"] : []),
-    ...FEATURE_FLAGS.filter((flag) => observed.features.includes(flag) !== (news[flag] ?? false)),
     ...(vpcDrifted ? ["vpcUuid"] : []),
   ];
 };
-
-const replacementReasons = (
-  news: DropletProps,
-  olds: DropletProps | undefined,
-  observed: DropletAttributes,
-): string[] => [
-  ...propsDriftedFromCloud(news, observed),
-  ...(olds === undefined ? [] : propsChangedSinceLastDeploy(news, olds)),
-];
 
 // A value known only after deploy may differ from the deployed one.
 const hasUnresolvedReplacingProp = (news: object) =>
   Object.entries(news).some(([prop, value]) => REPLACING_PROPS.has(prop) && !isResolved(value));
 
+// A volume attaches to one droplet at a time, so a droplet that holds
+// volumes must go before its replacement can take them.
+const replacement = (olds: DropletProps) =>
+  ({ action: "replace", deleteFirst: (olds.volumes?.length ?? 0) > 0 }) as const;
+
 // A malformed `createdAt` parses to NaN and counts as not older.
-const isOlderThan = (
-  createdAt: string,
-  maxAge: NonNullable<DropletProps["replaceAfter"]>,
-  nowMs: number,
-): boolean => nowMs - Date.parse(createdAt) >= Duration.toMillis(maxAge);
+const isOlderThan = (createdAt: string, maxAge: Duration.Input, nowMs: number): boolean =>
+  nowMs - Date.parse(createdAt) >= Duration.toMillis(maxAge);
 
 const isDueForReplacement = Effect.fn(function* (
   observed: DropletAttributes,
-  replaceAfter: DropletProps["replaceAfter"],
+  replaceAfter: Duration.Input | undefined,
 ) {
   if (replaceAfter === undefined) return false;
   const now = yield* Clock.currentTimeMillis;
@@ -401,23 +398,21 @@ export const diffDroplet = Effect.fn(function* ({
   news,
   output,
 }: {
-  readonly olds: DropletProps | undefined;
+  readonly olds: DropletProps;
   readonly news: Input<DropletProps>;
   readonly output: DropletAttributes | undefined;
 }) {
   if (!isResolved(news)) {
     const replaces = output !== undefined && hasUnresolvedReplacingProp(news);
-    return replaces ? REPLACE : undefined;
+    return replaces ? replacement(olds) : undefined;
   }
   if (output !== undefined && propsDriftedFromCloud(news, output).length > 0) {
-    return REPLACE;
+    return replacement(olds);
   }
-  // Adoption has no previous deploy to compare with.
-  if (olds === undefined) return undefined;
   if (output !== undefined && (yield* isDueForReplacement(output, news.replaceAfter))) {
-    return REPLACE;
+    return replacement(olds);
   }
-  if (propsChangedSinceLastDeploy(news, olds).length > 0) return REPLACE;
+  if (propsChangedSinceLastDeploy(news, olds).length > 0) return replacement(olds);
   return undefined;
 });
 
@@ -431,9 +426,6 @@ const isActiveWithPublicIpv4 = (droplet: ApiDroplet) =>
 // Actions are rejected while a droplet is locked or still provisioning.
 const acceptsActions = (droplet: ApiDroplet) => droplet.status !== "new" && !droplet.locked;
 
-const hasNameAndTags = (name: string, tags: ReadonlyArray<string>) => (droplet: ApiDroplet) =>
-  droplet.name === name && sameMembers(droplet.tags, tags);
-
 const isFinished = (status: ActionStatus): status is Exclude<ActionStatus, "in-progress"> =>
   status !== "in-progress";
 
@@ -442,9 +434,11 @@ const newestFirst = Order.mapInput(
   (droplet: ApiDroplet) => droplet.created_at,
 );
 
-const publicAddress = (
-  networks: ReadonlyArray<{ type?: string; ip_address?: string }> | undefined,
-) => networks?.find((network) => network.type === "public")?.ip_address;
+const publicAddress = (networks: ReadonlyArray<NetworkV4 | NetworkV6> | undefined) =>
+  networks?.find((network) => network.type === "public")?.ip_address;
+
+const privateAddress = (networks: ReadonlyArray<NetworkV4> | undefined) =>
+  networks?.find((network) => network.type === "private")?.ip_address;
 
 const toAttrs = (droplet: ApiDroplet): DropletAttributes => ({
   dropletId: droplet.id,
@@ -455,7 +449,7 @@ const toAttrs = (droplet: ApiDroplet): DropletAttributes => ({
   imageId: droplet.image.id,
   imageSlug: droplet.image.slug ?? undefined,
   ipv4: publicAddress(droplet.networks.v4),
-  privateIpv4: droplet.networks.v4?.find((network) => network.type === "private")?.ip_address,
+  privateIpv4: privateAddress(droplet.networks.v4),
   ipv6: publicAddress(droplet.networks.v6),
   vpcUuid: droplet.vpc_uuid,
   features: droplet.features,
@@ -473,16 +467,14 @@ const rejectReservedTags = (tags: ReadonlyArray<string> | undefined) =>
     onSome: (tag) => Effect.fail(new DropletTagReserved({ tag })),
   });
 
-const rejectReplacement = (
-  droplet: ApiDroplet,
-  news: DropletProps,
-  olds: DropletProps | undefined,
-) => {
-  const reasons = replacementReasons(news, olds, toAttrs(droplet));
-  return reasons.length === 0
-    ? Effect.void
-    : Effect.fail(new DropletReplacementRequired({ dropletId: droplet.id, reasons }));
-};
+const featureActions = (droplet: ApiDroplet, news: DropletProps): PostDropletActionRequestBody[] =>
+  isOn(news.ipv6) && !droplet.features.includes("ipv6") ? [{ type: "enable_ipv6" }] : [];
+
+const hasConverged =
+  (name: string, tags: ReadonlyArray<string>, news: DropletProps) => (droplet: ApiDroplet) =>
+    droplet.name === name &&
+    setEquals(droplet.tags, tags) &&
+    featureActions(droplet, news).length === 0;
 
 export const DropletProvider = () =>
   Provider.effect(
@@ -514,16 +506,10 @@ export const DropletProvider = () =>
       // `tag_name` also returns GPU droplets, which the plain list hides
       // behind `type=gpus`.
       const listTagged = (tag: string) =>
-        collectPages(
-          (query) => list({ ...query, tag_name: tag }),
-          (response) => response.droplets ?? [],
-        );
+        list.items({ tag_name: tag, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
 
       const listOfType = (type: "droplets" | "gpus") =>
-        collectPages(
-          (query) => list({ ...query, type }),
-          (response) => response.droplets ?? [],
-        );
+        list.items({ type, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
 
       const observeNewestTagged = (tag: string) =>
         listTagged(tag).pipe(Effect.map((droplets) => Arr.head(Arr.sort(droplets, newestFirst))));
@@ -549,10 +535,11 @@ export const DropletProvider = () =>
         wait: {
           readonly until: (droplet: ApiDroplet) => boolean;
           readonly waitingFor: string;
+          readonly budget: PollBudget;
         },
       ) =>
         pollUntil(observeById(dropletId), {
-          ...DROPLET_POLL,
+          ...wait.budget,
           until: (observed): observed is Option.Some<ApiDroplet> =>
             Option.isSome(observed) && wait.until(observed.value),
           onTimeout: (last) =>
@@ -569,11 +556,12 @@ export const DropletProvider = () =>
           : waitForDroplet(droplet.id, {
               until: acceptsActions,
               waitingFor: "a state that accepts actions",
+              budget: ACTION_POLL,
             });
 
       const waitUntilGone = (dropletId: number) =>
         pollUntil(observeById(dropletId), {
-          ...DROPLET_POLL,
+          ...PROVISIONING_POLL,
           until: Option.isNone,
           onTimeout: () => new DropletStillExists({ dropletId }),
         });
@@ -587,7 +575,7 @@ export const DropletProvider = () =>
 
       const waitForAction = (dropletId: number, actionId: number) =>
         pollUntil(observeActionStatus(dropletId, actionId), {
-          ...DROPLET_POLL,
+          ...ACTION_POLL,
           until: isFinished,
           onTimeout: () => new DropletActionTimedOut({ dropletId, actionId }),
         }).pipe(
@@ -596,6 +584,14 @@ export const DropletProvider = () =>
             (status) => new DropletActionFailed({ dropletId, actionId, status }),
           ),
         );
+
+      const runAction = Effect.fn(function* (
+        dropletId: number,
+        body: PostDropletActionRequestBody,
+      ) {
+        const posted = yield* postAction({ droplet_id: dropletId, body });
+        yield* waitForAction(dropletId, posted.action.id);
+      });
 
       // The assign endpoint answers 404 for a tag that does not exist yet.
       const assign = (tag: string, dropletId: number) => {
@@ -639,13 +635,15 @@ export const DropletProvider = () =>
         );
       };
 
+      // Each action locks the droplet until it finishes.
+      const syncFeatures = (droplet: ApiDroplet, news: DropletProps) =>
+        Effect.forEach(featureActions(droplet, news), (body) => runAction(droplet.id, body), {
+          discard: true,
+        });
+
       const syncName = Effect.fn(function* (droplet: ApiDroplet, name: string) {
         if (droplet.name === name) return;
-        const renamed = yield* postAction({
-          droplet_id: droplet.id,
-          body: { type: "rename", name } satisfies DropletActionRename,
-        });
-        yield* waitForAction(droplet.id, renamed.action.id);
+        yield* runAction(droplet.id, { type: "rename", name });
       });
 
       const createDroplet = Effect.fn(function* (
@@ -680,6 +678,7 @@ export const DropletProvider = () =>
         return yield* waitForDroplet(dropletId, {
           until: isActiveWithPublicIpv4,
           waitingFor: "active with a public IPv4 address",
+          budget: PROVISIONING_POLL,
         });
       });
 
@@ -694,14 +693,22 @@ export const DropletProvider = () =>
           onSome: waitUntilAcceptsActions,
         });
 
-      const destroyDroplet = Effect.fn(function* (droplet: ApiDroplet) {
-        yield* pollUntil(observeById(droplet.id), {
-          ...DROPLET_POLL,
+      const waitUntilAcceptsDestroy = (dropletId: number) =>
+        pollUntil(observeById(dropletId), {
+          ...ACTION_POLL,
           until: (observed) => Option.isNone(observed) || acceptsActions(observed.value),
-          onTimeout: () => new DropletStillExists({ dropletId: droplet.id }),
+          onTimeout: (last) =>
+            new DropletWaitTimedOut({
+              dropletId,
+              waitingFor: "a state that accepts destroy",
+              lastStatus: Option.getOrUndefined(Option.map(last, (droplet) => droplet.status)),
+            }),
         });
-        yield* ignoreNotFound(destroy({ droplet_id: droplet.id }));
-        yield* waitUntilGone(droplet.id);
+
+      const destroyDroplet = Effect.fn(function* (dropletId: number) {
+        yield* waitUntilAcceptsDestroy(dropletId);
+        yield* ignoreNotFound(destroy({ droplet_id: dropletId }));
+        yield* waitUntilGone(dropletId);
       });
 
       return {
@@ -736,23 +743,28 @@ export const DropletProvider = () =>
           return Option.getOrUndefined(Option.map(foreign, (droplet) => Unowned(toAttrs(droplet))));
         }),
         diff: diffDroplet,
-        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, olds, output }) {
+        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
           yield* rejectReservedTags(news.tags);
           const name = news.name ?? (yield* physicalName(id));
           const generationTag = generationTagFor(instanceId);
-          const tags = unique([...(news.tags ?? []), yield* ownershipTagFor(fqn), generationTag]);
+          const tags = Arr.dedupe([
+            ...(news.tags ?? []),
+            yield* ownershipTagFor(fqn),
+            generationTag,
+          ]);
 
           // The ownership tag is not a fallback here: a replacement shares
           // it with the droplet it replaces.
           const observed = yield* observeByIdOrTag(output?.dropletId, generationTag);
           const droplet = yield* ensureDroplet(observed, name, news, tags);
-          yield* rejectReplacement(droplet, news, olds);
 
           yield* syncTags(droplet, tags);
+          yield* syncFeatures(droplet, news);
           yield* syncName(droplet, name);
           const synced = yield* waitForDroplet(droplet.id, {
-            until: hasNameAndTags(name, tags),
-            waitingFor: `name '${name}' and its tags`,
+            until: hasConverged(name, tags, news),
+            waitingFor: `name '${name}', its tags and features`,
+            budget: ACTION_POLL,
           });
           return toAttrs(synced);
         }),
@@ -760,7 +772,7 @@ export const DropletProvider = () =>
           const observed = yield* observeById(output.dropletId);
           if (Option.isNone(observed)) return;
           const droplet = observed.value;
-          yield* destroyDroplet(droplet);
+          yield* destroyDroplet(droplet.id);
           // DigitalOcean keeps a tag after its last droplet is destroyed.
           yield* Effect.forEach(droplet.tags.filter(isAlchemyTag), deleteTagIfUnused, {
             concurrency: "unbounded",

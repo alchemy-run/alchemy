@@ -1,9 +1,6 @@
+import type { NotFound } from "@distilled.cloud/digitalocean";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-
-interface NotFound {
-  readonly _tag: "NotFound";
-}
 
 /** Observes a resource that may not exist. */
 export const noneIfNotFound = <A, E, R>(read: Effect.Effect<A, E | NotFound, R>) =>

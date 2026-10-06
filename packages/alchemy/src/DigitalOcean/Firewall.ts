@@ -9,42 +9,66 @@ import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Unowned } from "../../AdoptPolicy.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
-import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
-import { sameMembers, unique } from "../members.ts";
-import { ignoreNotFound, noneIfNotFound } from "../notFound.ts";
-import { collectPages } from "../pagination.ts";
-import { pollUntil, type PollBudget } from "../poll.ts";
-import type { Providers } from "../Providers.ts";
+import * as Stream from "effect/Stream";
+import { Unowned } from "../AdoptPolicy.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { setEquals } from "../Util/equal.ts";
+import { pollUntil, type PollBudget } from "../Util/poll.ts";
+import { ignoreNotFound, noneIfNotFound } from "./notFound.ts";
+import type { Providers } from "./Providers.ts";
+
+export type { FirewallStatus } from "@distilled.cloud/digitalocean";
 
 export type FirewallRuleProtocol = "tcp" | "udp" | "icmp";
 
 /** One port (`"22"`), an inclusive range (`"8000-9000"`), or `"0"` for all ports. */
 export type FirewallRulePorts = `${number}` | `${number}-${number}`;
 
+export type FirewallRuleAction = "allow" | "deny";
+
 export type FirewallInboundRule = {
   protocol: FirewallRuleProtocol;
-  /** ICMP has no ports. The API always reports `"0"` for it. */
+  /** ICMP has no ports; pass `"0"`. */
   ports: FirewallRulePorts;
-  /** IPv4 and IPv6 addresses and CIDRs allowed in, for example `"0.0.0.0/0"` and `"::/0"`. */
+  /**
+   * Whether matching traffic is let in or dropped.
+   *
+   * @default "allow"
+   */
+  action?: FirewallRuleAction;
+  /** IPv4 and IPv6 addresses and CIDRs, for example `"0.0.0.0/0"` and `"::/0"`. */
   addresses?: string[];
-  /** Droplet ids allowed in. */
+  /** Droplet ids. */
   dropletIds?: number[];
-  /** Droplet tags allowed in. */
+  /** Load balancer ids. */
+  loadBalancerUids?: string[];
+  /** Kubernetes cluster ids. */
+  kubernetesIds?: string[];
+  /** Droplet tags. */
   tags?: string[];
 };
 
 export type FirewallOutboundRule = {
   protocol: FirewallRuleProtocol;
-  /** ICMP has no ports. The API always reports `"0"` for it. */
+  /** ICMP has no ports; pass `"0"`. */
   ports: FirewallRulePorts;
-  /** IPv4 and IPv6 addresses and CIDRs allowed out. */
+  /**
+   * Whether matching traffic is let out or dropped.
+   *
+   * @default "allow"
+   */
+  action?: FirewallRuleAction;
+  /** IPv4 and IPv6 addresses and CIDRs. */
   addresses?: string[];
-  /** Droplet ids allowed out. */
+  /** Droplet ids. */
   dropletIds?: number[];
-  /** Droplet tags allowed out. */
+  /** Load balancer ids. */
+  loadBalancerUids?: string[];
+  /** Kubernetes cluster ids. */
+  kubernetesIds?: string[];
+  /** Droplet tags. */
   tags?: string[];
 };
 
@@ -68,11 +92,15 @@ export type FirewallProps = {
    */
   tags?: string[];
 
-  /** Inbound allow rules. Traffic that no rule allows is dropped. */
+  /**
+   * Inbound rules. Traffic that no rule allows is dropped.
+   *
+   * @default no inbound traffic is allowed
+   */
   inboundRules?: FirewallInboundRule[];
 
   /**
-   * Outbound allow rules. Pass `[]` to drop all outbound traffic.
+   * Outbound rules. Pass `[]` to drop all outbound traffic.
    *
    * @default all outbound traffic is allowed
    */
@@ -93,9 +121,9 @@ export type Firewall = Resource<
     dropletIds: number[];
     /** Droplet tags the firewall protects. */
     tags: string[];
-    /** Inbound allow rules. */
+    /** Inbound rules. */
     inboundRules: FirewallInboundRule[];
-    /** Outbound allow rules. Allow-all when the prop was omitted. */
+    /** Outbound rules. Allow-all when the prop was omitted. */
     outboundRules: FirewallOutboundRule[];
     /** ISO 8601 creation time. */
     createdAt: string;
@@ -107,13 +135,14 @@ export type Firewall = Resource<
 export type FirewallAttributes = Firewall["Attributes"];
 
 /**
- * A DigitalOcean Cloud Firewall. It allows traffic to droplets selected by
+ * A DigitalOcean Cloud Firewall. It filters traffic to droplets selected by
  * id or by tag. Traffic that no rule allows is dropped. Every property
  * updates in place.
  *
  * A firewall has no ownership tag. Its `tags` prop selects droplets; it
- * does not label the firewall. A firewall with the same name but no prior
- * state is `Unowned` and needs `--adopt`.
+ * does not label the firewall. A generated name proves that alchemy created
+ * the firewall. A firewall with a name you chose and no prior state is
+ * `Unowned` and needs `--adopt`.
  *
  * ### Creating a Firewall
  * **Example:** Allow Only SSH, HTTP, and HTTPS to a Web Host
@@ -145,6 +174,19 @@ export type FirewallAttributes = Firewall["Attributes"];
  * });
  * ```
  *
+ * ### Updating Rules
+ * **Example:** Block one network while keeping the rest open
+ * ```typescript
+ * yield* DigitalOcean.Firewall("edge", {
+ *   tags: ["web"],
+ *   inboundRules: [
+ *     { protocol: "tcp", ports: "443", action: "deny", addresses: ["203.0.113.0/24"] },
+ *     { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
+ *     { protocol: "icmp", ports: "0", addresses: ["0.0.0.0/0", "::/0"] },
+ *   ],
+ * });
+ * ```
+ *
  * @see https://docs.digitalocean.com/reference/api/digitalocean/#tag/Firewalls
  *
  * @resource
@@ -153,7 +195,7 @@ export type FirewallAttributes = Firewall["Attributes"];
  */
 export const Firewall = Resource<Firewall>("DigitalOcean.Firewall");
 
-export class FirewallWaitTimedOut extends Data.TaggedError("FirewallWaitTimedOut")<{
+export class FirewallWaitTimedOut extends Data.TaggedError("DigitalOcean.FirewallWaitTimedOut")<{
   readonly firewallId: string;
   readonly waitingFor: string;
   readonly lastStatus: FirewallStatus | undefined;
@@ -163,7 +205,7 @@ export class FirewallWaitTimedOut extends Data.TaggedError("FirewallWaitTimedOut
   }
 }
 
-export class FirewallApplyFailed extends Data.TaggedError("FirewallApplyFailed")<{
+export class FirewallApplyFailed extends Data.TaggedError("DigitalOcean.FirewallApplyFailed")<{
   readonly firewallId: string;
 }> {
   override get message() {
@@ -171,7 +213,7 @@ export class FirewallApplyFailed extends Data.TaggedError("FirewallApplyFailed")
   }
 }
 
-export class FirewallStillExists extends Data.TaggedError("FirewallStillExists")<{
+export class FirewallStillExists extends Data.TaggedError("DigitalOcean.FirewallStillExists")<{
   readonly firewallId: string;
 }> {
   override get message() {
@@ -180,6 +222,8 @@ export class FirewallStillExists extends Data.TaggedError("FirewallStillExists")
 }
 
 const NAME_MAX_LENGTH = 255;
+
+const PAGE_SIZE = 200;
 
 // Rules reach the droplets within seconds.
 const FIREWALL_POLL: PollBudget = { every: "3 seconds", times: 20 };
@@ -203,20 +247,26 @@ const parsePorts = (ports: string): FirewallRulePorts => {
   return to === undefined ? `${from}` : `${from}-${to}`;
 };
 
-const ascending = (a: number, b: number) => a - b;
+// IPv6 addresses compare case-insensitively.
+const memberList = (members: ReadonlyArray<string | number> | undefined) =>
+  Arr.dedupe((members ?? []).map((member) => String(member).toLowerCase()))
+    .sort()
+    .join(",");
 
-// Addresses compare as written, because DigitalOcean returns them unchanged.
 const fingerprintRule = (rule: FirewallRule) =>
   [
     rule.protocol,
     normalizePorts(rule),
-    unique(rule.addresses).sort().join(","),
-    unique(rule.dropletIds).sort(ascending).join(","),
-    unique(rule.tags).sort().join(","),
+    rule.action ?? "allow",
+    memberList(rule.addresses),
+    memberList(rule.dropletIds),
+    memberList(rule.loadBalancerUids),
+    memberList(rule.kubernetesIds),
+    memberList(rule.tags),
   ].join("|");
 
 /**
- * True when both lists allow the same traffic. Rule order, member order
+ * True when both lists filter the same traffic. Rule order, member order
  * and repeats do not matter.
  *
  * @internal exported for unit testing
@@ -224,7 +274,7 @@ const fingerprintRule = (rule: FirewallRule) =>
 export const sameRules = (
   a: ReadonlyArray<FirewallRule> | undefined,
   b: ReadonlyArray<FirewallRule> | undefined,
-) => sameMembers(a?.map(fingerprintRule), b?.map(fingerprintRule));
+) => setEquals(a?.map(fingerprintRule), b?.map(fingerprintRule));
 
 const uniqueRules = (rules: ReadonlyArray<FirewallRule>) =>
   Arr.dedupeWith(rules, (a, b) => fingerprintRule(a) === fingerprintRule(b));
@@ -237,8 +287,11 @@ type ApiRuleTarget =
 const fromApiRule = (rule: ApiRule, target: ApiRuleTarget): FirewallRule => ({
   protocol: rule.protocol,
   ports: parsePorts(rule.ports),
+  action: rule.action ?? "allow",
   addresses: [...(target.addresses ?? [])],
   dropletIds: [...(target.droplet_ids ?? [])],
+  loadBalancerUids: [...(target.load_balancer_uids ?? [])],
+  kubernetesIds: [...(target.kubernetes_ids ?? [])],
   tags: [...(target.tags ?? [])],
 });
 
@@ -251,12 +304,15 @@ const outboundRulesOf = (firewall: ApiFirewall): FirewallOutboundRule[] =>
 const toApiRule = (rule: FirewallRule) => ({
   protocol: rule.protocol,
   ports: normalizePorts(rule),
+  action: rule.action ?? "allow",
 });
 
 const toApiTarget = (rule: FirewallRule) => ({
-  addresses: rule.addresses && unique(rule.addresses),
-  droplet_ids: rule.dropletIds && unique(rule.dropletIds),
-  tags: rule.tags && unique(rule.tags),
+  addresses: rule.addresses,
+  droplet_ids: rule.dropletIds,
+  load_balancer_uids: rule.loadBalancerUids,
+  kubernetes_ids: rule.kubernetesIds,
+  tags: rule.tags,
 });
 
 interface DesiredFirewall {
@@ -269,8 +325,8 @@ interface DesiredFirewall {
 
 const desiredFirewall = (name: string, props: FirewallProps): DesiredFirewall => ({
   name,
-  dropletIds: unique(props.dropletIds),
-  tags: unique(props.tags),
+  dropletIds: Arr.dedupe(props.dropletIds ?? []),
+  tags: Arr.dedupe(props.tags ?? []),
   inboundRules: uniqueRules(props.inboundRules ?? []),
   outboundRules: uniqueRules(props.outboundRules ?? ALLOW_ALL_OUTBOUND),
 });
@@ -291,8 +347,8 @@ const toApiBody = (desired: DesiredFirewall) => ({
 
 const matches = (desired: DesiredFirewall) => (firewall: ApiFirewall) =>
   firewall.name === desired.name &&
-  sameMembers(firewall.droplet_ids, desired.dropletIds) &&
-  sameMembers(firewall.tags, desired.tags) &&
+  setEquals(firewall.droplet_ids, desired.dropletIds) &&
+  setEquals(firewall.tags, desired.tags) &&
   sameRules(inboundRulesOf(firewall), desired.inboundRules) &&
   sameRules(outboundRulesOf(firewall), desired.outboundRules);
 
@@ -329,14 +385,14 @@ export const FirewallProvider = () =>
           get({ firewall_id: firewallId }).pipe(Effect.map((response) => response.firewall)),
         );
 
-      const listAll = collectPages(list, (response) => response.firewalls ?? []);
+      const listAll = list.items({ per_page: PAGE_SIZE }).pipe(Stream.runCollect);
 
       const observeByName = (name: string) =>
         listAll.pipe(Effect.map(Arr.findFirst((firewall) => firewall.name === name)));
 
       // The stored id is a cache. A generated name contains the instance
-      // id, so it finds the firewall without the id. A user-supplied name
-      // proves nothing, because firewall names are not unique.
+      // id, so it finds the firewall without the id. A chosen name proves
+      // nothing, because firewall names are not unique.
       const observeOwned = Effect.fn(function* (
         firewallId: string | undefined,
         generatedName: string | undefined,
@@ -349,21 +405,15 @@ export const FirewallProvider = () =>
         return yield* observeByName(generatedName);
       });
 
-      const waitForFirewall = (
-        firewallId: string,
-        wait: {
-          readonly until: (firewall: ApiFirewall) => boolean;
-          readonly waitingFor: string;
-        },
-      ) =>
+      const waitUntilPropagated = (firewallId: string) =>
         pollUntil(observeById(firewallId), {
           ...FIREWALL_POLL,
           until: (observed): observed is Option.Some<ApiFirewall> =>
-            Option.isSome(observed) && (hasFailed(observed.value) || wait.until(observed.value)),
+            Option.isSome(observed) && (hasFailed(observed.value) || hasPropagated(observed.value)),
           onTimeout: (last) =>
             new FirewallWaitTimedOut({
               firewallId,
-              waitingFor: wait.waitingFor,
+              waitingFor: "its rules on every droplet",
               lastStatus: Option.getOrUndefined(Option.map(last, (firewall) => firewall.status)),
             }),
         }).pipe(
@@ -384,14 +434,12 @@ export const FirewallProvider = () =>
       const createFirewall = (desired: DesiredFirewall) =>
         create(toApiBody(desired)).pipe(Effect.map((response) => response.firewall));
 
+      // The update is a full replacement of the firewall.
       const syncFirewall = Effect.fn(function* (firewall: ApiFirewall, desired: DesiredFirewall) {
         if (!matches(desired)(firewall)) {
           yield* update({ firewall_id: firewall.id, ...toApiBody(desired) });
         }
-        return yield* waitForFirewall(firewall.id, {
-          until: (observed) => hasPropagated(observed) && matches(desired)(observed),
-          waitingFor: "its rules on every droplet",
-        });
+        return yield* waitUntilPropagated(firewall.id);
       });
 
       return {
@@ -403,15 +451,14 @@ export const FirewallProvider = () =>
           return (yield* listAll).map(toAttrs);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          if (output !== undefined) {
-            const observed = yield* observeById(output.firewallId);
-            return Option.getOrUndefined(Option.map(observed, toAttrs));
-          }
-          const name = olds.name ?? (yield* physicalName(id));
-          const named = yield* observeByName(name);
-          if (Option.isNone(named)) return undefined;
-          const attrs = toAttrs(named.value);
-          return olds.name === undefined ? attrs : Unowned(attrs);
+          const generatedName = olds.name === undefined ? yield* physicalName(id) : undefined;
+          const owned = yield* observeOwned(output?.firewallId, generatedName);
+          if (Option.isSome(owned)) return toAttrs(owned.value);
+          // A same-named firewall belongs to someone else until `--adopt`
+          // says otherwise.
+          if (olds.name === undefined) return undefined;
+          const named = yield* observeByName(olds.name);
+          return Option.getOrUndefined(Option.map(named, (firewall) => Unowned(toAttrs(firewall))));
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = news.name ?? (yield* physicalName(id));

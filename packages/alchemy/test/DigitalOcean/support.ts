@@ -1,11 +1,7 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import type { NotFound } from "@distilled.cloud/digitalocean";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
-import { CredentialsStoreLive } from "@/Auth/Credentials";
-import { ProfileStoreLive } from "@/Auth/Profile";
-import * as DigitalOcean from "@/DigitalOcean";
+import { isActionState, State } from "@/State/State";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -13,31 +9,38 @@ export const logLevel = Effect.provideService(
 );
 
 const hasDigitalOceanToken = !!(
-  process.env.DIGITALOCEAN_TOKEN || process.env.DIGITALOCEAN_ACCESS_TOKEN
+  process.env.DIGITALOCEAN_TOKEN ||
+  process.env.DIGITALOCEAN_ACCESS_TOKEN ||
+  process.env.DIGITALOCEAN_API_KEY
 );
 
-/** Live tests need a token and are skipped by `--fast`. */
-export const skipLive = !hasDigitalOceanToken || !!process.env.FAST;
+/** Live tests need a token. */
+export const skipLive = !hasDigitalOceanToken;
 
-/** Credentials resolved the same way the provider resolves them. */
-const credentials = DigitalOcean.fromAuthProvider().pipe(
-  Layer.provide(DigitalOcean.DigitalOceanAuth),
-  Layer.provide(ProfileStoreLive),
-  Layer.provide(CredentialsStoreLive),
-  Layer.provide(NodeServices.layer),
-  Layer.orDie,
-);
+/** A droplet takes minutes to create and destroy, so `--fast` skips it. */
+export const skipSlow = skipLive || !!process.env.FAST;
 
-/**
- * Out-of-band verification context: raw distilled calls, independent of
- * the provider layer under test.
- */
-export const outOfBand = Effect.provide(Layer.mergeAll(credentials, FetchHttpClient.layer));
-
-/** True when an out-of-band read answers that the resource does not exist. */
-export const isGone = <A, E, R>(read: Effect.Effect<A, E | { readonly _tag: "NotFound" }, R>) =>
+/** True when a read answers that the resource does not exist. */
+export const isGone = <A, E, R>(read: Effect.Effect<A, E | NotFound, R>) =>
   read.pipe(
     Effect.as(false),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),
-    outOfBand,
   );
+
+/**
+ * Reproduces a crash after the cloud resource was created but before its
+ * attributes were committed: the row goes back to `creating` without them.
+ */
+export const forgetAttributes = Effect.fn(function* (address: {
+  readonly stack: string;
+  readonly stage: string;
+  readonly fqn: string;
+}) {
+  const state = yield* yield* State;
+  const stored = yield* state.get(address);
+  if (!stored || isActionState(stored) || stored.status !== "created") {
+    return yield* Effect.die(new Error(`Expected a created row for ${address.fqn}`));
+  }
+  const { attr: _attr, ...creating } = stored;
+  yield* state.set({ ...address, value: { ...creating, status: "creating" } });
+});

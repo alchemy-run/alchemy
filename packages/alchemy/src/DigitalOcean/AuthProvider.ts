@@ -12,10 +12,17 @@ import {
 
 export const DIGITALOCEAN_AUTH_PROVIDER_NAME = "DigitalOcean";
 
-// The Terraform provider reads `DIGITALOCEAN_TOKEN`; `doctl` reads
-// `DIGITALOCEAN_ACCESS_TOKEN`. The first name wins when both are set.
+// The Terraform provider reads `DIGITALOCEAN_TOKEN`, `doctl` reads
+// `DIGITALOCEAN_ACCESS_TOKEN`, and the distilled SDK also reads
+// `DIGITALOCEAN_API_KEY`. The first name set wins.
 export const DIGITALOCEAN_TOKEN_ENV = "DIGITALOCEAN_TOKEN";
 export const DIGITALOCEAN_ACCESS_TOKEN_ENV = "DIGITALOCEAN_ACCESS_TOKEN";
+export const DIGITALOCEAN_API_KEY_ENV = "DIGITALOCEAN_API_KEY";
+const TOKEN_ENV_NAMES = [
+  DIGITALOCEAN_TOKEN_ENV,
+  DIGITALOCEAN_ACCESS_TOKEN_ENV,
+  DIGITALOCEAN_API_KEY_ENV,
+] as const;
 export const DIGITALOCEAN_API_BASE_URL_ENV = "DIGITALOCEAN_API_BASE_URL";
 
 export type DigitalOceanAuthConfig = StoredAuthConfig;
@@ -27,26 +34,26 @@ export type DigitalOceanResolvedCredentials = {
   source: { type: DigitalOceanAuthConfig["method"] | "env"; details?: string };
 };
 
-const readEnvironment = Effect.gen(function* () {
-  const fromToken = yield* getEnvRedacted(DIGITALOCEAN_TOKEN_ENV);
-  const fromAccessToken = fromToken
-    ? undefined
-    : yield* getEnvRedacted(DIGITALOCEAN_ACCESS_TOKEN_ENV);
-  const apiToken = fromToken ?? fromAccessToken;
-  if (!apiToken) {
-    return yield* new AuthError({
-      message: `DigitalOcean CI credentials not found. Set ${DIGITALOCEAN_TOKEN_ENV} or ${DIGITALOCEAN_ACCESS_TOKEN_ENV}.`,
-    });
+const firstTokenInEnvironment = Effect.fn(function* () {
+  for (const name of TOKEN_ENV_NAMES) {
+    const apiToken = yield* getEnvRedacted(name);
+    if (apiToken) return { name, apiToken };
   }
+  return yield* new AuthError({
+    message: `DigitalOcean env credentials not found. Set ${TOKEN_ENV_NAMES.join(", ")}.`,
+  });
+});
+
+const readEnvironment = Effect.gen(function* () {
+  const token = yield* firstTokenInEnvironment();
   const apiBaseUrl = yield* getEnv(DIGITALOCEAN_API_BASE_URL_ENV);
-  const tokenName = fromToken ? DIGITALOCEAN_TOKEN_ENV : DIGITALOCEAN_ACCESS_TOKEN_ENV;
   return {
     type: "apiToken" as const,
-    apiToken,
+    apiToken: token.apiToken,
     apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
     source: {
       type: "env" as const,
-      details: apiBaseUrl ? `${tokenName}, ${DIGITALOCEAN_API_BASE_URL_ENV}` : tokenName,
+      details: apiBaseUrl ? `${token.name}, ${DIGITALOCEAN_API_BASE_URL_ENV}` : token.name,
     },
   };
 });
@@ -78,8 +85,8 @@ const digitalOceanAuth = makeStoredAuthProvider<DigitalOceanResolvedCredentials>
       name: DIGITALOCEAN_TOKEN_ENV,
       required: true,
       secret: true,
-      alternatives: [DIGITALOCEAN_ACCESS_TOKEN_ENV],
-      description: "Personal access token; doctl sets the alternative name.",
+      alternatives: [DIGITALOCEAN_ACCESS_TOKEN_ENV, DIGITALOCEAN_API_KEY_ENV],
+      description: "Personal access token; doctl and the SDK set the alternative names.",
     },
     {
       name: DIGITALOCEAN_API_BASE_URL_ENV,
@@ -93,8 +100,8 @@ const digitalOceanAuth = makeStoredAuthProvider<DigitalOceanResolvedCredentials>
  * Layer that registers the DigitalOcean {@link AuthProvider} into the
  * {@link AuthProviders} registry.
  *
- * Auth is a Personal Access Token (`DIGITALOCEAN_TOKEN`, or
- * `DIGITALOCEAN_ACCESS_TOKEN` as set by `doctl`). An optional
- * `DIGITALOCEAN_API_BASE_URL` overrides the API root.
+ * Auth is a Personal Access Token (`DIGITALOCEAN_TOKEN`,
+ * `DIGITALOCEAN_ACCESS_TOKEN` as set by `doctl`, or `DIGITALOCEAN_API_KEY`).
+ * An optional `DIGITALOCEAN_API_BASE_URL` overrides the API root.
  */
 export const DigitalOceanAuth = digitalOceanAuth.layer;
