@@ -27,6 +27,10 @@ describe("Docker proxy lifetime", () => {
           const port = yield* listenOnLoopback(server);
           return yield* Effect.callback<net.Socket>((resume) => {
             const socket = net.connect(port, "127.0.0.1", () => resume(Effect.succeed(socket)));
+            // Closing the scope destroys the server side of this connection;
+            // macOS then reports ECONNRESET on the client. Without a listener
+            // Node rethrows it as an uncaught exception and fails the run.
+            socket.on("error", () => {});
           });
         }),
       );
