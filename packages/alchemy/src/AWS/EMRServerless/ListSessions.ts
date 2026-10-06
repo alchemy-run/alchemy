@@ -15,9 +15,8 @@ export type ListSessionsInput = Omit<emr.ListSessionsRequest, "applicationId">;
  * Enumerates interactive sessions on the bound {@link Application},
  * optionally filtered by state or creation window. Provide the
  * implementation with `Effect.provide(AWS.EMRServerless.ListSessionsHttp)`.
- * @binding
- * @section Interactive Sessions
- * @example List Idle Sessions
+ * ### Interactive Sessions
+ * **Example:** List Idle Sessions
  * ```typescript
  * // init
  * const listSessions = yield* AWS.EMRServerless.ListSessions(app);
@@ -25,6 +24,8 @@ export type ListSessionsInput = Omit<emr.ListSessionsRequest, "applicationId">;
  * // runtime
  * const { sessions } = yield* listSessions({ states: ["IDLE"] });
  * ```
+ *
+ * @binding
  */
 export interface ListSessions extends Binding.Service<
   ListSessions,
@@ -32,11 +33,7 @@ export interface ListSessions extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request?: ListSessionsInput,
-    ) => Effect.Effect<emr.ListSessionsResponse, emr.ListSessionsError>
+    (request?: ListSessionsInput) => Effect.Effect<emr.ListSessionsResponse, emr.ListSessionsError>
   >
 > {}
-export const ListSessions = Binding.Service<ListSessions>(
-  "AWS.EMRServerless.ListSessions",
-);
+export const ListSessions = Binding.Service<ListSessions>("AWS.EMRServerless.ListSessions");

@@ -10,9 +10,8 @@ import type { Detector } from "./Detector.ts";
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.UnarchiveFindingsHttp)`.
- * @binding
- * @section Working with Findings
- * @example Unarchive Findings
+ * ### Working with Findings
+ * **Example:** Unarchive Findings
  * ```typescript
  * // init
  * const unarchiveFindings = yield* AWS.GuardDuty.UnarchiveFindings(detector);
@@ -20,6 +19,8 @@ import type { Detector } from "./Detector.ts";
  * // runtime
  * yield* unarchiveFindings({ FindingIds: findingIds });
  * ```
+ *
+ * @binding
  */
 export interface UnarchiveFindings extends Binding.Service<
   UnarchiveFindings,
@@ -29,10 +30,7 @@ export interface UnarchiveFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.UnarchiveFindingsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.UnarchiveFindingsResponse,
-      guardduty.UnarchiveFindingsError
-    >
+    ) => Effect.Effect<guardduty.UnarchiveFindingsResponse, guardduty.UnarchiveFindingsError>
   >
 > {}
 export const UnarchiveFindings = Binding.Service<UnarchiveFindings>(

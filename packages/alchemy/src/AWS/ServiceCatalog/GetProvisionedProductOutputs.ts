@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.GetProvisionedProductOutputsHttp)`.
- * @binding
- * @section Tracking Provisioned Products
- * @example Read a Provisioned Product's Stack Outputs
+ * ### Tracking Provisioned Products
+ * **Example:** Read a Provisioned Product's Stack Outputs
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getProvisionedProductOutputs = yield* AWS.ServiceCatalog.GetProvisionedProductOutputs();
@@ -23,6 +22,8 @@ import * as Binding from "../../Binding.ts";
  *   ProvisionedProductName: "my-vpc",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetProvisionedProductOutputs extends Binding.Service<
   GetProvisionedProductOutputs,
@@ -36,7 +37,6 @@ export interface GetProvisionedProductOutputs extends Binding.Service<
     >
   >
 > {}
-export const GetProvisionedProductOutputs =
-  Binding.Service<GetProvisionedProductOutputs>(
-    "AWS.ServiceCatalog.GetProvisionedProductOutputs",
-  );
+export const GetProvisionedProductOutputs = Binding.Service<GetProvisionedProductOutputs>(
+  "AWS.ServiceCatalog.GetProvisionedProductOutputs",
+);

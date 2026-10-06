@@ -10,9 +10,8 @@ import type { Detector } from "./Detector.ts";
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.AcceptAdministratorInvitationHttp)`.
- * @binding
- * @section Administrator & Invitations
- * @example Accept an Invitation
+ * ### Administrator & Invitations
+ * **Example:** Accept an Invitation
  * ```typescript
  * // init
  * const acceptAdministratorInvitation = yield* AWS.GuardDuty.AcceptAdministratorInvitation(detector);
@@ -23,6 +22,8 @@ import type { Detector } from "./Detector.ts";
  *   InvitationId: invitationId,
  * });
  * ```
+ *
+ * @binding
  */
 export interface AcceptAdministratorInvitation extends Binding.Service<
   AcceptAdministratorInvitation,
@@ -31,17 +32,13 @@ export interface AcceptAdministratorInvitation extends Binding.Service<
     detector: Detector,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        guardduty.AcceptAdministratorInvitationRequest,
-        "DetectorId"
-      >,
+      request?: Omit<guardduty.AcceptAdministratorInvitationRequest, "DetectorId">,
     ) => Effect.Effect<
       guardduty.AcceptAdministratorInvitationResponse,
       guardduty.AcceptAdministratorInvitationError
     >
   >
 > {}
-export const AcceptAdministratorInvitation =
-  Binding.Service<AcceptAdministratorInvitation>(
-    "AWS.GuardDuty.AcceptAdministratorInvitation",
-  );
+export const AcceptAdministratorInvitation = Binding.Service<AcceptAdministratorInvitation>(
+  "AWS.GuardDuty.AcceptAdministratorInvitation",
+);

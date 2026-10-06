@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.GetCelebrityInfoHttp)`.
  *
- * @binding
- * @section Image Analysis
- * @example Look Up a Celebrity by ID
+ * ### Image Analysis
+ * **Example:** Look Up a Celebrity by ID
  * ```typescript
  * // init
  * const getCelebrityInfo = yield* AWS.Rekognition.GetCelebrityInfo();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * const info = yield* getCelebrityInfo({ Id: celebrityId });
  * // info.Name, info.Urls, info.KnownGender
  * ```
+ *
+ * @binding
  */
 export interface GetCelebrityInfo extends Binding.Service<
   GetCelebrityInfo,
@@ -29,10 +30,7 @@ export interface GetCelebrityInfo extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetCelebrityInfoRequest,
-    ) => Effect.Effect<
-      rekognition.GetCelebrityInfoResponse,
-      rekognition.GetCelebrityInfoError
-    >
+    ) => Effect.Effect<rekognition.GetCelebrityInfoResponse, rekognition.GetCelebrityInfoError>
   >
 > {}
 export const GetCelebrityInfo = Binding.Service<GetCelebrityInfo>(

@@ -12,14 +12,15 @@ import type { Index } from "./SearchIndex.ts";
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.ClearQuerySuggestionsHttp)`.
  *
- * @binding
- * @section Query Suggestions
- * @example Reset Suggestions
+ * ### Query Suggestions
+ * **Example:** Reset Suggestions
  * ```typescript
  * const clearSuggestions = yield* AWS.Kendra.ClearQuerySuggestions(index);
  *
  * yield* clearSuggestions();
  * ```
+ *
+ * @binding
  */
 export interface ClearQuerySuggestions extends Binding.Service<
   ClearQuerySuggestions,
@@ -27,10 +28,7 @@ export interface ClearQuerySuggestions extends Binding.Service<
   (
     index: Index,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      kendra.ClearQuerySuggestionsResponse,
-      kendra.ClearQuerySuggestionsError
-    >
+    () => Effect.Effect<kendra.ClearQuerySuggestionsResponse, kendra.ClearQuerySuggestionsError>
   >
 > {}
 export const ClearQuerySuggestions = Binding.Service<ClearQuerySuggestions>(

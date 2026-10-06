@@ -7,9 +7,8 @@ import * as Binding from "../../Binding.ts";
  * invoices and receipts, extracting summary fields (vendor, total, dates)
  * and line-item groups.
  *
- * @binding
- * @section Synchronous Analysis
- * @example Analyze an Invoice
+ * ### Synchronous Analysis
+ * **Example:** Analyze an Invoice
  * ```typescript
  * // init
  * const analyzeExpense = yield* AWS.Textract.AnalyzeExpense();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const fields = result.ExpenseDocuments?.[0]?.SummaryFields;
  * ```
+ *
+ * @binding
  */
 export interface AnalyzeExpense extends Binding.Service<
   AnalyzeExpense,
@@ -27,12 +28,7 @@ export interface AnalyzeExpense extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.AnalyzeExpenseRequest,
-    ) => Effect.Effect<
-      textract.AnalyzeExpenseResponse,
-      textract.AnalyzeExpenseError
-    >
+    ) => Effect.Effect<textract.AnalyzeExpenseResponse, textract.AnalyzeExpenseError>
   >
 > {}
-export const AnalyzeExpense = Binding.Service<AnalyzeExpense>(
-  "AWS.Textract.AnalyzeExpense",
-);
+export const AnalyzeExpense = Binding.Service<AnalyzeExpense>("AWS.Textract.AnalyzeExpense");

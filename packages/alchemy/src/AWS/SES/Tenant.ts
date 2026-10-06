@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import type { SuppressionListReason } from "./ConfigurationSet.ts";
 
@@ -85,16 +80,15 @@ export interface Tenant extends Resource<
  * Associate resources with a tenant using `SES.TenantResourceAssociation`.
  * Deleting the tenant removes its resource associations but leaves the
  * underlying resources in place.
- * @resource
- * @section Creating Tenants
- * @example Basic Tenant
+ * ### Creating Tenants
+ * **Example:** Basic Tenant
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
  * const tenant = yield* SES.Tenant("CustomerA", {});
  * ```
  *
- * @example Tenant with a Scoped Suppression List
+ * **Example:** Tenant with a Scoped Suppression List
  * ```typescript
  * // SES requires the reasons and the scope together, so they travel as one
  * // prop rather than two independently-optional ones.
@@ -103,15 +97,15 @@ export interface Tenant extends Resource<
  * });
  * ```
  *
- * @example Tenant with Tags
+ * **Example:** Tenant with Tags
  * ```typescript
  * const tenant = yield* SES.Tenant("CustomerA", {
  *   tags: { Customer: "acme", CostCenter: "growth" },
  * });
  * ```
  *
- * @section Associating Resources
- * @example Give the Tenant an Identity, Config Set, and Template
+ * ### Associating Resources
+ * **Example:** Give the Tenant an Identity, Config Set, and Template
  * ```typescript
  * const tenant = yield* SES.Tenant("CustomerA", {});
  * const identity = yield* SES.EmailIdentity("Sender", {
@@ -130,8 +124,8 @@ export interface Tenant extends Resource<
  * });
  * ```
  *
- * @section Tenant Suppression Lists
- * @example Read and Write the Tenant's Own Suppression List
+ * ### Tenant Suppression Lists
+ * **Example:** Read and Write the Tenant's Own Suppression List
  * ```typescript
  * // With scope "TENANT" the list is separate from the account's.
  * const tenant = yield* SES.Tenant("CustomerA", {
@@ -152,21 +146,21 @@ export interface Tenant extends Resource<
  *   TenantName: yield* tenant.tenantName,
  * });
  * ```
+ *
+ * @resource
  */
 export const Tenant = Resource<Tenant>("AWS.SES.Tenant");
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const sameReasons = (
   a: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
   b: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
 ): boolean => {
-  const key = (
-    reasons: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
-  ) => JSON.stringify([...(reasons ?? [])].sort());
+  const key = (reasons: ReadonlyArray<sesv2.SuppressionListReason> | undefined) =>
+    JSON.stringify([...(reasons ?? [])].sort());
   return key(a) === key(b);
 };
 
@@ -174,13 +168,8 @@ export const TenantProvider = () =>
   Provider.effect(
     Tenant,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<TenantProps, "tenantName">,
-      ) {
-        return (
-          props.tenantName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<TenantProps, "tenantName">) {
+        return props.tenantName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getTenant = Effect.fn(function* (name: string) {
@@ -196,9 +185,7 @@ export const TenantProvider = () =>
         // Account-scoped: enumerate every tenant so leaked test resources are
         // cleaned by nuke.
         list: Effect.fn(function* () {
-          const pages = yield* sesv2.listTenants
-            .pages({})
-            .pipe(Stream.runCollect);
+          const pages = yield* sesv2.listTenants.pages({}).pipe(Stream.runCollect);
           return Array.from(pages)
             .flatMap((page) => page.Tenants ?? [])
             .flatMap((entry) =>
@@ -215,8 +202,7 @@ export const TenantProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.tenantName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.tenantName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getTenant(name);
           if (!found || !found.TenantId || !found.TenantArn) return undefined;
           const attrs = {
@@ -259,11 +245,7 @@ export const TenantProvider = () =>
                     }
                   : undefined,
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
             // Not always readable the instant create returns, and on the
             // AlreadyExists race another writer may still be mid-create.
             observed = yield* getTenant(name).pipe(
@@ -275,14 +257,8 @@ export const TenantProvider = () =>
             );
           }
 
-          if (
-            observed === undefined ||
-            !observed.TenantId ||
-            !observed.TenantArn
-          ) {
-            return yield* Effect.fail(
-              new Error(`SES tenant ${name} was not found after create`),
-            );
+          if (observed === undefined || !observed.TenantId || !observed.TenantArn) {
+            return yield* Effect.fail(new Error(`SES tenant ${name} was not found after create`));
           }
           const tenantArn = observed.TenantArn;
 
@@ -294,10 +270,8 @@ export const TenantProvider = () =>
           //    specified without SuppressionScope", and the mirror image). The
           //    prop nests them so that invalid state is unrepresentable and
           //    the put below always carries both.
-          const observedReasons =
-            observed.SuppressionAttributes?.SuppressedReasons;
-          const observedScope =
-            observed.SuppressionAttributes?.SuppressionScope;
+          const observedReasons = observed.SuppressionAttributes?.SuppressedReasons;
+          const observedScope = observed.SuppressionAttributes?.SuppressionScope;
           if (
             news.suppression !== undefined &&
             (!sameReasons(observedReasons, news.suppression.reasons) ||

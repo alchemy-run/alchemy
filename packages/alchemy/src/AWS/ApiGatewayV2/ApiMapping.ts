@@ -52,9 +52,8 @@ export interface ApiMapping extends Resource<
 /**
  * An API Gateway v2 API mapping — serves an API stage under a custom
  * {@link DomainName}, optionally at a base path.
- * @resource
- * @section Mapping APIs onto a domain
- * @example Map an API at the domain root
+ * ### Mapping APIs onto a domain
+ * **Example:** Map an API at the domain root
  * ```typescript
  * yield* ApiGatewayV2.ApiMapping("Root", {
  *   api,
@@ -63,7 +62,7 @@ export interface ApiMapping extends Resource<
  * });
  * ```
  *
- * @example Map a second API under /v2
+ * **Example:** Map a second API under /v2
  * ```typescript
  * yield* ApiGatewayV2.ApiMapping("V2", {
  *   api: apiV2,
@@ -72,10 +71,10 @@ export interface ApiMapping extends Resource<
  *   apiMappingKey: "v2",
  * });
  * ```
+ *
+ * @resource
  */
-export const ApiMappingResource = Resource<ApiMapping>(
-  "AWS.ApiGatewayV2.ApiMapping",
-);
+export const ApiMappingResource = Resource<ApiMapping>("AWS.ApiGatewayV2.ApiMapping");
 
 export interface ApiMappingInputProps extends Omit<
   {
@@ -116,8 +115,7 @@ const snapshotFromMapping = (
   apiId: mapping.ApiId ?? "",
   domainName,
   stage: mapping.Stage ?? "",
-  apiMappingKey:
-    mapping.ApiMappingKey === "" ? undefined : mapping.ApiMappingKey,
+  apiMappingKey: mapping.ApiMappingKey === "" ? undefined : mapping.ApiMappingKey,
 });
 
 export const ApiMappingProvider = () =>
@@ -127,11 +125,7 @@ export const ApiMappingProvider = () =>
       const getMappingSafe = (domainName: string, apiMappingId: string) =>
         agw2
           .getApiMapping({ DomainName: domainName, ApiMappingId: apiMappingId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return ApiMappingResource.Provider.of({
         stables: ["apiMappingId", "domainName"],
@@ -153,9 +147,7 @@ export const ApiMappingProvider = () =>
                   Effect.map((items) =>
                     items
                       .filter((mapping) => mapping.ApiMappingId != null)
-                      .map((mapping) =>
-                        snapshotFromMapping(domain.DomainName!, mapping),
-                      ),
+                      .map((mapping) => snapshotFromMapping(domain.DomainName!, mapping)),
                   ),
                   Effect.catchTag("NotFoundException", () =>
                     Effect.succeed([] as ApiMapping["Attributes"][]),
@@ -168,10 +160,7 @@ export const ApiMappingProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.domainName || !output.apiMappingId) return undefined;
-          const mapping = yield* getMappingSafe(
-            output.domainName,
-            output.apiMappingId,
-          );
+          const mapping = yield* getMappingSafe(output.domainName, output.apiMappingId);
           if (!mapping?.ApiMappingId) return undefined;
           return snapshotFromMapping(output.domainName, mapping);
         }),

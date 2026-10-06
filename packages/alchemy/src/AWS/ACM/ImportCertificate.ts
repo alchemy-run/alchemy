@@ -8,8 +8,7 @@ import * as Binding from "../../Binding.ts";
  * `CertificateArn` to re-import (rotate) an existing imported certificate;
  * omit it to import a new one.
  */
-export interface ImportCertificateRequest
-  extends acm.ImportCertificateRequest {}
+export interface ImportCertificateRequest extends acm.ImportCertificateRequest {}
 
 /**
  * Runtime binding for `acm:ImportCertificate`.
@@ -20,9 +19,8 @@ export interface ImportCertificateRequest
  * outside CA and re-imports it over the existing ACM entry by passing its
  * `CertificateArn`. Provide the implementation with
  * `Effect.provide(AWS.ACM.ImportCertificateHttp)`.
- * @binding
- * @section Importing Certificates
- * @example Rotate an Externally Issued Certificate
+ * ### Importing Certificates
+ * **Example:** Rotate an Externally Issued Certificate
  * ```typescript
  * // init — account-level binding takes no resource
  * const importCertificate = yield* AWS.ACM.ImportCertificate();
@@ -36,6 +34,8 @@ export interface ImportCertificateRequest
  *   CertificateChain: encoder.encode(chainPem),
  * });
  * ```
+ *
+ * @binding
  */
 export interface ImportCertificate extends Binding.Service<
   ImportCertificate,
@@ -43,13 +43,8 @@ export interface ImportCertificate extends Binding.Service<
   () => Effect.Effect<
     (
       request: ImportCertificateRequest,
-    ) => Effect.Effect<
-      acm.ImportCertificateResponse,
-      acm.ImportCertificateError
-    >
+    ) => Effect.Effect<acm.ImportCertificateResponse, acm.ImportCertificateError>
   >
 > {}
 
-export const ImportCertificate = Binding.Service<ImportCertificate>(
-  "AWS.ACM.ImportCertificate",
-);
+export const ImportCertificate = Binding.Service<ImportCertificate>("AWS.ACM.ImportCertificate");

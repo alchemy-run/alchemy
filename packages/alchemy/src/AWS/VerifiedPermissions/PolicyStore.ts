@@ -63,9 +63,8 @@ export interface PolicyStore extends Resource<
  * An Amazon Verified Permissions policy store — the container for Cedar
  * policies, policy templates, and a schema. Authorization requests
  * (`IsAuthorized`) are evaluated against all policies in a store.
- * @resource
- * @section Creating a Policy Store
- * @example Basic Policy Store
+ * ### Creating a Policy Store
+ * **Example:** Basic Policy Store
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -74,7 +73,7 @@ export interface PolicyStore extends Resource<
  * });
  * ```
  *
- * @example Strict Validation with a Schema
+ * **Example:** Strict Validation with a Schema
  * ```typescript
  * const store = yield* AWS.VerifiedPermissions.PolicyStore("Store", {
  *   validationMode: "STRICT",
@@ -91,10 +90,10 @@ export interface PolicyStore extends Resource<
  *   }),
  * });
  * ```
+ *
+ * @resource
  */
-export const PolicyStore = Resource<PolicyStore>(
-  "AWS.VerifiedPermissions.PolicyStore",
-);
+export const PolicyStore = Resource<PolicyStore>("AWS.VerifiedPermissions.PolicyStore");
 
 export const PolicyStoreProvider = () =>
   Provider.effect(
@@ -103,11 +102,7 @@ export const PolicyStoreProvider = () =>
       const observe = Effect.fn(function* (policyStoreId: string) {
         return yield* avp
           .getPolicyStore({ policyStoreId, tags: true })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return PolicyStore.Provider.of({
@@ -115,12 +110,8 @@ export const PolicyStoreProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* avp.listPolicyStores
-              .pages({})
-              .pipe(Stream.runCollect);
-            const items = Array.from(pages).flatMap(
-              (page) => page.policyStores ?? [],
-            );
+            const pages = yield* avp.listPolicyStores.pages({}).pipe(Stream.runCollect);
+            const items = Array.from(pages).flatMap((page) => page.policyStores ?? []);
             return items.map((item) => ({
               policyStoreId: item.policyStoreId,
               policyStoreArn: item.arn,
@@ -153,9 +144,7 @@ export const PolicyStoreProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative
           let store =
-            output?.policyStoreId !== undefined
-              ? yield* observe(output.policyStoreId)
-              : undefined;
+            output?.policyStoreId !== undefined ? yield* observe(output.policyStoreId) : undefined;
 
           // 2. ENSURE — createPolicyStore returns id + arn directly
           if (store === undefined) {

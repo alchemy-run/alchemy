@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.UpdateEncryptionKeyHttp)`.
- * @binding
- * @section Account Settings & Usage
- * @example Use a Customer-Managed Key
+ * ### Account Settings & Usage
+ * **Example:** Use a Customer-Managed Key
  * ```typescript
  * // init
  * const updateEncryptionKey = yield* AWS.Inspector2.UpdateEncryptionKey();
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  *   scanType: "PACKAGE",
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateEncryptionKey extends Binding.Service<
   UpdateEncryptionKey,
@@ -31,10 +32,7 @@ export interface UpdateEncryptionKey extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.UpdateEncryptionKeyRequest,
-    ) => Effect.Effect<
-      inspector2.UpdateEncryptionKeyResponse,
-      inspector2.UpdateEncryptionKeyError
-    >
+    ) => Effect.Effect<inspector2.UpdateEncryptionKeyResponse, inspector2.UpdateEncryptionKeyError>
   >
 > {}
 export const UpdateEncryptionKey = Binding.Service<UpdateEncryptionKey>(

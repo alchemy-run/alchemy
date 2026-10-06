@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Result from "effect/Result";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -15,7 +15,7 @@ export class VerifiedPermissionsTestFunction extends AWS.Lambda.Function<AWS.Lam
 export default VerifiedPermissionsTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // isAuthorized fans out an AVP API call; the 3s default is too tight
     timeout: Duration.seconds(30),
   },
@@ -136,16 +136,11 @@ export default VerifiedPermissionsTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json({
-            tag: Result.isFailure(result)
-              ? result.failure._tag
-              : "unexpected-success",
+            tag: Result.isFailure(result) ? result.failure._tag : "unexpected-success",
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

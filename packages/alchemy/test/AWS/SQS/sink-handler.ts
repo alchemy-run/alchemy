@@ -1,20 +1,19 @@
-import * as AWS from "@/AWS";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 
-export class TestQueue extends Context.Service<
-  TestQueue,
-  { queue: AWS.SQS.Queue }
->()("TestQueue") {}
+export class TestQueue extends Context.Service<TestQueue, { queue: AWS.SQS.Queue }>()(
+  "TestQueue",
+) {}
 
 export const TestQueueLive = Layer.effect(
   TestQueue,
@@ -31,7 +30,7 @@ export class QueueSinkFunction extends AWS.Lambda.Function<AWS.Lambda.Function>(
 export const QueueSinkFunctionLive = QueueSinkFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // The sink's bounded partial-failure retry can sleep up to ~6s, which
     // exceeds Lambda's 3s default timeout (see PATTERNS §7).
     timeout: Duration.seconds(30),
@@ -76,9 +75,7 @@ export const QueueSinkFunctionLive = QueueSinkFunction.make(
         Effect.tapError(Console.log),
         Effect.tap(Console.log),
         Effect.catch(() =>
-          Effect.succeed(
-            HttpServerResponse.text("Internal server error", { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Internal server error", { status: 500 })),
         ),
       ),
     };

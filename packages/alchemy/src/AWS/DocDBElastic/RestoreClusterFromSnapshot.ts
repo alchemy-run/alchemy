@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  * Lambda that rebuilds a cluster from the latest nightly backup. Provide the
  * implementation with
  * `Effect.provide(AWS.DocDBElastic.RestoreClusterFromSnapshotHttp)`.
- * @binding
- * @section Managing Snapshots
- * @example Restore a Cluster from a Snapshot
+ * ### Managing Snapshots
+ * **Example:** Restore a Cluster from a Snapshot
  * ```typescript
  * const restoreCluster = yield* DocDBElastic.RestoreClusterFromSnapshot();
  *
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * // result.cluster.status → "CREATING"
  * ```
+ *
+ * @binding
  */
 export interface RestoreClusterFromSnapshot extends Binding.Service<
   RestoreClusterFromSnapshot,
@@ -37,7 +38,6 @@ export interface RestoreClusterFromSnapshot extends Binding.Service<
     >
   >
 > {}
-export const RestoreClusterFromSnapshot =
-  Binding.Service<RestoreClusterFromSnapshot>(
-    "AWS.DocDBElastic.RestoreClusterFromSnapshot",
-  );
+export const RestoreClusterFromSnapshot = Binding.Service<RestoreClusterFromSnapshot>(
+  "AWS.DocDBElastic.RestoreClusterFromSnapshot",
+);

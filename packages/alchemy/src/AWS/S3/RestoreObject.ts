@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface RestoreObjectRequest extends Omit<
-  S3.RestoreObjectRequest,
-  "Bucket"
-> {}
+export interface RestoreObjectRequest extends Omit<S3.RestoreObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:RestoreObject`.
@@ -17,9 +13,8 @@ export interface RestoreObjectRequest extends Omit<
  * injected automatically and `s3:RestoreObject` is granted on the bucket's
  * objects. Provide the implementation with
  * `Effect.provide(AWS.S3.RestoreObjectHttp)`.
- * @binding
- * @section Archived Objects
- * @example Restore an Archived Object for 3 Days
+ * ### Archived Objects
+ * **Example:** Restore an Archived Object for 3 Days
  * ```typescript
  * const restoreObject = yield* AWS.S3.RestoreObject(bucket);
  *
@@ -31,6 +26,8 @@ export interface RestoreObjectRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface RestoreObject extends Binding.Service<
   RestoreObject,
@@ -38,11 +35,7 @@ export interface RestoreObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: RestoreObjectRequest,
-    ) => Effect.Effect<S3.RestoreObjectOutput, S3.RestoreObjectError>
+    (request: RestoreObjectRequest) => Effect.Effect<S3.RestoreObjectOutput, S3.RestoreObjectError>
   >
 > {}
-export const RestoreObject = Binding.Service<RestoreObject>(
-  "AWS.S3.RestoreObject",
-);
+export const RestoreObject = Binding.Service<RestoreObject>("AWS.S3.RestoreObject");

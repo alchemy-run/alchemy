@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListDeviceDiscoveries}.
  */
-export interface ListDeviceDiscoveriesRequest
-  extends mi.ListDeviceDiscoveriesRequest {}
+export interface ListDeviceDiscoveriesRequest extends mi.ListDeviceDiscoveriesRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:ListDeviceDiscoveries`
@@ -17,14 +16,15 @@ export interface ListDeviceDiscoveriesRequest
  * {@link GetDeviceDiscovery}. Provide the implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.ListDeviceDiscoveriesHttp)`.
  *
- * @binding
- * @section Discovering Devices
- * @example List Running Discovery Scans
+ * ### Discovering Devices
+ * **Example:** List Running Discovery Scans
  * ```typescript
  * const listDiscoveries = yield* IoTManagedIntegrations.ListDeviceDiscoveries();
  *
  * const { Items } = yield* listDiscoveries({ StatusFilter: "RUNNING" });
  * ```
+ *
+ * @binding
  */
 export interface ListDeviceDiscoveries extends Binding.Service<
   ListDeviceDiscoveries,
@@ -32,10 +32,7 @@ export interface ListDeviceDiscoveries extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListDeviceDiscoveriesRequest,
-    ) => Effect.Effect<
-      mi.ListDeviceDiscoveriesResponse,
-      mi.ListDeviceDiscoveriesError
-    >
+    ) => Effect.Effect<mi.ListDeviceDiscoveriesResponse, mi.ListDeviceDiscoveriesError>
   >
 > {}
 export const ListDeviceDiscoveries = Binding.Service<ListDeviceDiscoveries>(

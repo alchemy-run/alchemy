@@ -8,9 +8,8 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
  * deployment paused in the ready state (`actionOnTimeout:
  * "STOP_DEPLOYMENT"`), starts rerouting traffic to the replacement
  * environment without waiting for the configured wait time.
- * @binding
- * @section Controlling Deployments
- * @example Approve Traffic Rerouting
+ * ### Controlling Deployments
+ * **Example:** Approve Traffic Rerouting
  * ```typescript
  * const continueDeployment = yield* AWS.CodeDeploy.ContinueDeployment(group);
  *
@@ -19,6 +18,8 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
  *   deploymentWaitType: "READY_WAIT",
  * });
  * ```
+ *
+ * @binding
  */
 export interface ContinueDeployment extends Binding.Service<
   ContinueDeployment,
@@ -28,10 +29,7 @@ export interface ContinueDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.ContinueDeploymentInput,
-    ) => Effect.Effect<
-      SVC.ContinueDeploymentResponse,
-      SVC.ContinueDeploymentError
-    >
+    ) => Effect.Effect<SVC.ContinueDeploymentResponse, SVC.ContinueDeploymentError>
   >
 > {}
 export const ContinueDeployment = Binding.Service<ContinueDeployment>(

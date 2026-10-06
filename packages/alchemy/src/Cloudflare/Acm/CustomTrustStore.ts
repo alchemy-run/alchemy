@@ -2,7 +2,6 @@ import * as acm from "@distilled.cloud/cloudflare/acm";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -91,11 +90,8 @@ export type CustomTrustStore = Resource<
  * no ownership markers, so a cold `read` scans the zone for a certificate
  * with the same PEM body and reports it as `Unowned` — the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product ACM
- * @category SSL/TLS & Certificates
- * @section Uploading a root CA
- * @example Trust a private root CA for origin pulls
+ * ### Uploading a root CA
+ * **Example:** Trust a private root CA for origin pulls
  * ```typescript
  * const trustStore = yield* Cloudflare.Acm.CustomTrustStore("OriginRootCa", {
  *   zoneId: zone.zoneId,
@@ -103,7 +99,7 @@ export type CustomTrustStore = Resource<
  * });
  * ```
  *
- * @example Load the PEM from a file
+ * **Example:** Load the PEM from a file
  * ```typescript
  * const fs = yield* FileSystem.FileSystem;
  * const pem = yield* fs.readFileString("./certs/root-ca.pem");
@@ -114,6 +110,10 @@ export type CustomTrustStore = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api/resources/acm/
+ *
+ * @resource
+ * @product ACM
+ * @category SSL/TLS & Certificates
  */
 export const CustomTrustStore = Resource<CustomTrustStore>(TypeId);
 
@@ -168,13 +168,8 @@ export const CustomTrustStoreProvider = () =>
       }
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -210,9 +205,7 @@ export const CustomTrustStoreProvider = () =>
       // 1. Observe — the id cached on `output` is a hint, not a guarantee:
       //    a missing (or async-deleted) certificate falls through to the
       //    PEM scan and then to create.
-      let observed = output?.id
-        ? yield* getTrustStore(zoneId, output.id)
-        : undefined;
+      let observed = output?.id ? yield* getTrustStore(zoneId, output.id) : undefined;
       if (observed && isGoneStatus(observed.status)) observed = undefined;
 
       // 2. Fall back to scanning the zone for the same PEM body. Ownership
@@ -277,9 +270,8 @@ const isGoneStatus = (status: CustomTrustStoreStatus): boolean =>
 const getTrustStore = (zoneId: string, id: string) =>
   acm.getCustomTrustStore({ zoneId, customOriginTrustStoreId: id }).pipe(
     Effect.map((cert): ObservedTrustStore | undefined => cert),
-    Effect.catchTag(
-      ["CustomTrustStoreNotFound", "InvalidObjectIdentifier"],
-      () => Effect.succeed(undefined),
+    Effect.catchTag(["CustomTrustStoreNotFound", "InvalidObjectIdentifier"], () =>
+      Effect.succeed(undefined),
     ),
   );
 
@@ -302,10 +294,7 @@ const findByCertificate = (zoneId: string, certificate: string) =>
 
 const normalizePem = (pem: string): string => pem.replace(/\r\n/g, "\n").trim();
 
-const toAttributes = (
-  zoneId: string,
-  cert: ObservedTrustStore,
-): CustomTrustStoreAttributes => ({
+const toAttributes = (zoneId: string, cert: ObservedTrustStore): CustomTrustStoreAttributes => ({
   id: cert.id,
   zoneId,
   certificate: cert.certificate,

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -55,11 +54,8 @@ export type CustomPage = Resource<
  * A Cloudflare Zero Trust Access custom page. Replaces the default Access
  * block pages (`identity_denied` / `forbidden`) with custom HTML, which can
  * then be selected on an Access application.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Custom Page
- * @example Custom forbidden page
+ * ### Creating a Custom Page
+ * **Example:** Custom forbidden page
  * ```typescript
  * const page = yield* Cloudflare.Access.CustomPage("Forbidden", {
  *   type: "forbidden",
@@ -67,7 +63,7 @@ export type CustomPage = Resource<
  * });
  * ```
  *
- * @example Custom identity-denied page with an explicit name
+ * **Example:** Custom identity-denied page with an explicit name
  * ```typescript
  * const page = yield* Cloudflare.Access.CustomPage("Denied", {
  *   name: "corp-identity-denied",
@@ -76,20 +72,23 @@ export type CustomPage = Resource<
  * });
  * ```
  *
- * @section Updating the HTML
- * @example HTML and name converge in place
+ * ### Updating the HTML
+ * **Example:** HTML and name converge in place
  * ```typescript
  * const page = yield* Cloudflare.Access.CustomPage("Forbidden", {
  *   type: "forbidden",
  *   customHtml: "<html><body><h1>Still denied</h1></body></html>",
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const CustomPage = Resource<CustomPage>("Cloudflare.Access.CustomPage");
 
 export const isCustomPage = (value: unknown): value is CustomPage =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.CustomPage";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.CustomPage";
 
 export const CustomPageProvider = () =>
   Provider.succeed(CustomPage, {
@@ -131,11 +130,7 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(
-            Effect.catchTag("AccessCustomPageNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
         if (direct && direct.uid) {
           return toAttrs(direct, acct);
         }
@@ -145,11 +140,7 @@ export const CustomPageProvider = () =>
       if (!existing || !existing.uid) return undefined;
       const full = yield* zeroTrust
         .getAccessCustomPage({ accountId: acct, customPageId: existing.uid })
-        .pipe(
-          Effect.catchTag("AccessCustomPageNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
       if (!full || !full.uid) return undefined;
       return toAttrs(full, acct);
     }),
@@ -167,22 +158,14 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(
-            Effect.catchTag("AccessCustomPageNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
       }
       if (!observed || !observed.uid) {
         const byName = yield* findPageByName(acct, name);
         if (byName?.uid) {
           observed = yield* zeroTrust
             .getAccessCustomPage({ accountId: acct, customPageId: byName.uid })
-            .pipe(
-              Effect.catchTag("AccessCustomPageNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
         }
       }
 
@@ -206,9 +189,7 @@ export const CustomPageProvider = () =>
             ),
           );
         if (!created.uid) {
-          return yield* Effect.fail(
-            new Error("CustomPage: created page missing uid"),
-          );
+          return yield* Effect.fail(new Error("CustomPage: created page missing uid"));
         }
         return toAttrs({ ...created, type: news.type }, acct);
       }

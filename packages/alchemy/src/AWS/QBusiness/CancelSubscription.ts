@@ -20,14 +20,15 @@ export interface CancelSubscriptionRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.CancelSubscriptionHttp)`.
  *
- * @binding
- * @section Subscriptions
- * @example Cancel a Subscription
+ * ### Subscriptions
+ * **Example:** Cancel a Subscription
  * ```typescript
  * const cancel = yield* AWS.QBusiness.CancelSubscription(app);
  *
  * yield* cancel({ subscriptionId });
  * ```
+ *
+ * @binding
  */
 export interface CancelSubscription extends Binding.Service<
   CancelSubscription,
@@ -37,10 +38,7 @@ export interface CancelSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CancelSubscriptionRequest,
-    ) => Effect.Effect<
-      qbusiness.CancelSubscriptionResponse,
-      qbusiness.CancelSubscriptionError
-    >
+    ) => Effect.Effect<qbusiness.CancelSubscriptionResponse, qbusiness.CancelSubscriptionError>
   >
 > {}
 export const CancelSubscription = Binding.Service<CancelSubscription>(

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface GetTopicAttributesRequest extends Omit<
-  sns.GetTopicAttributesInput,
-  "TopicArn"
-> {}
+export interface GetTopicAttributesRequest extends Omit<sns.GetTopicAttributesInput, "TopicArn"> {}
 
 /**
  * Runtime binding for `sns:GetTopicAttributes`.
@@ -16,9 +13,8 @@ export interface GetTopicAttributesRequest extends Omit<
  * The binding grants the host function `sns:GetTopicAttributes` on the
  * topic. Provide the `GetTopicAttributesHttp` layer on the Function to
  * implement the binding.
- * @binding
- * @section Reading Topic Attributes
- * @example Read a Topic's Attributes
+ * ### Reading Topic Attributes
+ * **Example:** Read a Topic's Attributes
  * ```typescript
  * // init (provide SNS.GetTopicAttributesHttp on the Function)
  * const getTopicAttributes = yield* SNS.GetTopicAttributes(topic);
@@ -27,6 +23,8 @@ export interface GetTopicAttributesRequest extends Omit<
  * const response = yield* getTopicAttributes();
  * const displayName = response.Attributes?.DisplayName;
  * ```
+ *
+ * @binding
  */
 export interface GetTopicAttributes extends Binding.Service<
   GetTopicAttributes,
@@ -36,13 +34,8 @@ export interface GetTopicAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetTopicAttributesRequest,
-    ) => Effect.Effect<
-      sns.GetTopicAttributesResponse,
-      sns.GetTopicAttributesError
-    >
+    ) => Effect.Effect<sns.GetTopicAttributesResponse, sns.GetTopicAttributesError>
   >
 > {}
 
-export const GetTopicAttributes = Binding.Service<GetTopicAttributes>(
-  "AWS.SNS.GetTopicAttributes",
-);
+export const GetTopicAttributes = Binding.Service<GetTopicAttributes>("AWS.SNS.GetTopicAttributes");

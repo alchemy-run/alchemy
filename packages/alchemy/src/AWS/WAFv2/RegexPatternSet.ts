@@ -6,11 +6,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fetchWafTags,
@@ -86,16 +82,15 @@ export interface RegexPatternSet extends Resource<
  * referenced from web ACL and rule group rules via
  * `RegexPatternSetReferenceStatement`.
  *
- * @resource
- * @section Creating Regex Pattern Sets
- * @example Block Requests Matching Bad Path Patterns
+ * ### Creating Regex Pattern Sets
+ * **Example:** Block Requests Matching Bad Path Patterns
  * ```typescript
  * const badPaths = yield* AWS.WAFv2.RegexPatternSet("BadPaths", {
  *   regularExpressions: ["^/wp-admin", "\\.php$"],
  * });
  * ```
  *
- * @example Reference from a Web ACL Rule
+ * **Example:** Reference from a Web ACL Rule
  * ```typescript
  * const acl = yield* AWS.WAFv2.WebACL("Firewall", {
  *   rules: [
@@ -119,25 +114,20 @@ export interface RegexPatternSet extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
-export const RegexPatternSet = Resource<RegexPatternSet>(
-  "AWS.WAFv2.RegexPatternSet",
-);
+export const RegexPatternSet = Resource<RegexPatternSet>("AWS.WAFv2.RegexPatternSet");
 
 const defaultScope: WafScope = "REGIONAL";
 
 const toExpressionList = (expressions: readonly string[]): WAFV2.Regex[] =>
   expressions.map((RegexString) => ({ RegexString }));
 
-const fromExpressionList = (
-  list: readonly WAFV2.Regex[] | undefined,
-): string[] =>
-  (list ?? []).flatMap((regex) =>
-    regex.RegexString !== undefined ? [regex.RegexString] : [],
-  );
+const fromExpressionList = (list: readonly WAFV2.Regex[] | undefined): string[] =>
+  (list ?? []).flatMap((regex) => (regex.RegexString !== undefined ? [regex.RegexString] : []));
 
-const sorted = (values: readonly string[]) =>
-  [...values].sort((a, b) => a.localeCompare(b));
+const sorted = (values: readonly string[]) => [...values].sort((a, b) => a.localeCompare(b));
 
 const toAttrs = (set: WAFV2.RegexPatternSet, scope: WafScope) => ({
   regexPatternSetName: set.Name ?? "",
@@ -151,14 +141,8 @@ export const RegexPatternSetProvider = () =>
   Provider.effect(
     RegexPatternSet,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: RegexPatternSetProps,
-      ) {
-        return (
-          props.regexPatternSetName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: RegexPatternSetProps) {
+        return props.regexPatternSetName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const findSet = Effect.fn(function* (
@@ -172,9 +156,7 @@ export const RegexPatternSetProvider = () =>
             wafv2
               .getRegexPatternSet({ Name: name, Scope: scope, Id: cachedId })
               .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
               ),
           );
           if (byId?.RegexPatternSet) {
@@ -202,16 +184,11 @@ export const RegexPatternSetProvider = () =>
                   Id: summary.Id,
                 })
                 .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
                 ),
             );
           }
-          if (
-            !listed.NextMarker ||
-            (listed.RegexPatternSets?.length ?? 0) === 0
-          ) {
+          if (!listed.NextMarker || (listed.RegexPatternSets?.length ?? 0) === 0) {
             break;
           }
           marker = listed.NextMarker;
@@ -267,12 +244,7 @@ export const RegexPatternSetProvider = () =>
       });
 
       return {
-        stables: [
-          "regexPatternSetName",
-          "regexPatternSetId",
-          "regexPatternSetArn",
-          "scope",
-        ],
+        stables: ["regexPatternSetName", "regexPatternSetId", "regexPatternSetArn", "scope"],
 
         list: () =>
           Effect.gen(function* () {
@@ -283,10 +255,7 @@ export const RegexPatternSetProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldName = yield* createName(
-            id,
-            olds ?? { regularExpressions: [] },
-          );
+          const oldName = yield* createName(id, olds ?? { regularExpressions: [] });
           const newName = yield* createName(id, news);
           if (
             oldName !== newName ||
@@ -312,8 +281,7 @@ export const RegexPatternSetProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const scope = news.scope ?? defaultScope;
-          const name =
-            output?.regexPatternSetName ?? (yield* createName(id, news));
+          const name = output?.regexPatternSetName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -328,16 +296,12 @@ export const RegexPatternSetProvider = () =>
                 .createRegexPatternSet({
                   Name: name,
                   Scope: scope,
-                  RegularExpressionList: toExpressionList(
-                    news.regularExpressions,
-                  ),
+                  RegularExpressionList: toExpressionList(news.regularExpressions),
                   Description: news.description,
                   Tags: createTagsList(desiredTags),
                 })
                 .pipe(
-                  Effect.catchTag("WAFDuplicateItemException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
                 ),
             );
             observed = yield* findSet(scope, name, undefined);
@@ -347,9 +311,7 @@ export const RegexPatternSetProvider = () =>
           const arn = set?.ARN;
           if (set === undefined || arn === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Failed to observe RegexPatternSet '${name}' after create`,
-              ),
+              new Error(`Failed to observe RegexPatternSet '${name}' after create`),
             );
           }
 
@@ -359,9 +321,7 @@ export const RegexPatternSetProvider = () =>
           //    may return the list in arbitrary order — compare as sets.
           const drifted = !deepEqual(
             {
-              RegularExpressions: sorted(
-                fromExpressionList(set.RegularExpressionList),
-              ),
+              RegularExpressions: sorted(fromExpressionList(set.RegularExpressionList)),
               Description: set.Description,
             },
             {
@@ -374,10 +334,7 @@ export const RegexPatternSetProvider = () =>
             yield* retryOptimisticLock(
               Effect.gen(function* () {
                 const fresh = yield* findSet(scope, name, set.Id);
-                if (
-                  !fresh?.RegexPatternSet?.Id ||
-                  fresh.LockToken === undefined
-                ) {
+                if (!fresh?.RegexPatternSet?.Id || fresh.LockToken === undefined) {
                   return;
                 }
                 yield* withWafScope(
@@ -386,9 +343,7 @@ export const RegexPatternSetProvider = () =>
                     Name: name,
                     Scope: scope,
                     Id: fresh.RegexPatternSet.Id,
-                    RegularExpressionList: toExpressionList(
-                      news.regularExpressions,
-                    ),
+                    RegularExpressionList: toExpressionList(news.regularExpressions),
                     Description: news.description,
                     LockToken: fresh.LockToken,
                   }),
@@ -440,12 +395,7 @@ export const RegexPatternSetProvider = () =>
                       Id: output.regexPatternSetId,
                       LockToken: found.LockToken,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        "WAFNonexistentItemException",
-                        () => Effect.void,
-                      ),
-                    ),
+                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
                 );
               }),
             ),

@@ -6,19 +6,15 @@ import type { QApp } from "./QApp.ts";
 /**
  * Request for {@link ListLibraryItems} — `instanceId` is injected from the bound Q App.
  */
-export interface ListLibraryItemsRequest extends Omit<
-  qapps.ListLibraryItemsInput,
-  "instanceId"
-> {}
+export interface ListLibraryItemsRequest extends Omit<qapps.ListLibraryItemsInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:ListLibraryItems`.
  *
  * Lists the library items published in the bound app's Q Business application environment instance. Provide the implementation with
  * `Effect.provide(AWS.QApps.ListLibraryItemsHttp)`.
- * @binding
- * @section Library Items
- * @example List Library Items
+ * ### Library Items
+ * **Example:** List Library Items
  * ```typescript
  * // init — bind the operation to the Q App
  * const listLibraryItems = yield* AWS.QApps.ListLibraryItems(app);
@@ -27,6 +23,8 @@ export interface ListLibraryItemsRequest extends Omit<
  * const page = yield* listLibraryItems({ limit: 25 });
  * console.log(page.libraryItems?.length);
  * ```
+ *
+ * @binding
  */
 export interface ListLibraryItems extends Binding.Service<
   ListLibraryItems,
@@ -36,13 +34,8 @@ export interface ListLibraryItems extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListLibraryItemsRequest,
-    ) => Effect.Effect<
-      qapps.ListLibraryItemsOutput,
-      qapps.ListLibraryItemsError
-    >
+    ) => Effect.Effect<qapps.ListLibraryItemsOutput, qapps.ListLibraryItemsError>
   >
 > {}
 
-export const ListLibraryItems = Binding.Service<ListLibraryItems>(
-  "AWS.QApps.ListLibraryItems",
-);
+export const ListLibraryItems = Binding.Service<ListLibraryItems>("AWS.QApps.ListLibraryItems");

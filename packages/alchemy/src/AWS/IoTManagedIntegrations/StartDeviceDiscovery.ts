@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link StartDeviceDiscovery}.
  */
-export interface StartDeviceDiscoveryRequest
-  extends mi.StartDeviceDiscoveryRequest {}
+export interface StartDeviceDiscoveryRequest extends mi.StartDeviceDiscoveryRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:StartDeviceDiscovery`
@@ -17,9 +16,8 @@ export interface StartDeviceDiscoveryRequest
  * protocol. Provide the implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.StartDeviceDiscoveryHttp)`.
  *
- * @binding
- * @section Discovering Devices
- * @example Start a Zigbee Discovery Scan
+ * ### Discovering Devices
+ * **Example:** Start a Zigbee Discovery Scan
  * ```typescript
  * // init — account-level binding takes no resource
  * const startDiscovery = yield* IoTManagedIntegrations.StartDeviceDiscovery();
@@ -30,6 +28,8 @@ export interface StartDeviceDiscoveryRequest
  *   ControllerIdentifier: controllerManagedThingId,
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartDeviceDiscovery extends Binding.Service<
   StartDeviceDiscovery,
@@ -37,10 +37,7 @@ export interface StartDeviceDiscovery extends Binding.Service<
   () => Effect.Effect<
     (
       request: StartDeviceDiscoveryRequest,
-    ) => Effect.Effect<
-      mi.StartDeviceDiscoveryResponse,
-      mi.StartDeviceDiscoveryError
-    >
+    ) => Effect.Effect<mi.StartDeviceDiscoveryResponse, mi.StartDeviceDiscoveryError>
   >
 > {}
 export const StartDeviceDiscovery = Binding.Service<StartDeviceDiscovery>(

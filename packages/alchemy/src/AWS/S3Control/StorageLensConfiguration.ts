@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createTagsList,
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createTagsList, createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -87,16 +82,15 @@ export interface StorageLensConfiguration extends Resource<
  * organization-wide) storage analytics dashboard aggregating usage and
  * activity metrics across buckets, with optional daily export to S3 or
  * CloudWatch.
- * @resource
- * @section Creating Dashboards
- * @example Free-metrics dashboard over the whole account
+ * ### Creating Dashboards
+ * **Example:** Free-metrics dashboard over the whole account
  * ```typescript
  * import * as S3Control from "alchemy/AWS/S3Control";
  *
  * const lens = yield* S3Control.StorageLensConfiguration("account-lens", {});
  * ```
  *
- * @example Dashboard scoped to specific buckets
+ * **Example:** Dashboard scoped to specific buckets
  * ```typescript
  * const lens = yield* S3Control.StorageLensConfiguration("data-lens", {
  *   include: {
@@ -105,7 +99,7 @@ export interface StorageLensConfiguration extends Resource<
  * });
  * ```
  *
- * @example Advanced metrics with S3 export
+ * **Example:** Advanced metrics with S3 export
  * ```typescript
  * const lens = yield* S3Control.StorageLensConfiguration("advanced-lens", {
  *   accountLevel: {
@@ -125,12 +119,14 @@ export interface StorageLensConfiguration extends Resource<
  * });
  * ```
  *
- * @example Disable a dashboard without deleting it
+ * **Example:** Disable a dashboard without deleting it
  * ```typescript
  * const lens = yield* S3Control.StorageLensConfiguration("account-lens", {
  *   isEnabled: false,
  * });
  * ```
+ *
+ * @resource
  */
 export const StorageLensConfiguration = Resource<StorageLensConfiguration>(
   "AWS.S3Control.StorageLensConfiguration",
@@ -161,9 +157,7 @@ export const StorageLensConfigurationProvider = () =>
         props: Pick<StorageLensConfigurationProps, "configId">,
       ) {
         // Config IDs allow [a-zA-Z0-9-_.], 1-64 characters.
-        return (
-          props.configId ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.configId ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const observeConfiguration = (accountId: string, configId: string) =>
@@ -174,9 +168,7 @@ export const StorageLensConfigurationProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.StorageLensConfiguration),
-            Effect.catchTag("NoSuchConfiguration", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NoSuchConfiguration", () => Effect.succeed(undefined)),
           );
 
       const observedTags = (accountId: string, configId: string) =>
@@ -186,9 +178,7 @@ export const StorageLensConfigurationProvider = () =>
             ConfigId: configId,
           })
           .pipe(
-            Effect.map((r) =>
-              Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-            ),
+            Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))),
             Effect.catchTag("NoSuchConfiguration", () =>
               Effect.succeed({} as Record<string, string>),
             ),
@@ -242,8 +232,7 @@ export const StorageLensConfigurationProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const configId =
-            output?.configId ?? (yield* createConfigId(id, olds ?? {}));
+          const configId = output?.configId ?? (yield* createConfigId(id, olds ?? {}));
           const observed = yield* observeConfiguration(accountId, configId);
           if (observed?.StorageLensArn === undefined) return undefined;
           const attrs = {
@@ -264,8 +253,7 @@ export const StorageLensConfigurationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const configId =
-            output?.configId ?? (yield* createConfigId(id, news));
+          const configId = output?.configId ?? (yield* createConfigId(id, news));
 
           // 1. OBSERVE — cloud state is authoritative.
           const observed = yield* observeConfiguration(accountId, configId);
@@ -310,9 +298,7 @@ export const StorageLensConfigurationProvider = () =>
           return {
             configId,
             storageLensArn:
-              final.StorageLensConfiguration?.StorageLensArn ??
-              output?.storageLensArn ??
-              "",
+              final.StorageLensConfiguration?.StorageLensArn ?? output?.storageLensArn ?? "",
           };
         }),
         delete: Effect.fn(function* ({ output }) {

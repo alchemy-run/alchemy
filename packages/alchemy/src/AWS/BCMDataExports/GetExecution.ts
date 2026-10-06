@@ -7,10 +7,7 @@ import type { Export } from "./Export.ts";
  * Request for {@link GetExecution} — the bound export's ARN is injected
  * automatically.
  */
-export interface GetExecutionRequest extends Omit<
-  bcm.GetExecutionRequest,
-  "ExportArn"
-> {}
+export interface GetExecutionRequest extends Omit<bcm.GetExecutionRequest, "ExportArn"> {}
 
 /**
  * Runtime binding for `bcm-data-exports:GetExecution`.
@@ -20,9 +17,8 @@ export interface GetExecutionRequest extends Omit<
  * inside a function runtime. Useful for delivery monitors that alert when a
  * refresh fails. Provide the implementation with
  * `Effect.provide(AWS.BCMDataExports.GetExecutionHttp)`.
- * @binding
- * @section Monitoring Executions
- * @example Check an Execution's Status
+ * ### Monitoring Executions
+ * **Example:** Check an Execution's Status
  * ```typescript
  * // init — bind the operation to the export
  * const getExecution = yield* AWS.BCMDataExports.GetExecution(cur);
@@ -31,6 +27,8 @@ export interface GetExecutionRequest extends Omit<
  * const result = yield* getExecution({ ExecutionId: executionId });
  * const status = result.ExecutionStatus?.StatusCode;
  * ```
+ *
+ * @binding
  */
 export interface GetExecution extends Binding.Service<
   GetExecution,
@@ -38,12 +36,8 @@ export interface GetExecution extends Binding.Service<
   (
     dataExport: Export,
   ) => Effect.Effect<
-    (
-      request: GetExecutionRequest,
-    ) => Effect.Effect<bcm.GetExecutionResponse, bcm.GetExecutionError>
+    (request: GetExecutionRequest) => Effect.Effect<bcm.GetExecutionResponse, bcm.GetExecutionError>
   >
 > {}
 
-export const GetExecution = Binding.Service<GetExecution>(
-  "AWS.BCMDataExports.GetExecution",
-);
+export const GetExecution = Binding.Service<GetExecution>("AWS.BCMDataExports.GetExecution");

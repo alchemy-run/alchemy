@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * parameter groups from the last 24 hours (up to 14 days with an explicit
  * time window) — failovers, maintenance, configuration changes. Provide the
  * implementation with `Effect.provide(AWS.DocDB.DescribeEventsHttp)`.
- * @binding
- * @section Monitoring Clusters
- * @example Read a Cluster's Recent Events
+ * ### Monitoring Clusters
+ * **Example:** Read a Cluster's Recent Events
  * ```typescript
  * const describeEvents = yield* AWS.DocDB.DescribeEvents();
  *
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  *   yield* Effect.logInfo(`${event.Date}: ${event.Message}`);
  * }
  * ```
+ *
+ * @binding
  */
 export interface DescribeEvents extends Binding.Service<
   DescribeEvents,
@@ -34,6 +35,4 @@ export interface DescribeEvents extends Binding.Service<
     ) => Effect.Effect<docdb.EventsMessage, docdb.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.DocDB.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.DocDB.DescribeEvents");

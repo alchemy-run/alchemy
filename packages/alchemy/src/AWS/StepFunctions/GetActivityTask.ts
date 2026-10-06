@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Activity } from "./Activity.ts";
 
-export interface GetActivityTaskRequest extends Omit<
-  sfn.GetActivityTaskInput,
-  "activityArn"
-> {}
+export interface GetActivityTaskRequest extends Omit<sfn.GetActivityTaskInput, "activityArn"> {}
 
 /**
  * Runtime binding for `states:GetActivityTask` — the activity worker's
@@ -18,9 +15,8 @@ export interface GetActivityTaskRequest extends Omit<
  * `taskToken` means the poll timed out) — size the host's timeout
  * accordingly. Complete the returned task with `SendTaskSuccess` /
  * `SendTaskFailure`, keeping it alive with `SendTaskHeartbeat`.
- * @binding
- * @section Activity Workers
- * @example Poll for a task and complete it
+ * ### Activity Workers
+ * **Example:** Poll for a task and complete it
  * ```typescript
  * const getActivityTask = yield* StepFunctions.GetActivityTask(activity);
  * const sendTaskSuccess = yield* StepFunctions.SendTaskSuccess(activity);
@@ -33,6 +29,8 @@ export interface GetActivityTaskRequest extends Omit<
  *   });
  * }
  * ```
+ *
+ * @binding
  */
 export interface GetActivityTask extends Binding.Service<
   GetActivityTask,

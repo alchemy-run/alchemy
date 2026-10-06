@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { NotificationChannel } from "@/AWS/DevOpsGuru/NotificationChannel.ts";
-import { Topic } from "@/AWS/SNS/Topic.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "alchemy-test";
@@ -10,6 +5,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { NotificationChannel } from "@/AWS/DevOpsGuru/NotificationChannel.ts";
+import { Topic } from "@/AWS/SNS/Topic.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,14 +22,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        devopsguru.describeInsight({
-          Id: "alchemy-nonexistent-devopsguru-insight-probe",
-        }),
+        devopsguru.describeInsight({ Id: "alchemy-nonexistent-devopsguru-insight-probe" }),
       );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
     }),
+  { tags: ["provider:aws", "provider:aws:devopsguru", "live"] },
 );
 
 const listChannels = devopsguru.listNotificationChannels.items({}).pipe(
@@ -102,17 +99,14 @@ test.provider(
       const afterUpdate = yield* listChannels;
       const liveUpdated = afterUpdate.find((c) => c.Id === updated.channel.id);
       expect(liveUpdated?.Config?.Sns?.TopicArn).toBe(created.topic.topicArn);
-      expect(
-        [...(liveUpdated?.Config?.Filters?.Severities ?? [])].sort(),
-      ).toEqual(["HIGH", "MEDIUM"]);
-      expect(liveUpdated?.Config?.Filters?.MessageTypes).toEqual([
-        "NEW_INSIGHT",
+      expect([...(liveUpdated?.Config?.Filters?.Severities ?? [])].sort()).toEqual([
+        "HIGH",
+        "MEDIUM",
       ]);
+      expect(liveUpdated?.Config?.Filters?.MessageTypes).toEqual(["NEW_INSIGHT"]);
       // The old channel is gone (not duplicated).
       expect(
-        afterUpdate.filter(
-          (c) => c.Config?.Sns?.TopicArn === created.topic.topicArn,
-        ),
+        afterUpdate.filter((c) => c.Config?.Sns?.TopicArn === created.topic.topicArn),
       ).toHaveLength(1);
 
       // Idempotent redeploy — no drift, id is unchanged.
@@ -132,12 +126,13 @@ test.provider(
       // Destroy — the channel is removed and the SNS topic is gone.
       yield* stack.destroy();
       const afterDestroy = yield* listChannels;
-      expect(
-        afterDestroy.some(
-          (c) => c.Config?.Sns?.TopicArn === created.topic.topicArn,
-        ),
-      ).toBe(false);
+      expect(afterDestroy.some((c) => c.Config?.Sns?.TopicArn === created.topic.topicArn)).toBe(
+        false,
+      );
       yield* assertTopicDeleted(created.topic.topicArn);
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:devopsguru", "provider:aws:sns", "live"],
+    timeout: 180_000,
+  },
 );

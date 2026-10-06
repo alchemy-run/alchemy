@@ -10,9 +10,8 @@ import type { Cluster } from "./Cluster.ts";
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:ListNodegroups` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.ListNodegroupsHttp)`.
- * @binding
- * @section Inspecting Compute
- * @example List the Cluster's Node Groups
+ * ### Inspecting Compute
+ * **Example:** List the Cluster's Node Groups
  * ```typescript
  * // init
  * const listNodegroups = yield* AWS.EKS.ListNodegroups(cluster);
@@ -20,6 +19,8 @@ import type { Cluster } from "./Cluster.ts";
  * // runtime
  * const { nodegroups } = yield* listNodegroups();
  * ```
+ *
+ * @binding
  */
 export interface ListNodegroups extends Binding.Service<
   ListNodegroups,
@@ -32,6 +33,4 @@ export interface ListNodegroups extends Binding.Service<
     ) => Effect.Effect<eks.ListNodegroupsResponse, eks.ListNodegroupsError>
   >
 > {}
-export const ListNodegroups = Binding.Service<ListNodegroups>(
-  "AWS.EKS.ListNodegroups",
-);
+export const ListNodegroups = Binding.Service<ListNodegroups>("AWS.EKS.ListNodegroups");

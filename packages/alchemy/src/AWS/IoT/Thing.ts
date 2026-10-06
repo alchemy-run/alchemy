@@ -42,20 +42,21 @@ export interface Thing extends Resource<
 /**
  * An AWS IoT Thing — the cloud representation of a physical device.
  *
- * @resource
- * @section Creating a Thing
- * @example Basic Thing
+ * ### Creating a Thing
+ * **Example:** Basic Thing
  * ```typescript
  * const thing = yield* Thing("sensor", {});
  * ```
  *
- * @example Thing with Attributes
+ * **Example:** Thing with Attributes
  * ```typescript
  * const thing = yield* Thing("sensor", {
  *   thingName: "temperature-sensor-01",
  *   attributes: { location: "warehouse-a", model: "acme-t1000" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Thing = Resource<Thing>("AWS.IoT.Thing");
 
@@ -84,15 +85,10 @@ export const ThingProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const thingName =
-            output?.thingName ?? (yield* createName(id, olds ?? {}));
+          const thingName = output?.thingName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .describeThing({ thingName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (!found) return undefined;
           return {
             thingName,
@@ -112,11 +108,7 @@ export const ThingProvider = () =>
           // 1. OBSERVE — cloud is authoritative; output is only an id cache.
           let live = yield* iot
             .describeThing({ thingName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // 2. ENSURE — create if missing; tolerate an AlreadyExists race.
           if (live === undefined) {
@@ -124,33 +116,23 @@ export const ThingProvider = () =>
               .createThing({
                 thingName,
                 thingTypeName: news.thingTypeName,
-                attributePayload: news.attributes
-                  ? { attributes: news.attributes }
-                  : undefined,
+                attributePayload: news.attributes ? { attributes: news.attributes } : undefined,
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             live = yield* iot.describeThing({ thingName });
           } else {
             // 3. SYNC — converge attributes + thing type to desired.
             const desiredAttrs = news.attributes ?? {};
             const observedAttrs = live.attributes ?? {};
-            const attrsChanged =
-              JSON.stringify(desiredAttrs) !== JSON.stringify(observedAttrs);
+            const attrsChanged = JSON.stringify(desiredAttrs) !== JSON.stringify(observedAttrs);
             const typeChanged =
-              (news.thingTypeName ?? undefined) !==
-              (live.thingTypeName ?? undefined);
+              (news.thingTypeName ?? undefined) !== (live.thingTypeName ?? undefined);
             if (attrsChanged || typeChanged) {
               yield* iot.updateThing({
                 thingName,
                 thingTypeName: news.thingTypeName,
                 removeThingType:
-                  news.thingTypeName === undefined &&
-                  live.thingTypeName !== undefined
+                  news.thingTypeName === undefined && live.thingTypeName !== undefined
                     ? true
                     : undefined,
                 attributePayload: attrsChanged
@@ -170,9 +152,7 @@ export const ThingProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* iot
             .deleteThing({ thingName: output.thingName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

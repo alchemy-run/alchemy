@@ -1,7 +1,6 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
 import type { Environment } from "./Environment.ts";
@@ -38,8 +37,7 @@ export interface SecretsProps {
  *
  * Each entry in `secrets` becomes one `GitHub.Secret` resource, using the
  * map key as both the alchemy logical id and the secret name.
- * @resource
- * @example
+ * **Example:** Example
  * ```ts
  * yield* GitHub.Secrets({
  *   owner: "my-org",
@@ -50,13 +48,11 @@ export interface SecretsProps {
  *   },
  * });
  * ```
+ *
+ * @resource
+ * @product Actions
  */
-export const Secrets = ({
-  owner,
-  repository,
-  environment,
-  secrets,
-}: SecretsProps) =>
+export const Secrets = ({ owner, repository, environment, secrets }: SecretsProps) =>
   Effect.all(
     Object.entries(secrets).map(([name, value]) =>
       Secret(name, {
@@ -81,15 +77,8 @@ const liftValue = (
     : Effect.isEffect(value)
       ? Effect.map(value, toRedacted)
       : Output.isOutput(value)
-        ? Output.map(
-            value as Output.Output<string | Redacted.Redacted<string>>,
-            toRedacted,
-          )
+        ? Output.map(value as Output.Output<string | Redacted.Redacted<string>>, toRedacted)
         : toRedacted(value as string | Redacted.Redacted<string>);
 
-const toRedacted = (
-  value: string | Redacted.Redacted<string>,
-): Redacted.Redacted<string> =>
-  Redacted.isRedacted(value)
-    ? (value as Redacted.Redacted<string>)
-    : Redacted.make(value);
+const toRedacted = (value: string | Redacted.Redacted<string>): Redacted.Redacted<string> =>
+  Redacted.isRedacted(value) ? (value as Redacted.Redacted<string>) : Redacted.make(value);

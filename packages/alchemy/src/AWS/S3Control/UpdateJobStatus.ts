@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * only after a human signs off. The account id is resolved once via
  * `sts:GetCallerIdentity`. Provide the implementation with
  * `Effect.provide(AWS.S3Control.UpdateJobStatusHttp)`.
- * @binding
- * @section Running Batch Operations Jobs
- * @example Cancel a Job
+ * ### Running Batch Operations Jobs
+ * **Example:** Cancel a Job
  * ```typescript
  * // init — account-level binding, no resource argument
  * const updateJobStatus = yield* AWS.S3Control.UpdateJobStatus();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  *   StatusUpdateReason: "superseded by newer manifest",
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateJobStatus extends Binding.Service<
   UpdateJobStatus,
@@ -38,6 +39,4 @@ export interface UpdateJobStatus extends Binding.Service<
     >
   >
 > {}
-export const UpdateJobStatus = Binding.Service<UpdateJobStatus>(
-  "AWS.S3Control.UpdateJobStatus",
-);
+export const UpdateJobStatus = Binding.Service<UpdateJobStatus>("AWS.S3Control.UpdateJobStatus");

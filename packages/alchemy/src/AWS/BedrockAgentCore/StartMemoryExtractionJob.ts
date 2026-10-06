@@ -15,9 +15,8 @@ export interface StartMemoryExtractionJobRequest extends Omit<
  * AgentCore data-plane API against it. Provide `AgentCore.StartMemoryExtractionJobHttp`
  * on the Function effect to implement the binding.
  *
- * @binding
- * @section Extraction Jobs
- * @example Start an Extraction Job
+ * ### Extraction Jobs
+ * **Example:** Start an Extraction Job
  * ```typescript
  * // init
  * const startMemoryExtractionJob = yield* AgentCore.StartMemoryExtractionJob(memory);
@@ -32,6 +31,8 @@ export interface StartMemoryExtractionJobRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface StartMemoryExtractionJob extends Binding.Service<
   StartMemoryExtractionJob,
@@ -47,7 +48,6 @@ export interface StartMemoryExtractionJob extends Binding.Service<
     >
   >
 > {}
-export const StartMemoryExtractionJob =
-  Binding.Service<StartMemoryExtractionJob>(
-    "AWS.BedrockAgentCore.StartMemoryExtractionJob",
-  );
+export const StartMemoryExtractionJob = Binding.Service<StartMemoryExtractionJob>(
+  "AWS.BedrockAgentCore.StartMemoryExtractionJob",
+);

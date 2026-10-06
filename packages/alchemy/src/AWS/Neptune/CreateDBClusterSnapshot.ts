@@ -12,9 +12,8 @@ import type { DBCluster } from "./DBCluster.ts";
  * cluster identifier is injected from the binding. Provide the
  * implementation with
  * `Effect.provide(AWS.Neptune.CreateDBClusterSnapshotHttp)`.
- * @binding
- * @section Managing Snapshots
- * @example Take a Manual Snapshot
+ * ### Managing Snapshots
+ * **Example:** Take a Manual Snapshot
  * ```typescript
  * // init — bind the operation to the cluster
  * const createDBClusterSnapshot =
@@ -25,6 +24,8 @@ import type { DBCluster } from "./DBCluster.ts";
  *   DBClusterSnapshotIdentifier: `pre-migration-${runId}`,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateDBClusterSnapshot extends Binding.Service<
   CreateDBClusterSnapshot,
@@ -33,14 +34,8 @@ export interface CreateDBClusterSnapshot extends Binding.Service<
     cluster: DBCluster,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        neptune.CreateDBClusterSnapshotMessage,
-        "DBClusterIdentifier"
-      >,
-    ) => Effect.Effect<
-      neptune.CreateDBClusterSnapshotResult,
-      neptune.CreateDBClusterSnapshotError
-    >
+      request?: Omit<neptune.CreateDBClusterSnapshotMessage, "DBClusterIdentifier">,
+    ) => Effect.Effect<neptune.CreateDBClusterSnapshotResult, neptune.CreateDBClusterSnapshotError>
   >
 > {}
 export const CreateDBClusterSnapshot = Binding.Service<CreateDBClusterSnapshot>(

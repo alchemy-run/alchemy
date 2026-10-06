@@ -15,9 +15,8 @@ export interface GetShardIteratorRequest extends Omit<
  * position for reading records with `AWS.Kinesis.GetRecords`. The stream name
  * is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Kinesis.GetShardIteratorHttp)`.
- * @binding
- * @section Reading Records
- * @example Obtain an Iterator for the Latest Position
+ * ### Reading Records
+ * **Example:** Obtain an Iterator for the Latest Position
  * ```typescript
  * // init
  * const getShardIterator = yield* AWS.Kinesis.GetShardIterator(stream);
@@ -29,6 +28,8 @@ export interface GetShardIteratorRequest extends Omit<
  * });
  * // pass iterator.ShardIterator to getRecords
  * ```
+ *
+ * @binding
  */
 export interface GetShardIterator extends Binding.Service<
   GetShardIterator,
@@ -38,13 +39,8 @@ export interface GetShardIterator extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetShardIteratorRequest,
-    ) => Effect.Effect<
-      Kinesis.GetShardIteratorOutput,
-      Kinesis.GetShardIteratorError
-    >
+    ) => Effect.Effect<Kinesis.GetShardIteratorOutput, Kinesis.GetShardIteratorError>
   >
 > {}
 
-export const GetShardIterator = Binding.Service<GetShardIterator>(
-  "AWS.Kinesis.GetShardIterator",
-);
+export const GetShardIterator = Binding.Service<GetShardIterator>("AWS.Kinesis.GetShardIterator");

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface ListChannelsRequest extends Omit<
-  repostspace.ListChannelsInput,
-  "spaceId"
-> {}
+export interface ListChannelsRequest extends Omit<repostspace.ListChannelsInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `ListChannels` operation (IAM action
@@ -16,14 +13,15 @@ export interface ListChannelsRequest extends Omit<
  * (`nextToken`/`maxResults`).
  * Provide the implementation with
  * `Effect.provide(AWS.RePostSpace.ListChannelsHttp)`.
- * @binding
- * @section Managing Channels
- * @example List the space's channels
+ * ### Managing Channels
+ * **Example:** List the space's channels
  * ```typescript
  * const listChannels = yield* AWS.RePostSpace.ListChannels(space);
  *
  * const { channels } = yield* listChannels();
  * ```
+ *
+ * @binding
  */
 export interface ListChannels extends Binding.Service<
   ListChannels,
@@ -33,12 +31,7 @@ export interface ListChannels extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListChannelsRequest,
-    ) => Effect.Effect<
-      repostspace.ListChannelsOutput,
-      repostspace.ListChannelsError
-    >
+    ) => Effect.Effect<repostspace.ListChannelsOutput, repostspace.ListChannelsError>
   >
 > {}
-export const ListChannels = Binding.Service<ListChannels>(
-  "AWS.RePostSpace.ListChannels",
-);
+export const ListChannels = Binding.Service<ListChannels>("AWS.RePostSpace.ListChannels");

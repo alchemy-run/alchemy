@@ -69,9 +69,8 @@ export interface EventType extends Resource<
  * labels, and entity types) that detectors evaluate. Event types are cheap
  * metadata objects.
  *
- * @resource
- * @section Creating an Event Type
- * @example Basic Event Type
+ * ### Creating an Event Type
+ * **Example:** Basic Event Type
  * ```typescript
  * const purchase = yield* FraudDetector.EventType("purchase", {
  *   eventVariables: ["email", "ip"],
@@ -79,6 +78,8 @@ export interface EventType extends Resource<
  *   labels: ["fraud", "legit"],
  * });
  * ```
+ *
+ * @resource
  */
 export const EventType = Resource<EventType>("AWS.FraudDetector.EventType");
 
@@ -86,24 +87,14 @@ export const EventTypeProvider = () =>
   Provider.effect(
     EventType,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Partial<EventTypeProps>,
-      ) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Partial<EventTypeProps>) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getEventTypes({ name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.eventTypes?.[0];
       });
 
@@ -171,9 +162,7 @@ export const EventTypeProvider = () =>
           frauddetector.getEventTypes.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.eventTypes ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.eventTypes ?? []).map(toAttrs)),
             ),
           ),
       };

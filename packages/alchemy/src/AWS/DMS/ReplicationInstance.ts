@@ -114,9 +114,8 @@ export interface ReplicationInstance extends Resource<
  * replication tasks. Provisioning takes several minutes and the instance is
  * billed hourly while it exists, so create it only when a migration is
  * running and destroy it promptly.
- * @resource
- * @section Creating a Replication Instance
- * @example Small Instance in a Subnet Group
+ * ### Creating a Replication Instance
+ * **Example:** Small Instance in a Subnet Group
  * ```typescript
  * const instance = yield* ReplicationInstance("Migration", {
  *   replicationInstanceClass: "dms.t3.micro",
@@ -125,10 +124,10 @@ export interface ReplicationInstance extends Resource<
  *   publiclyAccessible: false,
  * });
  * ```
+ *
+ * @resource
  */
-export const ReplicationInstance = Resource<ReplicationInstance>(
-  "AWS.DMS.ReplicationInstance",
-);
+export const ReplicationInstance = Resource<ReplicationInstance>("AWS.DMS.ReplicationInstance");
 
 const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,
@@ -154,15 +153,9 @@ export const ReplicationInstanceProvider = () =>
       const findInstance = Effect.fn(function* (identifier: string) {
         const response = yield* dms
           .describeReplicationInstances({
-            Filters: [
-              { Name: "replication-instance-id", Values: [identifier] },
-            ],
+            Filters: [{ Name: "replication-instance-id", Values: [identifier] }],
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
         return response?.ReplicationInstances?.[0];
       });
 
@@ -176,16 +169,11 @@ export const ReplicationInstanceProvider = () =>
       // Provisioning and modifications both surface as a transitional status;
       // budget ~15 minutes (15s x 60) for the instance to become available.
       const waitForInstance = Effect.fn(function* (identifier: string) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]);
         return yield* findInstance(identifier).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.ReplicationInstanceArn) {
-              return Effect.fail(
-                new Error(`DMS replication instance '${identifier}' not found`),
-              );
+              return Effect.fail(new Error(`DMS replication instance '${identifier}' not found`));
             }
             if (instance.ReplicationInstanceStatus !== "available") {
               return Effect.fail(
@@ -204,9 +192,7 @@ export const ReplicationInstanceProvider = () =>
         const identifier = instance.ReplicationInstanceIdentifier;
         if (!identifier || !instance.ReplicationInstanceArn) {
           return yield* Effect.fail(
-            new Error(
-              `DMS replication instance '${identifier}' is missing its identifier or ARN`,
-            ),
+            new Error(`DMS replication instance '${identifier}' is missing its identifier or ARN`),
           );
         }
         return {
@@ -215,12 +201,8 @@ export const ReplicationInstanceProvider = () =>
           replicationInstanceClass: instance.ReplicationInstanceClass ?? "",
           status: instance.ReplicationInstanceStatus,
           engineVersion: instance.EngineVersion,
-          privateIpAddresses: [
-            ...(instance.ReplicationInstancePrivateIpAddresses ?? []),
-          ],
-          publicIpAddresses: [
-            ...(instance.ReplicationInstancePublicIpAddresses ?? []),
-          ],
+          privateIpAddresses: [...(instance.ReplicationInstancePrivateIpAddresses ?? [])],
+          publicIpAddresses: [...(instance.ReplicationInstancePublicIpAddresses ?? [])],
           tags: yield* readTags(instance.ReplicationInstanceArn),
         };
       });
@@ -242,19 +224,13 @@ export const ReplicationInstanceProvider = () =>
             return { action: "replace" } as const;
           }
           // Create-only properties force a replacement.
-          if (
-            (news.publiclyAccessible ?? undefined) !==
-            (olds?.publiclyAccessible ?? undefined)
-          ) {
+          if ((news.publiclyAccessible ?? undefined) !== (olds?.publiclyAccessible ?? undefined)) {
             return { action: "replace" } as const;
           }
           if ((news.kmsKeyId ?? undefined) !== (olds?.kmsKeyId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (news.availabilityZone ?? undefined) !==
-            (olds?.availabilityZone ?? undefined)
-          ) {
+          if ((news.availabilityZone ?? undefined) !== (olds?.availabilityZone ?? undefined)) {
             return { action: "replace" } as const;
           }
           if (
@@ -263,9 +239,7 @@ export const ReplicationInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            (news.networkType ?? undefined) !== (olds?.networkType ?? undefined)
-          ) {
+          if ((news.networkType ?? undefined) !== (olds?.networkType ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -283,14 +257,11 @@ export const ReplicationInstanceProvider = () =>
           const instance = yield* findInstance(name);
           if (!instance?.ReplicationInstanceArn) return undefined;
           const attrs = yield* toAttrs(instance);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.replicationInstanceIdentifier ?? (yield* toName(id, news));
+          const name = output?.replicationInstanceIdentifier ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -306,8 +277,7 @@ export const ReplicationInstanceProvider = () =>
                 AllocatedStorage: news.allocatedStorage,
                 VpcSecurityGroupIds: news.vpcSecurityGroupIds,
                 AvailabilityZone: news.availabilityZone,
-                ReplicationSubnetGroupIdentifier:
-                  news.replicationSubnetGroupIdentifier,
+                ReplicationSubnetGroupIdentifier: news.replicationSubnetGroupIdentifier,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 MultiAZ: news.multiAZ,
                 EngineVersion: news.engineVersion,
@@ -320,12 +290,7 @@ export const ReplicationInstanceProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsFault", () => Effect.void));
           }
 
           // Wait for availability so sync/modify calls don't hit
@@ -340,9 +305,7 @@ export const ReplicationInstanceProvider = () =>
             ApplyImmediately: true,
           };
           let dirty = false;
-          if (
-            news.replicationInstanceClass !== observed.ReplicationInstanceClass
-          ) {
+          if (news.replicationInstanceClass !== observed.ReplicationInstanceClass) {
             modify.ReplicationInstanceClass = news.replicationInstanceClass;
             dirty = true;
           }
@@ -357,18 +320,14 @@ export const ReplicationInstanceProvider = () =>
             modify.MultiAZ = news.multiAZ;
             dirty = true;
           }
-          if (
-            news.engineVersion !== undefined &&
-            news.engineVersion !== observed.EngineVersion
-          ) {
+          if (news.engineVersion !== undefined && news.engineVersion !== observed.EngineVersion) {
             modify.EngineVersion = news.engineVersion;
             modify.AllowMajorVersionUpgrade = true;
             dirty = true;
           }
           if (
             news.preferredMaintenanceWindow !== undefined &&
-            news.preferredMaintenanceWindow !==
-              observed.PreferredMaintenanceWindow
+            news.preferredMaintenanceWindow !== observed.PreferredMaintenanceWindow
           ) {
             modify.PreferredMaintenanceWindow = news.preferredMaintenanceWindow;
             dirty = true;

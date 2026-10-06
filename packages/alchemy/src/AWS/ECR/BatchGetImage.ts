@@ -17,15 +17,16 @@ export interface BatchGetImageRequest extends Omit<
  *
  * Fetches image manifests from the bound repository — the read half of a registry pull, and the first step of re-tagging an image (`BatchGetImage` → `PutImage` with a new tag). Provide the implementation with
  * `Effect.provide(AWS.ECR.BatchGetImageHttp)`.
- * @binding
- * @section Pulling Images
- * @example Fetch an Image Manifest
+ * ### Pulling Images
+ * **Example:** Fetch an Image Manifest
  * ```typescript
  * const batchGetImage = yield* AWS.ECR.BatchGetImage(repository);
  *
  * const res = yield* batchGetImage({ imageIds: [{ imageTag: "latest" }] });
  * const manifest = res.images?.[0]?.imageManifest;
  * ```
+ *
+ * @binding
  */
 export interface BatchGetImage extends Binding.Service<
   BatchGetImage,
@@ -39,6 +40,4 @@ export interface BatchGetImage extends Binding.Service<
   >
 > {}
 
-export const BatchGetImage = Binding.Service<BatchGetImage>(
-  "AWS.ECR.BatchGetImage",
-);
+export const BatchGetImage = Binding.Service<BatchGetImage>("AWS.ECR.BatchGetImage");

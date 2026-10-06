@@ -14,9 +14,8 @@ export interface ValidateStateMachineDefinitionRequest
  * runs this same check as a pre-flight; bind it in a function runtime to
  * validate definitions on demand (e.g. compiled `Sfn` programs before a
  * deployment pipeline applies them).
- * @binding
- * @section Validating Definitions
- * @example Validate a definition string
+ * ### Validating Definitions
+ * **Example:** Validate a definition string
  * ```typescript
  * const validate = yield* StepFunctions.ValidateStateMachineDefinition();
  *
@@ -27,6 +26,8 @@ export interface ValidateStateMachineDefinitionRequest
  * });
  * // report.result === "OK" | "FAIL"; report.diagnostics lists findings
  * ```
+ *
+ * @binding
  */
 export interface ValidateStateMachineDefinition extends Binding.Service<
   ValidateStateMachineDefinition,
@@ -40,7 +41,6 @@ export interface ValidateStateMachineDefinition extends Binding.Service<
     >
   >
 > {}
-export const ValidateStateMachineDefinition =
-  Binding.Service<ValidateStateMachineDefinition>(
-    "AWS.StepFunctions.ValidateStateMachineDefinition",
-  );
+export const ValidateStateMachineDefinition = Binding.Service<ValidateStateMachineDefinition>(
+  "AWS.StepFunctions.ValidateStateMachineDefinition",
+);

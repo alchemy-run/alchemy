@@ -9,15 +9,16 @@ import * as Binding from "../../Binding.ts";
  * one data set or revision.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.ListJobsHttp)`.
- * @binding
- * @section Import & Export Jobs
- * @example List A Data Set's Jobs
+ * ### Import & Export Jobs
+ * **Example:** List A Data Set's Jobs
  * ```typescript
  * const listJobs = yield* AWS.DataExchange.ListJobs();
  *
  * // runtime
  * const { Jobs } = yield* listJobs({ DataSetId: dataSetId });
  * ```
+ *
+ * @binding
  */
 export interface ListJobs extends Binding.Service<
   ListJobs,
@@ -25,10 +26,7 @@ export interface ListJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dataexchange.ListJobsRequest,
-    ) => Effect.Effect<
-      dataexchange.ListJobsResponse,
-      dataexchange.ListJobsError
-    >
+    ) => Effect.Effect<dataexchange.ListJobsResponse, dataexchange.ListJobsError>
   >
 > {}
 export const ListJobs = Binding.Service<ListJobs>("AWS.DataExchange.ListJobs");

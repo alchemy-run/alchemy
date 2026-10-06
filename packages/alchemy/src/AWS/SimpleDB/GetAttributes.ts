@@ -4,19 +4,15 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface GetAttributesRequest extends Omit<
-  sdb.GetAttributesRequest,
-  "DomainName"
-> {}
+export interface GetAttributesRequest extends Omit<sdb.GetAttributesRequest, "DomainName"> {}
 
 /**
  * Runtime binding for `sdb:GetAttributes`.
  *
  * Bind this operation to a {@link Domain} inside a function runtime to get a
  * callable that automatically injects the domain name.
- * @binding
- * @section Reading Items
- * @example Read an Item's Attributes
+ * ### Reading Items
+ * **Example:** Read an Item's Attributes
  * ```typescript
  * const getAttributes = yield* AWS.SimpleDB.GetAttributes(domain);
  *
@@ -26,6 +22,8 @@ export interface GetAttributesRequest extends Omit<
  * });
  * // response.Attributes: [{ Name: "email", Value: "a@b.com" }, ...]
  * ```
+ *
+ * @binding
  */
 export interface GetAttributes extends Binding.Service<
   GetAttributes,
@@ -35,13 +33,7 @@ export interface GetAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAttributesRequest,
-    ) => Effect.Effect<
-      sdb.GetAttributesResponse,
-      sdb.GetAttributesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<sdb.GetAttributesResponse, sdb.GetAttributesError, RuntimeContext>
   >
 > {}
-export const GetAttributes = Binding.Service<GetAttributes>(
-  "AWS.SimpleDB.GetAttributes",
-);
+export const GetAttributes = Binding.Service<GetAttributes>("AWS.SimpleDB.GetAttributes");

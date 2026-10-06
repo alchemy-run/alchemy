@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetCostComparisonDrivers}.
  */
-export interface GetCostComparisonDriversRequest
-  extends ce.GetCostComparisonDriversRequest {}
+export interface GetCostComparisonDriversRequest extends ce.GetCostComparisonDriversRequest {}
 
 /**
  * Runtime binding for `ce:GetCostComparisonDrivers`.
@@ -15,9 +14,8 @@ export interface GetCostComparisonDriversRequest
  * billing periods — which services, accounts, or usage types moved the
  * bill. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.GetCostComparisonDriversHttp)`.
- * @binding
- * @section Querying Cost and Usage
- * @example Find What Drove a Cost Change
+ * ### Querying Cost and Usage
+ * **Example:** Find What Drove a Cost Change
  * ```typescript
  * // init — account-level binding takes no resource
  * const getCostComparisonDrivers = yield* AWS.CostExplorer.GetCostComparisonDrivers();
@@ -29,6 +27,8 @@ export interface GetCostComparisonDriversRequest
  *   MetricForComparison: "UnblendedCost",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetCostComparisonDrivers extends Binding.Service<
   GetCostComparisonDrivers,
@@ -36,14 +36,10 @@ export interface GetCostComparisonDrivers extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetCostComparisonDriversRequest,
-    ) => Effect.Effect<
-      ce.GetCostComparisonDriversResponse,
-      ce.GetCostComparisonDriversError
-    >
+    ) => Effect.Effect<ce.GetCostComparisonDriversResponse, ce.GetCostComparisonDriversError>
   >
 > {}
 
-export const GetCostComparisonDrivers =
-  Binding.Service<GetCostComparisonDrivers>(
-    "AWS.CostExplorer.GetCostComparisonDrivers",
-  );
+export const GetCostComparisonDrivers = Binding.Service<GetCostComparisonDrivers>(
+  "AWS.CostExplorer.GetCostComparisonDrivers",
+);

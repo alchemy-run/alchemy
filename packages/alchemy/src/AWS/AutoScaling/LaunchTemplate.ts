@@ -1,6 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
@@ -15,17 +15,17 @@ import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
-import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
 } from "../EC2/hosted.ts";
+import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { AWSEnvironment } from "../index.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import { AWSEnvironment } from "../index.ts";
 
 export type LaunchTemplateId = `lt-${string}`;
 export type LaunchTemplateName = string;
@@ -188,9 +188,8 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  * A launch template that preserves the `Host` authoring model used by
  * `AWS.EC2.Instance`, but packages that host configuration for use with an
  * Auto Scaling Group.
- * @resource
- * @section Creating a Launch Template
- * @example Basic Launch Template
+ * ### Creating a Launch Template
+ * **Example:** Basic Launch Template
  * ```typescript
  * import { LaunchTemplate } from "alchemy/AWS/AutoScaling";
  *
@@ -200,7 +199,7 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  * });
  * ```
  *
- * @example Launch a fleet from the template
+ * **Example:** Launch a fleet from the template
  * ```typescript
  * import { AutoScalingGroup } from "alchemy/AWS/AutoScaling";
  *
@@ -212,8 +211,8 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  * });
  * ```
  *
- * @section Hosting Processes
- * @example Hosted HTTP Launch Template
+ * ### Hosting Processes
+ * **Example:** Hosted HTTP Launch Template
  * ```typescript
  * const template = yield* Effect.gen(function* () {
  *   yield* Http.serve(HttpServerResponse.json({ ok: true }));
@@ -230,6 +229,8 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  *   AWS.AutoScaling.LaunchTemplate("ApiTemplate"),
  * );
  * ```
+ *
+ * @resource
  */
 export const LaunchTemplate: Platform<
   LaunchTemplate,
@@ -237,9 +238,7 @@ export const LaunchTemplate: Platform<
   LaunchTemplateShape,
   LaunchTemplateRuntimeContext
 > = Platform("AWS.AutoScaling.LaunchTemplate", {
-  createRuntimeContext: createEc2HostRuntimeContext(
-    "AWS.AutoScaling.LaunchTemplate",
-  ),
+  createRuntimeContext: createEc2HostRuntimeContext("AWS.AutoScaling.LaunchTemplate"),
 });
 
 export const LaunchTemplateProvider = () =>
@@ -259,10 +258,7 @@ export const LaunchTemplateProvider = () =>
         resourceType: "AWS.AutoScaling.LaunchTemplate",
       });
 
-      const toName = (
-        id: string,
-        props: { launchTemplateName?: string } = {},
-      ) =>
+      const toName = (id: string, props: { launchTemplateName?: string } = {}) =>
         props.launchTemplateName
           ? Effect.succeed(props.launchTemplateName)
           : createPhysicalName({ id, maxLength: 128, lowercase: true });
@@ -283,9 +279,7 @@ export const LaunchTemplateProvider = () =>
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
             Effect.catch((error) =>
-              isLaunchTemplateNotFound(error)
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
+              isLaunchTemplateNotFound(error) ? Effect.succeed(undefined) : Effect.fail(error),
             ),
           );
 
@@ -297,9 +291,7 @@ export const LaunchTemplateProvider = () =>
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
             Effect.catch((error) =>
-              isLaunchTemplateNotFound(error)
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
+              isLaunchTemplateNotFound(error) ? Effect.succeed(undefined) : Effect.fail(error),
             ),
           );
 
@@ -361,9 +353,7 @@ export const LaunchTemplateProvider = () =>
         const versionNumber = created.LaunchTemplateVersion?.VersionNumber;
         if (versionNumber === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `createLaunchTemplateVersion returned no version for '${launchTemplateId}'`,
-            ),
+            new Error(`createLaunchTemplateVersion returned no version for '${launchTemplateId}'`),
           );
         }
 
@@ -381,9 +371,7 @@ export const LaunchTemplateProvider = () =>
       ) {
         return {
           launchTemplateId: template.LaunchTemplateId as LaunchTemplateId,
-          launchTemplateArn: yield* toArn(
-            template.LaunchTemplateId as LaunchTemplateId,
-          ),
+          launchTemplateArn: yield* toArn(template.LaunchTemplateId as LaunchTemplateId),
           launchTemplateName: template.LaunchTemplateName!,
           defaultVersionNumber: Number(template.DefaultVersionNumber ?? 1),
           latestVersionNumber: Number(
@@ -401,11 +389,7 @@ export const LaunchTemplateProvider = () =>
       });
 
       return {
-        stables: [
-          "launchTemplateId",
-          "launchTemplateArn",
-          "launchTemplateName",
-        ],
+        stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
         diff: Effect.fn(function* ({ id, olds, news: _news, output }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
@@ -418,11 +402,7 @@ export const LaunchTemplateProvider = () =>
           if (!deepEqual(olds, news)) {
             return {
               action: "update",
-              stables: [
-                "launchTemplateId",
-                "launchTemplateArn",
-                "launchTemplateName",
-              ],
+              stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
             } as const;
           }
 
@@ -436,19 +416,14 @@ export const LaunchTemplateProvider = () =>
             if (hash !== output.code.hash) {
               return {
                 action: "update",
-                stables: [
-                  "launchTemplateId",
-                  "launchTemplateArn",
-                  "launchTemplateName",
-                ],
+                stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
               } as const;
             }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const template =
-            (output?.launchTemplateId &&
-              (yield* describeById(output.launchTemplateId))) ??
+            (output?.launchTemplateId && (yield* describeById(output.launchTemplateId))) ??
             (yield* describeByName(yield* toName(id, olds ?? {})));
 
           return template
@@ -473,15 +448,8 @@ export const LaunchTemplateProvider = () =>
               ),
             ),
           ),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
-          const launchTemplateName =
-            output?.launchTemplateName ?? (yield* toName(id, news));
+        reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+          const launchTemplateName = output?.launchTemplateName ?? (yield* toName(id, news));
           const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
@@ -497,8 +465,7 @@ export const LaunchTemplateProvider = () =>
           // (id from output, name from desired) so the reconciler
           // converges whether `output` is fresh, stale, or missing.
           let existing =
-            (output?.launchTemplateId &&
-              (yield* describeById(output.launchTemplateId))) ||
+            (output?.launchTemplateId && (yield* describeById(output.launchTemplateId))) ||
             (yield* describeByName(launchTemplateName));
 
           // Ensure — create the launch template if missing. We must
@@ -522,9 +489,7 @@ export const LaunchTemplateProvider = () =>
                   imageId: news.imageId,
                   instanceType: news.instanceType,
                   keyName: news.keyName,
-                  securityGroupIds: news.securityGroupIds as
-                    | string[]
-                    | undefined,
+                  securityGroupIds: news.securityGroupIds as string[] | undefined,
                   associatePublicIpAddress: news.associatePublicIpAddress,
                   tags: desiredTags,
                 },
@@ -534,9 +499,7 @@ export const LaunchTemplateProvider = () =>
             const template = created.LaunchTemplate;
             if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
               return yield* Effect.fail(
-                new Error(
-                  `createLaunchTemplate returned no launch template for '${id}'`,
-                ),
+                new Error(`createLaunchTemplate returned no launch template for '${id}'`),
               );
             }
             yield* session.note(template.LaunchTemplateId);
@@ -570,9 +533,7 @@ export const LaunchTemplateProvider = () =>
           const refreshed = yield* describeById(existing.LaunchTemplateId!);
           if (!refreshed) {
             return yield* Effect.fail(
-              new Error(
-                `Launch template '${launchTemplateName}' was not readable after reconcile`,
-              ),
+              new Error(`Launch template '${launchTemplateName}' was not readable after reconcile`),
             );
           }
           yield* session.note(refreshed.LaunchTemplateId!);
@@ -585,9 +546,7 @@ export const LaunchTemplateProvider = () =>
             } as any)
             .pipe(
               Effect.catch((error) =>
-                isLaunchTemplateNotFound(error)
-                  ? Effect.void
-                  : Effect.fail(error),
+                isLaunchTemplateNotFound(error) ? Effect.void : Effect.fail(error),
               ),
             );
 

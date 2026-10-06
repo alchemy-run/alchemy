@@ -1,13 +1,13 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as NotificationsContacts from "@/AWS/NotificationsContacts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as NotificationsContacts from "@/AWS/NotificationsContacts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -22,22 +22,18 @@ export class NotificationsContactsTestFunction extends Lambda.Function<Lambda.Fu
 export default NotificationsContactsTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    const contact = yield* NotificationsContacts.EmailContact(
-      "BindingsContact",
-      {
-        name: CONTACT_NAME,
-        emailAddress: CONTACT_EMAIL,
-        tags: { fixture: "notificationscontacts-bindings" },
-      },
-    );
+    const contact = yield* NotificationsContacts.EmailContact("BindingsContact", {
+      name: CONTACT_NAME,
+      emailAddress: CONTACT_EMAIL,
+      tags: { fixture: "notificationscontacts-bindings" },
+    });
 
     const getContact = yield* NotificationsContacts.GetEmailContact(contact);
-    const sendActivationCode =
-      yield* NotificationsContacts.SendActivationCode(contact);
+    const sendActivationCode = yield* NotificationsContacts.SendActivationCode(contact);
     const activate = yield* NotificationsContacts.ActivateEmailContact(contact);
 
     return {
@@ -75,9 +71,7 @@ export default NotificationsContactsTestFunction.make(
           // Activation needs the code from the activation email (a human
           // loop) — a bogus code must surface a TYPED error, which proves
           // both the IAM grant and the request wiring.
-          const result = yield* Effect.result(
-            activate({ code: Redacted.make("000000") }),
-          );
+          const result = yield* Effect.result(activate({ code: Redacted.make("000000") }));
           if (Result.isFailure(result)) {
             return yield* HttpServerResponse.json({
               activated: false,

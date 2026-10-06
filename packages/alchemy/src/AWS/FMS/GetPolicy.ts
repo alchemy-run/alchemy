@@ -12,9 +12,8 @@ export interface GetPolicyRequest extends fms.GetPolicyRequest {}
  *
  * Returns the specified Firewall Manager policy. Provide the
  * implementation with `Effect.provide(AWS.FMS.GetPolicyHttp)`.
- * @binding
- * @section Reading Policies
- * @example Read a Policy
+ * ### Reading Policies
+ * **Example:** Read a Policy
  * ```typescript
  * // init — account-level binding takes no resource
  * const getPolicy = yield* AWS.FMS.GetPolicy();
@@ -23,14 +22,14 @@ export interface GetPolicyRequest extends fms.GetPolicyRequest {}
  * const result = yield* getPolicy({ PolicyId: policyId });
  * console.log(result.Policy?.PolicyName);
  * ```
+ *
+ * @binding
  */
 export interface GetPolicy extends Binding.Service<
   GetPolicy,
   "AWS.FMS.GetPolicy",
   () => Effect.Effect<
-    (
-      request: GetPolicyRequest,
-    ) => Effect.Effect<fms.GetPolicyResponse, fms.GetPolicyError>
+    (request: GetPolicyRequest) => Effect.Effect<fms.GetPolicyResponse, fms.GetPolicyError>
   >
 > {}
 

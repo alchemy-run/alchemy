@@ -7,14 +7,15 @@ import * as Binding from "../../Binding.ts";
  *
  * Cancels a running export task by id. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.CancelExportTaskHttp)`.
- * @binding
- * @section Importing and Exporting Data
- * @example Cancel an export
+ * ### Importing and Exporting Data
+ * **Example:** Cancel an export
  * ```typescript
  * const cancelExport = yield* NeptuneGraph.CancelExportTask();
  *
  * yield* cancelExport({ taskIdentifier });
  * ```
+ *
+ * @binding
  */
 export interface CancelExportTask extends Binding.Service<
   CancelExportTask,
@@ -22,10 +23,7 @@ export interface CancelExportTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: neptunegraph.CancelExportTaskInput,
-    ) => Effect.Effect<
-      neptunegraph.CancelExportTaskOutput,
-      neptunegraph.CancelExportTaskError
-    >
+    ) => Effect.Effect<neptunegraph.CancelExportTaskOutput, neptunegraph.CancelExportTaskError>
   >
 > {}
 export const CancelExportTask = Binding.Service<CancelExportTask>(

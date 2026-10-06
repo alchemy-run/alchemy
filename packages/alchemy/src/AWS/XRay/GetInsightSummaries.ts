@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetInsightSummariesRequest
-  extends xray.GetInsightSummariesRequest {}
+export interface GetInsightSummariesRequest extends xray.GetInsightSummariesRequest {}
 
 /**
  * Retrieve the summaries of all insights in a group (by name or ARN)
@@ -13,9 +12,8 @@ export interface GetInsightSummariesRequest
  * provide the implementation with `Effect.provide(XRay.GetInsightSummariesHttp)`.
  * The action is account-scoped: X-Ray does not support resource-level
  * permissions for `xray:GetInsightSummaries`, so the binding grants it on `*`.
- * @binding
- * @section Insights
- * @example List recent insights for a group
+ * ### Insights
+ * **Example:** List recent insights for a group
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -31,6 +29,8 @@ export interface GetInsightSummariesRequest
  * });
  * const insights = result.InsightSummaries ?? [];
  * ```
+ *
+ * @binding
  */
 export interface GetInsightSummaries extends Binding.Service<
   GetInsightSummaries,
@@ -38,10 +38,7 @@ export interface GetInsightSummaries extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetInsightSummariesRequest,
-    ) => Effect.Effect<
-      xray.GetInsightSummariesResult,
-      xray.GetInsightSummariesError
-    >
+    ) => Effect.Effect<xray.GetInsightSummariesResult, xray.GetInsightSummariesError>
   >
 > {}
 export const GetInsightSummaries = Binding.Service<GetInsightSummaries>(

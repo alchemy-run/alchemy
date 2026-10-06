@@ -12,9 +12,8 @@ import type { Task } from "./Task.ts";
  * `StartTaskExecution`; access is granted on the bound task's executions.
  * Provide the implementation with
  * `Effect.provide(AWS.DataSync.CancelTaskExecutionHttp)`.
- * @binding
- * @section Running Transfers
- * @example Cancel A Transfer
+ * ### Running Transfers
+ * **Example:** Cancel A Transfer
  * ```typescript
  * // init — bind the operation to the task
  * const cancelTaskExecution = yield* AWS.DataSync.CancelTaskExecution(task);
@@ -22,6 +21,8 @@ import type { Task } from "./Task.ts";
  * // runtime
  * yield* cancelTaskExecution({ TaskExecutionArn: executionArn });
  * ```
+ *
+ * @binding
  */
 export interface CancelTaskExecution extends Binding.Service<
   CancelTaskExecution,
@@ -31,10 +32,7 @@ export interface CancelTaskExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: datasync.CancelTaskExecutionRequest,
-    ) => Effect.Effect<
-      datasync.CancelTaskExecutionResponse,
-      datasync.CancelTaskExecutionError
-    >
+    ) => Effect.Effect<datasync.CancelTaskExecutionResponse, datasync.CancelTaskExecutionError>
   >
 > {}
 export const CancelTaskExecution = Binding.Service<CancelTaskExecution>(

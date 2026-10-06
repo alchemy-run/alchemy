@@ -1,13 +1,13 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as NeptuneGraph from "@/AWS/NeptuneGraph";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as NeptuneGraph from "@/AWS/NeptuneGraph";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -54,7 +54,7 @@ export const FixtureGraphLive = Layer.effect(
 export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
@@ -103,10 +103,7 @@ export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
             language: "OPEN_CYPHER",
             parameters: body.parameters,
           });
-          const payload = yield* response.payload.pipe(
-            Stream.decodeText,
-            Stream.mkString,
-          );
+          const payload = yield* response.payload.pipe(Stream.decodeText, Stream.mkString);
           return yield* HttpServerResponse.json(JSON.parse(payload));
         }
 

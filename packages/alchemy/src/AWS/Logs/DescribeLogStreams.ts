@@ -15,9 +15,8 @@ export interface DescribeLogStreamsRequest extends Omit<
  * streams of the group (e.g. to discover the most recently written stream
  * before reading with `GetLogEvents`), automatically injecting the log group
  * name.
- * @binding
- * @section Reading Logs
- * @example Find the Most Recent Stream
+ * ### Reading Logs
+ * **Example:** Find the Most Recent Stream
  * ```typescript
  * const describeLogStreams = yield* AWS.Logs.DescribeLogStreams(logGroup);
  *
@@ -27,6 +26,8 @@ export interface DescribeLogStreamsRequest extends Omit<
  *   limit: 1,
  * });
  * ```
+ *
+ * @binding
  */
 export interface DescribeLogStreams extends Binding.Service<
   DescribeLogStreams,
@@ -36,10 +37,7 @@ export interface DescribeLogStreams extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeLogStreamsRequest,
-    ) => Effect.Effect<
-      Logs.DescribeLogStreamsResponse,
-      Logs.DescribeLogStreamsError
-    >
+    ) => Effect.Effect<Logs.DescribeLogStreamsResponse, Logs.DescribeLogStreamsError>
   >
 > {}
 export const DescribeLogStreams = Binding.Service<DescribeLogStreams>(

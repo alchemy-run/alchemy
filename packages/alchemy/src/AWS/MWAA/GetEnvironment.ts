@@ -11,9 +11,8 @@ import type { Environment } from "./Environment.ts";
  * for health checks and for gating REST API calls on `Status === "AVAILABLE"`.
  * Provide the implementation with
  * `Effect.provide(AWS.MWAA.GetEnvironmentHttp)`.
- * @binding
- * @section Describing the Environment
- * @example Check Environment Health
+ * ### Describing the Environment
+ * **Example:** Check Environment Health
  * ```typescript
  * // init — bind the operation to the environment
  * const getEnvironment = yield* AWS.MWAA.GetEnvironment(environment);
@@ -22,17 +21,15 @@ import type { Environment } from "./Environment.ts";
  * const result = yield* getEnvironment();
  * const healthy = result.Environment?.Status === "AVAILABLE";
  * ```
+ *
+ * @binding
  */
 export interface GetEnvironment extends Binding.Service<
   GetEnvironment,
   "AWS.MWAA.GetEnvironment",
   (
     environment: Environment,
-  ) => Effect.Effect<
-    () => Effect.Effect<mwaa.GetEnvironmentOutput, mwaa.GetEnvironmentError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<mwaa.GetEnvironmentOutput, mwaa.GetEnvironmentError>>
 > {}
 
-export const GetEnvironment = Binding.Service<GetEnvironment>(
-  "AWS.MWAA.GetEnvironment",
-);
+export const GetEnvironment = Binding.Service<GetEnvironment>("AWS.MWAA.GetEnvironment");

@@ -17,12 +17,9 @@ import type { DispatchNamespace as DispatchNamespaceResource } from "./DispatchN
  * Provide {@link GetBinding} on the Worker's runtime layer to resolve the
  * underlying `dispatch_namespace` binding at request time.
  *
- * @binding
- * @product Workers for Platforms
- * @category Workers & Compute
  *
- * @section Dispatching to user Workers
- * @example Dispatch a request to a customer Worker
+ * ### Dispatching to user Workers
+ * **Example:** Dispatch a request to a customer Worker
  * Bind the namespace during the Worker's init phase, then look up and forward
  * to a user Worker from a request handler.
  * ```typescript
@@ -38,21 +35,21 @@ import type { DispatchNamespace as DispatchNamespaceResource } from "./DispatchN
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/get-started/dynamic-dispatch/
+ *
+ * @binding
+ * @product Workers for Platforms
+ * @category Workers & Compute
  */
 export interface Get extends Binding.Service<
   Get,
   "Cloudflare.WorkersForPlatforms.Get",
-  (
-    namespace: DispatchNamespaceResource,
-  ) => Effect.Effect<DispatchNamespaceClient>
+  (namespace: DispatchNamespaceResource) => Effect.Effect<DispatchNamespaceClient>
 > {}
 
 export const Get = Binding.Service<Get>("Cloudflare.WorkersForPlatforms.Get");
 
 /** Error raised by dynamic-dispatch runtime operations. */
-export class DispatchNamespaceError extends Data.TaggedError(
-  "DispatchNamespaceError",
-)<{
+export class DispatchNamespaceError extends Data.TaggedError("DispatchNamespaceError")<{
   /** Human-readable runtime error message. */
   message: string;
   /** Original error thrown by the Cloudflare runtime binding. */

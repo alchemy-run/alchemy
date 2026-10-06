@@ -89,8 +89,8 @@ export interface ImageActionsProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Image Events
- * @example React to Successful Pushes
+ * ### Consuming Image Events
+ * **Example:** React to Successful Pushes
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -125,12 +125,8 @@ export const consumeImageActions = <StreamReq = never, Req = never>(
       ...(props.repositories || props.actionTypes || props.results
         ? {
             detail: {
-              ...(props.repositories
-                ? { "repository-name": [...props.repositories] }
-                : {}),
-              ...(props.actionTypes
-                ? { "action-type": [...props.actionTypes] }
-                : {}),
+              ...(props.repositories ? { "repository-name": [...props.repositories] } : {}),
+              ...(props.actionTypes ? { "action-type": [...props.actionTypes] } : {}),
               ...(props.results ? { result: [...props.results] } : {}),
             },
           }
@@ -160,8 +156,8 @@ export interface ImageScansProps extends EventRouteProps {
  * finishes — including scan-on-push scans; this subscribes the host Function
  * to those events so it can react to new findings without polling.
  *
- * @section Consuming Image Events
- * @example Alert on High-Severity Findings
+ * ### Consuming Image Events
+ * **Example:** Alert on High-Severity Findings
  * ```typescript
  * yield* AWS.ECR.consumeImageScans({}, (events) =>
  *   Stream.runForEach(events, (event) =>
@@ -184,9 +180,7 @@ export const consumeImageScans = <StreamReq = never, Req = never>(
     {
       source: ["aws.ecr"],
       "detail-type": ["ECR Image Scan"],
-      ...(props.repositories
-        ? { detail: { "repository-name": [...props.repositories] } }
-        : {}),
+      ...(props.repositories ? { detail: { "repository-name": [...props.repositories] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

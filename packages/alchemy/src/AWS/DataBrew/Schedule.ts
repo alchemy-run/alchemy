@@ -57,9 +57,8 @@ export interface Schedule extends Resource<
  * An AWS Glue DataBrew schedule — a cron expression that starts one or more
  * DataBrew jobs at recurring times. The schedule definition is free; only
  * the job runs it triggers are billed.
- * @resource
- * @section Creating Schedules
- * @example Nightly Job Schedule
+ * ### Creating Schedules
+ * **Example:** Nightly Job Schedule
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -69,12 +68,14 @@ export interface Schedule extends Resource<
  * });
  * ```
  *
- * @example Schedule Without Jobs (attach later)
+ * **Example:** Schedule Without Jobs (attach later)
  * ```typescript
  * const schedule = yield* AWS.DataBrew.Schedule("Standing", {
  *   cronExpression: "cron(0 12 ? * MON-FRI *)",
  * });
  * ```
+ *
+ * @resource
  */
 export const Schedule = Resource<Schedule>("AWS.DataBrew.Schedule");
 
@@ -86,20 +87,13 @@ export const ScheduleProvider = () =>
         id: string,
         props: { scheduleName?: string | undefined },
       ) {
-        return (
-          props.scheduleName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.scheduleName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeSchedule({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Schedule.Provider.of({
@@ -108,28 +102,21 @@ export const ScheduleProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* databrew.listSchedules
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* databrew.listSchedules.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Schedules ?? [])
               .map((s) => ({
                 scheduleName: s.Name,
-                scheduleArn:
-                  s.ResourceArn ??
-                  databrewArn(region, accountId, "schedule", s.Name),
+                scheduleArn: s.ResourceArn ?? databrewArn(region, accountId, "schedule", s.Name),
               }));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.scheduleName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.scheduleName ?? (yield* createName(id, olds ?? {}));
           const schedule = yield* observe(name);
           if (schedule === undefined) return undefined;
-          const arn =
-            schedule.ResourceArn ??
-            databrewArn(region, accountId, "schedule", name);
+          const arn = schedule.ResourceArn ?? databrewArn(region, accountId, "schedule", name);
           const attrs = { scheduleName: name, scheduleArn: arn };
           const tags = cleanMap(schedule.Tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -164,8 +151,7 @@ export const ScheduleProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
           } else if (
             schedule.CronExpression !== news.cronExpression ||
-            JSON.stringify(schedule.JobNames ?? []) !==
-              JSON.stringify(news.jobNames ?? [])
+            JSON.stringify(schedule.JobNames ?? []) !== JSON.stringify(news.jobNames ?? [])
           ) {
             yield* databrew.updateSchedule({
               Name: name,
@@ -174,9 +160,7 @@ export const ScheduleProvider = () =>
             });
           }
 
-          const arn =
-            schedule?.ResourceArn ??
-            databrewArn(region, accountId, "schedule", name);
+          const arn = schedule?.ResourceArn ?? databrewArn(region, accountId, "schedule", name);
 
           // 3b. SYNC TAGS against observed cloud tags
           const observedTags = yield* fetchObservedTags(arn);
@@ -187,12 +171,8 @@ export const ScheduleProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* retryWhileConflict(
-            databrew.deleteSchedule({ Name: output.scheduleName }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+          yield* retryWhileConflict(databrew.deleteSchedule({ Name: output.scheduleName })).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
         }),
       });

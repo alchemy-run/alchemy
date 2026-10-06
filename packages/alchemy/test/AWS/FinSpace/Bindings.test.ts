@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as finspace from "@distilled.cloud/aws/finspace";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,6 +31,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
 test.provider(
@@ -53,6 +54,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
 test.provider(
@@ -60,13 +62,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        finspace.listKxChangesets({
-          environmentId: missingEnvironmentId,
-          databaseName: "nodb",
-        }),
+        finspace.listKxChangesets({ environmentId: missingEnvironmentId, databaseName: "nodb" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
 test.provider(
@@ -81,6 +81,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
 test.provider(
@@ -96,6 +97,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
 test.provider(
@@ -103,11 +105,9 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        finspace.getKxUser({
-          environmentId: missingEnvironmentId,
-          userName: "nouser",
-        }),
+        finspace.getKxUser({ environmentId: missingEnvironmentId, userName: "nouser" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );

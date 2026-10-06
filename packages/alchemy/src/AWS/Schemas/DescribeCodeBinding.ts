@@ -11,9 +11,8 @@ import type { Schema } from "./Schema.ts";
  * `CREATE_COMPLETE`. The registry and schema names are injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.Schemas.DescribeCodeBindingHttp)`.
- * @binding
- * @section Code Bindings
- * @example Poll Generation Status
+ * ### Code Bindings
+ * **Example:** Poll Generation Status
  * ```typescript
  * // init — bind the operation to the schema
  * const describeCodeBinding = yield* AWS.Schemas.DescribeCodeBinding(schema);
@@ -24,6 +23,8 @@ import type { Schema } from "./Schema.ts";
  *   // the package is ready to download via GetCodeBindingSource
  * }
  * ```
+ *
+ * @binding
  */
 export interface DescribeCodeBinding extends Binding.Service<
   DescribeCodeBinding,
@@ -34,10 +35,7 @@ export interface DescribeCodeBinding extends Binding.Service<
       Language: string;
       /** The version of the schema. Defaults to the latest. */
       SchemaVersion?: string;
-    }) => Effect.Effect<
-      schemas.DescribeCodeBindingResponse,
-      schemas.DescribeCodeBindingError
-    >
+    }) => Effect.Effect<schemas.DescribeCodeBindingResponse, schemas.DescribeCodeBindingError>
   >
 > {}
 export const DescribeCodeBinding = Binding.Service<DescribeCodeBinding>(

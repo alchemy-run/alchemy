@@ -12,9 +12,8 @@ import type { DBInstance } from "./DBInstance.ts";
  * pre-migration backup function or a scheduled snapshot-rotation job. The
  * instance identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.CreateDBSnapshotHttp)`.
- * @binding
- * @section Managing Instance Snapshots
- * @example Take a Manual Instance Snapshot
+ * ### Managing Instance Snapshots
+ * **Example:** Take a Manual Instance Snapshot
  * ```typescript
  * // init — bind the operation to the instance
  * const createDBSnapshot = yield* AWS.RDS.CreateDBSnapshot(instance);
@@ -24,6 +23,8 @@ import type { DBInstance } from "./DBInstance.ts";
  *   DBSnapshotIdentifier: `pre-migration-${runId}`,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateDBSnapshot extends Binding.Service<
   CreateDBSnapshot,
@@ -36,6 +37,4 @@ export interface CreateDBSnapshot extends Binding.Service<
     ) => Effect.Effect<rds.CreateDBSnapshotResult, rds.CreateDBSnapshotError>
   >
 > {}
-export const CreateDBSnapshot = Binding.Service<CreateDBSnapshot>(
-  "AWS.RDS.CreateDBSnapshot",
-);
+export const CreateDBSnapshot = Binding.Service<CreateDBSnapshot>("AWS.RDS.CreateDBSnapshot");

@@ -5,11 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { readMailManagerTags, syncMailManagerTags } from "./internal.ts";
 
@@ -54,9 +50,8 @@ export interface AddonSubscription extends Resource<
  * :::warning
  * Creating a subscription accepts the Add On's **additional pricing**.
  * :::
- * @resource
- * @section Subscribing to an Add On
- * @example Spamhaus DBL
+ * ### Subscribing to an Add On
+ * **Example:** Spamhaus DBL
  * ```typescript
  * import * as MailManager from "alchemy/AWS/MailManager";
  *
@@ -67,10 +62,10 @@ export interface AddonSubscription extends Resource<
  *   addonSubscriptionId: subscription.addonSubscriptionId,
  * });
  * ```
+ *
+ * @resource
  */
-export const AddonSubscription = Resource<AddonSubscription>(
-  "AWS.MailManager.AddonSubscription",
-);
+export const AddonSubscription = Resource<AddonSubscription>("AWS.MailManager.AddonSubscription");
 
 export const AddonSubscriptionProvider = () =>
   Provider.effect(
@@ -79,17 +74,11 @@ export const AddonSubscriptionProvider = () =>
       const getById = (addonSubscriptionId: string) =>
         mm
           .getAddonSubscription({ AddonSubscriptionId: addonSubscriptionId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const listAll = mm.listAddonSubscriptions.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.AddonSubscriptions ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.AddonSubscriptions ?? [])),
       );
 
       // Subscriptions have no user-supplied name — recover identity after a
@@ -98,9 +87,7 @@ export const AddonSubscriptionProvider = () =>
         const subscriptions = yield* listAll;
         for (const subscription of subscriptions) {
           if (subscription.AddonSubscriptionArn === undefined) continue;
-          const tags = yield* readMailManagerTags(
-            subscription.AddonSubscriptionArn,
-          );
+          const tags = yield* readMailManagerTags(subscription.AddonSubscriptionArn);
           if (yield* hasAlchemyTags(id, tags)) return subscription;
         }
         return undefined;
@@ -182,11 +169,7 @@ export const AddonSubscriptionProvider = () =>
                 AddonName: news.addonName,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             if (created !== undefined) {
               const found = yield* getById(created.AddonSubscriptionId);
               subscription = {
@@ -198,8 +181,7 @@ export const AddonSubscriptionProvider = () =>
               subscription = yield* findByAlchemyTags(id);
             }
           }
-          const attrs =
-            subscription !== undefined ? toAttrs(subscription) : undefined;
+          const attrs = subscription !== undefined ? toAttrs(subscription) : undefined;
           if (attrs === undefined) {
             return yield* Effect.fail(
               new Error(

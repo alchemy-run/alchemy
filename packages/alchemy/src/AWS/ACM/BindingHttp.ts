@@ -1,7 +1,7 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Certificate } from "./Certificate.ts";
@@ -73,31 +73,36 @@ export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ACM.${config.capability}(${certificate}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...config.iamActions],
-                  Resource: [certificate.certificateArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ACM.${config.capability}(${certificate}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...config.iamActions],
+                Resource: [certificate.certificateArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.ACM.${config.capability}(${certificate.LogicalId})`,
-      )(function* (request?: Omit<Req, "CertificateArn">) {
+      return Effect.fn(`AWS.ACM.${config.capability}(${certificate.LogicalId})`)(function* (
+        request?: Omit<Req, "CertificateArn">,
+      ) {
         // Sound: at instantiation `Req` always contains `CertificateArn: string`
         // (every certificate-scoped distilled request does), so
         // `Omit<Req, "CertificateArn"> & { CertificateArn: string }` is exactly
         // `Req & { CertificateArn: string }`. TypeScript cannot prove this for
         // an unresolved type parameter, hence the precise assertion.
-        return yield* op({
-          ...(request ?? {}),
-          CertificateArn: yield* CertificateArn,
-        } as Req & { CertificateArn: string });
+        //
+        // The region must be pinned HERE, at the call site: the yield-time
+        // snapshot is only a fallback — the calling fiber's ambient Region
+        // (the host Function's own region) wins over it, so pinning only at
+        // the yield would silently route the call to the wrong region.
+        return yield* withAcmRegion(
+          op({
+            ...request,
+            CertificateArn: yield* CertificateArn,
+          } as Req & { CertificateArn: string }),
+        );
       });
     });
   });
@@ -116,11 +121,7 @@ export interface AcmAccountHttpBindingConfig<Req extends object, Out, Err> {
   /**
    * The distilled ACM operation implementing the capability.
    */
-  operation: Effect.Effect<
-    (input: Req) => Effect.Effect<Out, Err>,
-    never,
-    AcmRequirements
-  >;
+  operation: Effect.Effect<(input: Req) => Effect.Effect<Out, Err>, never, AcmRequirements>;
 }
 
 /**
@@ -148,10 +149,9 @@ export const makeAcmAccountHttpBinding = <Req extends object, Out, Err>(
           });
         }
       }
-      return Effect.fn(`AWS.ACM.${config.capability}`)(function* (
-        request?: Req,
-      ) {
-        return yield* op(request ?? ({} as Req));
+      return Effect.fn(`AWS.ACM.${config.capability}`)(function* (request?: Req) {
+        // Call-site pin — see makeAcmCertificateHttpBinding above.
+        return yield* withAcmRegion(op(request ?? ({} as Req)));
       });
     });
   });

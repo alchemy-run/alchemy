@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.ListInvitationsHttp)`.
- * @binding
- * @section Administrator & Invitations
- * @example List Pending Invitations
+ * ### Administrator & Invitations
+ * **Example:** List Pending Invitations
  * ```typescript
  * // init
  * // init — account-level binding, no resource argument
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { Invitations } = yield* listInvitations();
  * ```
+ *
+ * @binding
  */
 export interface ListInvitations extends Binding.Service<
   ListInvitations,
@@ -27,12 +28,7 @@ export interface ListInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: guardduty.ListInvitationsRequest,
-    ) => Effect.Effect<
-      guardduty.ListInvitationsResponse,
-      guardduty.ListInvitationsError
-    >
+    ) => Effect.Effect<guardduty.ListInvitationsResponse, guardduty.ListInvitationsError>
   >
 > {}
-export const ListInvitations = Binding.Service<ListInvitations>(
-  "AWS.GuardDuty.ListInvitations",
-);
+export const ListInvitations = Binding.Service<ListInvitations>("AWS.GuardDuty.ListInvitations");

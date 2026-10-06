@@ -89,8 +89,8 @@ export interface InsightEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Insight Events
- * @example Page on High-Severity Insights
+ * ### Consuming Insight Events
+ * **Example:** Page on High-Severity Insights
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -121,9 +121,7 @@ export const consumeInsightEvents = <StreamReq = never, Req = never>(
     props.id ?? "DevOpsGuruInsightEvents",
     {
       source: ["aws.devops-guru"],
-      "detail-type": (props.kinds ?? (["new-insight"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
+      "detail-type": (props.kinds ?? (["new-insight"] as const)).map((kind) => DETAIL_TYPES[kind]),
       ...(props.severities !== undefined
         ? { detail: { insightSeverity: [...props.severities] } }
         : {}),

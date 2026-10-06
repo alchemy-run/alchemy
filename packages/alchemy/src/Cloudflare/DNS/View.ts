@@ -2,7 +2,6 @@ import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -46,13 +45,7 @@ export interface ViewAttributes {
   modifiedTime: string;
 }
 
-export type View = Resource<
-  DnsViewTypeId,
-  ViewProps,
-  ViewAttributes,
-  never,
-  Providers
->;
+export type View = Resource<DnsViewTypeId, ViewProps, ViewAttributes, never, Providers>;
 
 /**
  * An Internal DNS view (`/accounts/{account_id}/dns_settings/views`) —
@@ -62,18 +55,15 @@ export type View = Resource<
  * Requires the Enterprise Internal DNS entitlement on the account
  * (creation fails with `InternalDnsNotAvailable` otherwise). Both
  * `name` and `zones` are mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Creating a View
- * @example View over internal zones
+ * ### Creating a View
+ * **Example:** View over internal zones
  * ```typescript
  * const view = yield* Cloudflare.DNS.View("Internal", {
  *   zones: [internalZone.zoneId],
  * });
  * ```
  *
- * @example View with an explicit name
+ * **Example:** View with an explicit name
  * ```typescript
  * const view = yield* Cloudflare.DNS.View("Internal", {
  *   name: "datacenter-east",
@@ -82,6 +72,10 @@ export type View = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/internal-dns/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const View = Resource<View>(DnsViewTypeId, {
   aliases: ["Cloudflare.Dns.View"],
@@ -216,10 +210,7 @@ const sameZones = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
-const toAttributes = (
-  view: ObservedView,
-  accountId: string,
-): ViewAttributes => ({
+const toAttributes = (view: ObservedView, accountId: string): ViewAttributes => ({
   viewId: view.id,
   accountId,
   name: view.name,

@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /** How Shield Advanced aggregates traffic across a protection group. */
@@ -96,8 +91,8 @@ export interface ProtectionGroup extends Resource<
  * commitment); without one every call fails with the typed
  * `SubscriptionNotFound` error.
  *
- * @section Grouping Protections
- * @example Group All Protected Resources
+ * ### Grouping Protections
+ * **Example:** Group All Protected Resources
  * ```typescript
  * const group = yield* Shield.ProtectionGroup("AllResources", {
  *   aggregation: "SUM",
@@ -105,7 +100,7 @@ export interface ProtectionGroup extends Resource<
  * });
  * ```
  *
- * @example Group by Resource Type
+ * **Example:** Group by Resource Type
  * ```typescript
  * const group = yield* Shield.ProtectionGroup("Distributions", {
  *   aggregation: "MAX",
@@ -114,7 +109,7 @@ export interface ProtectionGroup extends Resource<
  * });
  * ```
  *
- * @example Arbitrary Member List
+ * **Example:** Arbitrary Member List
  * ```typescript
  * const group = yield* Shield.ProtectionGroup("Fleet", {
  *   aggregation: "MEAN",
@@ -124,9 +119,7 @@ export interface ProtectionGroup extends Resource<
  * });
  * ```
  */
-export const ProtectionGroup = Resource<ProtectionGroup>(
-  "AWS.Shield.ProtectionGroup",
-);
+export const ProtectionGroup = Resource<ProtectionGroup>("AWS.Shield.ProtectionGroup");
 
 const observeGroup = (protectionGroupId: string) =>
   shield.describeProtectionGroup({ ProtectionGroupId: protectionGroupId }).pipe(
@@ -139,9 +132,7 @@ const observeGroup = (protectionGroupId: string) =>
 const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>
   tagRecord(
     (tags ?? []).flatMap((t) =>
-      t.Key !== undefined && t.Value !== undefined
-        ? [{ Key: t.Key, Value: t.Value }]
-        : [],
+      t.Key !== undefined && t.Value !== undefined ? [{ Key: t.Key, Value: t.Value }] : [],
     ),
   );
 
@@ -151,10 +142,7 @@ const readGroupTags = (protectionGroupArn: string) =>
     Effect.catch(() => Effect.succeed<Record<string, string>>({})),
   );
 
-const buildAttrs = (
-  group: shield.ProtectionGroup,
-  tags: Record<string, string>,
-) => ({
+const buildAttrs = (group: shield.ProtectionGroup, tags: Record<string, string>) => ({
   protectionGroupId: group.ProtectionGroupId,
   protectionGroupArn: group.ProtectionGroupArn!,
   aggregation: group.Aggregation,
@@ -208,8 +196,7 @@ export const ProtectionGroupProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const groupId =
-            output?.protectionGroupId ?? (yield* toGroupId(id, olds ?? {}));
+          const groupId = output?.protectionGroupId ?? (yield* toGroupId(id, olds ?? {}));
           const group = yield* observeGroup(groupId);
           if (!group?.ProtectionGroupArn) return undefined;
           const tags = yield* readGroupTags(group.ProtectionGroupArn);
@@ -239,18 +226,11 @@ export const ProtectionGroupProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             group = yield* observeGroup(groupId);
             if (!group?.ProtectionGroupArn) {
               return yield* Effect.fail(
-                new Error(
-                  `Failed to create or read Shield protection group ${groupId}`,
-                ),
+                new Error(`Failed to create or read Shield protection group ${groupId}`),
               );
             }
           } else {
@@ -259,8 +239,7 @@ export const ProtectionGroupProvider = () =>
             const changed =
               group.Aggregation !== news.aggregation ||
               group.Pattern !== news.pattern ||
-              (group.ResourceType ?? undefined) !==
-                (news.resourceType ?? undefined) ||
+              (group.ResourceType ?? undefined) !== (news.resourceType ?? undefined) ||
               !sameMembers(group.Members ?? [], news.members ?? []);
             if (changed) {
               yield* shield.updateProtectionGroup({
@@ -289,9 +268,7 @@ export const ProtectionGroupProvider = () =>
             const groups = yield* shield.listProtectionGroups.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.ProtectionGroups ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.ProtectionGroups ?? []),
               ),
               Effect.catchTag("SubscriptionNotFound", () => Effect.succeed([])),
             );

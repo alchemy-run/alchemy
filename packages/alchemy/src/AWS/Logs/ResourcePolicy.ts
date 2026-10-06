@@ -45,9 +45,8 @@ export interface ResourcePolicy extends Resource<
  * quota cannot be raised. Always use a deterministic `policyName` and destroy
  * policies you no longer need.
  * :::
- * @resource
- * @section Granting Log Delivery
- * @example Allow Route 53 Query Logging
+ * ### Granting Log Delivery
+ * **Example:** Allow Route 53 Query Logging
  * ```typescript
  * const policy = yield* ResourcePolicy("Route53QueryLogging", {
  *   policyName: "route53-query-logging",
@@ -64,10 +63,10 @@ export interface ResourcePolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.Logs.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.Logs.ResourcePolicy");
 
 export const ResourcePolicyProvider = () =>
   Provider.effect(
@@ -99,9 +98,7 @@ export const ResourcePolicyProvider = () =>
             Effect.map((policies) =>
               policies
                 .filter(
-                  (
-                    policy,
-                  ): policy is logs.ResourcePolicy & { policyName: string } =>
+                  (policy): policy is logs.ResourcePolicy & { policyName: string } =>
                     policy.policyName != null,
                 )
                 .map((policy) => ({
@@ -112,15 +109,12 @@ export const ResourcePolicyProvider = () =>
           ),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toPolicyName(id, olds)) !== (yield* toPolicyName(id, news))
-          ) {
+          if ((yield* toPolicyName(id, olds)) !== (yield* toPolicyName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const policyName =
-            output?.policyName ?? (yield* toPolicyName(id, olds ?? {}));
+          const policyName = output?.policyName ?? (yield* toPolicyName(id, olds ?? {}));
           const observed = yield* observe(policyName);
           if (!observed) return undefined;
           return {
@@ -129,8 +123,7 @@ export const ResourcePolicyProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const policyName =
-            output?.policyName ?? (yield* toPolicyName(id, news));
+          const policyName = output?.policyName ?? (yield* toPolicyName(id, news));
           const desiredDocument = toDocumentString(news.policyDocument);
 
           // Observe — putResourcePolicy upserts by name; skip the put when the
@@ -161,18 +154,16 @@ export const ResourcePolicyProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* logs
-            .deleteResourcePolicy({ policyName: output.policyName })
-            .pipe(
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "OperationAbortedException" ||
-                  error._tag === "ServiceUnavailableException",
-                schedule: Schedule.exponential(100),
-                times: 8,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* logs.deleteResourcePolicy({ policyName: output.policyName }).pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "OperationAbortedException" ||
+                error._tag === "ServiceUnavailableException",
+              schedule: Schedule.exponential(100),
+              times: 8,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       };
     }),

@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListRootsHttp)`.
- * @binding
- * @section Reading the Organization Tree
- * @example Find the Root Id
+ * ### Reading the Organization Tree
+ * **Example:** Find the Root Id
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listRoots = yield* AWS.Organizations.ListRoots();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * const { Roots } = yield* listRoots();
  * const rootId = Roots?.[0]?.Id;
  * ```
+ *
+ * @binding
  */
 export interface ListRoots extends Binding.Service<
   ListRoots,
@@ -27,12 +28,7 @@ export interface ListRoots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: organizations.ListRootsRequest,
-    ) => Effect.Effect<
-      organizations.ListRootsResponse,
-      organizations.ListRootsError
-    >
+    ) => Effect.Effect<organizations.ListRootsResponse, organizations.ListRootsError>
   >
 > {}
-export const ListRoots = Binding.Service<ListRoots>(
-  "AWS.Organizations.ListRoots",
-);
+export const ListRoots = Binding.Service<ListRoots>("AWS.Organizations.ListRoots");

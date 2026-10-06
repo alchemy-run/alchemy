@@ -10,9 +10,8 @@ import type { Queue } from "./Queue.ts";
  * (paginated). The queue's `farmId`/`queueId` are injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.Deadline.ListSessionsHttp)`.
- * @binding
- * @section Monitoring Sessions
- * @example List A Job's Sessions
+ * ### Monitoring Sessions
+ * **Example:** List A Job's Sessions
  * ```typescript
  * // init — bind the operation to the queue
  * const listSessions = yield* AWS.Deadline.ListSessions(queue);
@@ -20,6 +19,8 @@ import type { Queue } from "./Queue.ts";
  * // runtime
  * const { sessions } = yield* listSessions({ jobId });
  * ```
+ *
+ * @binding
  */
 export interface ListSessions extends Binding.Service<
   ListSessions,
@@ -29,12 +30,7 @@ export interface ListSessions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<deadline.ListSessionsRequest, "farmId" | "queueId">,
-    ) => Effect.Effect<
-      deadline.ListSessionsResponse,
-      deadline.ListSessionsError
-    >
+    ) => Effect.Effect<deadline.ListSessionsResponse, deadline.ListSessionsError>
   >
 > {}
-export const ListSessions = Binding.Service<ListSessions>(
-  "AWS.Deadline.ListSessions",
-);
+export const ListSessions = Binding.Service<ListSessions>("AWS.Deadline.ListSessions");

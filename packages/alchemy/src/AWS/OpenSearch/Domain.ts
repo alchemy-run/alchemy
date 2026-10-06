@@ -7,10 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import {
   isDomainActive,
@@ -269,15 +266,14 @@ export interface Domain extends Resource<
  * Domains take roughly 15-25 minutes to provision (and about as long for
  * blue/green configuration changes) and are billed per instance-hour while
  * they exist. Destroy domains you are not using.
- * @resource
- * @section Creating a Domain
- * @example Minimal Domain
+ * ### Creating a Domain
+ * **Example:** Minimal Domain
  * ```typescript
  * // A single t3.small.search node with 10 GiB of gp3 EBS storage.
  * const domain = yield* Domain("Search", {});
  * ```
  *
- * @example Encrypted Domain with Access Policy
+ * **Example:** Encrypted Domain with Access Policy
  * ```typescript
  * const domain = yield* Domain("Search", {
  *   engineVersion: "OpenSearch_2.19",
@@ -303,8 +299,8 @@ export interface Domain extends Resource<
  * });
  * ```
  *
- * @section Multi-AZ Cluster
- * @example Zone-Aware Cluster
+ * ### Multi-AZ Cluster
+ * **Example:** Zone-Aware Cluster
  * ```typescript
  * const domain = yield* Domain("Search", {
  *   clusterConfig: {
@@ -315,14 +311,14 @@ export interface Domain extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Domain = Resource<Domain>("AWS.OpenSearch.Domain");
 
 const DEFAULT_INSTANCE_TYPE = "t3.small.search";
 
-const toClusterConfig = (
-  config: DomainClusterConfig | undefined,
-): opensearch.ClusterConfig => ({
+const toClusterConfig = (config: DomainClusterConfig | undefined): opensearch.ClusterConfig => ({
   InstanceType: config?.instanceType ?? DEFAULT_INSTANCE_TYPE,
   InstanceCount: config?.instanceCount ?? 1,
   DedicatedMasterEnabled: config?.dedicatedMasterEnabled,
@@ -339,9 +335,7 @@ const toClusterConfig = (
   MultiAZWithStandbyEnabled: config?.multiAZWithStandbyEnabled,
 });
 
-const toEbsOptions = (
-  ebs: DomainEbsOptions | undefined,
-): opensearch.EBSOptions =>
+const toEbsOptions = (ebs: DomainEbsOptions | undefined): opensearch.EBSOptions =>
   ebs?.enabled === false
     ? { EBSEnabled: false }
     : {
@@ -365,18 +359,14 @@ const toEndpointOptions = (
         CustomEndpointCertificateArn: options.customEndpointCertificateArn,
       };
 
-const toAccessPolicies = (
-  policy: PolicyDocument | string | undefined,
-): string | undefined =>
+const toAccessPolicies = (policy: PolicyDocument | string | undefined): string | undefined =>
   policy === undefined
     ? undefined
     : typeof policy === "string"
       ? policy
       : stringifyPolicyDocument(policy);
 
-const toVpcOptions = (
-  options: DomainVpcOptions | undefined,
-): opensearch.VPCOptions | undefined =>
+const toVpcOptions = (options: DomainVpcOptions | undefined): opensearch.VPCOptions | undefined =>
   options === undefined
     ? undefined
     : {
@@ -396,17 +386,12 @@ export const DomainProvider = () =>
       const readDomain = Effect.fn(function* (name: string) {
         return yield* opensearch.describeDomain({ DomainName: name }).pipe(
           Effect.map((response) => response.DomainStatus),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       const waitForActive = Effect.fn(function* (name: string) {
-        const domain = yield* repeatUntilDomainState(
-          readDomain(name),
-          isDomainActive,
-        );
+        const domain = yield* repeatUntilDomainState(readDomain(name), isDomainActive);
         if (domain === undefined) {
           return yield* Effect.fail(
             new Error(`OpenSearch domain '${name}' not found while waiting`),
@@ -447,10 +432,7 @@ export const DomainProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            o.nodeToNodeEncryption === true &&
-            n.nodeToNodeEncryption === false
-          ) {
+          if (o.nodeToNodeEncryption === true && n.nodeToNodeEncryption === false) {
             return { action: "replace" } as const;
           }
           // Moving a domain between public and VPC endpoints replaces it.
@@ -464,9 +446,7 @@ export const DomainProvider = () =>
           const domain = yield* readDomain(name);
           if (domain === undefined) return undefined;
           const attrs = yield* toAttrs(domain);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -508,20 +488,13 @@ export const DomainProvider = () =>
                     ? { Enabled: props.nodeToNodeEncryption }
                     : undefined,
                 AdvancedOptions: props.advancedOptions,
-                DomainEndpointOptions: toEndpointOptions(
-                  props.domainEndpointOptions,
-                ),
+                DomainEndpointOptions: toEndpointOptions(props.domainEndpointOptions),
                 TagList: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           }
 
           // Provisioning and blue/green config changes both surface as
@@ -555,10 +528,7 @@ export const DomainProvider = () =>
             update.AccessPolicies = toAccessPolicies(props.accessPolicies);
             mutated = true;
           }
-          if (
-            props.ipAddressType !== undefined &&
-            props.ipAddressType !== observed.IPAddressType
-          ) {
+          if (props.ipAddressType !== undefined && props.ipAddressType !== observed.IPAddressType) {
             update.IPAddressType = props.ipAddressType;
             mutated = true;
           }
@@ -568,8 +538,7 @@ export const DomainProvider = () =>
               observed.SnapshotOptions?.AutomatedSnapshotStartHour
           ) {
             update.SnapshotOptions = {
-              AutomatedSnapshotStartHour:
-                props.snapshotOptions.automatedSnapshotStartHour,
+              AutomatedSnapshotStartHour: props.snapshotOptions.automatedSnapshotStartHour,
             };
             mutated = true;
           }
@@ -591,15 +560,10 @@ export const DomainProvider = () =>
             update.AdvancedOptions = props.advancedOptions;
             mutated = true;
           }
-          const desiredEndpointOptions = toEndpointOptions(
-            props.domainEndpointOptions,
-          );
+          const desiredEndpointOptions = toEndpointOptions(props.domainEndpointOptions);
           if (
             desiredEndpointOptions !== undefined &&
-            subsetDiffers(
-              desiredEndpointOptions,
-              observed.DomainEndpointOptions,
-            )
+            subsetDiffers(desiredEndpointOptions, observed.DomainEndpointOptions)
           ) {
             update.DomainEndpointOptions = desiredEndpointOptions;
             mutated = true;
@@ -665,15 +629,12 @@ export const DomainProvider = () =>
           // A domain mid-create/config-change may reject deletion — wait
           // (bounded, tolerant) for it to settle first. Already deleting
           // (or gone) is success.
-          yield* repeatUntilDomainState(
-            readDomain(name),
-            isDomainDeletable,
-          ).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          yield* repeatUntilDomainState(readDomain(name), isDomainDeletable).pipe(
+            Effect.catch(() => Effect.succeed(undefined)),
+          );
           yield* opensearch
             .deleteDomain({ DomainName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
@@ -688,22 +649,15 @@ export const DomainProvider = () =>
                 (name) =>
                   opensearch.describeDomain({ DomainName: name }).pipe(
                     Effect.map((response) => response.DomainStatus),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   ),
                 { concurrency: 4 },
               ),
             ),
             Effect.map((domains) =>
-              domains.filter(
-                (domain): domain is opensearch.DomainStatus =>
-                  domain !== undefined,
-              ),
+              domains.filter((domain): domain is opensearch.DomainStatus => domain !== undefined),
             ),
-            Effect.flatMap(
-              Effect.forEach((domain) => toAttrs(domain), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((domain) => toAttrs(domain), { concurrency: 4 })),
           ),
       };
     }),

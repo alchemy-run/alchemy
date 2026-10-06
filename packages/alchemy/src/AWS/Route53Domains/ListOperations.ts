@@ -2,8 +2,7 @@ import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListOperationsRequest
-  extends route53domains.ListOperationsRequest {}
+export interface ListOperationsRequest extends route53domains.ListOperationsRequest {}
 
 /**
  * Runtime binding for `route53domains:ListOperations` — list the
@@ -21,9 +20,8 @@ export interface ListOperationsRequest
  * Provide the implementation with
  * `Effect.provide(AWS.Route53Domains.ListOperationsHttp)`.
  *
- * @binding
- * @section Tracking Registration Operations
- * @example List In-Progress Operations
+ * ### Tracking Registration Operations
+ * **Example:** List In-Progress Operations
  * ```typescript
  * // init
  * const listOperations = yield* AWS.Route53Domains.ListOperations();
@@ -35,6 +33,8 @@ export interface ListOperationsRequest
  * });
  * const ids = (result.Operations ?? []).map((op) => op.OperationId);
  * ```
+ *
+ * @binding
  */
 export interface ListOperations extends Binding.Service<
   ListOperations,
@@ -42,12 +42,7 @@ export interface ListOperations extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListOperationsRequest,
-    ) => Effect.Effect<
-      route53domains.ListOperationsResponse,
-      route53domains.ListOperationsError
-    >
+    ) => Effect.Effect<route53domains.ListOperationsResponse, route53domains.ListOperationsError>
   >
 > {}
-export const ListOperations = Binding.Service<ListOperations>(
-  "AWS.Route53Domains.ListOperations",
-);
+export const ListOperations = Binding.Service<ListOperations>("AWS.Route53Domains.ListOperations");

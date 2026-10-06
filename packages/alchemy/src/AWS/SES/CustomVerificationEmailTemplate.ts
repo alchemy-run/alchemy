@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -70,9 +65,8 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * Creating, reading, updating, and deleting the template works on any account.
  * Actually *sending* a custom verification email requires the account to be
  * out of the SES sandbox (production access).
- * @resource
- * @section Creating Templates
- * @example Branded Verification Email
+ * ### Creating Templates
+ * **Example:** Branded Verification Email
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -86,7 +80,7 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * });
  * ```
  *
- * @example Explicit Template Name
+ * **Example:** Explicit Template Name
  * ```typescript
  * // Without templateName a deterministic name is derived from app/stage/id.
  * const template = yield* SES.CustomVerificationEmailTemplate("Verify", {
@@ -100,8 +94,8 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * });
  * ```
  *
- * @section Sending the Verification Email
- * @example Verify a New Address from a Lambda Function
+ * ### Sending the Verification Email
+ * **Example:** Verify a New Address from a Lambda Function
  * ```typescript
  * // init — account-level binding, no resource argument
  * const sendVerification = yield* SES.SendCustomVerificationEmail();
@@ -113,16 +107,16 @@ export interface CustomVerificationEmailTemplate extends Resource<
  *   TemplateName: yield* template.templateName,
  * });
  * ```
+ *
+ * @resource
  */
-export const CustomVerificationEmailTemplate =
-  Resource<CustomVerificationEmailTemplate>(
-    "AWS.SES.CustomVerificationEmailTemplate",
-  );
+export const CustomVerificationEmailTemplate = Resource<CustomVerificationEmailTemplate>(
+  "AWS.SES.CustomVerificationEmailTemplate",
+);
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 // getCustomVerificationEmailTemplate returns no ARN, so the ARN
 // listTagsForResource needs is derived — verified live against SES.
@@ -137,20 +131,13 @@ export const CustomVerificationEmailTemplateProvider = () =>
         id: string,
         props: Pick<CustomVerificationEmailTemplateProps, "templateName">,
       ) {
-        return (
-          props.templateName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.templateName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getTemplate = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getCustomVerificationEmailTemplate({ TemplateName: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       // The get returns no tags, so ownership costs a second API call. Only
@@ -181,14 +168,11 @@ export const CustomVerificationEmailTemplateProvider = () =>
             .pipe(Stream.runCollect);
           return Array.from(pages)
             .flatMap((page) => page.CustomVerificationEmailTemplates ?? [])
-            .flatMap((meta) =>
-              meta.TemplateName ? [{ templateName: meta.TemplateName }] : [],
-            );
+            .flatMap((meta) => (meta.TemplateName ? [{ templateName: meta.TemplateName }] : []));
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.templateName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.templateName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getTemplate(name);
           if (!found) return undefined;
           // Templates are taggable and reconcile brands the ones it creates,

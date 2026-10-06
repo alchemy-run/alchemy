@@ -100,9 +100,8 @@ export interface BackupSelection extends Resource<
  * A selection is immutable: any change to its name, role, or resource set
  * replaces it.
  *
- * @resource
- * @section Assigning Resources
- * @example Assign resources by tag
+ * ### Assigning Resources
+ * **Example:** Assign resources by tag
  * ```typescript
  * import * as Backup from "alchemy/AWS/Backup";
  *
@@ -119,7 +118,7 @@ export interface BackupSelection extends Resource<
  * });
  * ```
  *
- * @example Assign resources by ARN
+ * **Example:** Assign resources by ARN
  * ```typescript
  * const selection = yield* Backup.BackupSelection("ExplicitResources", {
  *   backupPlanId: plan.backupPlanId,
@@ -127,10 +126,10 @@ export interface BackupSelection extends Resource<
  *   resources: [table.tableArn],
  * });
  * ```
+ *
+ * @resource
  */
-export const BackupSelection = Resource<BackupSelection>(
-  "AWS.Backup.BackupSelection",
-);
+export const BackupSelection = Resource<BackupSelection>("AWS.Backup.BackupSelection");
 
 // A freshly-created IAM role is not immediately assumable by AWS Backup, so
 // CreateBackupSelection can transiently reject the role with
@@ -143,10 +142,7 @@ const retryRolePropagation = <A, E extends { _tag: string }, R>(
   eff.pipe(
     Effect.retry({
       while: (e: E) => e._tag === "InvalidParameterValueException",
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -158,10 +154,7 @@ export const BackupSelectionProvider = () =>
         id: string,
         props: { selectionName?: string | undefined },
       ) {
-        return (
-          props.selectionName ??
-          (yield* createPhysicalName({ id, maxLength: 50 }))
-        );
+        return props.selectionName ?? (yield* createPhysicalName({ id, maxLength: 50 }));
       });
 
       return BackupSelection.Provider.of({
@@ -180,16 +173,14 @@ export const BackupSelectionProvider = () =>
               SelectionId: output.selectionId,
             })
             .pipe(
-              Effect.catchTag(
-                ["ResourceNotFoundException", "InvalidParameterValueException"],
-                () => Effect.succeed(undefined),
+              Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
+                Effect.succeed(undefined),
               ),
             );
           if (!found?.SelectionId) return undefined;
           return {
             selectionId: found.SelectionId,
-            selectionName:
-              found.BackupSelection?.SelectionName ?? output.selectionName,
+            selectionName: found.BackupSelection?.SelectionName ?? output.selectionName,
             backupPlanId: output.backupPlanId,
           };
         }),
@@ -203,12 +194,9 @@ export const BackupSelectionProvider = () =>
             oldName !== newName ||
             (olds.backupPlanId ?? "") !== (news.backupPlanId ?? "") ||
             (olds.iamRoleArn ?? "") !== (news.iamRoleArn ?? "") ||
-            JSON.stringify(olds.resources ?? []) !==
-              JSON.stringify(news.resources ?? []) ||
-            JSON.stringify(olds.notResources ?? []) !==
-              JSON.stringify(news.notResources ?? []) ||
-            JSON.stringify(olds.listOfTags ?? []) !==
-              JSON.stringify(news.listOfTags ?? [])
+            JSON.stringify(olds.resources ?? []) !== JSON.stringify(news.resources ?? []) ||
+            JSON.stringify(olds.notResources ?? []) !== JSON.stringify(news.notResources ?? []) ||
+            JSON.stringify(olds.listOfTags ?? []) !== JSON.stringify(news.listOfTags ?? [])
           ) {
             return { action: "replace" } as const;
           }
@@ -227,10 +215,7 @@ export const BackupSelectionProvider = () =>
               })
               .pipe(
                 Effect.catchTag(
-                  [
-                    "ResourceNotFoundException",
-                    "InvalidParameterValueException",
-                  ],
+                  ["ResourceNotFoundException", "InvalidParameterValueException"],
                   () => Effect.succeed(undefined),
                 ),
               );

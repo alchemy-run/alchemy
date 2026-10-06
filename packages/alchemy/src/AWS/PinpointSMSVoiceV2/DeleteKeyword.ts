@@ -20,9 +20,8 @@ export interface DeleteKeywordRequest extends Omit<
  * deploy-time half grants `sms-voice:DeleteKeyword` on the number.
  * Provide the implementation with
  * `Effect.provide(AWS.PinpointSMSVoiceV2.DeleteKeywordHttp)`.
- * @binding
- * @section Managing Keywords
- * @example Remove a Keyword
+ * ### Managing Keywords
+ * **Example:** Remove a Keyword
  * ```typescript
  * // init
  * const deleteKeyword = yield* AWS.PinpointSMSVoiceV2.DeleteKeyword(number);
@@ -30,6 +29,8 @@ export interface DeleteKeywordRequest extends Omit<
  * // runtime
  * yield* deleteKeyword({ Keyword: "INFO" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteKeyword extends Binding.Service<
   DeleteKeyword,
@@ -39,12 +40,7 @@ export interface DeleteKeyword extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteKeywordRequest,
-    ) => Effect.Effect<
-      smsvoice.DeleteKeywordResult,
-      smsvoice.DeleteKeywordError
-    >
+    ) => Effect.Effect<smsvoice.DeleteKeywordResult, smsvoice.DeleteKeywordError>
   >
 > {}
-export const DeleteKeyword = Binding.Service<DeleteKeyword>(
-  "AWS.PinpointSMSVoiceV2.DeleteKeyword",
-);
+export const DeleteKeyword = Binding.Service<DeleteKeyword>("AWS.PinpointSMSVoiceV2.DeleteKeyword");

@@ -87,8 +87,8 @@ export interface FlowEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Flow Events
- * @example Page an Operator When a Flow Raises an Alert
+ * ### Consuming Flow Events
+ * **Example:** Page an Operator When a Flow Raises an Alert
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -119,12 +119,8 @@ export const consumeFlowEvents = <StreamReq = never, Req = never>(
     props.id ?? "MediaConnectFlowEvents",
     {
       source: ["aws.mediaconnect"],
-      "detail-type": (props.kinds ?? (["alert"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.flowArns !== undefined
-        ? { resources: [...props.flowArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["alert"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.flowArns !== undefined ? { resources: [...props.flowArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

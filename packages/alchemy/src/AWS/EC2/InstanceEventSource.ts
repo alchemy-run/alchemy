@@ -1,9 +1,6 @@
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import {
-  consumeBusEvents,
-  type EventRecord,
-} from "../EventBridge/EventSource.ts";
+import { consumeBusEvents, type EventRecord } from "../EventBridge/EventSource.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -60,8 +57,8 @@ export interface InstanceStateEventSourceProps {
  * bound instance's id is an Output and cannot appear in the deploy-time rule
  * pattern.
  *
- * @section Observing Instance State
- * @example React to an instance stopping or terminating
+ * ### Observing Instance State
+ * **Example:** React to an instance stopping or terminating
  * ```typescript
  * yield* consumeInstanceStateEvents(
  *   instance,

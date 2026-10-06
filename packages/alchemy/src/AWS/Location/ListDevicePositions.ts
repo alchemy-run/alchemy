@@ -19,15 +19,16 @@ export interface ListDevicePositionsRequest extends Omit<
  * `geo:ListDevicePositions`), scoped to one {@link Tracker}. Provide the implementation with
  * `Effect.provide(AWS.Location.ListDevicePositionsHttp)`.
  *
- * @binding
- * @section Reading Device Positions
- * @example List All Device Positions
+ * ### Reading Device Positions
+ * **Example:** List All Device Positions
  * ```typescript
  * const listPositions = yield* Location.ListDevicePositions(tracker);
  *
  * const page = yield* listPositions();
  * // page.Entries → [{ DeviceId, Position, SampleTime }, …]
  * ```
+ *
+ * @binding
  */
 export interface ListDevicePositions extends Binding.Service<
   ListDevicePositions,
@@ -37,10 +38,7 @@ export interface ListDevicePositions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListDevicePositionsRequest,
-    ) => Effect.Effect<
-      location.ListDevicePositionsResponse,
-      location.ListDevicePositionsError
-    >
+    ) => Effect.Effect<location.ListDevicePositionsResponse, location.ListDevicePositionsError>
   >
 > {}
 export const ListDevicePositions = Binding.Service<ListDevicePositions>(

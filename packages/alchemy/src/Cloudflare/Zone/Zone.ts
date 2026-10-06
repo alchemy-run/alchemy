@@ -144,13 +144,7 @@ export type Props = {
   vanityNameServers?: string[];
 };
 
-export type Zone = Resource<
-  "Cloudflare.Zone.Zone",
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type Zone = Resource<"Cloudflare.Zone.Zone", Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare Zone (DNS domain) managed by Alchemy.
@@ -159,25 +153,22 @@ export type Zone = Resource<
  * delete the zone in Cloudflare. Opt in to actual deletion by wrapping the
  * resource (or the whole stack) in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
- * @resource
- * @product Zones
- * @category Domains & DNS
- * @section Creating a Zone
- * @example Create a new zone
+ * ### Creating a Zone
+ * **Example:** Create a new zone
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("MyZone", {
  *   name: "example.com",
  * });
  * ```
  *
- * @example Allow destruction
+ * **Example:** Allow destruction
  * ```typescript
  * import { destroy } from "alchemy/RemovalPolicy";
  * yield* Cloudflare.Zone.Zone("MyZone", { name: "example.com" }).pipe(destroy());
  * ```
  *
- * @section Adopting an existing Zone
- * @example Take over a zone that already exists in Cloudflare
+ * ### Adopting an existing Zone
+ * **Example:** Take over a zone that already exists in Cloudflare
  * ```typescript
  * import { adopt } from "alchemy/AdoptPolicy";
  * // A zone carries no ownership markers, so the engine refuses to take over a
@@ -187,6 +178,10 @@ export type Zone = Resource<
  * }).pipe(adopt(true));
  * // zone.zoneId, zone.nameServers, zone.accountId, ...
  * ```
+ *
+ * @resource
+ * @product Zones
+ * @category Domains & DNS
  */
 export const Zone = Resource<Zone>("Cloudflare.Zone.Zone", {
   defaultRemovalPolicy: "retain",
@@ -319,16 +314,14 @@ export const ZoneProvider = () =>
           Effect.gen(function* () {
             const { accountId } = yield* yield* CloudflareEnvironment;
             // Enumerate every zone in the account, paginating exhaustively.
-            const zoneIds = yield* zones.listZones
-              .pages({ account: { id: accountId } })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.fromIterable(chunk).flatMap((page) =>
-                    (page.result ?? []).map((zone) => zone.id),
-                  ),
+            const zoneIds = yield* zones.listZones.pages({ account: { id: accountId } }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.fromIterable(chunk).flatMap((page) =>
+                  (page.result ?? []).map((zone) => zone.id),
                 ),
-              );
+              ),
+            );
             // Hydrate each into the exact `read` Attributes shape via getZone,
             // tolerating zones that vanish mid-enumeration.
             const rows = yield* Effect.forEach(
@@ -336,9 +329,7 @@ export const ZoneProvider = () =>
               (zoneId) =>
                 zones.getZone({ zoneId }).pipe(
                   Effect.map((result) => toZoneAttributes(result, accountId)),
-                  Effect.catchTag("InvalidZoneIdentifier", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 10 },
             );

@@ -11,9 +11,8 @@ export interface ListPipelineExecutionsRequest extends Omit<
 /**
  * Runtime binding for `codepipeline:ListPipelineExecutions` — enumerates
  * recent executions of the pipeline (newest first).
- * @binding
- * @section Observing Pipelines
- * @example List Recent Executions
+ * ### Observing Pipelines
+ * **Example:** List Recent Executions
  * ```typescript
  * const listExecutions = yield* AWS.CodePipeline.ListPipelineExecutions(pipeline);
  *
@@ -21,6 +20,8 @@ export interface ListPipelineExecutionsRequest extends Omit<
  *   maxResults: 10,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListPipelineExecutions extends Binding.Service<
   ListPipelineExecutions,
@@ -30,10 +31,7 @@ export interface ListPipelineExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListPipelineExecutionsRequest,
-    ) => Effect.Effect<
-      SVC.ListPipelineExecutionsOutput,
-      SVC.ListPipelineExecutionsError
-    >
+    ) => Effect.Effect<SVC.ListPipelineExecutionsOutput, SVC.ListPipelineExecutionsError>
   >
 > {}
 export const ListPipelineExecutions = Binding.Service<ListPipelineExecutions>(

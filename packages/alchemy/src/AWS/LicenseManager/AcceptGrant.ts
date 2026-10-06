@@ -14,9 +14,8 @@ export interface AcceptGrantRequest extends licensemanager.AcceptGrantRequest {}
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.AcceptGrantHttp)`.
- * @binding
- * @section Managing Grants
- * @example Accept a Received Grant
+ * ### Managing Grants
+ * **Example:** Accept a Received Grant
  * ```typescript
  * // init
  * const acceptGrant = yield* AWS.LicenseManager.AcceptGrant();
@@ -24,6 +23,8 @@ export interface AcceptGrantRequest extends licensemanager.AcceptGrantRequest {}
  * // runtime
  * const { Status } = yield* acceptGrant({ GrantArn: grantArn });
  * ```
+ *
+ * @binding
  */
 export interface AcceptGrant extends Binding.Service<
   AcceptGrant,
@@ -31,12 +32,7 @@ export interface AcceptGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: AcceptGrantRequest,
-    ) => Effect.Effect<
-      licensemanager.AcceptGrantResponse,
-      licensemanager.AcceptGrantError
-    >
+    ) => Effect.Effect<licensemanager.AcceptGrantResponse, licensemanager.AcceptGrantError>
   >
 > {}
-export const AcceptGrant = Binding.Service<AcceptGrant>(
-  "AWS.LicenseManager.AcceptGrant",
-);
+export const AcceptGrant = Binding.Service<AcceptGrant>("AWS.LicenseManager.AcceptGrant");

@@ -151,9 +151,8 @@ export interface LayerVersion extends Resource<
  * it supersedes. `layerVersionArn` and `version` therefore change on update;
  * `layerName` and `layerArn` stay put.
  *
- * @resource
- * @section Publishing a Layer
- * @example Package a Local Directory
+ * ### Publishing a Layer
+ * **Example:** Package a Local Directory
  * ```typescript
  * // ./layers/deps contains nodejs/node_modules/...
  * const deps = yield* LayerVersion("Deps", {
@@ -162,7 +161,7 @@ export interface LayerVersion extends Resource<
  * });
  * ```
  *
- * @example Publish an Existing Archive
+ * **Example:** Publish an Existing Archive
  * ```typescript
  * const layer = yield* LayerVersion("Ffmpeg", {
  *   path: "./dist/ffmpeg-layer.zip",
@@ -171,7 +170,7 @@ export interface LayerVersion extends Resource<
  * });
  * ```
  *
- * @example Publish From S3
+ * **Example:** Publish From S3
  * ```typescript
  * const layer = yield* LayerVersion("BigLayer", {
  *   s3: {
@@ -181,14 +180,16 @@ export interface LayerVersion extends Resource<
  * });
  * ```
  *
- * @section Attaching to a Function
- * @example Use a Layer in a Function
+ * ### Attaching to a Function
+ * **Example:** Use a Layer in a Function
  * ```typescript
  * const fn = yield* Function("Handler", {
  *   main: import.meta.resolve("./handler.ts"),
  *   layers: [deps],
  * });
  * ```
+ *
+ * @resource
  */
 export const LayerVersion = Resource<LayerVersion>("AWS.Lambda.LayerVersion");
 
@@ -270,9 +271,7 @@ export const LayerVersionProvider = () =>
           };
         }
         if (!props.path) {
-          return yield* Effect.die(
-            "AWS.Lambda.LayerVersion requires either `path` or `s3`.",
-          );
+          return yield* Effect.die("AWS.Lambda.LayerVersion requires either `path` or `s3`.");
         }
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
@@ -320,10 +319,7 @@ export const LayerVersionProvider = () =>
           ("LayerArn" in version ? version.LayerArn : undefined) ??
           // `arn:…:layer:{name}:{version}` — the layer ARN is the version ARN
           // without its trailing version segment.
-          version.LayerVersionArn.slice(
-            0,
-            version.LayerVersionArn.lastIndexOf(":"),
-          );
+          version.LayerVersionArn.slice(0, version.LayerVersionArn.lastIndexOf(":"));
         const content = "Content" in version ? version.Content : undefined;
         return {
           layerName,
@@ -345,11 +341,7 @@ export const LayerVersionProvider = () =>
         Lambda.getLayerVersion({
           LayerName: layerName,
           VersionNumber: version,
-        }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       return {
         // `layerVersionArn`/`version` deliberately are NOT stable: an update
@@ -375,10 +367,7 @@ export const LayerVersionProvider = () =>
             olds.description !== news.description ||
             olds.licenseInfo !== news.licenseInfo ||
             !deepEqual(olds.compatibleRuntimes, news.compatibleRuntimes) ||
-            !deepEqual(
-              olds.compatibleArchitectures,
-              news.compatibleArchitectures,
-            )
+            !deepEqual(olds.compatibleArchitectures, news.compatibleArchitectures)
           ) {
             return { action: "update" } as const;
           }
@@ -387,9 +376,7 @@ export const LayerVersionProvider = () =>
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
           const version = yield* getVersion(output.layerName, output.version);
-          return version
-            ? snapshot(output.layerName, output.sourceHash, version)
-            : undefined;
+          return version ? snapshot(output.layerName, output.sourceHash, version) : undefined;
         }),
         list: () =>
           Effect.gen(function* () {
@@ -424,18 +411,14 @@ export const LayerVersionProvider = () =>
             return versions.flat();
           }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const layerName =
-            output?.layerName ?? (yield* createLayerName(id, news.layerName));
+          const layerName = output?.layerName ?? (yield* createLayerName(id, news.layerName));
           const { content, sourceHash } = yield* packageContent(news);
 
           // Observe: an interrupted apply may have already published the
           // version recorded in state. Republishing would leak a version, so
           // reuse it when it still exists and still matches the desired
           // content.
-          if (
-            output?.version !== undefined &&
-            output.sourceHash === sourceHash
-          ) {
+          if (output?.version !== undefined && output.sourceHash === sourceHash) {
             const existing = yield* getVersion(layerName, output.version);
             const attrs = existing && snapshot(layerName, sourceHash, existing);
             if (attrs) return attrs;
@@ -461,16 +444,11 @@ export const LayerVersionProvider = () =>
           // leak a version per deploy. Functions already referencing the old
           // version keep working — Lambda retains a copy until nothing
           // refers to it.
-          if (
-            output?.version !== undefined &&
-            output.version !== attrs.version
-          ) {
+          if (output?.version !== undefined && output.version !== attrs.version) {
             yield* Lambda.deleteLayerVersion({
               LayerName: layerName,
               VersionNumber: output.version,
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
           yield* session.note(`Layer ${attrs.layerName}:${attrs.version}`);
@@ -481,9 +459,7 @@ export const LayerVersionProvider = () =>
           yield* Lambda.deleteLayerVersion({
             LayerName: output.layerName,
             VersionNumber: output.version,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -60,9 +60,8 @@ export interface ProfileAssociation extends Resource<
  * associated with thousands of VPCs. The association is created immediately
  * but completes asynchronously — the returned `status` is typically still
  * `CREATING` when the deploy finishes.
- * @resource
- * @section Associating a Profile
- * @example Apply a Profile to a VPC
+ * ### Associating a Profile
+ * **Example:** Apply a Profile to a VPC
  * ```typescript
  * import * as Route53Profiles from "alchemy/AWS/Route53Profiles";
  *
@@ -71,6 +70,8 @@ export interface ProfileAssociation extends Resource<
  *   resourceId: vpc.vpcId,
  * });
  * ```
+ *
+ * @resource
  */
 export const ProfileAssociation = Resource<ProfileAssociation>(
   "AWS.Route53Profiles.ProfileAssociation",
@@ -119,10 +120,7 @@ export const ProfileAssociationProvider = () =>
   Provider.effect(
     ProfileAssociation,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
@@ -142,9 +140,7 @@ export const ProfileAssociationProvider = () =>
           })
           .pipe(
             Effect.map((r) => isLive(r.ProfileAssociation)),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
       const observeByPair = (profileId: string, resourceId: string) =>

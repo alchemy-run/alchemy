@@ -5,23 +5,14 @@ import type { Table } from "./Table.ts";
 
 export type BatchWriteItemTables = [Table, ...Table[]];
 
-type BatchWriteRequests = NonNullable<
-  DynamoDB.BatchWriteItemInput["RequestItems"]
->[string];
+type BatchWriteRequests = NonNullable<DynamoDB.BatchWriteItemInput["RequestItems"]>[string];
 
 export const sortBatchWriteItemTables = (tables: BatchWriteItemTables) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
+  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()].sort((a, b) =>
     a.LogicalId.localeCompare(b.LogicalId),
   ) as BatchWriteItemTables;
 
-export interface BatchWriteItemRequest extends Omit<
-  DynamoDB.BatchWriteItemInput,
-  "RequestItems"
-> {
+export interface BatchWriteItemRequest extends Omit<DynamoDB.BatchWriteItemInput, "RequestItems"> {
   RequestItems: Record<string, BatchWriteRequests>;
 }
 
@@ -30,9 +21,8 @@ export interface BatchWriteItemRequest extends Omit<
  *
  * Bind this operation to one or more tables and key the request by each bound
  * table's `LogicalId`.
- * @binding
- * @section Writing Data
- * @example Write Items Across Multiple Tables
+ * ### Writing Data
+ * **Example:** Write Items Across Multiple Tables
  * ```typescript
  * const batchWriteItem = yield* AWS.DynamoDB.BatchWriteItem(sourceTable, archiveTable);
  *
@@ -51,6 +41,8 @@ export interface BatchWriteItemRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface BatchWriteItem extends Binding.Service<
   BatchWriteItem,
@@ -60,13 +52,8 @@ export interface BatchWriteItem extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchWriteItemRequest,
-    ) => Effect.Effect<
-      DynamoDB.BatchWriteItemOutput,
-      DynamoDB.BatchWriteItemError
-    >
+    ) => Effect.Effect<DynamoDB.BatchWriteItemOutput, DynamoDB.BatchWriteItemError>
   >
 > {}
 
-export const BatchWriteItem = Binding.Service<BatchWriteItem>(
-  "AWS.DynamoDB.BatchWriteItem",
-);
+export const BatchWriteItem = Binding.Service<BatchWriteItem>("AWS.DynamoDB.BatchWriteItem");

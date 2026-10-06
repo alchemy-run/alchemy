@@ -9,12 +9,7 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  Platform,
-  type Main,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -24,12 +19,7 @@ import {
   type ServerHost,
 } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";
 import {
   makeBunBootstrap,
@@ -45,17 +35,13 @@ import type { Providers } from "../Providers.ts";
 
 export const isTask = (value: any): value is Task => {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.ECS.Task"
+    typeof value === "object" && value !== null && "Type" in value && value.Type === "AWS.ECS.Task"
   );
 };
 
-export class TaskEnvironment extends Context.Service<
-  TaskEnvironment,
-  Record<string, any>
->()("AWS.ECS.TaskEnvironment") {}
+export class TaskEnvironment extends Context.Service<TaskEnvironment, Record<string, any>>()(
+  "AWS.ECS.TaskEnvironment",
+) {}
 
 /**
  * The binding contract shared by the ECS container platforms (`Task` and the
@@ -192,12 +178,7 @@ export interface TaskDefinitionConfig {
   taskDefinition?: Partial<
     Omit<
       ecs.RegisterTaskDefinitionRequest,
-      | "family"
-      | "containerDefinitions"
-      | "executionRoleArn"
-      | "taskRoleArn"
-      | "cpu"
-      | "memory"
+      "family" | "containerDefinitions" | "executionRoleArn" | "taskRoleArn" | "cpu" | "memory"
     >
   >;
   /**
@@ -230,8 +211,7 @@ export interface BundledTaskProps extends TaskPropsBase, BundledImageSource {}
  * Build the user's own Dockerfile (`context` + optional `dockerfile` path)
  * into the task image.
  */
-export interface DockerfileTaskProps
-  extends TaskPropsBase, DockerfileImageSource {}
+export interface DockerfileTaskProps extends TaskPropsBase, DockerfileImageSource {}
 /**
  * Run a pre-built registry image (`image`), mirrored into ECR.
  */
@@ -298,11 +278,7 @@ export type TaskShape =
        * Runs to completion when the container starts, after which the
        * container exits.
        */
-      run?: Effect.Effect<
-        void,
-        never,
-        TaskServices | PlatformServices | RuntimeContext | Scope
-      >;
+      run?: Effect.Effect<void, never, TaskServices | PlatformServices | RuntimeContext | Scope>;
     });
 
 export interface TaskRuntimeContext extends HostRuntimeContext {
@@ -334,9 +310,8 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * Beyond the primary container you can declare task-level configuration
  * (volumes, runtime platform, ephemeral storage, IPC/PID mode, placement
  * constraints) and append additional `sidecars` for multi-container tasks.
- * @resource
- * @section Creating a Task
- * @example Remote Image
+ * ### Creating a Task
+ * **Example:** Remote Image
  * ```typescript
  * const migrate = yield* Task("DbMigrate", {
  *   image: "public.ecr.aws/docker/library/busybox:stable",
@@ -346,7 +321,7 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * });
  * ```
  *
- * @example Build Your Own Dockerfile
+ * **Example:** Build Your Own Dockerfile
  * ```typescript
  * const render = yield* Task("RenderJob", {
  *   context: "./render",                    // dockerfile defaults to ./render/Dockerfile
@@ -356,7 +331,7 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * });
  * ```
  *
- * @example Inline Effect Program
+ * **Example:** Inline Effect Program
  * ```typescript
  * const drainer = yield* Task(
  *   "QueueDrainer",
@@ -373,8 +348,8 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * );
  * ```
  *
- * @section Multi-Container Tasks
- * @example Task with a Sidecar
+ * ### Multi-Container Tasks
+ * **Example:** Task with a Sidecar
  * ```typescript
  * const task = yield* Task("ApiTask", {
  *   main: import.meta.url,
@@ -390,17 +365,14 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * });
  * ```
  *
- * @section Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the task doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * ### Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * @example Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -410,18 +382,7 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * @example Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -429,8 +390,8 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * }
  * ```
  *
- * @section Task-Level Configuration
- * @example ARM64 with EFS Volume and Ephemeral Storage
+ * ### Task-Level Configuration
+ * **Example:** ARM64 with EFS Volume and Ephemeral Storage
  * ```typescript
  * const task = yield* Task("WorkerTask", {
  *   main: import.meta.url,
@@ -448,7 +409,7 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  * });
  * ```
  *
- * @example Environment Files from S3
+ * **Example:** Environment Files from S3
  * ```typescript
  * const task = yield* Task("ApiTask", {
  *   main: import.meta.url,
@@ -457,13 +418,17 @@ export { createContainerRuntimeContext } from "../../Server/Process.ts";
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
-export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
-  Platform("AWS.ECS.Task", {
+export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> = Platform(
+  "AWS.ECS.Task",
+  {
     createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Task") as (
       id: string,
     ) => TaskRuntimeContext,
-  });
+  },
+);
 
 /** Docker build platform matching the task definition's declared runtime. */
 export const taskImagePlatform = (runtimePlatform?: ecs.RuntimePlatform) =>
@@ -473,6 +438,18 @@ export const taskImagePlatform = (runtimePlatform?: ecs.RuntimePlatform) =>
   // start with `image Manifest does not contain descriptor matching
   // platform 'linux/amd64'`.
   runtimePlatform?.cpuArchitecture === "ARM64" ? "linux/arm64" : "linux/amd64";
+
+/** Keep image resolution, drift detection and dev watching on the same inputs. */
+export const taskImageInput = (props: TaskProps) => {
+  const source = props as ImageSourceLike;
+  return {
+    source,
+    platform: taskImagePlatform(props.runtimePlatform),
+    port: props.port,
+    isExternal: props.isExternal,
+    bootstrap: makeBunBootstrap(source.handler ?? "default"),
+  };
+};
 
 /**
  * Create the IAM role assumed by ECS tasks if it doesn't already exist.
@@ -509,10 +486,7 @@ export const createTaskRoleIfNotExists = Effect.fn(function* ({
         iam.getRole({ RoleName: roleName }).pipe(
           Effect.filterOrFail(
             (existing) => hasTags(tags, existing.Role?.Tags),
-            () =>
-              new Error(
-                `Role '${roleName}' already exists and is not managed by alchemy`,
-              ),
+            () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
           ),
         ),
       ),
@@ -750,10 +724,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     // the user configured on the primary container.
     ...(bindingMountPoints.length > 0
       ? {
-          mountPoints: [
-            ...(props.container?.mountPoints ?? []),
-            ...bindingMountPoints,
-          ],
+          mountPoints: [...(props.container?.mountPoints ?? []), ...bindingMountPoints],
         }
       : {}),
   };
@@ -766,9 +737,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     cpu: String(props.cpu ?? 256),
     memory: String(props.memory ?? 512),
     volumes:
-      bindingVolumes.length > 0
-        ? [...(props.volumes ?? []), ...bindingVolumes]
-        : props.volumes,
+      bindingVolumes.length > 0 ? [...(props.volumes ?? []), ...bindingVolumes] : props.volumes,
     placementConstraints: props.placementConstraints,
     runtimePlatform: props.runtimePlatform,
     ephemeralStorage: props.ephemeralStorage,
@@ -783,9 +752,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
   });
   const taskDefinition = response.taskDefinition;
   if (!taskDefinition?.taskDefinitionArn) {
-    return yield* Effect.die(
-      new Error("registerTaskDefinition returned no task definition"),
-    );
+    return yield* Effect.die(new Error("registerTaskDefinition returned no task definition"));
   }
   return taskDefinition;
 });
@@ -817,10 +784,7 @@ export const syncTaskDefinitionTags = Effect.fn(function* ({
       )
       .map((t) => [t.key, t.value]),
   );
-  const { removed: removedTags, upsert: upsertTags } = diffTags(
-    observedTags,
-    tags,
-  );
+  const { removed: removedTags, upsert: upsertTags } = diffTags(observedTags, tags);
   if (upsertTags.length > 0) {
     yield* ecs.tagResource({
       resourceArn: revisionArn,
@@ -1058,8 +1022,7 @@ export const TaskProvider = () =>
         const image = container?.image;
         const taskRoleArn = taskDefinition.taskRoleArn;
         const executionRoleArn = taskDefinition.executionRoleArn;
-        const logGroupName =
-          container?.logConfiguration?.options?.["awslogs-group"];
+        const logGroupName = container?.logConfiguration?.options?.["awslogs-group"];
         if (
           !container?.name ||
           !image ||
@@ -1075,8 +1038,7 @@ export const TaskProvider = () =>
         const hash = image.slice(lastColon + 1);
         const repositoryName = repositoryUri.split("/").slice(1).join("/");
         const taskRoleName = taskRoleArn.split(":role/")[1] ?? taskRoleArn;
-        const executionRoleName =
-          executionRoleArn.split(":role/")[1] ?? executionRoleArn;
+        const executionRoleName = executionRoleArn.split(":role/")[1] ?? executionRoleArn;
         return {
           taskDefinitionArn: taskDefinition.taskDefinitionArn,
           taskFamily: taskDefinition.family,
@@ -1109,10 +1071,7 @@ export const TaskProvider = () =>
         ],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toTaskFamily(id, olds ?? {})) !==
-            (yield* toTaskFamily(id, news ?? {}))
-          ) {
+          if ((yield* toTaskFamily(id, olds ?? {})) !== (yield* toTaskFamily(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Content drift: the props don't change when files under a
@@ -1123,31 +1082,19 @@ export const TaskProvider = () =>
           // and surface drift as an update; without this a bootstrap or
           // code-only change would silently no-op until `--force`.
           if (output) {
-            const source = news as ImageSourceLike;
-            const hash = yield* imageSource.hash({
-              source,
-              platform: taskImagePlatform(news.runtimePlatform),
-              port: news.port,
-              isExternal: news.isExternal,
-              bootstrap: makeBunBootstrap(source.handler ?? "default"),
-            });
+            const hash = yield* imageSource.hash(taskImageInput(news));
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const family =
-            output?.taskFamily ?? (yield* toTaskFamily(id, olds ?? {}));
+          const family = output?.taskFamily ?? (yield* toTaskFamily(id, olds ?? {}));
           const described = yield* ecs
             .describeTaskDefinition({
               taskDefinition: output?.taskDefinitionArn ?? family,
             })
-            .pipe(
-              Effect.catchTag("ClientException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ClientException", () => Effect.succeed(undefined)));
           const taskDefinition = described?.taskDefinition;
           if (!taskDefinition?.taskDefinitionArn) {
             return undefined;
@@ -1159,36 +1106,24 @@ export const TaskProvider = () =>
             ...output,
             taskDefinitionArn: taskDefinition.taskDefinitionArn,
             taskFamily: taskDefinition.family ?? family,
-            containerName:
-              taskDefinition.containerDefinitions?.[0]?.name ??
-              output.containerName,
+            containerName: taskDefinition.containerDefinitions?.[0]?.name ?? output.containerName,
             port:
-              taskDefinition.containerDefinitions?.[0]?.portMappings?.[0]
-                ?.containerPort ?? output.port,
+              taskDefinition.containerDefinitions?.[0]?.portMappings?.[0]?.containerPort ??
+              output.port,
           };
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts. (An
           // explicit taskName change arrives here as a fresh replacement
           // instance with no output.)
           const family = output?.taskFamily ?? (yield* toTaskFamily(id, news));
-          const taskRoleName =
-            output?.taskRoleName ?? (yield* createRoleName(id, "task-role"));
+          const taskRoleName = output?.taskRoleName ?? (yield* createRoleName(id, "task-role"));
           const executionRoleName =
-            output?.executionRoleName ??
-            (yield* createRoleName(id, "execution-role"));
+            output?.executionRoleName ?? (yield* createRoleName(id, "execution-role"));
           const taskPolicyName = yield* createPolicyName(id, "task-policy");
-          const repositoryName =
-            output?.repositoryName ?? (yield* createRepositoryName(id));
-          const logGroupName =
-            output?.logGroupName ?? (yield* createLogGroupName(id));
+          const repositoryName = output?.repositoryName ?? (yield* createRepositoryName(id));
+          const logGroupName = output?.logGroupName ?? (yield* createLogGroupName(id));
           const tags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
@@ -1214,9 +1149,7 @@ export const TaskProvider = () =>
                 RoleName: taskRoleName,
                 PolicyArn: policyArn,
               })
-              .pipe(
-                Effect.catchTag("LimitExceededException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
           }
 
           // Environment files: the execution role reads the referenced S3
@@ -1249,20 +1182,15 @@ export const TaskProvider = () =>
           // task definition revision. Task definitions are versioned in
           // AWS, so registering a new revision is the unit of "update" —
           // the superseded revision is reaped after registration below.
-          const source = news as ImageSourceLike;
           const resolved = yield* imageSource.resolve({
+            ...taskImageInput(news),
             id,
-            source,
             repositoryName,
             repositoryUri:
               output?.repositoryUri && output.repositoryName === repositoryName
                 ? output.repositoryUri
                 : undefined,
             tags,
-            platform: taskImagePlatform(news.runtimePlatform),
-            port: news.port,
-            isExternal: news.isExternal,
-            bootstrap: makeBunBootstrap(source.handler ?? "default"),
             session,
           });
 
@@ -1304,8 +1232,7 @@ export const TaskProvider = () =>
           return {
             taskDefinitionArn: taskDefinition.taskDefinitionArn!,
             taskFamily: family,
-            containerName:
-              taskDefinition.containerDefinitions?.[0]?.name ?? family,
+            containerName: taskDefinition.containerDefinitions?.[0]?.name ?? family,
             port: news.port ?? output?.port ?? 3000,
             imageUri: resolved.imageUri,
             repositoryName: resolved.repositoryName,
@@ -1328,38 +1255,26 @@ export const TaskProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const arns = yield* ecs.listTaskDefinitions
-              .pages({ status: "ACTIVE" })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.taskDefinitionArns ?? [],
-                  ),
-                ),
-              );
+            const arns = yield* ecs.listTaskDefinitions.pages({ status: "ACTIVE" }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.taskDefinitionArns ?? []),
+              ),
+            );
             const rows = yield* Effect.forEach(
               arns,
               (arn) =>
                 ecs.describeTaskDefinition({ taskDefinition: arn }).pipe(
                   Effect.map((described) =>
                     described.taskDefinition
-                      ? toListAttributes(
-                          described.taskDefinition,
-                          region,
-                          accountId,
-                        )
+                      ? toListAttributes(described.taskDefinition, region, accountId)
                       : undefined,
                   ),
-                  Effect.catchTag("ClientException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is Task["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Task["Attributes"] => row !== undefined);
           }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteTaskDefinitionInfrastructure(output);

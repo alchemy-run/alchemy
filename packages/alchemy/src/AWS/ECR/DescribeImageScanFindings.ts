@@ -17,15 +17,16 @@ export interface DescribeImageScanFindingsRequest extends Omit<
  *
  * Returns the vulnerability findings of the most recent scan of an image in the bound repository. Provide the implementation with
  * `Effect.provide(AWS.ECR.DescribeImageScanFindingsHttp)`.
- * @binding
- * @section Image Scanning
- * @example Read Scan Findings
+ * ### Image Scanning
+ * **Example:** Read Scan Findings
  * ```typescript
  * const describeScanFindings = yield* AWS.ECR.DescribeImageScanFindings(repository);
  *
  * const res = yield* describeScanFindings({ imageId: { imageTag: "latest" } });
  * console.log(res.imageScanFindings?.findingSeverityCounts);
  * ```
+ *
+ * @binding
  */
 export interface DescribeImageScanFindings extends Binding.Service<
   DescribeImageScanFindings,
@@ -35,14 +36,10 @@ export interface DescribeImageScanFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeImageScanFindingsRequest,
-    ) => Effect.Effect<
-      ecr.DescribeImageScanFindingsResponse,
-      ecr.DescribeImageScanFindingsError
-    >
+    ) => Effect.Effect<ecr.DescribeImageScanFindingsResponse, ecr.DescribeImageScanFindingsError>
   >
 > {}
 
-export const DescribeImageScanFindings =
-  Binding.Service<DescribeImageScanFindings>(
-    "AWS.ECR.DescribeImageScanFindings",
-  );
+export const DescribeImageScanFindings = Binding.Service<DescribeImageScanFindings>(
+  "AWS.ECR.DescribeImageScanFindings",
+);

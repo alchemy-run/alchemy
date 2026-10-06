@@ -23,9 +23,8 @@ export interface RenewDomainRequest extends route53domains.RenewDomainRequest {}
  * Provide the implementation with
  * `Effect.provide(AWS.Route53Domains.RenewDomainHttp)`.
  *
- * @binding
- * @section Renewing Domains
- * @example Renew a Domain for One More Year
+ * ### Renewing Domains
+ * **Example:** Renew a Domain for One More Year
  * ```typescript
  * // init
  * const renewDomain = yield* AWS.Route53Domains.RenewDomain();
@@ -38,6 +37,8 @@ export interface RenewDomainRequest extends route53domains.RenewDomainRequest {}
  * });
  * // poll result.OperationId with GetOperationDetail until SUCCESSFUL
  * ```
+ *
+ * @binding
  */
 export interface RenewDomain extends Binding.Service<
   RenewDomain,
@@ -45,12 +46,7 @@ export interface RenewDomain extends Binding.Service<
   () => Effect.Effect<
     (
       request: RenewDomainRequest,
-    ) => Effect.Effect<
-      route53domains.RenewDomainResponse,
-      route53domains.RenewDomainError
-    >
+    ) => Effect.Effect<route53domains.RenewDomainResponse, route53domains.RenewDomainError>
   >
 > {}
-export const RenewDomain = Binding.Service<RenewDomain>(
-  "AWS.Route53Domains.RenewDomain",
-);
+export const RenewDomain = Binding.Service<RenewDomain>("AWS.Route53Domains.RenewDomain");

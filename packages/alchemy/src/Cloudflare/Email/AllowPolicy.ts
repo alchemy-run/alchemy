@@ -2,7 +2,6 @@ import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -106,11 +105,8 @@ export type AllowPolicy = Resource<
  * All fields are mutable in place. Requires the Email Security enterprise
  * add-on; accounts without the entitlement receive the typed
  * `EmailSecurityNotEntitled` error.
- * @resource
- * @product Email Security
- * @category Email
- * @section Creating an Allow Policy
- * @example Acceptable sender by email address
+ * ### Creating an Allow Policy
+ * **Example:** Acceptable sender by email address
  * ```typescript
  * yield* Cloudflare.Email.AllowPolicy("NewsletterSender", {
  *   pattern: "news@partner.example.com",
@@ -119,7 +115,7 @@ export type AllowPolicy = Resource<
  * });
  * ```
  *
- * @example Trusted sender domain (bypasses all detections)
+ * **Example:** Trusted sender domain (bypasses all detections)
  * ```typescript
  * yield* Cloudflare.Email.AllowPolicy("TrustedPartner", {
  *   pattern: "partner.example.com",
@@ -129,7 +125,7 @@ export type AllowPolicy = Resource<
  * });
  * ```
  *
- * @example Exempt recipient
+ * **Example:** Exempt recipient
  * ```typescript
  * // Messages delivered to the abuse mailbox must never be filtered.
  * yield* Cloudflare.Email.AllowPolicy("AbuseMailbox", {
@@ -141,18 +137,20 @@ export type AllowPolicy = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
+ *
+ * @resource
+ * @product Email Security
+ * @category Email
  */
-export const AllowPolicy = Resource<AllowPolicy>(
-  EmailSecurityAllowPolicyTypeId,
-  { aliases: ["Cloudflare.EmailSecurity.AllowPolicy"] },
-);
+export const AllowPolicy = Resource<AllowPolicy>(EmailSecurityAllowPolicyTypeId, {
+  aliases: ["Cloudflare.EmailSecurity.AllowPolicy"],
+});
 
 /**
  * Returns true if the given value is an AllowPolicy resource.
  */
 export const isAllowPolicy = (value: unknown): value is AllowPolicy =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === EmailSecurityAllowPolicyTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === EmailSecurityAllowPolicyTypeId;
 
 export const AllowPolicyProvider = () =>
   Provider.succeed(AllowPolicy, {
@@ -160,23 +158,25 @@ export const AllowPolicyProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* emailSecurity.listSettingAllowPolicies
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((policy) =>
-                toAttributes(policy, accountId),
-              ),
-            ),
+      return yield* emailSecurity.listSettingAllowPolicies.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((policy) => toAttributes(policy, accountId)),
           ),
-          // Email Security is a paid add-on; accounts without the
-          // entitlement can't enumerate policies — treat as empty.
-          Effect.catchTag("EmailSecurityNotEntitled", () =>
-            Effect.succeed([] as AllowPolicyAttributes[]),
-          ),
-        );
+        ),
+        // Email Security is a paid add-on gated by both account
+        // entitlement and token scope: an unentitled account answers
+        // `EmailSecurityNotEntitled`, while a credential lacking the
+        // Email Security scope (e.g. Cloudflare OAuth) answers a bare
+        // `Forbidden`. Neither can enumerate, so both mean "none
+        // visible" — matching `Domain.list()`. Returning `[]` is the
+        // safe direction for the callers of `list` (orphan detection
+        // never deletes what it cannot see).
+        Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
+          Effect.succeed([] as AllowPolicyAttributes[]),
+        ),
+      );
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -206,9 +206,7 @@ export const AllowPolicyProvider = () =>
 
       // 1. Observe — the id on `output` is a hint, not a guarantee; a
       //    missing policy falls through to the pattern scan and create.
-      let observed = output?.policyId
-        ? yield* getPolicy(accountId, output.policyId)
-        : undefined;
+      let observed = output?.policyId ? yield* getPolicy(accountId, output.policyId) : undefined;
       if (!observed) {
         observed = yield* findByPattern(accountId, news.pattern);
       }
@@ -232,8 +230,7 @@ export const AllowPolicyProvider = () =>
         (observed.isExemptRecipient ?? false) !== desired.isExemptRecipient ||
         (observed.isTrustedSender ?? false) !== desired.isTrustedSender ||
         (observed.verifySender ?? false) !== desired.verifySender ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (news.comments !== undefined && (observed.comments ?? "") !== news.comments);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }

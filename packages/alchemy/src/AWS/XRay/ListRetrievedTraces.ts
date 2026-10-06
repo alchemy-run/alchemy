@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListRetrievedTracesRequest
-  extends xray.ListRetrievedTracesRequest {}
+export interface ListRetrievedTracesRequest extends xray.ListRetrievedTracesRequest {}
 
 /**
  * Retrieve the traces fetched by a Transaction Search retrieval job.
@@ -14,9 +13,8 @@ export interface ListRetrievedTracesRequest
  * provide the implementation with `Effect.provide(XRay.ListRetrievedTracesHttp)`.
  * The action is account-scoped: X-Ray does not support resource-level
  * permissions for `xray:ListRetrievedTraces`, so the binding grants it on `*`.
- * @binding
- * @section Transaction Search
- * @example Poll a retrieval job for its traces
+ * ### Transaction Search
+ * **Example:** Poll a retrieval job for its traces
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -29,6 +27,8 @@ export interface ListRetrievedTracesRequest
  *   const traces = result.Traces ?? [];
  * }
  * ```
+ *
+ * @binding
  */
 export interface ListRetrievedTraces extends Binding.Service<
   ListRetrievedTraces,
@@ -36,10 +36,7 @@ export interface ListRetrievedTraces extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListRetrievedTracesRequest,
-    ) => Effect.Effect<
-      xray.ListRetrievedTracesResult,
-      xray.ListRetrievedTracesError
-    >
+    ) => Effect.Effect<xray.ListRetrievedTracesResult, xray.ListRetrievedTracesError>
   >
 > {}
 export const ListRetrievedTraces = Binding.Service<ListRetrievedTraces>(

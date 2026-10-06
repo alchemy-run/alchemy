@@ -1,11 +1,11 @@
-import * as DocDBElastic from "@/AWS/DocDBElastic";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DocDBElastic from "@/AWS/DocDBElastic";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "slow-handler.ts");
 
@@ -40,7 +40,7 @@ export class DocDBElasticSlowTestFunction extends Lambda.Function<Lambda.Functio
 export default DocDBElasticSlowTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const network = yield* Effect.sync(() => ({
@@ -95,9 +95,8 @@ export default DocDBElasticSlowTestFunction.make(
           // injection without waiting ~10 minutes for STOPPED.
           const status = yield* startCluster().pipe(
             Effect.map((result) => result.cluster.status),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ status });

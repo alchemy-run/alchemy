@@ -22,9 +22,8 @@ export interface UploadArchiveRequest extends Omit<
  * inventory jobs, so persist it.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.UploadArchiveHttp)`.
- * @binding
- * @section Uploading Archives
- * @example Upload a small archive
+ * ### Uploading Archives
+ * **Example:** Upload a small archive
  * ```typescript
  * const uploadArchive = yield* AWS.Glacier.UploadArchive(vault);
  *
@@ -34,6 +33,8 @@ export interface UploadArchiveRequest extends Omit<
  *   body: payload,
  * });
  * ```
+ *
+ * @binding
  */
 export interface UploadArchive extends Binding.Service<
   UploadArchive,
@@ -43,12 +44,7 @@ export interface UploadArchive extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UploadArchiveRequest,
-    ) => Effect.Effect<
-      glacier.ArchiveCreationOutput,
-      glacier.UploadArchiveError
-    >
+    ) => Effect.Effect<glacier.ArchiveCreationOutput, glacier.UploadArchiveError>
   >
 > {}
-export const UploadArchive = Binding.Service<UploadArchive>(
-  "AWS.Glacier.UploadArchive",
-);
+export const UploadArchive = Binding.Service<UploadArchive>("AWS.Glacier.UploadArchive");

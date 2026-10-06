@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -144,16 +139,15 @@ export interface ConfigurationSet extends Resource<
  * Attach event destinations with `SES.ConfigurationSetEventDestination` to
  * stream send/delivery/bounce/complaint events to SNS, EventBridge, or
  * CloudWatch.
- * @resource
- * @section Creating Configuration Sets
- * @example Basic Configuration Set
+ * ### Creating Configuration Sets
+ * **Example:** Basic Configuration Set
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
  * const configSet = yield* SES.ConfigurationSet("Default", {});
  * ```
  *
- * @example Require TLS and Publish Reputation Metrics
+ * **Example:** Require TLS and Publish Reputation Metrics
  * ```typescript
  * const configSet = yield* SES.ConfigurationSet("Strict", {
  *   tlsPolicy: "REQUIRE",
@@ -161,15 +155,15 @@ export interface ConfigurationSet extends Resource<
  * });
  * ```
  *
- * @example Suppress Bounces and Complaints
+ * **Example:** Suppress Bounces and Complaints
  * ```typescript
  * const configSet = yield* SES.ConfigurationSet("Suppressing", {
  *   suppressedReasons: ["BOUNCE", "COMPLAINT"],
  * });
  * ```
  *
- * @section Open and Click Tracking
- * @example Host Tracking Links on Your Own Domain
+ * ### Open and Click Tracking
+ * **Example:** Host Tracking Links on Your Own Domain
  * ```typescript
  * // The redirect domain must be a verified subdomain you own with a valid
  * // certificate. Omit `tracking` entirely to keep SES's current setting.
@@ -181,8 +175,8 @@ export interface ConfigurationSet extends Resource<
  * });
  * ```
  *
- * @section Virtual Deliverability Manager
- * @example Collect Engagement Metrics for This Configuration Set
+ * ### Virtual Deliverability Manager
+ * **Example:** Collect Engagement Metrics for This Configuration Set
  * ```typescript
  * // Requires account-level VDM — see SES.AccountSettings.
  * const configSet = yield* SES.ConfigurationSet("Measured", {
@@ -193,8 +187,8 @@ export interface ConfigurationSet extends Resource<
  * });
  * ```
  *
- * @section Event Destinations
- * @example Stream Events to SNS
+ * ### Event Destinations
+ * **Example:** Stream Events to SNS
  * ```typescript
  * const topic = yield* SNS.Topic("EmailEvents", {});
  * const destination = yield* SES.ConfigurationSetEventDestination("ToSns", {
@@ -203,26 +197,19 @@ export interface ConfigurationSet extends Resource<
  *   snsDestination: { topicArn: topic.topicArn },
  * });
  * ```
+ *
+ * @resource
  */
-export const ConfigurationSet = Resource<ConfigurationSet>(
-  "AWS.SES.ConfigurationSet",
-);
+export const ConfigurationSet = Resource<ConfigurationSet>("AWS.SES.ConfigurationSet");
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
-const configurationSetArnOf = (
-  region: string,
-  accountId: string,
-  name: string,
-) => `arn:aws:ses:${region}:${accountId}:configuration-set/${name}`;
+const configurationSetArnOf = (region: string, accountId: string, name: string) =>
+  `arn:aws:ses:${region}:${accountId}:configuration-set/${name}`;
 
-const sameReasons = (
-  a: ReadonlyArray<string> | undefined,
-  b: ReadonlyArray<string>,
-) => {
+const sameReasons = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<string>) => {
   const left = [...(a ?? [])].sort();
   const right = [...b].sort();
   return left.length === right.length && left.every((v, i) => v === right[i]);
@@ -236,20 +223,13 @@ export const ConfigurationSetProvider = () =>
         id: string,
         props: Pick<ConfigurationSetProps, "configurationSetName">,
       ) {
-        return (
-          props.configurationSetName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.configurationSetName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getConfigurationSet = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getConfigurationSet({ ConfigurationSetName: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       return ConfigurationSet.Provider.of({
@@ -258,25 +238,18 @@ export const ConfigurationSetProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* sesv2.listConfigurationSets
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* sesv2.listConfigurationSets.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.ConfigurationSets ?? [])
               .map((name) => ({
                 configurationSetName: name,
-                configurationSetArn: configurationSetArnOf(
-                  region,
-                  accountId,
-                  name,
-                ),
+                configurationSetArn: configurationSetArnOf(region, accountId, name),
               }));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.configurationSetName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.configurationSetName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getConfigurationSet(name);
           if (!found) return undefined;
           const attrs = {
@@ -298,13 +271,8 @@ export const ConfigurationSetProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.configurationSetName ?? (yield* createName(id, news));
-          const configurationSetArn = configurationSetArnOf(
-            region,
-            accountId,
-            name,
-          );
+          const name = output?.configurationSetName ?? (yield* createName(id, news));
+          const configurationSetArn = configurationSetArnOf(region, accountId, name);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredMaxDelivery = toWireSeconds(news.maxDelivery);
@@ -329,8 +297,7 @@ export const ConfigurationSetProvider = () =>
                       }
                     : undefined,
                 DeliveryOptions:
-                  news.tlsPolicy !== undefined ||
-                  desiredMaxDelivery !== undefined
+                  news.tlsPolicy !== undefined || desiredMaxDelivery !== undefined
                     ? {
                         TlsPolicy: news.tlsPolicy,
                         MaxDeliverySeconds: desiredMaxDelivery,
@@ -342,11 +309,7 @@ export const ConfigurationSetProvider = () =>
                     : undefined,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
             observed = yield* sesv2.getConfigurationSet({
               ConfigurationSetName: name,
             });
@@ -355,9 +318,7 @@ export const ConfigurationSetProvider = () =>
           // 3. SYNC — per mutable aspect: diff observed against desired and
           //    apply only the delta.
           const desiredSending = news.sendingEnabled ?? true;
-          if (
-            (observed.SendingOptions?.SendingEnabled ?? true) !== desiredSending
-          ) {
+          if ((observed.SendingOptions?.SendingEnabled ?? true) !== desiredSending) {
             yield* sesv2.putConfigurationSetSendingOptions({
               ConfigurationSetName: name,
               SendingEnabled: desiredSending,
@@ -366,8 +327,7 @@ export const ConfigurationSetProvider = () =>
 
           const desiredReputation = news.reputationMetricsEnabled ?? false;
           if (
-            (observed.ReputationOptions?.ReputationMetricsEnabled ?? false) !==
-            desiredReputation
+            (observed.ReputationOptions?.ReputationMetricsEnabled ?? false) !== desiredReputation
           ) {
             yield* sesv2.putConfigurationSetReputationOptions({
               ConfigurationSetName: name,
@@ -377,12 +337,10 @@ export const ConfigurationSetProvider = () =>
 
           const desiredTls = news.tlsPolicy ?? "OPTIONAL";
           const observedTls = observed.DeliveryOptions?.TlsPolicy ?? "OPTIONAL";
-          const observedMaxDelivery =
-            observed.DeliveryOptions?.MaxDeliverySeconds;
+          const observedMaxDelivery = observed.DeliveryOptions?.MaxDeliverySeconds;
           if (
             observedTls !== desiredTls ||
-            (desiredMaxDelivery !== undefined &&
-              observedMaxDelivery !== desiredMaxDelivery)
+            (desiredMaxDelivery !== undefined && observedMaxDelivery !== desiredMaxDelivery)
           ) {
             yield* sesv2.putConfigurationSetDeliveryOptions({
               ConfigurationSetName: name,
@@ -397,10 +355,7 @@ export const ConfigurationSetProvider = () =>
           // unset prop keeps inheriting the account-level defaults.
           if (
             news.suppressedReasons !== undefined &&
-            !sameReasons(
-              observed.SuppressionOptions?.SuppressedReasons,
-              news.suppressedReasons,
-            )
+            !sameReasons(observed.SuppressionOptions?.SuppressedReasons, news.suppressedReasons)
           ) {
             yield* sesv2.putConfigurationSetSuppressionOptions({
               ConfigurationSetName: name,
@@ -418,8 +373,7 @@ export const ConfigurationSetProvider = () =>
             (observed.TrackingOptions?.CustomRedirectDomain !==
               news.tracking.customRedirectDomain ||
               (news.tracking.httpsPolicy !== undefined &&
-                observed.TrackingOptions?.HttpsPolicy !==
-                  news.tracking.httpsPolicy))
+                observed.TrackingOptions?.HttpsPolicy !== news.tracking.httpsPolicy))
           ) {
             yield* sesv2.putConfigurationSetTrackingOptions({
               ConfigurationSetName: name,
@@ -444,10 +398,8 @@ export const ConfigurationSetProvider = () =>
             observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery;
           if (
             news.vdm !== undefined &&
-            (observed.VdmOptions?.DashboardOptions?.EngagementMetrics !==
-              desiredDashboard ||
-              observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery !==
-                desiredGuardian)
+            (observed.VdmOptions?.DashboardOptions?.EngagementMetrics !== desiredDashboard ||
+              observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery !== desiredGuardian)
           ) {
             yield* sesv2.putConfigurationSetVdmOptions({
               ConfigurationSetName: name,

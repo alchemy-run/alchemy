@@ -5,9 +5,8 @@ import type { Cluster } from "./Cluster.ts";
 
 /**
  * Runtime binding for `elasticmapreduce:AddInstanceGroups` — adds task instance groups to the bound cluster (instance-group clusters only). The cluster id is injected as `JobFlowId`.
- * @binding
- * @section Scaling the Cluster
- * @example Add a Task Group
+ * ### Scaling the Cluster
+ * **Example:** Add a Task Group
  * ```typescript
  * const addGroups = yield* AWS.EMR.AddInstanceGroups(cluster);
  *
@@ -19,6 +18,8 @@ import type { Cluster } from "./Cluster.ts";
  *   }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface AddInstanceGroups extends Binding.Service<
   AddInstanceGroups,
@@ -31,6 +32,4 @@ export interface AddInstanceGroups extends Binding.Service<
     ) => Effect.Effect<SVC.AddInstanceGroupsOutput, SVC.AddInstanceGroupsError>
   >
 > {}
-export const AddInstanceGroups = Binding.Service<AddInstanceGroups>(
-  "AWS.EMR.AddInstanceGroups",
-);
+export const AddInstanceGroups = Binding.Service<AddInstanceGroups>("AWS.EMR.AddInstanceGroups");

@@ -6,9 +6,8 @@ import * as Binding from "../../Binding.ts";
  * List the account's compositions in the current region, optionally
  * filtered by stage or encoder configuration.
  *
- * @binding
- * @section Compositing a Stage
- * @example List running compositions
+ * ### Compositing a Stage
+ * **Example:** List running compositions
  * ```typescript
  * // init
  * const listCompositions = yield* IVSRealtime.ListCompositions();
@@ -16,6 +15,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { compositions } = yield* listCompositions();
  * ```
+ *
+ * @binding
  */
 export interface ListCompositions extends Binding.Service<
   ListCompositions,
@@ -23,10 +24,7 @@ export interface ListCompositions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ivsrealtime.ListCompositionsRequest,
-    ) => Effect.Effect<
-      ivsrealtime.ListCompositionsResponse,
-      ivsrealtime.ListCompositionsError
-    >
+    ) => Effect.Effect<ivsrealtime.ListCompositionsResponse, ivsrealtime.ListCompositionsError>
   >
 > {}
 export const ListCompositions = Binding.Service<ListCompositions>(

@@ -12,9 +12,8 @@ import type { ComponentVersion } from "./ComponentVersion.ts";
  * rolling out a deployment. The component version ARN is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.GreengrassV2.DescribeComponentHttp)`.
- * @binding
- * @section Reading Components
- * @example Check A Component's State
+ * ### Reading Components
+ * **Example:** Check A Component's State
  * ```typescript
  * // init — bind the operation to the component version
  * const describeComponent = yield* AWS.GreengrassV2.DescribeComponent(component);
@@ -25,6 +24,8 @@ import type { ComponentVersion } from "./ComponentVersion.ts";
  *   yield* Effect.logWarning(`${metadata.componentName} is deprecated`);
  * }
  * ```
+ *
+ * @binding
  */
 export interface DescribeComponent extends Binding.Service<
   DescribeComponent,
@@ -34,10 +35,7 @@ export interface DescribeComponent extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<greengrassv2.DescribeComponentRequest, "arn">,
-    ) => Effect.Effect<
-      greengrassv2.DescribeComponentResponse,
-      greengrassv2.DescribeComponentError
-    >
+    ) => Effect.Effect<greengrassv2.DescribeComponentResponse, greengrassv2.DescribeComponentError>
   >
 > {}
 export const DescribeComponent = Binding.Service<DescribeComponent>(

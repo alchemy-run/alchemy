@@ -14,9 +14,8 @@ import type { AccessKey } from "./AccessKey.ts";
  * `iam:GetAccessKeyLastUsed` on `*`. Provide the implementation with
  * `Effect.provide(AWS.IAM.GetAccessKeyLastUsedHttp)`.
  *
- * @binding
- * @section Access Key Hygiene
- * @example Check When a Key Was Last Used
+ * ### Access Key Hygiene
+ * **Example:** Check When a Key Was Last Used
  * ```typescript
  * // init
  * const getAccessKeyLastUsed = yield* IAM.GetAccessKeyLastUsed(accessKey);
@@ -25,6 +24,8 @@ import type { AccessKey } from "./AccessKey.ts";
  * const { AccessKeyLastUsed, UserName } = yield* getAccessKeyLastUsed();
  * const lastUsed = AccessKeyLastUsed?.LastUsedDate;
  * ```
+ *
+ * @binding
  */
 export interface GetAccessKeyLastUsed extends Binding.Service<
   GetAccessKeyLastUsed,
@@ -32,10 +33,7 @@ export interface GetAccessKeyLastUsed extends Binding.Service<
   <K extends AccessKey>(
     accessKey: K,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      iam.GetAccessKeyLastUsedResponse,
-      iam.GetAccessKeyLastUsedError
-    >
+    () => Effect.Effect<iam.GetAccessKeyLastUsedResponse, iam.GetAccessKeyLastUsedError>
   >
 > {}
 export const GetAccessKeyLastUsed = Binding.Service<GetAccessKeyLastUsed>(

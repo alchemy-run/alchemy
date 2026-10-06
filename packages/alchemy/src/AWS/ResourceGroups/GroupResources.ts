@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link GroupResources} — the group is injected from the binding. */
-export type GroupResourcesRequest = Omit<
-  resourcegroups.GroupResourcesInput,
-  "Group"
->;
+export type GroupResourcesRequest = Omit<resourcegroups.GroupResourcesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:GroupResources`.
@@ -24,9 +21,8 @@ export type GroupResourcesRequest = Omit<
  * additionally require their own `TagResource` permission on the caller).
  * Provide the implementation with
  * `Effect.provide(AWS.ResourceGroups.GroupResourcesHttp)`.
- * @binding
- * @section Managing Group Membership
- * @example Add A Resource To An Application Group
+ * ### Managing Group Membership
+ * **Example:** Add A Resource To An Application Group
  * ```typescript
  * // init — bind the operation to the group
  * const groupResources = yield* AWS.ResourceGroups.GroupResources(group);
@@ -36,6 +32,8 @@ export type GroupResourcesRequest = Omit<
  *   ResourceArns: [resourceArn],
  * });
  * ```
+ *
+ * @binding
  */
 export interface GroupResources extends Binding.Service<
   GroupResources,
@@ -45,12 +43,7 @@ export interface GroupResources extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GroupResourcesRequest,
-    ) => Effect.Effect<
-      resourcegroups.GroupResourcesOutput,
-      resourcegroups.GroupResourcesError
-    >
+    ) => Effect.Effect<resourcegroups.GroupResourcesOutput, resourcegroups.GroupResourcesError>
   >
 > {}
-export const GroupResources = Binding.Service<GroupResources>(
-  "AWS.ResourceGroups.GroupResources",
-);
+export const GroupResources = Binding.Service<GroupResources>("AWS.ResourceGroups.GroupResources");

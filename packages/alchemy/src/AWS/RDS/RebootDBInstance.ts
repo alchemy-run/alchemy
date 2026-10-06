@@ -11,9 +11,8 @@ import type { DBInstance } from "./DBInstance.ts";
  * failover for Multi-AZ deployments) — e.g. to apply static parameter
  * changes. The instance identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.RebootDBInstanceHttp)`.
- * @binding
- * @section Operating an Instance
- * @example Reboot an Instance
+ * ### Operating an Instance
+ * **Example:** Reboot an Instance
  * ```typescript
  * // init — bind the operation to the instance
  * const rebootDBInstance = yield* AWS.RDS.RebootDBInstance(instance);
@@ -21,6 +20,8 @@ import type { DBInstance } from "./DBInstance.ts";
  * // runtime
  * yield* rebootDBInstance();
  * ```
+ *
+ * @binding
  */
 export interface RebootDBInstance extends Binding.Service<
   RebootDBInstance,
@@ -33,6 +34,4 @@ export interface RebootDBInstance extends Binding.Service<
     ) => Effect.Effect<rds.RebootDBInstanceResult, rds.RebootDBInstanceError>
   >
 > {}
-export const RebootDBInstance = Binding.Service<RebootDBInstance>(
-  "AWS.RDS.RebootDBInstance",
-);
+export const RebootDBInstance = Binding.Service<RebootDBInstance>("AWS.RDS.RebootDBInstance");

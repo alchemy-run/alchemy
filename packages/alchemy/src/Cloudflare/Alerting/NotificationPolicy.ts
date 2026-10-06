@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -113,11 +112,8 @@ export type NotificationPolicy = Resource<
  * A notification policy connects an alert type (the event Cloudflare
  * watches for) to one or more destinations — email addresses, webhook
  * destinations, or PagerDuty services — optionally narrowed by filters.
- * @resource
- * @product Alerting
- * @category Observability & Analytics
- * @section Creating a policy
- * @example Email notifications for Universal SSL events
+ * ### Creating a policy
+ * **Example:** Email notifications for Universal SSL events
  * ```typescript
  * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
@@ -125,7 +121,7 @@ export type NotificationPolicy = Resource<
  * });
  * ```
  *
- * @example Disabled policy with a description
+ * **Example:** Disabled policy with a description
  * ```typescript
  * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
@@ -135,8 +131,8 @@ export type NotificationPolicy = Resource<
  * });
  * ```
  *
- * @section Webhook destinations
- * @example Dispatch to a webhook destination
+ * ### Webhook destinations
+ * **Example:** Dispatch to a webhook destination
  * ```typescript
  * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   url: "https://alerts.example.com/cf",
@@ -148,8 +144,8 @@ export type NotificationPolicy = Resource<
  * });
  * ```
  *
- * @section Filters
- * @example Health check alerts for specific zones
+ * ### Filters
+ * **Example:** Health check alerts for specific zones
  * ```typescript
  * yield* Cloudflare.Alerting.NotificationPolicy("HealthAlerts", {
  *   alertType: "health_check_status_notification",
@@ -162,15 +158,17 @@ export type NotificationPolicy = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/notifications/
+ *
+ * @resource
+ * @product Alerting
+ * @category Observability & Analytics
  */
 export const NotificationPolicy = Resource<NotificationPolicy>(TypeId);
 
 /**
  * Returns true if the given value is a NotificationPolicy resource.
  */
-export const isNotificationPolicy = (
-  value: unknown,
-): value is NotificationPolicy =>
+export const isNotificationPolicy = (value: unknown): value is NotificationPolicy =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NotificationPolicyProvider = () =>
@@ -252,9 +250,7 @@ export const NotificationPolicyProvider = () =>
         });
         if (!created.id) {
           return yield* Effect.fail(
-            new Error(
-              "Cloudflare did not return an id for the created notification policy",
-            ),
+            new Error("Cloudflare did not return an id for the created notification policy"),
           );
         }
         const fresh = yield* observePolicy(accountId, created.id);
@@ -300,8 +296,7 @@ interface ObservedPolicy {
   readonly modified?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowPolicy = (raw: {
   id?: string | null;
@@ -364,10 +359,7 @@ const createPolicyName = (id: string, name: string | undefined) =>
 
 type PolicyBody = Omit<alerting.CreatePolicyRequest, "accountId">;
 
-const buildPolicyBody = (
-  name: string,
-  news: NotificationPolicyProps,
-): PolicyBody => ({
+const buildPolicyBody = (name: string, news: NotificationPolicyProps): PolicyBody => ({
   name,
   alertType: news.alertType,
   enabled: news.enabled ?? true,
@@ -385,10 +377,7 @@ const buildPolicyBody = (
  * dropped and object keys sorted, since Cloudflare echoes optional fields
  * as `null`.
  */
-const policyEqualsObserved = (
-  desired: PolicyBody,
-  observed: ObservedPolicy,
-): boolean =>
+const policyEqualsObserved = (desired: PolicyBody, observed: ObservedPolicy): boolean =>
   desired.name === (observed.name ?? "") &&
   desired.enabled === (observed.enabled ?? true) &&
   (desired.description ?? "") === (observed.description ?? "") &&

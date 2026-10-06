@@ -10,9 +10,8 @@ import type { Instance } from "./Instance.ts";
  * Applies attribute patch operations to a user in the bound instance's identity store (display name, emails, addresses, ...). The instance's
  * `IdentityStoreId` is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.IdentityCenter.UpdateUserHttp)`.
- * @binding
- * @section Managing Users
- * @example Update a User's Display Name
+ * ### Managing Users
+ * **Example:** Update a User's Display Name
  * ```typescript
  * // init — bind the operation to the Identity Center instance
  * const updateUser = yield* AWS.IdentityCenter.UpdateUser(instance);
@@ -25,6 +24,8 @@ import type { Instance } from "./Instance.ts";
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateUser extends Binding.Service<
   UpdateUser,
@@ -34,12 +35,7 @@ export interface UpdateUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.UpdateUserRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.UpdateUserResponse,
-      identitystore.UpdateUserError
-    >
+    ) => Effect.Effect<identitystore.UpdateUserResponse, identitystore.UpdateUserError>
   >
 > {}
-export const UpdateUser = Binding.Service<UpdateUser>(
-  "AWS.IdentityCenter.UpdateUser",
-);
+export const UpdateUser = Binding.Service<UpdateUser>("AWS.IdentityCenter.UpdateUser");

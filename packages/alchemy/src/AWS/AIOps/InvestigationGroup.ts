@@ -133,9 +133,8 @@ export interface InvestigationGroup extends Resource<
  *
  * You can have at most one investigation group per Region in an account, so
  * replacements are performed delete-first.
- * @resource
- * @section Creating an Investigation Group
- * @example Basic Investigation Group
+ * ### Creating an Investigation Group
+ * **Example:** Basic Investigation Group
  * ```typescript
  * import * as AIOps from "alchemy/AWS/AIOps";
  * import * as IAM from "alchemy/AWS/IAM";
@@ -157,7 +156,7 @@ export interface InvestigationGroup extends Resource<
  * });
  * ```
  *
- * @example Short Retention and Tag Boundaries
+ * **Example:** Short Retention and Tag Boundaries
  * ```typescript
  * const group = yield* AIOps.InvestigationGroup("Investigations", {
  *   roleArn: role.roleArn,
@@ -167,8 +166,8 @@ export interface InvestigationGroup extends Resource<
  * });
  * ```
  *
- * @section Resource Policy
- * @example Let CloudWatch Alarms Start Investigations
+ * ### Resource Policy
+ * **Example:** Let CloudWatch Alarms Start Investigations
  * ```typescript
  * const group = yield* AIOps.InvestigationGroup("Investigations", {
  *   roleArn: role.roleArn,
@@ -184,10 +183,10 @@ export interface InvestigationGroup extends Resource<
  *   }],
  * });
  * ```
+ *
+ * @resource
  */
-export const InvestigationGroup = Resource<InvestigationGroup>(
-  "AWS.AIOps.InvestigationGroup",
-);
+export const InvestigationGroup = Resource<InvestigationGroup>("AWS.AIOps.InvestigationGroup");
 
 /**
  * Bounded retry for `createInvestigationGroup` while the freshly created IAM
@@ -203,8 +202,7 @@ const retryWhileRolePropagates = <A, R>(
 ): Effect.Effect<A, aiops.CreateInvestigationGroupError, R> =>
   Effect.retry(self, {
     while: (e) =>
-      (e._tag === "ValidationException" ||
-        e._tag === "AccessDeniedException") &&
+      (e._tag === "ValidationException" || e._tag === "AccessDeniedException") &&
       /role/i.test(e.message ?? ""),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
   });
@@ -226,26 +224,17 @@ export const InvestigationGroupProvider = () =>
       const observeByArn = (arn: string) =>
         aiops
           .getInvestigationGroup({ identifier: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // At most one investigation group exists per Region, so scanning the
       // list for our name is a single cheap call.
       const findArnByName = (name: string) =>
         aiops.listInvestigationGroups.items({}).pipe(
           Stream.runCollect,
-          Effect.map(
-            (items) => Array.from(items).find((g) => g.name === name)?.arn,
-          ),
+          Effect.map((items) => Array.from(items).find((g) => g.name === name)?.arn),
         );
 
-      const observe = Effect.fn(function* (
-        name: string,
-        arnHint: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, arnHint: string | undefined) {
         if (arnHint !== undefined) {
           const found = yield* observeByArn(arnHint);
           if (found !== undefined) return found;
@@ -279,9 +268,7 @@ export const InvestigationGroupProvider = () =>
         stables: ["name", "arn"],
         list: () =>
           Effect.gen(function* () {
-            const items = yield* aiops.listInvestigationGroups
-              .items({})
-              .pipe(Stream.runCollect);
+            const items = yield* aiops.listInvestigationGroups.items({}).pipe(Stream.runCollect);
             const groups: {
               name: string;
               arn: string;
@@ -345,24 +332,19 @@ export const InvestigationGroupProvider = () =>
                 encryptionConfiguration: news.encryptionConfiguration,
                 tagKeyBoundaries: news.tagKeyBoundaries,
                 chatbotNotificationChannel: news.chatbotNotificationChannel,
-                isCloudTrailEventHistoryEnabled:
-                  news.isCloudTrailEventHistoryEnabled,
+                isCloudTrailEventHistoryEnabled: news.isCloudTrailEventHistoryEnabled,
                 crossAccountConfigurations: news.crossAccountConfigurations,
                 tags: desiredTags,
               })
               .pipe(
                 retryWhileRolePropagates,
                 Effect.flatMap((created) =>
-                  created.arn === undefined
-                    ? observe(name, undefined)
-                    : observeByArn(created.arn),
+                  created.arn === undefined ? observe(name, undefined) : observeByArn(created.arn),
                 ),
                 Effect.catchTag("ConflictException", (error) =>
                   observe(name, undefined).pipe(
                     Effect.flatMap((existing) =>
-                      existing === undefined
-                        ? Effect.fail(error)
-                        : Effect.succeed(existing),
+                      existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
                     ),
                   ),
                 ),
@@ -375,10 +357,7 @@ export const InvestigationGroupProvider = () =>
           //    state and PATCH only on drift. Aspects the user leaves
           //    undefined are unmanaged (left as observed).
           if (live !== undefined && arn !== undefined) {
-            const update: Omit<
-              aiops.UpdateInvestigationGroupRequest,
-              "identifier"
-            > = {};
+            const update: Omit<aiops.UpdateInvestigationGroupRequest, "identifier"> = {};
             if (live.roleArn !== news.roleArn) {
               update.roleArn = news.roleArn;
             }
@@ -386,43 +365,35 @@ export const InvestigationGroupProvider = () =>
               news.encryptionConfiguration !== undefined &&
               ((live.encryptionConfiguration?.type ?? "AWS_OWNED_KEY") !==
                 (news.encryptionConfiguration.type ?? "AWS_OWNED_KEY") ||
-                live.encryptionConfiguration?.kmsKeyId !==
-                  news.encryptionConfiguration.kmsKeyId)
+                live.encryptionConfiguration?.kmsKeyId !== news.encryptionConfiguration.kmsKeyId)
             ) {
               update.encryptionConfiguration = news.encryptionConfiguration;
             }
             if (
               news.tagKeyBoundaries !== undefined &&
-              !sameStringArray(
-                live.tagKeyBoundaries ?? [],
-                news.tagKeyBoundaries,
-              )
+              !sameStringArray(live.tagKeyBoundaries ?? [], news.tagKeyBoundaries)
             ) {
               update.tagKeyBoundaries = news.tagKeyBoundaries;
             }
             if (
               news.isCloudTrailEventHistoryEnabled !== undefined &&
-              live.isCloudTrailEventHistoryEnabled !==
-                news.isCloudTrailEventHistoryEnabled
+              live.isCloudTrailEventHistoryEnabled !== news.isCloudTrailEventHistoryEnabled
             ) {
-              update.isCloudTrailEventHistoryEnabled =
-                news.isCloudTrailEventHistoryEnabled;
+              update.isCloudTrailEventHistoryEnabled = news.isCloudTrailEventHistoryEnabled;
             }
             if (
               news.chatbotNotificationChannel !== undefined &&
               JSON.stringify(live.chatbotNotificationChannel ?? {}) !==
                 JSON.stringify(news.chatbotNotificationChannel)
             ) {
-              update.chatbotNotificationChannel =
-                news.chatbotNotificationChannel;
+              update.chatbotNotificationChannel = news.chatbotNotificationChannel;
             }
             if (
               news.crossAccountConfigurations !== undefined &&
               JSON.stringify(live.crossAccountConfigurations ?? []) !==
                 JSON.stringify(news.crossAccountConfigurations)
             ) {
-              update.crossAccountConfigurations =
-                news.crossAccountConfigurations;
+              update.crossAccountConfigurations = news.crossAccountConfigurations;
             }
             if (Object.keys(update).length > 0) {
               yield* aiops.updateInvestigationGroup({
@@ -442,20 +413,13 @@ export const InvestigationGroupProvider = () =>
               .getInvestigationGroupPolicy({ identifier: arn })
               .pipe(
                 Effect.map((r) => r.policy),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               );
             if (news.policy.length === 0) {
               if (observedPolicy !== undefined) {
                 yield* aiops
                   .deleteInvestigationGroupPolicy({ identifier: arn })
-                  .pipe(
-                    Effect.catchTag(
-                      "ResourceNotFoundException",
-                      () => Effect.void,
-                    ),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
               }
             } else {
               const desiredPolicy = JSON.stringify({
@@ -465,9 +429,7 @@ export const InvestigationGroupProvider = () =>
               const inSync = yield* Effect.sync(() => {
                 if (observedPolicy === undefined) return false;
                 try {
-                  return (
-                    JSON.stringify(JSON.parse(observedPolicy)) === desiredPolicy
-                  );
+                  return JSON.stringify(JSON.parse(observedPolicy)) === desiredPolicy;
                 } catch {
                   return false;
                 }
@@ -505,16 +467,13 @@ export const InvestigationGroupProvider = () =>
             name: live?.name ?? name,
             arn: arn!,
             roleArn: live?.roleArn ?? news.roleArn,
-            retentionInDays:
-              live?.retentionInDays ?? toWireDays(news.retention),
+            retentionInDays: live?.retentionInDays ?? toWireDays(news.retention),
           };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* aiops
             .deleteInvestigationGroup({ identifier: output.arn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

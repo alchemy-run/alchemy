@@ -19,14 +19,13 @@ export interface DeleteMessageRequest extends Omit<
  * ID from the WebSocket `SendMessage` response); an optional `reason` is
  * attached to the event.
  *
- * @binding
- * @section Moderating Messages
+ * ### Moderating Messages
  * Provide the `DeleteMessageHttp` implementation layer on the Function
  * effect, bind the room in the init phase, then call the returned client at
  * runtime. The binding grants `ivschat:DeleteMessage` on the room and
  * injects its ARN as the `roomIdentifier` automatically.
  *
- * @example Delete a message from a Lambda
+ * **Example:** Delete a message from a Lambda
  * ```typescript
  * // init
  * const room = yield* IVSChat.Room("LiveChat");
@@ -45,6 +44,8 @@ export interface DeleteMessageRequest extends Omit<
  * // on the Function effect:
  * // .pipe(Effect.provide(IVSChat.DeleteMessageHttp))
  * ```
+ *
+ * @binding
  */
 export interface DeleteMessage extends Binding.Service<
   DeleteMessage,
@@ -54,12 +55,7 @@ export interface DeleteMessage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteMessageRequest,
-    ) => Effect.Effect<
-      ivschat.DeleteMessageResponse,
-      ivschat.DeleteMessageError
-    >
+    ) => Effect.Effect<ivschat.DeleteMessageResponse, ivschat.DeleteMessageError>
   >
 > {}
-export const DeleteMessage = Binding.Service<DeleteMessage>(
-  "AWS.IVSChat.DeleteMessage",
-);
+export const DeleteMessage = Binding.Service<DeleteMessage>("AWS.IVSChat.DeleteMessage");

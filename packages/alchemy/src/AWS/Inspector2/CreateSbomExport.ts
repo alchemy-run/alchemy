@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.CreateSbomExportHttp)`.
- * @binding
- * @section Findings Reports & SBOM Exports
- * @example Export an SBOM
+ * ### Findings Reports & SBOM Exports
+ * **Example:** Export an SBOM
  * ```typescript
  * // init
  * const createSbomExport = yield* AWS.Inspector2.CreateSbomExport();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   s3Destination: { bucketName, keyPrefix: "sbom/", kmsKeyArn },
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateSbomExport extends Binding.Service<
   CreateSbomExport,
@@ -29,10 +30,7 @@ export interface CreateSbomExport extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.CreateSbomExportRequest,
-    ) => Effect.Effect<
-      inspector2.CreateSbomExportResponse,
-      inspector2.CreateSbomExportError
-    >
+    ) => Effect.Effect<inspector2.CreateSbomExportResponse, inspector2.CreateSbomExportError>
   >
 > {}
 export const CreateSbomExport = Binding.Service<CreateSbomExport>(

@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -76,11 +75,8 @@ export type DeviceManagedNetwork = Resource<
  *
  * Name and config are mutable in place (PUT). `tls` is the only network
  * type Cloudflare supports.
- * @resource
- * @product Devices
- * @category Cloudflare One (Zero Trust)
- * @section Creating a managed network
- * @example Detect the office network by TLS fingerprint
+ * ### Creating a managed network
+ * **Example:** Detect the office network by TLS fingerprint
  * ```typescript
  * const network = yield* Cloudflare.Devices.DeviceManagedNetwork("Office", {
  *   config: {
@@ -91,7 +87,7 @@ export type DeviceManagedNetwork = Resource<
  * });
  * ```
  *
- * @example Use the network in a custom device profile
+ * **Example:** Use the network in a custom device profile
  * ```typescript
  * yield* Cloudflare.Devices.DeviceCustomProfile("OnPrem", {
  *   match: `network == "${network.name}"`,
@@ -101,15 +97,17 @@ export type DeviceManagedNetwork = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/warp/configure-warp/managed-networks/
+ *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  */
 export const DeviceManagedNetwork = Resource<DeviceManagedNetwork>(TypeId);
 
 /**
  * Returns true if the given value is a DeviceManagedNetwork resource.
  */
-export const isDeviceManagedNetwork = (
-  value: unknown,
-): value is DeviceManagedNetwork =>
+export const isDeviceManagedNetwork = (value: unknown): value is DeviceManagedNetwork =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DeviceManagedNetworkProvider = () =>
@@ -180,9 +178,7 @@ export const DeviceManagedNetworkProvider = () =>
 
       // 3. Sync — PUT name/config when the observed state differs; skip
       //    the call entirely on a no-op.
-      const dirty =
-        (observed.name ?? "") !== name ||
-        !sameConfig(observed.config, news.config);
+      const dirty = (observed.name ?? "") !== name || !sameConfig(observed.config, news.config);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -225,9 +221,7 @@ type ObservedNetwork = {
 const observeNetwork = (accountId: string, networkId: string) =>
   zeroTrust
     .getDeviceNetwork({ accountId, networkId })
-    .pipe(
-      Effect.catchTag("DeviceNetworkNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("DeviceNetworkNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a managed network by exact name. Names are unique per account.
@@ -235,11 +229,7 @@ const observeNetwork = (accountId: string, networkId: string) =>
 const findByName = (accountId: string, name: string) =>
   zeroTrust
     .listDeviceNetworks({ accountId })
-    .pipe(
-      Effect.map((list) =>
-        list.result.find((n) => n.name === name && n.networkId != null),
-      ),
-    );
+    .pipe(Effect.map((list) => list.result.find((n) => n.name === name && n.networkId != null)));
 
 const createNetworkName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

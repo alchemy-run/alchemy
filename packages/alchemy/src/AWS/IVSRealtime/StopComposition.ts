@@ -7,9 +7,8 @@ import * as Binding from "../../Binding.ts";
  * destinations ends. Compositions are addressed by the server-generated
  * ARN returned by `StartComposition`.
  *
- * @binding
- * @section Compositing a Stage
- * @example Stop a running composition
+ * ### Compositing a Stage
+ * **Example:** Stop a running composition
  * ```typescript
  * // init
  * const stopComposition = yield* IVSRealtime.StopComposition();
@@ -17,6 +16,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* stopComposition({ arn: compositionArn });
  * ```
+ *
+ * @binding
  */
 export interface StopComposition extends Binding.Service<
   StopComposition,
@@ -24,12 +25,7 @@ export interface StopComposition extends Binding.Service<
   () => Effect.Effect<
     (
       request: ivsrealtime.StopCompositionRequest,
-    ) => Effect.Effect<
-      ivsrealtime.StopCompositionResponse,
-      ivsrealtime.StopCompositionError
-    >
+    ) => Effect.Effect<ivsrealtime.StopCompositionResponse, ivsrealtime.StopCompositionError>
   >
 > {}
-export const StopComposition = Binding.Service<StopComposition>(
-  "AWS.IVSRealtime.StopComposition",
-);
+export const StopComposition = Binding.Service<StopComposition>("AWS.IVSRealtime.StopComposition");

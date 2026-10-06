@@ -62,8 +62,8 @@ export interface ExperimentEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Experiment Events
- * @example Report When an Experiment Finishes
+ * ### Consuming Experiment Events
+ * **Example:** Report When an Experiment Finishes
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -96,8 +96,7 @@ export const consumeExperimentEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.fis"],
       "detail-type": ["FIS Experiment State Change"],
-      ...(props.experimentTemplateIds !== undefined ||
-      props.statuses !== undefined
+      ...(props.experimentTemplateIds !== undefined || props.statuses !== undefined
         ? {
             detail: {
               ...(props.experimentTemplateIds !== undefined

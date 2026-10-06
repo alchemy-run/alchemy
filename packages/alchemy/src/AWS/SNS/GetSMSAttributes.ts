@@ -10,13 +10,14 @@ export interface GetSMSAttributesRequest extends sns.GetSMSAttributesInput {}
  * An account-scoped operation — reads the account-level SMS settings such
  * as `DefaultSMSType`, `MonthlySpendLimit`, and delivery-status sampling.
  * Provide the `GetSMSAttributesHttp` layer on the Function to implement the binding.
- * @binding
- * @section SMS Account Settings
- * @example Read SMS Settings
+ * ### SMS Account Settings
+ * **Example:** Read SMS Settings
  * ```typescript
  * const getSmsAttributes = yield* SNS.GetSMSAttributes();
  * const { attributes } = yield* getSmsAttributes();
  * ```
+ *
+ * @binding
  */
 export interface GetSMSAttributes extends Binding.Service<
   GetSMSAttributes,
@@ -28,6 +29,4 @@ export interface GetSMSAttributes extends Binding.Service<
   >
 > {}
 
-export const GetSMSAttributes = Binding.Service<GetSMSAttributes>(
-  "AWS.SNS.GetSMSAttributes",
-);
+export const GetSMSAttributes = Binding.Service<GetSMSAttributes>("AWS.SNS.GetSMSAttributes");

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface PutRecordRequest extends Omit<
-  Kinesis.PutRecordInput,
-  "StreamName"
-> {}
+export interface PutRecordRequest extends Omit<Kinesis.PutRecordInput, "StreamName"> {}
 
 /**
  * Runtime binding for `kinesis:PutRecord`.
@@ -15,12 +12,11 @@ export interface PutRecordRequest extends Omit<
  * callable that writes single records — the stream name is injected
  * automatically and `kinesis:PutRecord` is granted on the stream. Provide the
  * implementation with `Effect.provide(AWS.Kinesis.PutRecordHttp)`.
- * @binding
- * @section Writing Records
- * @example Put a Record from a Handler
+ * ### Writing Records
+ * **Example:** Put a Record from a Handler
  * ```typescript
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.Kinesis.Stream("OrdersStream");
  *     // init — bind the operation to the stream
@@ -39,6 +35,8 @@ export interface PutRecordRequest extends Omit<
  *   }).pipe(Effect.provide(AWS.Kinesis.PutRecordHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface PutRecord extends Binding.Service<
   PutRecord,
@@ -46,9 +44,7 @@ export interface PutRecord extends Binding.Service<
   (
     stream: Stream,
   ) => Effect.Effect<
-    (
-      request: PutRecordRequest,
-    ) => Effect.Effect<Kinesis.PutRecordOutput, Kinesis.PutRecordError>
+    (request: PutRecordRequest) => Effect.Effect<Kinesis.PutRecordOutput, Kinesis.PutRecordError>
   >
 > {}
 

@@ -56,9 +56,8 @@ export interface Resource extends AlchemyResource<
  * Formation can vend temporary credentials for data stored there
  * (`DATA_LOCATION_ACCESS` grants, governed tables, etc.).
  *
- * @resource
- * @section Registering Locations
- * @example Register a Bucket with the Service-Linked Role
+ * ### Registering Locations
+ * **Example:** Register a Bucket with the Service-Linked Role
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -68,7 +67,7 @@ export interface Resource extends AlchemyResource<
  * });
  * ```
  *
- * @example Register with a Custom Data-Access Role
+ * **Example:** Register with a Custom Data-Access Role
  * ```typescript
  * const location = yield* AWS.LakeFormation.Resource("DataLakeLocation", {
  *   resourceArn: bucket.bucketArn,
@@ -76,6 +75,8 @@ export interface Resource extends AlchemyResource<
  *   hybridAccessEnabled: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Resource = AlchemyResource<Resource>("AWS.LakeFormation.Resource");
 
@@ -86,9 +87,7 @@ export const ResourceProvider = () =>
       const observe = Effect.fn(function* (resourceArn: string) {
         return yield* lf.describeResource({ ResourceArn: resourceArn }).pipe(
           Effect.map((r) => r.ResourceInfo),
-          Effect.catchTag("EntityNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -97,9 +96,7 @@ export const ResourceProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* lf.listResources
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lf.listResources.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.ResourceInfoList ?? [])
               .filter((info) => info.ResourceArn !== undefined)
@@ -139,9 +136,7 @@ export const ResourceProvider = () =>
           const register = lf.registerResource({
             ResourceArn: resourceArn,
             UseServiceLinkedRole:
-              news.roleArn !== undefined
-                ? undefined
-                : (news.useServiceLinkedRole ?? true),
+              news.roleArn !== undefined ? undefined : (news.useServiceLinkedRole ?? true),
             RoleArn: news.roleArn,
             WithFederation: news.withFederation,
             HybridAccessEnabled: news.hybridAccessEnabled,
@@ -152,15 +147,12 @@ export const ResourceProvider = () =>
 
           // 2. ENSURE
           if (info === undefined) {
-            yield* register.pipe(
-              Effect.catchTag("AlreadyExistsException", () => Effect.void),
-            );
+            yield* register.pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
             info = yield* observe(resourceArn);
           } else {
             // 3. SYNC — role and registration flags, observed vs desired.
             const desiredRole = news.roleArn;
-            const roleDrift =
-              desiredRole !== undefined && desiredRole !== info.RoleArn;
+            const roleDrift = desiredRole !== undefined && desiredRole !== info.RoleArn;
             const hybridDrift =
               news.hybridAccessEnabled !== undefined &&
               news.hybridAccessEnabled !== (info.HybridAccessEnabled ?? false);
@@ -169,9 +161,7 @@ export const ResourceProvider = () =>
               news.withFederation !== (info.WithFederation ?? false);
             if (roleDrift || hybridDrift || federationDrift) {
               const slrManaged =
-                info.RoleArn?.includes(
-                  "/aws-service-role/lakeformation.amazonaws.com/",
-                ) ?? false;
+                info.RoleArn?.includes("/aws-service-role/lakeformation.amazonaws.com/") ?? false;
               if (slrManaged) {
                 // UpdateResource rejects registrations held by the
                 // service-linked role ("Resource managed by Service Linked
@@ -180,10 +170,7 @@ export const ResourceProvider = () =>
                   Effect.catchTag("EntityNotFoundException", () => Effect.void),
                   // spurious error on the last SLR location — the
                   // deregistration still succeeds (see delete below)
-                  Effect.catchTag(
-                    "LastServiceLinkedRoleRegistration",
-                    () => Effect.void,
-                  ),
+                  Effect.catchTag("LastServiceLinkedRoleRegistration", () => Effect.void),
                 );
                 yield* register;
               } else {
@@ -211,22 +198,20 @@ export const ResourceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* lf
-            .deregisterResource({ ResourceArn: output.resourceArn })
-            .pipe(
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-              // Deregistering the LAST location registered with the
-              // service-linked role returns "Must manually delete
-              // service-linked role to deregister last S3 location" even
-              // though the registration IS removed (verified live). Verify
-              // and only re-fail if the registration is still present.
-              Effect.catchTag("LastServiceLinkedRoleRegistration", (error) =>
-                lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
-                  Effect.flatMap(() => Effect.fail(error)),
-                  Effect.catchTag("EntityNotFoundException", () => Effect.void),
-                ),
+          yield* lf.deregisterResource({ ResourceArn: output.resourceArn }).pipe(
+            Effect.catchTag("EntityNotFoundException", () => Effect.void),
+            // Deregistering the LAST location registered with the
+            // service-linked role returns "Must manually delete
+            // service-linked role to deregister last S3 location" even
+            // though the registration IS removed (verified live). Verify
+            // and only re-fail if the registration is still present.
+            Effect.catchTag("LastServiceLinkedRoleRegistration", (error) =>
+              lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
+                Effect.flatMap(() => Effect.fail(error)),
+                Effect.catchTag("EntityNotFoundException", () => Effect.void),
               ),
-            );
+            ),
+          );
         }),
       });
     }),

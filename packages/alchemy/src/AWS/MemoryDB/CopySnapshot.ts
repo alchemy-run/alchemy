@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * Makes a copy of an existing snapshot, optionally exporting it to an S3
  * bucket via `TargetBucket`. Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.CopySnapshotHttp)`.
- * @binding
- * @section Managing Snapshots
- * @example Copy a Snapshot
+ * ### Managing Snapshots
+ * **Example:** Copy a Snapshot
  * ```typescript
  * const copySnapshot = yield* MemoryDB.CopySnapshot();
  *
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * // result.Snapshot.Status → "creating"
  * ```
+ *
+ * @binding
  */
 export interface CopySnapshot extends Binding.Service<
   CopySnapshot,
@@ -29,12 +30,7 @@ export interface CopySnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: memorydb.CopySnapshotRequest,
-    ) => Effect.Effect<
-      memorydb.CopySnapshotResponse,
-      memorydb.CopySnapshotError
-    >
+    ) => Effect.Effect<memorydb.CopySnapshotResponse, memorydb.CopySnapshotError>
   >
 > {}
-export const CopySnapshot = Binding.Service<CopySnapshot>(
-  "AWS.MemoryDB.CopySnapshot",
-);
+export const CopySnapshot = Binding.Service<CopySnapshot>("AWS.MemoryDB.CopySnapshot");

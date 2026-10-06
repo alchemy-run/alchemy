@@ -9,10 +9,7 @@ import type { EventDataStore } from "./EventDataStore.ts";
  * `FROM` clause, so `QueryStatement` may be a function that receives the
  * bound store's ID and returns the SQL text.
  */
-export interface StartQueryRequest extends Omit<
-  cloudtrail.StartQueryRequest,
-  "QueryStatement"
-> {
+export interface StartQueryRequest extends Omit<cloudtrail.StartQueryRequest, "QueryStatement"> {
   /**
    * The SQL statement, or a function producing it from the bound event data
    * store's ID (for the `FROM <eventDataStoreId>` clause).
@@ -27,9 +24,8 @@ export interface StartQueryRequest extends Omit<
  * {@link EventDataStore} and returns the `QueryId` to poll with
  * {@link DescribeQuery} / {@link GetQueryResults}. Provide the implementation
  * with `Effect.provide(AWS.CloudTrail.StartQueryHttp)`.
- * @binding
- * @section Querying CloudTrail Lake
- * @example Start a Lake Query
+ * ### Querying CloudTrail Lake
+ * **Example:** Start a Lake Query
  * ```typescript
  * // init — bind the operation to the event data store
  * const startQuery = yield* AWS.CloudTrail.StartQuery(store);
@@ -40,6 +36,8 @@ export interface StartQueryRequest extends Omit<
  *     `SELECT eventID, eventName FROM ${id} LIMIT 10`,
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartQuery extends Binding.Service<
   StartQuery,
@@ -49,12 +47,7 @@ export interface StartQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartQueryRequest,
-    ) => Effect.Effect<
-      cloudtrail.StartQueryResponse,
-      cloudtrail.StartQueryError
-    >
+    ) => Effect.Effect<cloudtrail.StartQueryResponse, cloudtrail.StartQueryError>
   >
 > {}
-export const StartQuery = Binding.Service<StartQuery>(
-  "AWS.CloudTrail.StartQuery",
-);
+export const StartQuery = Binding.Service<StartQuery>("AWS.CloudTrail.StartQuery");

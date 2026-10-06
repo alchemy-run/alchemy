@@ -10,15 +10,16 @@ import type { Revision } from "./Revision.ts";
  * data set and revision ids are injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.DeleteAssetHttp)`.
- * @binding
- * @section Managing Assets
- * @example Remove A Bad Import
+ * ### Managing Assets
+ * **Example:** Remove A Bad Import
  * ```typescript
  * const deleteAsset = yield* AWS.DataExchange.DeleteAsset(revision);
  *
  * // runtime
  * yield* deleteAsset({ AssetId: assetId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteAsset extends Binding.Service<
   DeleteAsset,
@@ -27,16 +28,8 @@ export interface DeleteAsset extends Binding.Service<
     revision: Revision,
   ) => Effect.Effect<
     (
-      request: Omit<
-        dataexchange.DeleteAssetRequest,
-        "DataSetId" | "RevisionId"
-      >,
-    ) => Effect.Effect<
-      dataexchange.DeleteAssetResponse,
-      dataexchange.DeleteAssetError
-    >
+      request: Omit<dataexchange.DeleteAssetRequest, "DataSetId" | "RevisionId">,
+    ) => Effect.Effect<dataexchange.DeleteAssetResponse, dataexchange.DeleteAssetError>
   >
 > {}
-export const DeleteAsset = Binding.Service<DeleteAsset>(
-  "AWS.DataExchange.DeleteAsset",
-);
+export const DeleteAsset = Binding.Service<DeleteAsset>("AWS.DataExchange.DeleteAsset");

@@ -1,7 +1,6 @@
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -35,10 +34,7 @@ export type RecorderType = "RECORDER" | "LIVESTREAMER" | "NONE";
 /**
  * Waiting-room behavior for participants joining with this preset.
  */
-export type WaitingRoomType =
-  | "SKIP"
-  | "ON_PRIVILEGED_USER_ENTRY"
-  | "SKIP_ON_ACCEPT";
+export type WaitingRoomType = "SKIP" | "ON_PRIVILEGED_USER_ENTRY" | "SKIP_ON_ACCEPT";
 
 /**
  * Media configuration of a preset (stream counts, quality, frame rates).
@@ -231,13 +227,7 @@ export type PresetAttributes = {
   permissions: PresetPermissions | undefined;
 };
 
-export type Preset = Resource<
-  TypeId,
-  PresetProps,
-  PresetAttributes,
-  never,
-  Providers
->;
+export type Preset = Resource<TypeId, PresetProps, PresetAttributes, never, Providers>;
 
 /**
  * A Cloudflare RealtimeKit preset — a named participant role (e.g. `host`,
@@ -248,11 +238,8 @@ export type Preset = Resource<
  * the preset to a different app forces a replacement. The create API
  * requires the full config / UI / permissions objects, so the resource fills
  * unspecified sections with sensible defaults.
- * @resource
- * @product Realtime Kit
- * @category Media
- * @section Creating a Preset
- * @example Default group-call preset
+ * ### Creating a Preset
+ * **Example:** Default group-call preset
  * ```typescript
  * const app = yield* Cloudflare.RealtimeKit.App("Meetings", {});
  *
@@ -262,7 +249,7 @@ export type Preset = Resource<
  * });
  * ```
  *
- * @example Host preset with moderation permissions
+ * **Example:** Host preset with moderation permissions
  * ```typescript
  * const host = yield* Cloudflare.RealtimeKit.Preset("Host", {
  *   appId: app.appId,
@@ -277,8 +264,8 @@ export type Preset = Resource<
  * });
  * ```
  *
- * @section Updating a Preset
- * @example Switch to a webinar layout
+ * ### Updating a Preset
+ * **Example:** Switch to a webinar layout
  * ```typescript
  * const preset = yield* Cloudflare.RealtimeKit.Preset("Guest", {
  *   appId: app.appId,
@@ -291,6 +278,10 @@ export type Preset = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/realtime/realtimekit/
+ *
+ * @resource
+ * @product Realtime Kit
+ * @category Media
  */
 export const Preset = Resource<Preset>(TypeId);
 
@@ -453,11 +444,7 @@ export const PresetProvider = () =>
       // Observe — the presetId cached on `output` is a hint, not a
       // guarantee: a missing preset falls through and we recreate.
       const observed = output?.presetId
-        ? yield* getPreset(
-            output.accountId ?? accountId,
-            appId,
-            output.presetId,
-          )
+        ? yield* getPreset(output.accountId ?? accountId, appId, output.presetId)
         : undefined;
 
       if (!observed) {
@@ -470,11 +457,7 @@ export const PresetProvider = () =>
         // leaking / failing.
         const created = yield* realtimeKit
           .createPreset({ accountId, appId, ...desired })
-          .pipe(
-            Effect.catchTag("RealtimeKitPresetExists", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("RealtimeKitPresetExists", () => Effect.succeed(undefined)));
         if (created) {
           return toAttributes(created.data, accountId, appId);
         }
@@ -484,9 +467,7 @@ export const PresetProvider = () =>
           // engine retry the reconcile rather than silently succeeding.
           return yield* realtimeKit
             .createPreset({ accountId, appId, ...desired })
-            .pipe(
-              Effect.map((res) => toAttributes(res.data, accountId, appId)),
-            );
+            .pipe(Effect.map((res) => toAttributes(res.data, accountId, appId)));
         }
         yield* realtimeKit.patchPreset({
           accountId,
@@ -552,17 +533,13 @@ export const PresetProvider = () =>
                 preset.id
                   ? getPreset(accountId, appId, preset.id).pipe(
                       Effect.map((observed) =>
-                        observed
-                          ? toAttributes(observed, accountId, appId)
-                          : undefined,
+                        observed ? toAttributes(observed, accountId, appId) : undefined,
                       ),
                     )
                   : Effect.succeed(undefined),
               { concurrency: 10 },
             );
-            return hydrated.filter(
-              (row): row is PresetAttributes => row !== undefined,
-            );
+            return hydrated.filter((row): row is PresetAttributes => row !== undefined);
           }),
         { concurrency: 10 },
       );
@@ -584,9 +561,7 @@ const listAllApps = (accountId: string) =>
       pageNo: 1,
       perPage: LIST_PER_PAGE,
     });
-    const apps = (first.data ?? []).filter(
-      (a): a is NonNullable<typeof a> => a !== null,
-    );
+    const apps = (first.data ?? []).filter((a): a is NonNullable<typeof a> => a !== null);
     const total = first.paging?.totalCount ?? apps.length;
     const pages = Math.ceil(total / LIST_PER_PAGE);
     if (pages <= 1) return apps;
@@ -597,9 +572,7 @@ const listAllApps = (accountId: string) =>
           .getApp({ accountId, pageNo, perPage: LIST_PER_PAGE })
           .pipe(
             Effect.map((res) =>
-              (res.data ?? []).filter(
-                (a): a is NonNullable<typeof a> => a !== null,
-              ),
+              (res.data ?? []).filter((a): a is NonNullable<typeof a> => a !== null),
             ),
           ),
       { concurrency: 10 },
@@ -643,9 +616,7 @@ type ObservedPreset = realtimeKit.GetPresetByIdPresetResponse["data"];
 const getPreset = (accountId: string, appId: string, presetId: string) =>
   realtimeKit.getPresetByIdPreset({ accountId, appId, presetId }).pipe(
     Effect.map((res) => res.data),
-    Effect.catchTag("RealtimeKitPresetNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("RealtimeKitPresetNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -667,9 +638,7 @@ const createPresetName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const withUiDefaults = (
-  ui: PresetUi | undefined,
-): PresetUi & { configDiff: unknown } => {
+const withUiDefaults = (ui: PresetUi | undefined): PresetUi & { configDiff: unknown } => {
   const base = ui ?? defaultRealtimeKitPresetUi();
   // `config_diff` is required by the API even though it's incidental —
   // default it so users don't have to care.
@@ -683,9 +652,7 @@ const withUiDefaults = (
  * present, and annotating `PresetPermissions` (where it is
  * optional) would erase the guarantee the literal provides.
  */
-const withPermissionsDefaults = (
-  permissions: PresetPermissions | undefined,
-) => {
+const withPermissionsDefaults = (permissions: PresetPermissions | undefined) => {
   const base = permissions ?? defaultRealtimeKitPresetPermissions();
   return {
     ...base,
@@ -712,8 +679,7 @@ const subsetEquals = (desired: unknown, observed: unknown): boolean => {
   ) {
     return Object.entries(desired as Record<string, unknown>).every(
       ([key, value]) =>
-        value === undefined ||
-        subsetEquals(value, (observed as Record<string, unknown>)[key]),
+        value === undefined || subsetEquals(value, (observed as Record<string, unknown>)[key]),
     );
   }
   if (Array.isArray(desired) && Array.isArray(observed)) {
@@ -756,8 +722,7 @@ const toAttributes = (
             audio: {
               ...(preset.config.media.audio.enableHighBitrate != null
                 ? {
-                    enableHighBitrate:
-                      preset.config.media.audio.enableHighBitrate,
+                    enableHighBitrate: preset.config.media.audio.enableHighBitrate,
                   }
                 : {}),
               ...(preset.config.media.audio.enableStereo != null
@@ -792,10 +757,8 @@ const toAttributes = (
   permissions: preset.permissions
     ? {
         acceptWaitingRequests: preset.permissions.acceptWaitingRequests,
-        canAcceptProductionRequests:
-          preset.permissions.canAcceptProductionRequests,
-        canChangeParticipantPermissions:
-          preset.permissions.canChangeParticipantPermissions,
+        canAcceptProductionRequests: preset.permissions.canAcceptProductionRequests,
+        canChangeParticipantPermissions: preset.permissions.canChangeParticipantPermissions,
         canEditDisplayName: preset.permissions.canEditDisplayName,
         canLivestream: preset.permissions.canLivestream,
         canRecord: preset.permissions.canRecord,
@@ -806,8 +769,7 @@ const toAttributes = (
         },
         connectedMeetings: { ...preset.permissions.connectedMeetings },
         disableParticipantAudio: preset.permissions.disableParticipantAudio,
-        disableParticipantScreensharing:
-          preset.permissions.disableParticipantScreensharing,
+        disableParticipantScreensharing: preset.permissions.disableParticipantScreensharing,
         disableParticipantVideo: preset.permissions.disableParticipantVideo,
         hiddenParticipant: preset.permissions.hiddenParticipant,
         kickParticipant: preset.permissions.kickParticipant,
@@ -816,8 +778,7 @@ const toAttributes = (
             canProduce: preset.permissions.media.audio.canProduce as CanProduce,
           },
           screenshare: {
-            canProduce: preset.permissions.media.screenshare
-              .canProduce as CanProduce,
+            canProduce: preset.permissions.media.screenshare.canProduce as CanProduce,
           },
           video: {
             canProduce: preset.permissions.media.video.canProduce as CanProduce,

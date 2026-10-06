@@ -54,9 +54,8 @@ export interface PolicyStoreAlias extends Resource<
  * reference a policy store by a stable name (e.g. in `IsAuthorized`
  * requests) so the underlying store can be swapped without reconfiguring
  * clients.
- * @resource
- * @section Creating an Alias
- * @example Alias with a Generated Name
+ * ### Creating an Alias
+ * **Example:** Alias with a Generated Name
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -67,7 +66,7 @@ export interface PolicyStoreAlias extends Resource<
  * });
  * ```
  *
- * @example Named Alias with Hard Delete
+ * **Example:** Named Alias with Hard Delete
  * ```typescript
  * yield* AWS.VerifiedPermissions.PolicyStoreAlias("Alias", {
  *   policyStoreId: store.policyStoreId,
@@ -75,6 +74,8 @@ export interface PolicyStoreAlias extends Resource<
  *   deletionMode: "HardDelete",
  * });
  * ```
+ *
+ * @resource
  */
 export const PolicyStoreAlias = Resource<PolicyStoreAlias>(
   "AWS.VerifiedPermissions.PolicyStoreAlias",
@@ -92,11 +93,7 @@ export const PolicyStoreAliasProvider = () =>
       const observe = Effect.fn(function* (aliasName: string) {
         return yield* avp
           .getPolicyStoreAlias({ aliasName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return PolicyStoreAlias.Provider.of({
@@ -104,12 +101,8 @@ export const PolicyStoreAliasProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* avp.listPolicyStoreAliases
-              .pages({})
-              .pipe(Stream.runCollect);
-            const items = Array.from(pages).flatMap(
-              (page) => page.policyStoreAliases ?? [],
-            );
+            const pages = yield* avp.listPolicyStoreAliases.pages({}).pipe(Stream.runCollect);
+            const items = Array.from(pages).flatMap((page) => page.policyStoreAliases ?? []);
             return items.map((item) => ({
               aliasName: item.aliasName,
               policyStoreId: item.policyStoreId,
@@ -119,8 +112,7 @@ export const PolicyStoreAliasProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const aliasName =
-            output?.aliasName ??
-            (olds !== undefined ? yield* toAliasName(id, olds) : undefined);
+            output?.aliasName ?? (olds !== undefined ? yield* toAliasName(id, olds) : undefined);
           if (aliasName === undefined) return undefined;
           const alias = yield* observe(aliasName);
           if (alias === undefined || alias.state === "PendingDeletion") {
@@ -158,11 +150,7 @@ export const PolicyStoreAliasProvider = () =>
                 aliasName,
                 policyStoreId: news.policyStoreId,
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             if (created !== undefined) {
               yield* session.note(created.aliasName);
               return {
@@ -176,9 +164,7 @@ export const PolicyStoreAliasProvider = () =>
           const alias = existing ?? (yield* observe(aliasName));
           if (alias === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `policy store alias '${aliasName}' not found after create`,
-              ),
+              new Error(`policy store alias '${aliasName}' not found after create`),
             );
           }
           yield* session.note(alias.aliasName);
@@ -195,9 +181,7 @@ export const PolicyStoreAliasProvider = () =>
               aliasName: output.aliasName,
               deletionMode: olds.deletionMode ?? "HardDelete",
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

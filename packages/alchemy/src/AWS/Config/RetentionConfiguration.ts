@@ -37,9 +37,8 @@ export interface RetentionConfiguration extends Resource<
  * AWS allows only **one** retention configuration per account per region and
  * always names it `default` — treat this resource as an account-region
  * singleton.
- * @resource
- * @section Configuring Retention
- * @example Retain configuration items for one year
+ * ### Configuring Retention
+ * **Example:** Retain configuration items for one year
  * ```typescript
  * import * as Config from "alchemy/AWS/Config";
  *
@@ -48,12 +47,14 @@ export interface RetentionConfiguration extends Resource<
  * });
  * ```
  *
- * @example Minimum retention
+ * **Example:** Minimum retention
  * ```typescript
  * const retention = yield* Config.RetentionConfiguration("Retention", {
  *   retentionPeriod: "30 days",
  * });
  * ```
+ *
+ * @resource
  */
 export const RetentionConfiguration = Resource<RetentionConfiguration>(
   "AWS.Config.RetentionConfiguration",
@@ -67,9 +68,7 @@ export const RetentionConfigurationProvider = () =>
       // filter returns it (or nothing).
       const observeRetention = config.describeRetentionConfigurations({}).pipe(
         Effect.map((r) => (r.RetentionConfigurations ?? []).at(0)),
-        Effect.catchTag("NoSuchRetentionConfigurationException", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.succeed(undefined)),
       );
 
       const toAttrs = (retention: config.RetentionConfiguration) => ({
@@ -100,10 +99,7 @@ export const RetentionConfigurationProvider = () =>
 
           // 2+3. ENSURE + SYNC — PutRetentionConfiguration is a full upsert
           //    of the account-region singleton; skip the API on no-op.
-          if (
-            observed === undefined ||
-            observed.RetentionPeriodInDays !== desiredDays
-          ) {
+          if (observed === undefined || observed.RetentionPeriodInDays !== desiredDays) {
             yield* config.putRetentionConfiguration({
               RetentionPeriodInDays: desiredDays,
             });
@@ -121,12 +117,7 @@ export const RetentionConfigurationProvider = () =>
             .deleteRetentionConfiguration({
               RetentionConfigurationName: output.retentionConfigurationName,
             })
-            .pipe(
-              Effect.catchTag(
-                "NoSuchRetentionConfigurationException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.void));
         }),
       });
     }),

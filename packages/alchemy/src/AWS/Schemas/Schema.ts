@@ -72,9 +72,8 @@ export interface Schema extends Resource<
  * Updating the content publishes a new schema version; previous versions are
  * retained by the registry.
  *
- * @resource
- * @section Creating a Schema
- * @example OpenAPI 3 Schema
+ * ### Creating a Schema
+ * **Example:** OpenAPI 3 Schema
  * ```typescript
  * const registry = yield* AWS.Schemas.Registry("app-events", {});
  *
@@ -97,7 +96,7 @@ export interface Schema extends Resource<
  * });
  * ```
  *
- * @example JSONSchema Draft 4 Schema
+ * **Example:** JSONSchema Draft 4 Schema
  * ```typescript
  * const schema = yield* AWS.Schemas.Schema("UserSignedUp", {
  *   registryName: registry.registryName,
@@ -110,6 +109,8 @@ export interface Schema extends Resource<
  *   description: "Emitted when a user completes sign-up",
  * });
  * ```
+ *
+ * @resource
  */
 export const Schema = Resource<Schema>("AWS.Schemas.Schema");
 
@@ -118,10 +119,7 @@ export const SchemaProvider = () =>
     Schema,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: SchemaProps) {
-        return (
-          props.schemaName ??
-          (yield* createPhysicalName({ id, maxLength: 385 }))
-        );
+        return props.schemaName ?? (yield* createPhysicalName({ id, maxLength: 385 }));
       });
 
       const describe = (registryName: string, schemaName: string) =>
@@ -130,11 +128,7 @@ export const SchemaProvider = () =>
             RegistryName: registryName,
             SchemaName: schemaName,
           })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return Schema.Provider.of({
         stables: ["registryName", "schemaName", "schemaArn"],
@@ -147,8 +141,7 @@ export const SchemaProvider = () =>
           const registryName = output?.registryName ?? olds?.registryName;
           if (registryName === undefined) return undefined;
           const schemaName =
-            output?.schemaName ??
-            (yield* createName(id, olds ?? { registryName, content: "" }));
+            output?.schemaName ?? (yield* createName(id, olds ?? { registryName, content: "" }));
           const found = yield* describe(registryName, schemaName);
           if (!found) return undefined;
           const attrs = {
@@ -158,9 +151,7 @@ export const SchemaProvider = () =>
             schemaVersion: found.SchemaVersion!,
             type: found.Type ?? "OpenApi3",
           };
-          return (yield* hasAlchemyTags(id, found.Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, found.Tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -179,8 +170,7 @@ export const SchemaProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const registryName = news.registryName;
-          const schemaName =
-            output?.schemaName ?? (yield* createName(id, news));
+          const schemaName = output?.schemaName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredType = news.type ?? "OpenApi3";
 
@@ -209,18 +199,13 @@ export const SchemaProvider = () =>
           const contentChanged =
             canonicalJson(news.content) !== canonicalJson(live.Content ?? "") ||
             desiredType !== (live.Type ?? "OpenApi3");
-          const descriptionChanged =
-            (news.description ?? "") !== (live.Description ?? "");
+          const descriptionChanged = (news.description ?? "") !== (live.Description ?? "");
           if (contentChanged || descriptionChanged) {
             yield* schemas.updateSchema({
               RegistryName: registryName,
               SchemaName: schemaName,
-              ...(contentChanged
-                ? { Content: news.content, Type: desiredType }
-                : {}),
-              ...(descriptionChanged
-                ? { Description: news.description ?? "" }
-                : {}),
+              ...(contentChanged ? { Content: news.content, Type: desiredType } : {}),
+              ...(descriptionChanged ? { Description: news.description ?? "" } : {}),
             });
             live = yield* schemas.describeSchema({
               RegistryName: registryName,

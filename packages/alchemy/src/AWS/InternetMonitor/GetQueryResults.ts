@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface GetQueryResultsRequest extends Omit<
-  im.GetQueryResultsInput,
-  "MonitorName"
-> {}
+export interface GetQueryResultsRequest extends Omit<im.GetQueryResultsInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:GetQueryResults` — fetch the result
@@ -15,9 +12,8 @@ export interface GetQueryResultsRequest extends Omit<
  *
  * Provide `InternetMonitor.GetQueryResultsHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Querying Measurements
- * @example Read Query Results
+ * ### Querying Measurements
+ * **Example:** Read Query Results
  * ```typescript
  * // init — grants internetmonitor:GetQueryResults on the monitor
  * const getQueryResults = yield* AWS.InternetMonitor.GetQueryResults(monitor);
@@ -25,6 +21,8 @@ export interface GetQueryResultsRequest extends Omit<
  * // runtime
  * const { Fields, Data } = yield* getQueryResults({ QueryId: queryId });
  * ```
+ *
+ * @binding
  */
 export interface GetQueryResults extends Binding.Service<
   GetQueryResults,

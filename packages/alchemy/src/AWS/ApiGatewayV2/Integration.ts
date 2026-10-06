@@ -125,9 +125,8 @@ export interface IntegrationType extends Resource<
  * For HTTP APIs the common integration is `AWS_PROXY` with payload format
  * `2.0`, pointing directly at a Lambda function ARN. For WebSocket APIs the
  * `integrationUri` must be the full Lambda invocation URI.
- * @resource
- * @section Lambda proxy integration (HTTP API)
- * @example AWS_PROXY integration with payload 2.0
+ * ### Lambda proxy integration (HTTP API)
+ * **Example:** AWS_PROXY integration with payload 2.0
  * ```typescript
  * const integration = yield* ApiGatewayV2.Integration("Fn", {
  *   api,
@@ -137,8 +136,8 @@ export interface IntegrationType extends Resource<
  * });
  * ```
  *
- * @section HTTP proxy integration
- * @example Forward to an external HTTP endpoint
+ * ### HTTP proxy integration
+ * **Example:** Forward to an external HTTP endpoint
  * ```typescript
  * const integration = yield* ApiGatewayV2.Integration("Upstream", {
  *   api,
@@ -148,10 +147,10 @@ export interface IntegrationType extends Resource<
  *   payloadFormatVersion: "1.0",
  * });
  * ```
+ *
+ * @resource
  */
-export const IntegrationResource = Resource<IntegrationType>(
-  "AWS.ApiGatewayV2.Integration",
-);
+export const IntegrationResource = Resource<IntegrationType>("AWS.ApiGatewayV2.Integration");
 
 export interface IntegrationInputProps extends Omit<
   {
@@ -235,20 +234,14 @@ export const IntegrationProvider = () =>
       const getIntegrationSafe = (apiId: string, integrationId: string) =>
         agw2
           .getIntegration({ ApiId: apiId, IntegrationId: integrationId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return IntegrationResource.Provider.of({
         stables: ["apiId", "integrationId"],
 
         list: () =>
           Effect.gen(function* () {
-            const apis = yield* collectAllPages((NextToken) =>
-              agw2.getApis({ NextToken }),
-            );
+            const apis = yield* collectAllPages((NextToken) => agw2.getApis({ NextToken }));
             const perApi = yield* Effect.forEach(
               apis.filter((api) => api.ApiId != null),
               (api) =>
@@ -258,9 +251,7 @@ export const IntegrationProvider = () =>
                   Effect.map((items) =>
                     items
                       .filter((integ) => integ.IntegrationId != null)
-                      .map((integ) =>
-                        snapshotFromIntegration(api.ApiId!, integ),
-                      ),
+                      .map((integ) => snapshotFromIntegration(api.ApiId!, integ)),
                   ),
                   // API deleted between list and getIntegrations — skip it.
                   Effect.catchTag("NotFoundException", () =>
@@ -274,10 +265,7 @@ export const IntegrationProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.apiId || !output.integrationId) return undefined;
-          const integ = yield* getIntegrationSafe(
-            output.apiId,
-            output.integrationId,
-          );
+          const integ = yield* getIntegrationSafe(output.apiId, output.integrationId);
           if (!integ?.IntegrationId) return undefined;
           return snapshotFromIntegration(output.apiId, integ);
         }),
@@ -302,9 +290,7 @@ export const IntegrationProvider = () =>
             observed = yield* retryOnTooManyRequests(
               agw2.createIntegration({ ApiId: apiId, ...desiredRequest(news) }),
             );
-            yield* session.note(
-              `Created integration ${observed.IntegrationId}`,
-            );
+            yield* session.note(`Created integration ${observed.IntegrationId}`);
             return snapshotFromIntegration(apiId, observed);
           }
 
@@ -327,27 +313,16 @@ export const IntegrationProvider = () =>
             (desired.PassthroughBehavior !== undefined &&
               snapshot.passthroughBehavior !== desired.PassthroughBehavior) ||
             (desired.RequestParameters !== undefined &&
-              !deepEqual(
-                snapshot.requestParameters,
-                desired.RequestParameters,
-              )) ||
+              !deepEqual(snapshot.requestParameters, desired.RequestParameters)) ||
             (desired.RequestTemplates !== undefined &&
-              !deepEqual(
-                snapshot.requestTemplates,
-                desired.RequestTemplates,
-              )) ||
+              !deepEqual(snapshot.requestTemplates, desired.RequestTemplates)) ||
             (desired.ResponseParameters !== undefined &&
-              !deepEqual(
-                snapshot.responseParameters,
-                desired.ResponseParameters,
-              )) ||
-            snapshot.templateSelectionExpression !==
-              desired.TemplateSelectionExpression ||
+              !deepEqual(snapshot.responseParameters, desired.ResponseParameters)) ||
+            snapshot.templateSelectionExpression !== desired.TemplateSelectionExpression ||
             (desired.TimeoutInMillis !== undefined &&
               snapshot.timeoutInMillis !== desired.TimeoutInMillis) ||
             (desired.ContentHandlingStrategy !== undefined &&
-              snapshot.contentHandlingStrategy !==
-                desired.ContentHandlingStrategy);
+              snapshot.contentHandlingStrategy !== desired.ContentHandlingStrategy);
           if (drift) {
             const updated = yield* retryOnTooManyRequests(
               agw2.updateIntegration({
@@ -356,9 +331,7 @@ export const IntegrationProvider = () =>
                 ...desired,
               }),
             );
-            yield* session.note(
-              `Updated integration ${snapshot.integrationId}`,
-            );
+            yield* session.note(`Updated integration ${snapshot.integrationId}`);
             return snapshotFromIntegration(apiId, updated);
           }
 

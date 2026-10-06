@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  * `comprehendmedical:DetectPHI` (the action has no resource-level IAM). Pass
  * the clinical note as raw text — no marshalling.
  *
- * @binding
- * @section Detecting PHI
- * @example Detect PHI in a Clinical Note
+ * ### Detecting PHI
+ * **Example:** Detect PHI in a Clinical Note
  * ```typescript
  * // init
  * const detectPHI = yield* AWS.ComprehendMedical.DetectPHI();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const phi = (result.Entities ?? []).map((entity) => entity.Type);
  * ```
+ *
+ * @binding
  */
 export interface DetectPHI extends Binding.Service<
   DetectPHI,
@@ -32,12 +33,7 @@ export interface DetectPHI extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehendmedical.DetectPHIRequest,
-    ) => Effect.Effect<
-      comprehendmedical.DetectPHIResponse,
-      comprehendmedical.DetectPHIError
-    >
+    ) => Effect.Effect<comprehendmedical.DetectPHIResponse, comprehendmedical.DetectPHIError>
   >
 > {}
-export const DetectPHI = Binding.Service<DetectPHI>(
-  "AWS.ComprehendMedical.DetectPHI",
-);
+export const DetectPHI = Binding.Service<DetectPHI>("AWS.ComprehendMedical.DetectPHI");

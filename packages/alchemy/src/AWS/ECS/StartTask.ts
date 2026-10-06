@@ -18,9 +18,8 @@ export interface StartTaskRequest extends Omit<
  * pick placement). The cluster and task definition ARNs are injected
  * automatically; the host is granted `ecs:StartTask` on the task definition
  * plus `iam:PassRole` on the task and execution roles.
- * @binding
- * @section Running Tasks
- * @example Start a Task on a Specific Container Instance
+ * ### Running Tasks
+ * **Example:** Start a Task on a Specific Container Instance
  * ```typescript
  * const controller = yield* AWS.Lambda.Function(
  *   "PlacementController",
@@ -44,6 +43,8 @@ export interface StartTaskRequest extends Omit<
  *   }),
  * );
  * ```
+ *
+ * @binding
  */
 export interface StartTask extends Binding.Service<
   StartTask,
@@ -52,9 +53,7 @@ export interface StartTask extends Binding.Service<
     cluster: Cluster,
     task: Task,
   ) => Effect.Effect<
-    (
-      request: StartTaskRequest,
-    ) => Effect.Effect<ECS.StartTaskResponse, ECS.StartTaskError>
+    (request: StartTaskRequest) => Effect.Effect<ECS.StartTaskResponse, ECS.StartTaskError>
   >
 > {}
 export const StartTask = Binding.Service<StartTask>("AWS.ECS.StartTask");

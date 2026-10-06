@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `PutFeedback` request with `applicationId` injected from the bound application.
  */
-export interface PutFeedbackRequest extends Omit<
-  qbusiness.PutFeedbackRequest,
-  "applicationId"
-> {}
+export interface PutFeedbackRequest extends Omit<qbusiness.PutFeedbackRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `PutFeedback` operation (IAM action
@@ -21,9 +18,8 @@ export interface PutFeedbackRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.PutFeedbackHttp)`.
  *
- * @binding
- * @section Chat
- * @example Submit Feedback for a Message
+ * ### Chat
+ * **Example:** Submit Feedback for a Message
  * ```typescript
  * const feedback = yield* AWS.QBusiness.PutFeedback(app);
  *
@@ -36,6 +32,8 @@ export interface PutFeedbackRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutFeedback extends Binding.Service<
   PutFeedback,
@@ -45,12 +43,7 @@ export interface PutFeedback extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutFeedbackRequest,
-    ) => Effect.Effect<
-      qbusiness.PutFeedbackResponse,
-      qbusiness.PutFeedbackError
-    >
+    ) => Effect.Effect<qbusiness.PutFeedbackResponse, qbusiness.PutFeedbackError>
   >
 > {}
-export const PutFeedback = Binding.Service<PutFeedback>(
-  "AWS.QBusiness.PutFeedback",
-);
+export const PutFeedback = Binding.Service<PutFeedback>("AWS.QBusiness.PutFeedback");

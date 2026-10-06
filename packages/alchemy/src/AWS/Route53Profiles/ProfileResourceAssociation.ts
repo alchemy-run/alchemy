@@ -63,9 +63,8 @@ export interface ProfileResourceAssociation extends Resource<
  * An attachment of a DNS resource to a Route 53 Profile. Attach private
  * hosted zones, Resolver rules, or DNS Firewall rule groups; every VPC the
  * Profile is associated with picks up the resource.
- * @resource
- * @section Attaching Resources
- * @example Attach a DNS Firewall Rule Group
+ * ### Attaching Resources
+ * **Example:** Attach a DNS Firewall Rule Group
  * ```typescript
  * import * as Route53Profiles from "alchemy/AWS/Route53Profiles";
  *
@@ -79,7 +78,7 @@ export interface ProfileResourceAssociation extends Resource<
  * );
  * ```
  *
- * @example Attach a Resolver Rule
+ * **Example:** Attach a Resolver Rule
  * ```typescript
  * const attachment = yield* Route53Profiles.ProfileResourceAssociation(
  *   "CorpForwarding",
@@ -89,6 +88,8 @@ export interface ProfileResourceAssociation extends Resource<
  *   },
  * );
  * ```
+ *
+ * @resource
  */
 export const ProfileResourceAssociation = Resource<ProfileResourceAssociation>(
   "AWS.Route53Profiles.ProfileResourceAssociation",
@@ -137,10 +138,7 @@ const untilAssociationGone = <E, R>(
  *
  * @internal
  */
-const sameResourceProperties = (
-  a: string | undefined,
-  b: string | undefined,
-): boolean => {
+const sameResourceProperties = (a: string | undefined, b: string | undefined): boolean => {
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
   try {
@@ -154,18 +152,13 @@ export const ProfileResourceAssociationProvider = () =>
   Provider.effect(
     ProfileResourceAssociation,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       // `DELETING`/`DELETED` associations count as missing so reconcile
       // re-associates and delete converges.
-      const isLive = (
-        association: profiles.ProfileResourceAssociation | undefined,
-      ) =>
+      const isLive = (association: profiles.ProfileResourceAssociation | undefined) =>
         association !== undefined &&
         association.Status !== "DELETING" &&
         association.Status !== "DELETED"
@@ -179,32 +172,22 @@ export const ProfileResourceAssociationProvider = () =>
           })
           .pipe(
             Effect.map((r) => isLive(r.ProfileResourceAssociation)),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
       const observeByPair = (profileId: string, resourceArn: string) =>
-        profiles.listProfileResourceAssociations
-          .items({ ProfileId: profileId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk)
-                .filter(
-                  (association) => association.ResourceArn === resourceArn,
-                )
-                .map(isLive)
-                .find((association) => association !== undefined),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        profiles.listProfileResourceAssociations.items({ ProfileId: profileId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk)
+              .filter((association) => association.ResourceArn === resourceArn)
+              .map(isLive)
+              .find((association) => association !== undefined),
+          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
 
-      const toAttributes = (
-        association: profiles.ProfileResourceAssociation,
-      ) => ({
+      const toAttributes = (association: profiles.ProfileResourceAssociation) => ({
         profileResourceAssociationId: association.Id!,
         profileId: association.ProfileId!,
         resourceArn: association.ResourceArn!,
@@ -227,18 +210,12 @@ export const ProfileResourceAssociationProvider = () =>
                   summary.Id !== undefined ? [summary.Id] : [],
                 ),
                 (profileId) =>
-                  profiles.listProfileResourceAssociations
-                    .items({ ProfileId: profileId })
-                    .pipe(
-                      Stream.runCollect,
-                      Effect.map(
-                        Array.from<profiles.ProfileResourceAssociation>,
-                      ),
-                      // The profile can vanish between enumeration and listing.
-                      Effect.catchTag("ResourceNotFoundException", () =>
-                        Effect.succeed([]),
-                      ),
-                    ),
+                  profiles.listProfileResourceAssociations.items({ ProfileId: profileId }).pipe(
+                    Stream.runCollect,
+                    Effect.map(Array.from<profiles.ProfileResourceAssociation>),
+                    // The profile can vanish between enumeration and listing.
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
+                  ),
                 { concurrency: 5 },
               ),
             ),
@@ -269,10 +246,7 @@ export const ProfileResourceAssociationProvider = () =>
         // place via the default update path.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds.profileId !== news.profileId ||
-            olds.resourceArn !== news.resourceArn
-          ) {
+          if (olds.profileId !== news.profileId || olds.resourceArn !== news.resourceArn) {
             return { action: "replace" } as const;
           }
         }),
@@ -284,10 +258,7 @@ export const ProfileResourceAssociationProvider = () =>
             ? yield* observeById(output.profileResourceAssociationId)
             : undefined;
           if (!association) {
-            association = yield* observeByPair(
-              news.profileId,
-              news.resourceArn,
-            );
+            association = yield* observeByPair(news.profileId, news.resourceArn);
           }
 
           // ENSURE
@@ -307,10 +278,7 @@ export const ProfileResourceAssociationProvider = () =>
           const nameDelta = association.Name !== name ? name : undefined;
           const propsDelta =
             news.resourceProperties !== undefined &&
-            !sameResourceProperties(
-              association.ResourceProperties,
-              news.resourceProperties,
-            )
+            !sameResourceProperties(association.ResourceProperties, news.resourceProperties)
               ? news.resourceProperties
               : undefined;
           if (nameDelta !== undefined || propsDelta !== undefined) {
@@ -339,9 +307,7 @@ export const ProfileResourceAssociationProvider = () =>
           );
           // Disassociation drains asynchronously (~1 min). Wait (bounded) so
           // the Profile and the attached resource can be deleted right after.
-          yield* untilAssociationGone(
-            observeById(output.profileResourceAssociationId),
-          );
+          yield* untilAssociationGone(observeById(output.profileResourceAssociationId));
         }),
       });
     }),

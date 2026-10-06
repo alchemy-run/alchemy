@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
-export interface UpdateUsageRequest extends Omit<
-  ag.UpdateUsageRequest,
-  "usagePlanId"
-> {}
+export interface UpdateUsageRequest extends Omit<ag.UpdateUsageRequest, "usagePlanId"> {}
 
 /**
  * Runtime binding for granting a temporary quota extension to an API key
@@ -16,9 +13,8 @@ export interface UpdateUsageRequest extends Omit<
  * Provide `ApiGateway.UpdateUsageHttp` on the Function effect to implement
  * the binding.
  *
- * @binding
- * @section Metering usage
- * @example Extend a key's remaining quota
+ * ### Metering usage
+ * **Example:** Extend a key's remaining quota
  * ```typescript
  * // init
  * const updateUsage = yield* ApiGateway.UpdateUsage(plan);
@@ -31,18 +27,14 @@ export interface UpdateUsageRequest extends Omit<
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateUsage extends Binding.Service<
   UpdateUsage,
   "AWS.ApiGateway.UpdateUsage",
   <P extends UsagePlan>(
     usagePlan: P,
-  ) => Effect.Effect<
-    (
-      request: UpdateUsageRequest,
-    ) => Effect.Effect<ag.Usage, ag.UpdateUsageError>
-  >
+  ) => Effect.Effect<(request: UpdateUsageRequest) => Effect.Effect<ag.Usage, ag.UpdateUsageError>>
 > {}
-export const UpdateUsage = Binding.Service<UpdateUsage>(
-  "AWS.ApiGateway.UpdateUsage",
-);
+export const UpdateUsage = Binding.Service<UpdateUsage>("AWS.ApiGateway.UpdateUsage");

@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * or as an S3 object reference; the caller needs `s3:GetObject` on the
  * bucket for S3 input (bind `AWS.S3.GetObject(bucket)` alongside).
  *
- * @binding
- * @section Synchronous Analysis
- * @example Analyze Forms and Tables
+ * ### Synchronous Analysis
+ * **Example:** Analyze Forms and Tables
  * ```typescript
  * // init
  * const analyzeDocument = yield* AWS.Textract.AnalyzeDocument();
@@ -23,6 +22,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const tables = (result.Blocks ?? []).filter((b) => b.BlockType === "TABLE");
  * ```
+ *
+ * @binding
  */
 export interface AnalyzeDocument extends Binding.Service<
   AnalyzeDocument,
@@ -30,12 +31,7 @@ export interface AnalyzeDocument extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.AnalyzeDocumentRequest,
-    ) => Effect.Effect<
-      textract.AnalyzeDocumentResponse,
-      textract.AnalyzeDocumentError
-    >
+    ) => Effect.Effect<textract.AnalyzeDocumentResponse, textract.AnalyzeDocumentError>
   >
 > {}
-export const AnalyzeDocument = Binding.Service<AnalyzeDocument>(
-  "AWS.Textract.AnalyzeDocument",
-);
+export const AnalyzeDocument = Binding.Service<AnalyzeDocument>("AWS.Textract.AnalyzeDocument");

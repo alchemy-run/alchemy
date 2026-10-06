@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface SelectRequest extends Omit<
-  sdb.SelectRequest,
-  "SelectExpression"
-> {
+export interface SelectRequest extends Omit<sdb.SelectRequest, "SelectExpression"> {
   /**
    * The select expression (`select output_list from domain [where ...]`).
    *
@@ -25,9 +22,8 @@ export interface SelectRequest extends Omit<
  * `Select` addresses the domain inside the expression itself rather than via
  * a request field, so the client accepts either a literal expression or a
  * function of the domain's resolved physical name.
- * @binding
- * @section Querying Items
- * @example Select All Items
+ * ### Querying Items
+ * **Example:** Select All Items
  * ```typescript
  * const select = yield* AWS.SimpleDB.Select(domain);
  *
@@ -38,13 +34,15 @@ export interface SelectRequest extends Omit<
  * // result.Items: [{ Name: "user#123", Attributes: [...] }, ...]
  * ```
  *
- * @example Select with a Where Clause
+ * **Example:** Select with a Where Clause
  * ```typescript
  * const result = yield* select({
  *   SelectExpression: (domain) =>
  *     `select * from \`${domain}\` where plan = 'pro'`,
  * });
  * ```
+ *
+ * @binding
  */
 export interface Select extends Binding.Service<
   Select,
@@ -52,9 +50,7 @@ export interface Select extends Binding.Service<
   (
     domain: Domain,
   ) => Effect.Effect<
-    (
-      request: SelectRequest,
-    ) => Effect.Effect<sdb.SelectResponse, sdb.SelectError, RuntimeContext>
+    (request: SelectRequest) => Effect.Effect<sdb.SelectResponse, sdb.SelectError, RuntimeContext>
   >
 > {}
 export const Select = Binding.Service<Select>("AWS.SimpleDB.Select");

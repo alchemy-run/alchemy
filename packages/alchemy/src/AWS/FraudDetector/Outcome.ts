@@ -44,15 +44,16 @@ export interface Outcome extends Resource<
  * (e.g. `approve`, `review`, `block`). Detector rules reference outcomes; they
  * are cheap metadata objects.
  *
- * @resource
- * @section Creating an Outcome
- * @example Approve and Review Outcomes
+ * ### Creating an Outcome
+ * **Example:** Approve and Review Outcomes
  * ```typescript
  * const approve = yield* FraudDetector.Outcome("approve", {
  *   description: "let the transaction through",
  * });
  * const review = yield* FraudDetector.Outcome("review", {});
  * ```
+ *
+ * @resource
  */
 export const Outcome = Resource<Outcome>("AWS.FraudDetector.Outcome");
 
@@ -61,21 +62,14 @@ export const OutcomeProvider = () =>
     Outcome,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: OutcomeProps) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
       /** Look an outcome up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getOutcomes({ name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.outcomes?.[0];
       });
 
@@ -137,9 +131,7 @@ export const OutcomeProvider = () =>
           frauddetector.getOutcomes.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.outcomes ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.outcomes ?? []).map(toAttrs)),
             ),
           ),
       };

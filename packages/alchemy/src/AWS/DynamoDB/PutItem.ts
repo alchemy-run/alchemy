@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface PutItemRequest extends Omit<
-  DynamoDB.PutItemInput,
-  "TableName"
-> {}
+export interface PutItemRequest extends Omit<DynamoDB.PutItemInput, "TableName"> {}
 
 /**
  * Runtime binding for `dynamodb:PutItem`.
@@ -15,9 +12,8 @@ export interface PutItemRequest extends Omit<
  * that writes a single item, automatically injecting the table name and
  * granting the host `dynamodb:PutItem` on the table. Provide the `PutItemHttp`
  * layer on the Function to satisfy the binding.
- * @binding
- * @section Writing Data
- * @example Write a Single Item
+ * ### Writing Data
+ * **Example:** Write a Single Item
  * ```typescript
  * // inside the Function's Effect.gen, with Effect.provide(DynamoDB.PutItemHttp)
  * const putItem = yield* AWS.DynamoDB.PutItem(table);
@@ -30,6 +26,8 @@ export interface PutItemRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutItem extends Binding.Service<
   PutItem,
@@ -37,9 +35,7 @@ export interface PutItem extends Binding.Service<
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
-    (
-      request: PutItemRequest,
-    ) => Effect.Effect<DynamoDB.PutItemOutput, DynamoDB.PutItemError>
+    (request: PutItemRequest) => Effect.Effect<DynamoDB.PutItemOutput, DynamoDB.PutItemError>
   >
 > {}
 

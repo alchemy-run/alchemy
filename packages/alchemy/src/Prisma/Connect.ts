@@ -70,16 +70,13 @@ export interface ConnectClient {
   /**
    * Direct database password, when available.
    */
-  password: Effect.Effect<
-    Redacted.Redacted<string> | undefined,
-    never,
-    RuntimeContext
-  >;
+  password: Effect.Effect<Redacted.Redacted<string> | undefined, never, RuntimeContext>;
 }
 
 /**
- * Bind a {@link Connection} to a Prisma Compute app, AWS Lambda Function, or
- * Cloudflare Worker and obtain the typed runtime client.
+ * Bind a {@link Connection} to a Prisma Compute app, AWS Lambda Function,
+ * Cloudflare Worker, or Cloudflare Container and obtain the typed runtime
+ * client.
  *
  * `Connect` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
@@ -88,8 +85,8 @@ export interface ConnectClient {
  * Provide `Prisma.ConnectBinding` on the host implementation so Alchemy can
  * register the deploy-time binding and resolve the client at runtime.
  *
- * @section Binding a Connection
- * @example Use a connection inside Prisma Compute
+ * ### Binding a Connection
+ * **Example:** Use a connection inside Prisma Compute
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
@@ -108,7 +105,33 @@ export interface ConnectClient {
  * );
  * ```
  *
+ * **Example:** Use a connection inside a Cloudflare Container
+ * ```typescript
+ * export default Api.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const db = yield* Prisma.Connect(connection);
+ *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
+ *
+ *     return Api.of({
+ *       fetch: Effect.gen(function* () {
+ *         const users = yield* sql`SELECT * FROM users`;
+ *         return yield* HttpServerResponse.json(users);
+ *       }),
+ *     });
+ *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
+ * );
+ * ```
+ *
+ * A container is a real process with no workerd bindings, so the connection
+ * travels as plain environment variables — the same channel Prisma Compute
+ * and Lambda use. Start the container with
+ * `Cloudflare.Containers.layer(Api, { enableInternet: true })` so it can
+ * reach the database. (Hyperdrive, by contrast, is a workerd binding and is
+ * unavailable inside a container.)
+ *
  * @binding
+ * @product Postgres
  */
 export interface Connect extends Binding.Service<
   Connect,
@@ -136,10 +159,7 @@ export interface ConnectEnvKeys {
 export const connectEnvKeys = (
   connection: Pick<Connection, "FQN" | "LogicalId">,
 ): ConnectEnvKeys => {
-  const name =
-    connection.FQN === connection.LogicalId
-      ? connection.LogicalId
-      : connection.FQN;
+  const name = connection.FQN === connection.LogicalId ? connection.LogicalId : connection.FQN;
   const prefix = `PRISMA_${envName(name)}`;
   return {
     connectionId: `${prefix}_CONNECTION_ID`,
@@ -153,9 +173,7 @@ export const connectEnvKeys = (
   };
 };
 
-type ConnectEnvValue = Output.Output<
-  string | Redacted.Redacted<string> | undefined
->;
+type ConnectEnvValue = Output.Output<string | Redacted.Redacted<string> | undefined>;
 
 type ConnectEnvBindingHost = Resource<
   string,
@@ -183,10 +201,16 @@ type ConnectWorkerBindingHost = Resource<
   { bindings?: ConnectWorkerTextBinding[] }
 >;
 
-const supportsConnectEnvBinding = (
-  host: ResourceLike | undefined,
-): host is ConnectEnvBindingHost =>
-  host?.Type === "Prisma.Compute" || host?.Type === "AWS.Lambda.Function";
+/**
+ * Hosts whose runtime configuration travels as plain environment variables:
+ * Prisma Compute, an AWS Lambda Function, and a Cloudflare Container. A
+ * container is a real process with no workerd bindings, so `env` is the only
+ * channel it has — the same contract the other two expose.
+ */
+const supportsConnectEnvBinding = (host: ResourceLike | undefined): host is ConnectEnvBindingHost =>
+  host?.Type === "Prisma.Compute" ||
+  host?.Type === "AWS.Lambda.Function" ||
+  host?.Type === "Cloudflare.Container";
 
 const supportsConnectWorkerBinding = (
   host: ResourceLike | undefined,
@@ -229,15 +253,9 @@ const encodeOptionalValue = <A extends string | Redacted.Redacted<string>>(
 const encodedConnectEnv = (connection: Connection) => ({
   connectionId: connection.connectionId,
   databaseId: connection.databaseId,
-  directConnectionString: encodeOptionalValue(
-    connection.directConnectionString,
-  ),
-  pooledConnectionString: encodeOptionalValue(
-    connection.pooledConnectionString,
-  ),
-  accelerateConnectionString: encodeOptionalValue(
-    connection.accelerateConnectionString,
-  ),
+  directConnectionString: encodeOptionalValue(connection.directConnectionString),
+  pooledConnectionString: encodeOptionalValue(connection.pooledConnectionString),
+  accelerateConnectionString: encodeOptionalValue(connection.accelerateConnectionString),
   host: encodeOptionalValue(connection.host),
   user: encodeOptionalValue(connection.user),
   password: encodeOptionalValue(connection.password),
@@ -289,10 +307,7 @@ const connectWorkerBindings = (
     workerBindingValue(keys.databaseId, env.databaseId),
     workerBindingValue(keys.directConnectionString, env.directConnectionString),
     workerBindingValue(keys.pooledConnectionString, env.pooledConnectionString),
-    workerBindingValue(
-      keys.accelerateConnectionString,
-      env.accelerateConnectionString,
-    ),
+    workerBindingValue(keys.accelerateConnectionString, env.accelerateConnectionString),
     workerBindingValue(keys.host, env.host),
     workerBindingValue(keys.user, env.user),
     workerBindingValue(keys.password, env.password),
@@ -301,8 +316,7 @@ const connectWorkerBindings = (
 
 const redactedToString = (
   value: Redacted.Redacted<string> | string | undefined,
-): string | undefined =>
-  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+): string | undefined => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
 
 const runtimeOutput = <A>(
   key: string,
@@ -333,9 +347,8 @@ const decodeConnectionValue = (
   }
 };
 
-const optionalString = (
-  value: Redacted.Redacted<string> | string,
-): string | undefined => decodeConnectionValue(value) ?? undefined;
+const optionalString = (value: Redacted.Redacted<string> | string): string | undefined =>
+  decodeConnectionValue(value) ?? undefined;
 
 const optionalRedacted = (
   value: Redacted.Redacted<string> | string,
@@ -344,9 +357,8 @@ const optionalRedacted = (
   return decoded === undefined ? undefined : Redacted.make(decoded);
 };
 
-const nullableString = (
-  value: Redacted.Redacted<string> | string,
-): string | null | undefined => decodeConnectionValue(value);
+const nullableString = (value: Redacted.Redacted<string> | string): string | null | undefined =>
+  decodeConnectionValue(value);
 
 /**
  * Implementation layer for {@link Connect}. Provide it on the host
@@ -376,7 +388,7 @@ export const ConnectBinding = Layer.effect(
         } else {
           return yield* Effect.die(
             new Error(
-              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host?.Type ?? "no host"}'`,
+              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, Cloudflare.Worker, and Cloudflare.Container runtimes, got '${host?.Type ?? "no host"}'`,
             ),
           );
         }
@@ -418,15 +430,9 @@ export const ConnectBinding = Layer.effect(
         directConnectionString,
         pooledConnectionString,
         accelerateConnectionString,
-        host: runtimeOutput(keys.host, env.host).pipe(
-          Effect.map(nullableString),
-        ),
-        user: runtimeOutput(keys.user, env.user).pipe(
-          Effect.map(nullableString),
-        ),
-        password: runtimeOutput(keys.password, env.password).pipe(
-          Effect.map(optionalRedacted),
-        ),
+        host: runtimeOutput(keys.host, env.host).pipe(Effect.map(nullableString)),
+        user: runtimeOutput(keys.user, env.user).pipe(Effect.map(nullableString)),
+        password: runtimeOutput(keys.password, env.password).pipe(Effect.map(optionalRedacted)),
       } satisfies ConnectClient;
     });
   }),

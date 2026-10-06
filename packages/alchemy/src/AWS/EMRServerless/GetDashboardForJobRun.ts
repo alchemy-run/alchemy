@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link GetDashboardForJobRun} runtime callable.
  * The `applicationId` is injected from the bound {@link Application}.
  */
-export type GetDashboardForJobRunInput = Omit<
-  emr.GetDashboardForJobRunRequest,
-  "applicationId"
->;
+export type GetDashboardForJobRunInput = Omit<emr.GetDashboardForJobRunRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:GetDashboardForJobRun`.
@@ -20,9 +17,8 @@ export type GetDashboardForJobRunInput = Omit<
  * on-call engineer to debug a slow or failed job without console access.
  * Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.GetDashboardForJobRunHttp)`.
- * @binding
- * @section Dashboards
- * @example Link To A Job's Spark UI
+ * ### Dashboards
+ * **Example:** Link To A Job's Spark UI
  * ```typescript
  * // init
  * const getDashboardForJobRun =
@@ -31,6 +27,8 @@ export type GetDashboardForJobRunInput = Omit<
  * // runtime
  * const { url } = yield* getDashboardForJobRun({ jobRunId });
  * ```
+ *
+ * @binding
  */
 export interface GetDashboardForJobRun extends Binding.Service<
   GetDashboardForJobRun,
@@ -40,10 +38,7 @@ export interface GetDashboardForJobRun extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetDashboardForJobRunInput,
-    ) => Effect.Effect<
-      emr.GetDashboardForJobRunResponse,
-      emr.GetDashboardForJobRunError
-    >
+    ) => Effect.Effect<emr.GetDashboardForJobRunResponse, emr.GetDashboardForJobRunError>
   >
 > {}
 export const GetDashboardForJobRun = Binding.Service<GetDashboardForJobRun>(

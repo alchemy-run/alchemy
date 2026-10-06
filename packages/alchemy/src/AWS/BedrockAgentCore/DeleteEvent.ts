@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Memory } from "./Memory.ts";
 
-export interface DeleteEventRequest extends Omit<
-  agentcore.DeleteEventInput,
-  "memoryId"
-> {}
+export interface DeleteEventRequest extends Omit<agentcore.DeleteEventInput, "memoryId"> {}
 
 /**
  * Deletes a short-term event from an actor's session.
@@ -15,9 +12,8 @@ export interface DeleteEventRequest extends Omit<
  * AgentCore data-plane API against it. Provide `AgentCore.DeleteEventHttp`
  * on the Function effect to implement the binding.
  *
- * @binding
- * @section Deleting Events
- * @example Delete an Event by Id
+ * ### Deleting Events
+ * **Example:** Delete an Event by Id
  * ```typescript
  * // init
  * const deleteEvent = yield* AgentCore.DeleteEvent(memory);
@@ -34,6 +30,8 @@ export interface DeleteEventRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface DeleteEvent extends Binding.Service<
   DeleteEvent,
@@ -46,6 +44,4 @@ export interface DeleteEvent extends Binding.Service<
     ) => Effect.Effect<agentcore.DeleteEventOutput, agentcore.DeleteEventError>
   >
 > {}
-export const DeleteEvent = Binding.Service<DeleteEvent>(
-  "AWS.BedrockAgentCore.DeleteEvent",
-);
+export const DeleteEvent = Binding.Service<DeleteEvent>("AWS.BedrockAgentCore.DeleteEvent");

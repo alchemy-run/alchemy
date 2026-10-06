@@ -13,16 +13,11 @@ export interface GetIdRequest extends Omit<ci.GetIdInput, "IdentityPoolId"> {}
 export interface IdentityPoolAuthClient {
   /** Mint (or look up) an identity ID for a set of logins — or for a guest
    * when the pool allows unauthenticated identities. */
-  getId: (
-    request?: GetIdRequest,
-  ) => Effect.Effect<ci.GetIdResponse, ci.GetIdError>;
+  getId: (request?: GetIdRequest) => Effect.Effect<ci.GetIdResponse, ci.GetIdError>;
   /** Exchange an identity ID (+ logins) for temporary AWS credentials. */
   getCredentialsForIdentity: (
     request: ci.GetCredentialsForIdentityInput,
-  ) => Effect.Effect<
-    ci.GetCredentialsForIdentityResponse,
-    ci.GetCredentialsForIdentityError
-  >;
+  ) => Effect.Effect<ci.GetCredentialsForIdentityResponse, ci.GetCredentialsForIdentityError>;
   /** Exchange an identity ID (+ logins) for an OpenID Connect token
    * (basic/classic flow — requires `allowClassicFlow`). */
   getOpenIdToken: (
@@ -43,9 +38,8 @@ export interface IdentityPoolAuthClient {
  * ID and temporary AWS credentials. These operations are unauthenticated
  * (Cognito does not evaluate IAM for them), so the binding grants no IAM
  * policy — it injects the identity pool ID into `getId`.
- * @binding
- * @section Vending AWS Credentials
- * @example Guest (Unauthenticated) Credentials
+ * ### Vending AWS Credentials
+ * **Example:** Guest (Unauthenticated) Credentials
  * ```typescript
  * const identity = yield* Cognito.IdentityPoolAuth(identityPool);
  *
@@ -55,7 +49,7 @@ export interface IdentityPoolAuthClient {
  * });
  * ```
  *
- * @example Credentials for a User Pool Sign-In
+ * **Example:** Credentials for a User Pool Sign-In
  * ```typescript
  * const provider = `cognito-idp.${region}.amazonaws.com/${userPoolId}`;
  * const { IdentityId } = yield* identity.getId({
@@ -66,12 +60,12 @@ export interface IdentityPoolAuthClient {
  *   Logins: { [provider]: idToken },
  * });
  * ```
+ *
+ * @binding
  */
 export interface IdentityPoolAuth extends Binding.Service<
   IdentityPoolAuth,
   "AWS.Cognito.IdentityPoolAuth",
   <P extends IdentityPool>(pool: P) => Effect.Effect<IdentityPoolAuthClient>
 > {}
-export const IdentityPoolAuth = Binding.Service<IdentityPoolAuth>(
-  "AWS.Cognito.IdentityPoolAuth",
-);
+export const IdentityPoolAuth = Binding.Service<IdentityPoolAuth>("AWS.Cognito.IdentityPoolAuth");

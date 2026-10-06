@@ -13,9 +13,8 @@ export interface RejectGrantRequest extends licensemanager.RejectGrantRequest {}
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.RejectGrantHttp)`.
- * @binding
- * @section Managing Grants
- * @example Reject a Received Grant
+ * ### Managing Grants
+ * **Example:** Reject a Received Grant
  * ```typescript
  * // init
  * const rejectGrant = yield* AWS.LicenseManager.RejectGrant();
@@ -23,6 +22,8 @@ export interface RejectGrantRequest extends licensemanager.RejectGrantRequest {}
  * // runtime
  * const { Status } = yield* rejectGrant({ GrantArn: grantArn });
  * ```
+ *
+ * @binding
  */
 export interface RejectGrant extends Binding.Service<
   RejectGrant,
@@ -30,12 +31,7 @@ export interface RejectGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: RejectGrantRequest,
-    ) => Effect.Effect<
-      licensemanager.RejectGrantResponse,
-      licensemanager.RejectGrantError
-    >
+    ) => Effect.Effect<licensemanager.RejectGrantResponse, licensemanager.RejectGrantError>
   >
 > {}
-export const RejectGrant = Binding.Service<RejectGrant>(
-  "AWS.LicenseManager.RejectGrant",
-);
+export const RejectGrant = Binding.Service<RejectGrant>("AWS.LicenseManager.RejectGrant");

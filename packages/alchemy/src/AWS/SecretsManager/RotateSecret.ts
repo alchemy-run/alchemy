@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Secret } from "./Secret.ts";
 
-export interface RotateSecretRequest extends Omit<
-  secretsmanager.RotateSecretRequest,
-  "SecretId"
-> {}
+export interface RotateSecretRequest extends Omit<secretsmanager.RotateSecretRequest, "SecretId"> {}
 
 /**
  * Runtime binding for `secretsmanager:RotateSecret`.
@@ -15,9 +12,8 @@ export interface RotateSecretRequest extends Omit<
  * immediate rotation using the secret's configured rotation function (see
  * {@link onSecretRotation} for wiring one up). Provide the implementation
  * with `Effect.provide(AWS.SecretsManager.RotateSecretHttp)`.
- * @binding
- * @section Rotating Secrets
- * @example Trigger an On-Demand Rotation
+ * ### Rotating Secrets
+ * **Example:** Trigger an On-Demand Rotation
  * ```typescript
  * // init — bind the operation to the secret
  * const rotateSecret = yield* AWS.SecretsManager.RotateSecret(secret);
@@ -26,6 +22,8 @@ export interface RotateSecretRequest extends Omit<
  * const result = yield* rotateSecret();
  * const pendingVersionId = result.VersionId;
  * ```
+ *
+ * @binding
  */
 export interface RotateSecret extends Binding.Service<
   RotateSecret,
@@ -35,13 +33,8 @@ export interface RotateSecret extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RotateSecretRequest,
-    ) => Effect.Effect<
-      secretsmanager.RotateSecretResponse,
-      secretsmanager.RotateSecretError
-    >
+    ) => Effect.Effect<secretsmanager.RotateSecretResponse, secretsmanager.RotateSecretError>
   >
 > {}
 
-export const RotateSecret = Binding.Service<RotateSecret>(
-  "AWS.SecretsManager.RotateSecret",
-);
+export const RotateSecret = Binding.Service<RotateSecret>("AWS.SecretsManager.RotateSecret");

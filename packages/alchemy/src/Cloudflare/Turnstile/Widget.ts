@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -28,11 +27,7 @@ export type WidgetRegion = "world" | "china";
 /**
  * Clearance level granted when the widget is embedded on a Cloudflare zone.
  */
-export type ClearanceLevel =
-  | "no_clearance"
-  | "jschallenge"
-  | "managed"
-  | "interactive";
+export type ClearanceLevel = "no_clearance" | "jschallenge" | "managed" | "interactive";
 
 export type WidgetProps = {
   /**
@@ -138,13 +133,7 @@ export type WidgetAttributes = {
   modifiedOn: string;
 };
 
-export type Widget = Resource<
-  TypeId,
-  WidgetProps,
-  WidgetAttributes,
-  never,
-  Providers
->;
+export type Widget = Resource<TypeId, WidgetProps, WidgetAttributes, never, Providers>;
 
 /**
  * A Cloudflare Turnstile widget — Cloudflare's CAPTCHA alternative.
@@ -153,11 +142,8 @@ export type Widget = Resource<
  * embed in HTML) and produces a `secret` used server-side against the
  * `/turnstile/v0/siteverify` endpoint. Name, domains, mode, and clearance
  * settings are all mutable in place; only `region` forces a replacement.
- * @resource
- * @product Turnstile
- * @category Application Security
- * @section Creating a Widget
- * @example Managed widget
+ * ### Creating a Widget
+ * **Example:** Managed widget
  * ```typescript
  * const widget = yield* Cloudflare.Turnstile.Widget("signup-form", {
  *   domains: ["example.com"],
@@ -165,7 +151,7 @@ export type Widget = Resource<
  * });
  * ```
  *
- * @example Invisible widget with an explicit name
+ * **Example:** Invisible widget with an explicit name
  * ```typescript
  * const widget = yield* Cloudflare.Turnstile.Widget("api-guard", {
  *   name: "api-guard",
@@ -174,8 +160,8 @@ export type Widget = Resource<
  * });
  * ```
  *
- * @section Using the keys
- * @example Embedding the sitekey and verifying tokens
+ * ### Using the keys
+ * **Example:** Embedding the sitekey and verifying tokens
  * ```typescript
  * // The sitekey is public — render it in your HTML:
  * const sitekey = widget.sitekey;
@@ -185,6 +171,10 @@ export type Widget = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/turnstile/
+ *
+ * @resource
+ * @product Turnstile
+ * @category Application Security
  */
 export const Widget = Resource<Widget>(TypeId);
 
@@ -265,8 +255,7 @@ export const WidgetProvider = () =>
         domains: news.domains,
         mode: news.mode,
         botFightMode: news.botFightMode ?? observedBool(observed.botFightMode),
-        clearanceLevel:
-          news.clearanceLevel ?? (observed.clearanceLevel as ClearanceLevel),
+        clearanceLevel: news.clearanceLevel ?? (observed.clearanceLevel as ClearanceLevel),
         ephemeralId: news.ephemeralId ?? observedBool(observed.ephemeralId),
         offlabel: news.offlabel ?? observedBool(observed.offlabel),
       };
@@ -274,12 +263,9 @@ export const WidgetProvider = () =>
         observed.name !== desired.name ||
         observed.mode !== desired.mode ||
         !sameDomains(observed.domains, desired.domains) ||
-        (news.botFightMode !== undefined &&
-          observed.botFightMode !== news.botFightMode) ||
-        (news.clearanceLevel !== undefined &&
-          observed.clearanceLevel !== news.clearanceLevel) ||
-        (news.ephemeralId !== undefined &&
-          observed.ephemeralId !== news.ephemeralId) ||
+        (news.botFightMode !== undefined && observed.botFightMode !== news.botFightMode) ||
+        (news.clearanceLevel !== undefined && observed.clearanceLevel !== news.clearanceLevel) ||
+        (news.ephemeralId !== undefined && observed.ephemeralId !== news.ephemeralId) ||
         (news.offlabel !== undefined && observed.offlabel !== news.offlabel);
 
       if (!dirty) {
@@ -304,9 +290,7 @@ export const WidgetProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Enumerate every widget in the account, paginating exhaustively.
-      const pages = yield* turnstile.listWidgets
-        .pages({ accountId })
-        .pipe(Stream.runCollect);
+      const pages = yield* turnstile.listWidgets.pages({ accountId }).pipe(Stream.runCollect);
       const sitekeys = Array.from(pages).flatMap((page) =>
         (page.result ?? []).map((w) => w.sitekey),
       );

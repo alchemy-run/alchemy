@@ -58,9 +58,8 @@ export interface Group extends Resource<
  * cross-Region canaries) so you can view aggregated run results and manage
  * them as a unit. A group can hold as many as 10 canaries, and an account
  * can have as many as 20 groups.
- * @resource
- * @section Creating Groups
- * @example Group of Canaries
+ * ### Creating Groups
+ * **Example:** Group of Canaries
  * ```typescript
  * import * as Synthetics from "alchemy/AWS/Synthetics";
  *
@@ -69,12 +68,14 @@ export interface Group extends Resource<
  * });
  * ```
  *
- * @example Empty Group with Tags
+ * **Example:** Empty Group with Tags
  * ```typescript
  * const group = yield* Synthetics.Group("Fleet", {
  *   tags: { team: "platform" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Group = Resource<Group>("AWS.Synthetics.Group");
 
@@ -93,9 +94,7 @@ export const GroupProvider = () =>
       const getGroupOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* synthetics.getGroup({ GroupIdentifier: identifier }).pipe(
           Effect.map((r) => r.Group),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -115,10 +114,7 @@ export const GroupProvider = () =>
           ),
         );
 
-      const toAttributes = (
-        groupName: string,
-        group: synthetics.Group,
-      ): Group["Attributes"] => ({
+      const toAttributes = (groupName: string, group: synthetics.Group): Group["Attributes"] => ({
         groupName,
         groupArn: group.Arn ?? "",
         groupId: group.Id ?? "",
@@ -129,9 +125,7 @@ export const GroupProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* synthetics.listGroups
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* synthetics.listGroups.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Groups ?? [])
               .filter((group) => group.Name !== undefined)
@@ -143,8 +137,7 @@ export const GroupProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const groupName =
-            output?.groupName ?? (yield* createGroupName(id, olds ?? {}));
+          const groupName = output?.groupName ?? (yield* createGroupName(id, olds ?? {}));
           const group = yield* getGroupOrUndefined(groupName);
           if (group === undefined) return undefined;
           const attrs = toAttributes(groupName, group);
@@ -163,8 +156,7 @@ export const GroupProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const groupName =
-            output?.groupName ?? (yield* createGroupName(id, news));
+          const groupName = output?.groupName ?? (yield* createGroupName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -186,24 +178,15 @@ export const GroupProvider = () =>
           // idempotent per (group, canary) pair.
           const observedMembers = yield* listMembers(groupName);
           const desiredMembers = news.members ?? [];
-          const toAssociate = desiredMembers.filter(
-            (arn) => !observedMembers.includes(arn),
-          );
-          const toDisassociate = observedMembers.filter(
-            (arn) => !desiredMembers.includes(arn),
-          );
+          const toAssociate = desiredMembers.filter((arn) => !observedMembers.includes(arn));
+          const toDisassociate = observedMembers.filter((arn) => !desiredMembers.includes(arn));
           for (const ResourceArn of toAssociate) {
-            yield* synthetics
-              .associateResource({ GroupIdentifier: groupName, ResourceArn })
-              .pipe(
-                Effect.retry({
-                  while: (e): boolean => e._tag === "ConflictException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("2 seconds"),
-                    Schedule.recurs(8),
-                  ]),
-                }),
-              );
+            yield* synthetics.associateResource({ GroupIdentifier: groupName, ResourceArn }).pipe(
+              Effect.retry({
+                while: (e): boolean => e._tag === "ConflictException",
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
+              }),
+            );
           }
           for (const ResourceArn of toDisassociate) {
             yield* synthetics
@@ -215,10 +198,7 @@ export const GroupProvider = () =>
                 Effect.catchTag("ResourceNotFoundException", () => Effect.void),
                 Effect.retry({
                   while: (e): boolean => e._tag === "ConflictException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("2 seconds"),
-                    Schedule.recurs(8),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
                 }),
               );
           }
@@ -256,18 +236,13 @@ export const GroupProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // The group does not need to be emptied first — deleting a group
           // never deletes its canaries.
-          yield* synthetics
-            .deleteGroup({ GroupIdentifier: output.groupName })
-            .pipe(
-              Effect.retry({
-                while: (e): boolean => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(8),
-                ]),
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* synthetics.deleteGroup({ GroupIdentifier: output.groupName }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

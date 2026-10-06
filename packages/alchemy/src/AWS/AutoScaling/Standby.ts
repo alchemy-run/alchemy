@@ -28,20 +28,14 @@ export interface StandbyClient {
    */
   enter: (
     request: EnterStandbyRequest,
-  ) => Effect.Effect<
-    autoscaling.EnterStandbyAnswer,
-    autoscaling.EnterStandbyError
-  >;
+  ) => Effect.Effect<autoscaling.EnterStandbyAnswer, autoscaling.EnterStandbyError>;
   /**
    * Move standby instances back into service; the desired capacity is
    * incremented accordingly.
    */
   exit: (
     request: ExitStandbyRequest,
-  ) => Effect.Effect<
-    autoscaling.ExitStandbyAnswer,
-    autoscaling.ExitStandbyError
-  >;
+  ) => Effect.Effect<autoscaling.ExitStandbyAnswer, autoscaling.ExitStandbyError>;
 }
 
 /**
@@ -53,9 +47,8 @@ export interface StandbyClient {
  * instance, apply a patch, or drain it during maintenance — and puts them
  * back afterwards. Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.StandbyHttp)`.
- * @binding
- * @section Standby Maintenance
- * @example Pull an instance for maintenance, then return it
+ * ### Standby Maintenance
+ * **Example:** Pull an instance for maintenance, then return it
  * ```typescript
  * // init — bind the operations to the group
  * const standby = yield* AWS.AutoScaling.Standby(group);
@@ -71,6 +64,8 @@ export interface StandbyClient {
  * // runtime — put it back in service
  * yield* standby.exit({ InstanceIds: [instanceId] });
  * ```
+ *
+ * @binding
  */
 export interface Standby extends Binding.Service<
   Standby,

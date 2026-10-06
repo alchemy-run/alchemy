@@ -10,9 +10,8 @@ import type { DataSet } from "./DataSet.ts";
  * bound {@link DataSet}. `AwsAccountId` and `DataSetId` are injected from
  * the binding. Provide the implementation with
  * `Effect.provide(AWS.QuickSight.DescribeIngestionHttp)`.
- * @binding
- * @section Refreshing SPICE Data
- * @example Poll An Ingestion Until It Settles
+ * ### Refreshing SPICE Data
+ * **Example:** Poll An Ingestion Until It Settles
  * ```typescript
  * // init — bind the operation to the dataset
  * const describeIngestion = yield* AWS.QuickSight.DescribeIngestion(dataSet);
@@ -30,6 +29,8 @@ import type { DataSet } from "./DataSet.ts";
  *   }),
  * );
  * ```
+ *
+ * @binding
  */
 export interface DescribeIngestion extends Binding.Service<
   DescribeIngestion,
@@ -38,14 +39,8 @@ export interface DescribeIngestion extends Binding.Service<
     dataSet: DataSet,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.DescribeIngestionRequest,
-        "AwsAccountId" | "DataSetId"
-      >,
-    ) => Effect.Effect<
-      quicksight.DescribeIngestionResponse,
-      quicksight.DescribeIngestionError
-    >
+      request: Omit<quicksight.DescribeIngestionRequest, "AwsAccountId" | "DataSetId">,
+    ) => Effect.Effect<quicksight.DescribeIngestionResponse, quicksight.DescribeIngestionError>
   >
 > {}
 export const DescribeIngestion = Binding.Service<DescribeIngestion>(

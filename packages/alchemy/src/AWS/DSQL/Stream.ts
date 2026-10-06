@@ -89,9 +89,8 @@ export interface Stream extends Resource<
  * source on the **target** stream; DSQL itself never invokes compute
  * directly.
  *
- * @resource
- * @section Creating a CDC Stream
- * @example Stream Cluster Changes into Kinesis
+ * ### Creating a CDC Stream
+ * **Example:** Stream Cluster Changes into Kinesis
  * ```typescript
  * const cluster = yield* DSQL.Cluster("AppDb", {});
  * const target = yield* Kinesis.Stream("Changes", {
@@ -134,7 +133,7 @@ export interface Stream extends Resource<
  * });
  * ```
  *
- * @example Consume Change Records with a Function
+ * **Example:** Consume Change Records with a Function
  * ```typescript
  * // DSQL delivers into the Kinesis stream; consume it with the
  * // Kinesis event source on the target stream.
@@ -142,6 +141,8 @@ export interface Stream extends Resource<
  *   Effect.forEach(records, (record) => handleChange(record)),
  * );
  * ```
+ *
+ * @resource
  */
 export const Stream = Resource<Stream>("AWS.DSQL.Stream");
 
@@ -152,17 +153,10 @@ export const StreamProvider = () =>
   Provider.effect(
     Stream,
     Effect.gen(function* () {
-      const readStream = Effect.fn(function* (
-        clusterIdentifier: string,
-        streamIdentifier: string,
-      ) {
+      const readStream = Effect.fn(function* (clusterIdentifier: string, streamIdentifier: string) {
         return yield* dsql
           .getStream({ clusterIdentifier, streamIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // Bounded readiness wait — stream creation typically completes in one
@@ -171,23 +165,16 @@ export const StreamProvider = () =>
         clusterIdentifier: string,
         streamIdentifier: string,
       ) {
-        const policy = Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]);
         return yield* readStream(clusterIdentifier, streamIdentifier).pipe(
           Effect.flatMap((stream) => {
             if (stream === undefined) {
-              return Effect.fail(
-                new Error(`DSQL stream '${streamIdentifier}' not found`),
-              );
+              return Effect.fail(new Error(`DSQL stream '${streamIdentifier}' not found`));
             }
             if (stream.status === "FAILED") {
               return Effect.die(
                 `DSQL stream '${streamIdentifier}' failed to provision` +
-                  (stream.statusReason
-                    ? ` (${stream.statusReason.error})`
-                    : ""),
+                  (stream.statusReason ? ` (${stream.statusReason.error})` : ""),
               );
             }
             if (stream.status !== "ACTIVE") {
@@ -224,8 +211,7 @@ export const StreamProvider = () =>
             news.clusterId !== olds?.clusterId ||
             news.kinesisStreamArn !== olds?.kinesisStreamArn ||
             news.roleArn !== olds?.roleArn ||
-            (news.ordering ?? defaultOrdering) !==
-              (olds?.ordering ?? defaultOrdering) ||
+            (news.ordering ?? defaultOrdering) !== (olds?.ordering ?? defaultOrdering) ||
             (news.format ?? defaultFormat) !== (olds?.format ?? defaultFormat)
           ) {
             return { action: "replace" } as const;
@@ -240,8 +226,7 @@ export const StreamProvider = () =>
           }
           const tags = Object.fromEntries(
             Object.entries(stream.tags ?? {}).filter(
-              (entry): entry is [string, string] =>
-                typeof entry[1] === "string",
+              (entry): entry is [string, string] => typeof entry[1] === "string",
             ),
           );
           const attrs = toAttrs(stream);
@@ -285,12 +270,8 @@ export const StreamProvider = () =>
                 Effect.retry({
                   while: (e): boolean =>
                     e._tag === "ConflictException" ||
-                    (e._tag === "ValidationException" &&
-                      e.message.includes("IAM role")),
-                  schedule: Schedule.max([
-                    Schedule.fixed("5 seconds"),
-                    Schedule.recurs(24),
-                  ]),
+                    (e._tag === "ValidationException" && e.message.includes("IAM role")),
+                  schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
                 }),
               );
             streamId = created.streamIdentifier;
@@ -302,8 +283,7 @@ export const StreamProvider = () =>
           // 3. Sync tags — diff against OBSERVED cloud tags.
           const observedTags = Object.fromEntries(
             Object.entries(observed.tags ?? {}).filter(
-              (entry): entry is [string, string] =>
-                typeof entry[1] === "string",
+              (entry): entry is [string, string] => typeof entry[1] === "string",
             ),
           );
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -336,10 +316,7 @@ export const StreamProvider = () =>
               // conflict; retry briefly until it settles.
               Effect.retry({
                 while: (e): boolean => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
               }),
             );
           // Wait until fully gone (bounded) so the parent cluster's delete
@@ -348,18 +325,11 @@ export const StreamProvider = () =>
             Effect.flatMap((stream) =>
               stream === undefined || stream.status === "DELETED"
                 ? Effect.void
-                : Effect.fail(
-                    new Error(
-                      `DSQL stream '${output.streamId}' still ${stream.status}`,
-                    ),
-                  ),
+                : Effect.fail(new Error(`DSQL stream '${output.streamId}' still ${stream.status}`)),
             ),
             Effect.retry({
               while: (e): boolean => e instanceof Error,
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(36),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
             }),
             // Best-effort — deletion continues server-side either way.
             Effect.catch(() => Effect.void),
@@ -375,24 +345,17 @@ export const StreamProvider = () =>
             const nested = yield* Effect.forEach(
               clusters,
               (cluster) =>
-                dsql.listStreams
-                  .items({ clusterIdentifier: cluster.identifier })
-                  .pipe(
-                    EStream.runCollect,
-                    Effect.map((c) => Array.from(c)),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed([]),
-                    ),
-                  ),
+                dsql.listStreams.items({ clusterIdentifier: cluster.identifier }).pipe(
+                  EStream.runCollect,
+                  Effect.map((c) => Array.from(c)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
+                ),
               { concurrency: 4 },
             );
             return yield* Effect.forEach(
               nested.flat(),
               (summary) =>
-                readStream(
-                  summary.clusterIdentifier,
-                  summary.streamIdentifier,
-                ).pipe(
+                readStream(summary.clusterIdentifier, summary.streamIdentifier).pipe(
                   Effect.map((stream) =>
                     stream === undefined || stream.status === "DELETED"
                       ? undefined
@@ -402,9 +365,7 @@ export const StreamProvider = () =>
               { concurrency: 4 },
             ).pipe(
               Effect.map((attrs) =>
-                attrs.filter(
-                  (a): a is NonNullable<typeof a> => a !== undefined,
-                ),
+                attrs.filter((a): a is NonNullable<typeof a> => a !== undefined),
               ),
             );
           }),

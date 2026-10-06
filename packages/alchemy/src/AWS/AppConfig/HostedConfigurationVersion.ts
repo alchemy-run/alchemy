@@ -57,9 +57,8 @@ export interface HostedConfigurationVersion extends Resource<
  * change to the content produces a new version (a replacement), and its
  * `versionNumber` is what you deploy through a {@link Deployment}.
  *
- * @resource
- * @section Creating a Hosted Configuration Version
- * @example JSON Configuration
+ * ### Creating a Hosted Configuration Version
+ * **Example:** JSON Configuration
  * ```typescript
  * const version = yield* AppConfig.HostedConfigurationVersion("V1", {
  *   applicationId: app.applicationId,
@@ -69,6 +68,8 @@ export interface HostedConfigurationVersion extends Resource<
  * });
  * // version.versionNumber -> 1
  * ```
+ *
+ * @resource
  */
 export const HostedConfigurationVersion = Resource<HostedConfigurationVersion>(
   "AWS.AppConfig.HostedConfigurationVersion",
@@ -89,11 +90,7 @@ export const HostedConfigurationVersionProvider = () =>
             ConfigurationProfileId: configurationProfileId,
             VersionNumber: versionNumber,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -109,10 +106,8 @@ export const HostedConfigurationVersionProvider = () =>
               olds.configurationProfileId !== news.configurationProfileId ||
               olds.content !== news.content ||
               olds.contentType !== news.contentType ||
-              (olds.description ?? undefined) !==
-                (news.description ?? undefined) ||
-              (olds.versionLabel ?? undefined) !==
-                (news.versionLabel ?? undefined))
+              (olds.description ?? undefined) !== (news.description ?? undefined) ||
+              (olds.versionLabel ?? undefined) !== (news.versionLabel ?? undefined))
           ) {
             return { action: "replace" } as const;
           }
@@ -183,9 +178,7 @@ export const HostedConfigurationVersionProvider = () =>
               ConfigurationProfileId: output.configurationProfileId,
               VersionNumber: output.versionNumber,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Hosted configuration versions are keyed under their parent profile.

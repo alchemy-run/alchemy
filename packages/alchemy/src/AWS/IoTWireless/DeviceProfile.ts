@@ -6,17 +6,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readIotWirelessTags,
-  sameShape,
-  syncIotWirelessTags,
-} from "./internal.ts";
+import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
 
 export interface DeviceProfileProps {
   /**
@@ -65,9 +57,8 @@ export interface DeviceProfile extends Resource<
  *
  * Device profiles are immutable after creation: any change to `name`,
  * `loRaWAN`, or `sidewalk` replaces the profile. Only tags update in place.
- * @resource
- * @section Creating Device Profiles
- * @example US915 OTAA Device Profile
+ * ### Creating Device Profiles
+ * **Example:** US915 OTAA Device Profile
  * ```typescript
  * import * as IoTWireless from "alchemy/AWS/IoTWireless";
  *
@@ -82,38 +73,29 @@ export interface DeviceProfile extends Resource<
  * });
  * ```
  *
- * @example Sidewalk Device Profile
+ * **Example:** Sidewalk Device Profile
  * ```typescript
  * const profile = yield* IoTWireless.DeviceProfile("SidewalkModel", {
  *   sidewalk: {},
  * });
  * ```
+ *
+ * @resource
  */
-export const DeviceProfile = Resource<DeviceProfile>(
-  "AWS.IoTWireless.DeviceProfile",
-);
+export const DeviceProfile = Resource<DeviceProfile>("AWS.IoTWireless.DeviceProfile");
 
 export const DeviceProfileProvider = () =>
   Provider.effect(
     DeviceProfile,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const getById = (deviceProfileId: string) =>
         iotw
           .getDeviceProfile({ Id: deviceProfileId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // Device profiles have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -141,15 +123,10 @@ export const DeviceProfileProvider = () =>
         return yield* getById(summary.Id);
       });
 
-      const toAttrs = Effect.fn(function* (
-        profile: iotw.GetDeviceProfileResponse,
-        name: string,
-      ) {
+      const toAttrs = Effect.fn(function* (profile: iotw.GetDeviceProfileResponse, name: string) {
         if (profile.Id === undefined || profile.Arn === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `IoT Wireless device profile '${name}' returned without Id/Arn`,
-            ),
+            new Error(`IoT Wireless device profile '${name}' returned without Id/Arn`),
           );
         }
         return {
@@ -183,8 +160,7 @@ export const DeviceProfileProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.deviceProfileName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.deviceProfileName ?? (yield* createName(id, olds ?? {}));
           const profile = yield* observe(output, name);
           if (profile === undefined) return undefined;
           const attrs = yield* toAttrs(profile, name);
@@ -203,17 +179,13 @@ export const DeviceProfileProvider = () =>
           if (!sameShape(olds?.loRaWAN, news.loRaWAN)) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds?.sidewalk === undefined) !==
-            (news.sidewalk === undefined)
-          ) {
+          if ((olds?.sidewalk === undefined) !== (news.sidewalk === undefined)) {
             return { action: "replace" } as const;
           }
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.deviceProfileName ?? (yield* createName(id, news));
+          const name = output?.deviceProfileName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -232,11 +204,7 @@ export const DeviceProfileProvider = () =>
                 Sidewalk: news.sidewalk,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             profile =
               created?.Id !== undefined
                 ? yield* getById(created.Id)
@@ -244,9 +212,7 @@ export const DeviceProfileProvider = () =>
           }
           if (profile === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless device profile '${name}' not found after create`,
-              ),
+              new Error(`IoT Wireless device profile '${name}' not found after create`),
             );
           }
 

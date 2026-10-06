@@ -2,7 +2,6 @@ import * as diagnostics from "@distilled.cloud/cloudflare/diagnostics";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -71,18 +70,15 @@ export type EndpointHealthcheck = Resource<
  * IPs with the typed `InvalidHealthcheckEndpoint` error. The `endpoint` is
  * mutable in place via PUT (the UUID is stable across updates), but `name`
  * is create-only — changing it triggers a replacement.
- * @resource
- * @product Diagnostics
- * @category Observability & Analytics
- * @section Creating an endpoint healthcheck
- * @example Probe an on-net host
+ * ### Creating an endpoint healthcheck
+ * **Example:** Probe an on-net host
  * ```typescript
  * const check = yield* Cloudflare.Diagnostics.EndpointHealthcheck("core-router", {
  *   endpoint: "10.0.0.1",
  * });
  * ```
  *
- * @example With an explicit name
+ * **Example:** With an explicit name
  * ```typescript
  * const check = yield* Cloudflare.Diagnostics.EndpointHealthcheck("core-router", {
  *   endpoint: "10.0.0.1",
@@ -90,8 +86,8 @@ export type EndpointHealthcheck = Resource<
  * });
  * ```
  *
- * @section Updating
- * @example Re-point the probe at a different host
+ * ### Updating
+ * **Example:** Re-point the probe at a different host
  * ```typescript
  * // Changing `endpoint` updates the same healthcheck in place.
  * const check = yield* Cloudflare.Diagnostics.EndpointHealthcheck("core-router", {
@@ -100,15 +96,17 @@ export type EndpointHealthcheck = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/magic-wan/
+ *
+ * @resource
+ * @product Diagnostics
+ * @category Observability & Analytics
  */
 export const EndpointHealthcheck = Resource<EndpointHealthcheck>(TypeId);
 
 /**
  * Returns true if the given value is an EndpointHealthcheck resource.
  */
-export const isEndpointHealthcheck = (
-  value: unknown,
-): value is EndpointHealthcheck =>
+export const isEndpointHealthcheck = (value: unknown): value is EndpointHealthcheck =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const EndpointHealthcheckProvider = () =>
@@ -128,9 +126,7 @@ export const EndpointHealthcheckProvider = () =>
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
       const desiredName =
-        news.name ??
-        output?.name ??
-        (yield* createHealthcheckName(id, news.name));
+        news.name ?? output?.name ?? (yield* createHealthcheckName(id, news.name));
       if (output !== undefined && output.name !== desiredName) {
         return { action: "replace" } as const;
       }
@@ -171,10 +167,7 @@ export const EndpointHealthcheckProvider = () =>
       // `EndpointHealthcheckNotFound` before concluding it is gone, so a
       // propagation blip never leaks a duplicate (names are not unique).
       const observed = output?.healthcheckId
-        ? yield* observeExisting(
-            output.accountId ?? accountId,
-            output.healthcheckId,
-          )
+        ? yield* observeExisting(output.accountId ?? accountId, output.healthcheckId)
         : undefined;
 
       // Ensure — greenfield (or out-of-band delete): create with the full
@@ -195,8 +188,7 @@ export const EndpointHealthcheckProvider = () =>
       // without persisting it), so it never participates in the dirty
       // check and the observed name is kept as the source of truth.
       const dirty =
-        observed.endpoint !== desired.endpoint ||
-        observed.checkType !== desired.checkType;
+        observed.endpoint !== desired.endpoint || observed.checkType !== desired.checkType;
       if (!dirty) {
         return toAttributes(observed, observed.accountId);
       }
@@ -209,10 +201,7 @@ export const EndpointHealthcheckProvider = () =>
       });
       // The PUT response echoes the request body; only `endpoint` is
       // actually mutable, so overlay the persisted (observed) name.
-      return toAttributes(
-        { ...updated, name: observed.name },
-        observed.accountId,
-      );
+      return toAttributes({ ...updated, name: observed.name }, observed.accountId);
     }),
 
     list: Effect.fn(function* () {
@@ -232,9 +221,7 @@ export const EndpointHealthcheckProvider = () =>
           accountId: output.accountId,
           id: output.healthcheckId,
         })
-        .pipe(
-          Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.void));
     }),
   });
 
@@ -249,9 +236,7 @@ type ObservedHealthcheck = diagnostics.GetEndpointHealthcheckResponse & {
 const getHealthcheck = (accountId: string, id: string) =>
   diagnostics.getEndpointHealthcheck({ accountId, id }).pipe(
     Effect.map((hc): ObservedHealthcheck => ({ ...hc, accountId })),
-    Effect.catchTag("EndpointHealthcheckNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -266,14 +251,9 @@ const observeExisting = (accountId: string, id: string) =>
     Effect.map((hc): ObservedHealthcheck => ({ ...hc, accountId })),
     Effect.retry({
       while: (e) => e._tag === "EndpointHealthcheckNotFound",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
-    Effect.catchTag("EndpointHealthcheckNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -288,9 +268,7 @@ const findByName = (accountId: string, name: string) =>
         .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
         .at(0),
     ),
-    Effect.map(
-      (hc): ObservedHealthcheck | undefined => hc && { ...hc, accountId },
-    ),
+    Effect.map((hc): ObservedHealthcheck | undefined => hc && { ...hc, accountId }),
   );
 
 const createHealthcheckName = (id: string, name: string | undefined) =>

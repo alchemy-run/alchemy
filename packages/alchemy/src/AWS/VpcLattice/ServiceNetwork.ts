@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
@@ -72,24 +67,23 @@ export interface ServiceNetwork extends Resource<
  * services and VPCs into one application network. Cheap control-plane resource
  * with no per-hour charge until VPCs or services are associated.
  *
- * @resource
- * @section Creating Service Networks
- * @example Basic Service Network
+ * ### Creating Service Networks
+ * **Example:** Basic Service Network
  * ```typescript
  * const network = yield* ServiceNetwork("AppNetwork", {});
  * ```
  *
- * @example IAM-Authorized Network
+ * **Example:** IAM-Authorized Network
  * ```typescript
  * const network = yield* ServiceNetwork("SecureNetwork", {
  *   authType: "AWS_IAM",
  *   tags: { Environment: "prod" },
  * });
  * ```
+ *
+ * @resource
  */
-export const ServiceNetwork = Resource<ServiceNetwork>(
-  "AWS.VpcLattice.ServiceNetwork",
-);
+export const ServiceNetwork = Resource<ServiceNetwork>("AWS.VpcLattice.ServiceNetwork");
 
 export const ServiceNetworkProvider = () =>
   Provider.effect(
@@ -106,11 +100,7 @@ export const ServiceNetworkProvider = () =>
       const observe = (serviceNetworkIdentifier: string) =>
         vpclattice
           .getServiceNetwork({ serviceNetworkIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findByName = (name: string) =>
         vpclattice.listServiceNetworks.pages({}).pipe(
@@ -125,17 +115,11 @@ export const ServiceNetworkProvider = () =>
           ),
         );
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({
           resourceArn: arn,
         });
-        const { removed, upsert } = diffTags(
-          tagRecord(listed.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(tagRecord(listed.tags), desiredTags);
         if (upsert.length > 0) {
           yield* vpclattice.tagResource({
             resourceArn: arn,
@@ -156,11 +140,7 @@ export const ServiceNetworkProvider = () =>
       ) {
         const listed = yield* vpclattice
           .listTagsForResource({ resourceArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         if (!listed) return false;
         const tags = tagRecord(listed.tags);
         return (
@@ -178,9 +158,7 @@ export const ServiceNetworkProvider = () =>
         const pages = yield* vpclattice.listServiceNetworkVpcAssociations
           .pages({ serviceNetworkIdentifier: serviceNetworkId })
           .pipe(Stream.runCollect);
-        const associations = Array.from(pages).flatMap(
-          (page) => page.items ?? [],
-        );
+        const associations = Array.from(pages).flatMap((page) => page.items ?? []);
         yield* Effect.forEach(
           associations,
           (association) =>
@@ -188,8 +166,7 @@ export const ServiceNetworkProvider = () =>
               if (
                 !association.id ||
                 !association.arn ||
-                (!force &&
-                  !(yield* isOwnedAssociation(association.arn, ownerTags)))
+                (!force && !(yield* isOwnedAssociation(association.arn, ownerTags)))
               ) {
                 return;
               }
@@ -197,18 +174,14 @@ export const ServiceNetworkProvider = () =>
                 vpclattice.deleteServiceNetworkVpcAssociation({
                   serviceNetworkVpcAssociationIdentifier: association.id,
                 }),
-              ).pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
               yield* waitUntilAbsent(
                 vpclattice
                   .getServiceNetworkVpcAssociation({
                     serviceNetworkVpcAssociationIdentifier: association.id,
                   })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   ),
               );
             }),
@@ -224,9 +197,7 @@ export const ServiceNetworkProvider = () =>
         const pages = yield* vpclattice.listServiceNetworkServiceAssociations
           .pages({ serviceNetworkIdentifier: serviceNetworkId })
           .pipe(Stream.runCollect);
-        const associations = Array.from(pages).flatMap(
-          (page) => page.items ?? [],
-        );
+        const associations = Array.from(pages).flatMap((page) => page.items ?? []);
         yield* Effect.forEach(
           associations,
           (association) =>
@@ -234,8 +205,7 @@ export const ServiceNetworkProvider = () =>
               if (
                 !association.id ||
                 !association.arn ||
-                (!force &&
-                  !(yield* isOwnedAssociation(association.arn, ownerTags)))
+                (!force && !(yield* isOwnedAssociation(association.arn, ownerTags)))
               ) {
                 return;
               }
@@ -243,18 +213,14 @@ export const ServiceNetworkProvider = () =>
                 vpclattice.deleteServiceNetworkServiceAssociation({
                   serviceNetworkServiceAssociationIdentifier: association.id,
                 }),
-              ).pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
               yield* waitUntilAbsent(
                 vpclattice
                   .getServiceNetworkServiceAssociation({
                     serviceNetworkServiceAssociationIdentifier: association.id,
                   })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   ),
               );
             }),
@@ -270,9 +236,7 @@ export const ServiceNetworkProvider = () =>
         const pages = yield* vpclattice.listServiceNetworkResourceAssociations
           .pages({ serviceNetworkIdentifier: serviceNetworkId })
           .pipe(Stream.runCollect);
-        const associations = Array.from(pages).flatMap(
-          (page) => page.items ?? [],
-        );
+        const associations = Array.from(pages).flatMap((page) => page.items ?? []);
         yield* Effect.forEach(
           associations,
           (association) =>
@@ -280,8 +244,7 @@ export const ServiceNetworkProvider = () =>
               if (
                 !association.id ||
                 !association.arn ||
-                (!force &&
-                  !(yield* isOwnedAssociation(association.arn, ownerTags)))
+                (!force && !(yield* isOwnedAssociation(association.arn, ownerTags)))
               ) {
                 return;
               }
@@ -289,18 +252,14 @@ export const ServiceNetworkProvider = () =>
                 vpclattice.deleteServiceNetworkResourceAssociation({
                   serviceNetworkResourceAssociationIdentifier: association.id,
                 }),
-              ).pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
               yield* waitUntilAbsent(
                 vpclattice
                   .getServiceNetworkResourceAssociation({
                     serviceNetworkResourceAssociationIdentifier: association.id,
                   })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   ),
               );
             }),
@@ -312,9 +271,7 @@ export const ServiceNetworkProvider = () =>
         stables: ["serviceNetworkId", "serviceNetworkArn", "name"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -333,9 +290,7 @@ export const ServiceNetworkProvider = () =>
             authType: (network.authType as ServiceNetworkAuthType) ?? "NONE",
             tags: tagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, listed.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -352,13 +307,9 @@ export const ServiceNetworkProvider = () =>
           if (!network?.arn || !network.id) {
             network = yield* vpclattice
               .createServiceNetwork({ name, authType: desiredAuthType })
-              .pipe(
-                Effect.catchTag("ConflictException", () => findByName(name)),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!network?.arn || !network.id) {
-              return yield* Effect.fail(
-                new Error(`Failed to create service network ${name}`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create service network ${name}`));
             }
           } else if ((network.authType ?? "NONE") !== desiredAuthType) {
             // Sync auth type — the only mutable setting.
@@ -381,18 +332,13 @@ export const ServiceNetworkProvider = () =>
         }),
         list: () =>
           Effect.gen(function* () {
-            const summaries = yield* vpclattice.listServiceNetworks
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.items ?? []),
-                ),
-              );
+            const summaries = yield* vpclattice.listServiceNetworks.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
+            );
             return yield* Effect.forEach(
               summaries.filter(
-                (s): s is typeof s & { id: string; arn: string } =>
-                  s.id != null && s.arn != null,
+                (s): s is typeof s & { id: string; arn: string } => s.id != null && s.arn != null,
               ),
               (summary) =>
                 Effect.gen(function* () {
@@ -404,8 +350,7 @@ export const ServiceNetworkProvider = () =>
                     serviceNetworkId: summary.id,
                     serviceNetworkArn: summary.arn,
                     name: summary.name!,
-                    authType:
-                      (network?.authType as ServiceNetworkAuthType) ?? "NONE",
+                    authType: (network?.authType as ServiceNetworkAuthType) ?? "NONE",
                     tags: tagRecord(listed.tags),
                   };
                 }),
@@ -424,21 +369,9 @@ export const ServiceNetworkProvider = () =>
           // the same Alchemy stack/stage.
           yield* Effect.all(
             [
-              deleteVpcAssociations(
-                output.serviceNetworkId,
-                output.tags,
-                force === true,
-              ),
-              deleteServiceAssociations(
-                output.serviceNetworkId,
-                output.tags,
-                force === true,
-              ),
-              deleteResourceAssociations(
-                output.serviceNetworkId,
-                output.tags,
-                force === true,
-              ),
+              deleteVpcAssociations(output.serviceNetworkId, output.tags, force === true),
+              deleteServiceAssociations(output.serviceNetworkId, output.tags, force === true),
+              deleteResourceAssociations(output.serviceNetworkId, output.tags, force === true),
             ],
             { concurrency: 3 },
           );
@@ -446,9 +379,7 @@ export const ServiceNetworkProvider = () =>
             vpclattice.deleteServiceNetwork({
               serviceNetworkIdentifier: output.serviceNetworkId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitUntilAbsent(observe(output.serviceNetworkId));
         }),
       };

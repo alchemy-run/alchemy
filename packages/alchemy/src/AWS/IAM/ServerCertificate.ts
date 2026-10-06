@@ -6,13 +6,8 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
 import { toTagRecord } from "./common.ts";
 
 export interface ServerCertificateProps {
@@ -76,9 +71,8 @@ export interface ServerCertificate extends Resource<
  * `ServerCertificate` uploads and tracks a TLS certificate bundle for legacy
  * IAM-integrated services. The private key is write-only and should be provided
  * as a redacted value when possible.
- * @resource
- * @section Uploading Server Certificates
- * @example Upload a TLS Certificate
+ * ### Uploading Server Certificates
+ * **Example:** Upload a TLS Certificate
  * ```typescript
  * const certificate = yield* ServerCertificate("ApiTlsCertificate", {
  *   certificateBody: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
@@ -88,10 +82,10 @@ export interface ServerCertificate extends Resource<
  *   certificateChain: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
  * });
  * ```
+ *
+ * @resource
  */
-export const ServerCertificate = Resource<ServerCertificate>(
-  "AWS.IAM.ServerCertificate",
-);
+export const ServerCertificate = Resource<ServerCertificate>("AWS.IAM.ServerCertificate");
 
 export const ServerCertificateProvider = () =>
   Provider.effect(
@@ -107,20 +101,12 @@ export const ServerCertificateProvider = () =>
           .getServerCertificate({
             ServerCertificateName: name,
           })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         return response?.ServerCertificate;
       });
 
       return {
-        stables: [
-          "serverCertificateArn",
-          "serverCertificateName",
-          "serverCertificateId",
-        ],
+        stables: ["serverCertificateArn", "serverCertificateName", "serverCertificateId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
@@ -146,10 +132,8 @@ export const ServerCertificateProvider = () =>
           });
           return {
             serverCertificateArn: cert.ServerCertificateMetadata.Arn,
-            serverCertificateName:
-              cert.ServerCertificateMetadata.ServerCertificateName,
-            serverCertificateId:
-              cert.ServerCertificateMetadata.ServerCertificateId,
+            serverCertificateName: cert.ServerCertificateMetadata.ServerCertificateName,
+            serverCertificateId: cert.ServerCertificateMetadata.ServerCertificateId,
             path: cert.ServerCertificateMetadata.Path,
             certificateBody: cert.CertificateBody,
             certificateChain: cert.CertificateChain,
@@ -159,8 +143,7 @@ export const ServerCertificateProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.serverCertificateName ?? (yield* toName(id, news));
+          const name = output?.serverCertificateName ?? (yield* toName(id, news));
           const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
@@ -205,16 +188,13 @@ export const ServerCertificateProvider = () =>
                       );
                     }
                     return {
-                      ServerCertificateMetadata:
-                        existing.ServerCertificateMetadata,
+                      ServerCertificateMetadata: existing.ServerCertificateMetadata,
                     };
                   }),
                 ),
               );
             if (!created.ServerCertificateMetadata?.Arn) {
-              return yield* Effect.fail(
-                new Error(`uploadServerCertificate returned no metadata`),
-              );
+              return yield* Effect.fail(new Error(`uploadServerCertificate returned no metadata`));
             }
             cert = yield* readCertificate(name);
           }
@@ -240,9 +220,7 @@ export const ServerCertificateProvider = () =>
           const metadata = fresh?.ServerCertificateMetadata;
           if (!metadata?.Arn || !metadata.ServerCertificateName) {
             return yield* Effect.fail(
-              new Error(
-                `Server certificate '${name}' was not readable after sync`,
-              ),
+              new Error(`Server certificate '${name}' was not readable after sync`),
             );
           }
 
@@ -267,18 +245,14 @@ export const ServerCertificateProvider = () =>
             const metadatas = yield* iam.listServerCertificates.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.ServerCertificateMetadataList ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.ServerCertificateMetadataList ?? []),
               ),
             );
             const rows = yield* Effect.forEach(
               metadatas,
               (meta) =>
                 Effect.gen(function* () {
-                  const cert = yield* readCertificate(
-                    meta.ServerCertificateName,
-                  );
+                  const cert = yield* readCertificate(meta.ServerCertificateName);
                   // Raced delete between list and hydrate — skip it.
                   if (!cert?.ServerCertificateMetadata?.Arn) {
                     return undefined;
@@ -288,10 +262,8 @@ export const ServerCertificateProvider = () =>
                   });
                   return {
                     serverCertificateArn: cert.ServerCertificateMetadata.Arn,
-                    serverCertificateName:
-                      cert.ServerCertificateMetadata.ServerCertificateName,
-                    serverCertificateId:
-                      cert.ServerCertificateMetadata.ServerCertificateId,
+                    serverCertificateName: cert.ServerCertificateMetadata.ServerCertificateName,
+                    serverCertificateId: cert.ServerCertificateMetadata.ServerCertificateId,
                     path: cert.ServerCertificateMetadata.Path,
                     certificateBody: cert.CertificateBody,
                     certificateChain: cert.CertificateChain,

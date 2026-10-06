@@ -12,9 +12,8 @@ export interface ListApplicationOperationsRequest extends Omit<
  * Runtime binding for `kinesisanalytics:ListApplicationOperations` — pages
  * through the bound application's async operation history (starts, stops,
  * updates, rollbacks and their outcomes).
- * @binding
- * @section Operating the Application
- * @example List recent failed operations
+ * ### Operating the Application
+ * **Example:** List recent failed operations
  * ```typescript
  * const listOperations = yield* AWS.KinesisAnalyticsV2.ListApplicationOperations(app);
  *
@@ -22,6 +21,8 @@ export interface ListApplicationOperationsRequest extends Omit<
  *   OperationStatus: "FAILED",
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListApplicationOperations extends Binding.Service<
   ListApplicationOperations,
@@ -31,13 +32,9 @@ export interface ListApplicationOperations extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListApplicationOperationsRequest,
-    ) => Effect.Effect<
-      SVC.ListApplicationOperationsResponse,
-      SVC.ListApplicationOperationsError
-    >
+    ) => Effect.Effect<SVC.ListApplicationOperationsResponse, SVC.ListApplicationOperationsError>
   >
 > {}
-export const ListApplicationOperations =
-  Binding.Service<ListApplicationOperations>(
-    "AWS.KinesisAnalyticsV2.ListApplicationOperations",
-  );
+export const ListApplicationOperations = Binding.Service<ListApplicationOperations>(
+  "AWS.KinesisAnalyticsV2.ListApplicationOperations",
+);

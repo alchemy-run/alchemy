@@ -15,15 +15,16 @@ export interface ListReferencesRequest extends Omit<
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.ListReferencesHttp)`.
- * @binding
- * @section References
- * @example Bind ListReferences to a ReferenceStore
+ * ### References
+ * **Example:** Bind ListReferences to a ReferenceStore
  * ```typescript
  * // init
  * const listReferences = yield* AWS.Omics.ListReferences(store);
  * // runtime
  * const result = yield* listReferences({});
  * ```
+ *
+ * @binding
  */
 export interface ListReferences extends Binding.Service<
   ListReferences,
@@ -37,6 +38,4 @@ export interface ListReferences extends Binding.Service<
   >
 > {}
 
-export const ListReferences = Binding.Service<ListReferences>(
-  "AWS.Omics.ListReferences",
-);
+export const ListReferences = Binding.Service<ListReferences>("AWS.Omics.ListReferences");

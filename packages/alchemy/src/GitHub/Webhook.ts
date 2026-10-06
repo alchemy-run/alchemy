@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type { Input } from "../Input.ts";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
@@ -119,9 +119,8 @@ export interface Webhook extends Resource<
  * {@link import("./RepositoryEventSource.ts").events | events(repository, handler)}
  * inside a Cloudflare Worker, which provisions the webhook, wires the
  * delivery URL to the Worker, and forwards verified events to your handler.
- * @resource
- * @section Creating a Webhook
- * @example Forward push events to a URL
+ * ### Creating a Webhook
+ * **Example:** Forward push events to a URL
  * ```typescript
  * yield* GitHub.Webhook("ci-webhook", {
  *   owner: "my-org",
@@ -132,7 +131,7 @@ export interface Webhook extends Resource<
  * });
  * ```
  *
- * @example Point a webhook at a Worker
+ * **Example:** Point a webhook at a Worker
  * ```typescript
  * const worker = yield* Cloudflare.Worker("Api", { ... });
  *
@@ -143,6 +142,9 @@ export interface Webhook extends Resource<
  *   events: ["*"],
  * });
  * ```
+ *
+ * @resource
+ * @product Webhook
  */
 export const Webhook = Resource<Webhook>("GitHub.Webhook");
 
@@ -255,14 +257,11 @@ export const WebhookProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const hooks = await octokit.paginate(
-                  octokit.rest.repos.listWebhooks,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const hooks = await octokit.paginate(octokit.rest.repos.listWebhooks, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return hooks.map(toAttrs);
               } catch (error: any) {
                 // Repos where the token lacks admin access reject the webhooks

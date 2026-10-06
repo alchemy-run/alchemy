@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * and grants `mediaconvert:CancelJob` on `*`. Provide the implementation
  * with `Effect.provide(AWS.MediaConvert.CancelJobHttp)`.
  *
- * @binding
- * @section Tracking Jobs
- * @example Cancel an In-Flight Job
+ * ### Tracking Jobs
+ * **Example:** Cancel an In-Flight Job
  * ```typescript
  * // init
  * const cancelJob = yield* AWS.MediaConvert.CancelJob();
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  *   Effect.catchTag(["NotFoundException", "ConflictException"], () => Effect.void),
  * );
  * ```
+ *
+ * @binding
  */
 export interface CancelJob extends Binding.Service<
   CancelJob,
@@ -31,12 +32,7 @@ export interface CancelJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediaconvert.CancelJobRequest,
-    ) => Effect.Effect<
-      mediaconvert.CancelJobResponse,
-      mediaconvert.CancelJobError
-    >
+    ) => Effect.Effect<mediaconvert.CancelJobResponse, mediaconvert.CancelJobError>
   >
 > {}
-export const CancelJob = Binding.Service<CancelJob>(
-  "AWS.MediaConvert.CancelJob",
-);
+export const CancelJob = Binding.Service<CancelJob>("AWS.MediaConvert.CancelJob");

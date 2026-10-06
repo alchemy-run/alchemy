@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface GetAssetRequest extends Omit<
-  datazone.GetAssetInput,
-  "domainIdentifier"
-> {}
+export interface GetAssetRequest extends Omit<datazone.GetAssetInput, "domainIdentifier"> {}
 
 /**
  * Runtime binding for `datazone:GetAsset`.
@@ -14,9 +11,8 @@ export interface GetAssetRequest extends Omit<
  * Reads an asset in the bound domain — its forms, glossary terms, and latest revision. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.GetAssetHttp)`.
- * @binding
- * @section Searching the Catalog
- * @example Read an Asset
+ * ### Searching the Catalog
+ * **Example:** Read an Asset
  * ```typescript
  * // init — bind the operation to the domain
  * const getAsset = yield* AWS.DataZone.GetAsset(domain);
@@ -24,6 +20,8 @@ export interface GetAssetRequest extends Omit<
  * // runtime
  * const asset = yield* getAsset({ identifier: assetId });
  * ```
+ *
+ * @binding
  */
 export interface GetAsset extends Binding.Service<
   GetAsset,
@@ -31,9 +29,7 @@ export interface GetAsset extends Binding.Service<
   (
     domain: Domain,
   ) => Effect.Effect<
-    (
-      request: GetAssetRequest,
-    ) => Effect.Effect<datazone.GetAssetOutput, datazone.GetAssetError>
+    (request: GetAssetRequest) => Effect.Effect<datazone.GetAssetOutput, datazone.GetAssetError>
   >
 > {}
 export const GetAsset = Binding.Service<GetAsset>("AWS.DataZone.GetAsset");

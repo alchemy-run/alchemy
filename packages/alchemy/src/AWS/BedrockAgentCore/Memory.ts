@@ -99,9 +99,8 @@ export interface Memory extends Resource<
  * Provisioning is asynchronous: the provider waits for the memory to reach
  * `ACTIVE` (~2-3 minutes) before returning.
  *
- * @resource
- * @section Creating Memories
- * @example Short-Term Memory Only
+ * ### Creating Memories
+ * **Example:** Short-Term Memory Only
  * ```typescript
  * import * as AgentCore from "alchemy/AWS/BedrockAgentCore";
  *
@@ -110,7 +109,7 @@ export interface Memory extends Resource<
  * });
  * ```
  *
- * @example Memory with a Semantic Long-Term Strategy
+ * **Example:** Memory with a Semantic Long-Term Strategy
  * ```typescript
  * const memory = yield* AgentCore.Memory("AgentMemory", {
  *   eventExpiryDuration: "90 days",
@@ -125,8 +124,8 @@ export interface Memory extends Resource<
  * });
  * ```
  *
- * @section Using Memory from a Function
- * @example Record and Query Events
+ * ### Using Memory from a Function
+ * **Example:** Record and Query Events
  * ```typescript
  * // init
  * const createEvent = yield* AgentCore.CreateEvent(memory);
@@ -156,6 +155,8 @@ export interface Memory extends Resource<
  *   }),
  * };
  * ```
+ *
+ * @resource
  */
 export const Memory = Resource<Memory>("AWS.BedrockAgentCore.Memory");
 
@@ -166,31 +167,22 @@ export const MemoryProvider = () =>
   Provider.effect(
     Memory,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<MemoryProps, "name">,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: Pick<MemoryProps, "name">) {
         return props.name ?? (yield* createAgentCoreName(id));
       });
 
       const getMemoryOrUndefined = Effect.fn(function* (memoryId: string) {
         return yield* control.getMemory({ memoryId }).pipe(
           Effect.map((r) => r.memory),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       // Memory summaries carry no name, so find-by-name hydrates each
       // non-deleting summary and matches on the fetched name.
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* control.listMemories
-          .pages({})
-          .pipe(Stream.runCollect);
-        const summaries = Array.from(pages).flatMap(
-          (page) => page.memories ?? [],
-        );
+        const pages = yield* control.listMemories.pages({}).pipe(Stream.runCollect);
+        const summaries = Array.from(pages).flatMap((page) => page.memories ?? []);
         const hydrated = yield* Effect.forEach(
           summaries,
           (s) =>
@@ -224,12 +216,8 @@ export const MemoryProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* control.listMemories
-              .pages({})
-              .pipe(Stream.runCollect);
-            const summaries = Array.from(pages).flatMap(
-              (page) => page.memories ?? [],
-            );
+            const pages = yield* control.listMemories.pages({}).pipe(Stream.runCollect);
+            const summaries = Array.from(pages).flatMap((page) => page.memories ?? []);
             const hydrated = yield* Effect.forEach(
               summaries,
               (s) =>
@@ -244,9 +232,7 @@ export const MemoryProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const memory = output?.memoryId
             ? yield* getMemoryOrUndefined(output.memoryId)
-            : yield* findByName(
-                yield* createName(id, olds ?? ({} as MemoryProps)),
-              );
+            : yield* findByName(yield* createName(id, olds ?? ({} as MemoryProps)));
           if (memory === undefined || memory.status === "DELETING") {
             return undefined;
           }
@@ -263,10 +249,7 @@ export const MemoryProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          if (
-            (oldProps.encryptionKeyArn ?? undefined) !==
-            (news?.encryptionKeyArn ?? undefined)
-          ) {
+          if ((oldProps.encryptionKeyArn ?? undefined) !== (news?.encryptionKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
           // Strategy lists are create-only: in-place strategy mutation uses a
@@ -286,13 +269,10 @@ export const MemoryProvider = () =>
           const name = output?.name ?? (yield* createName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
-          const eventExpiryDuration =
-            toWireDays(props.eventExpiryDuration) ?? 90;
+          const eventExpiryDuration = toWireDays(props.eventExpiryDuration) ?? 90;
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache.
-          let memory = output?.memoryId
-            ? yield* getMemoryOrUndefined(output.memoryId)
-            : undefined;
+          let memory = output?.memoryId ? yield* getMemoryOrUndefined(output.memoryId) : undefined;
           if (memory === undefined) {
             memory = yield* findByName(name);
           }
@@ -360,15 +340,11 @@ export const MemoryProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteMemory({ memoryId: output.memoryId }).pipe(
             retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
           yield* control.getMemory({ memoryId: output.memoryId }).pipe(
             Effect.map((r) => r.memory.status as string),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("GONE" as string),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as string)),
             Effect.repeat({
               schedule: Schedule.fixed("5 seconds"),
               until: (status) => status === "GONE",

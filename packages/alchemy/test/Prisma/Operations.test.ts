@@ -1,13 +1,12 @@
-import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
-import * as Prisma from "@/Prisma/Operations";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import { Credentials } from "@/Prisma/Credentials";
+import * as Prisma from "@/Prisma/Operations";
 
 type AssertNever<T extends never> = T;
-type ClientOperation = Exclude<
-  keyof PrismaManagementClient,
-  "request" | "paginate"
->;
+type ClientOperation = Exclude<keyof PrismaManagementClient, "request" | "paginate">;
 export type PrismaOperationCoverage = [
   AssertNever<Exclude<ClientOperation, keyof typeof Prisma>>,
   AssertNever<Exclude<keyof typeof Prisma, ClientOperation>>,
@@ -48,6 +47,13 @@ const expectedOperationHelpers = [
   "createBranch",
   "updateBranch",
   "deleteBranch",
+  "listBuckets",
+  "getBucket",
+  "createBucket",
+  "deleteBucket",
+  "listBucketKeys",
+  "createBucketKey",
+  "deleteBucketKey",
   "getCustomDomain",
   "deleteCustomDomain",
   "retryCustomDomain",
@@ -87,7 +93,7 @@ const expectedOperationHelpers = [
   "deleteSourceRepository",
 ];
 
-describe("Prisma operation helpers", () => {
+describe("Prisma operation helpers", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect("delegate every public operation helper to PrismaClient", () => {
     const calls: Array<[string, unknown[]]> = [];
     const client = new Proxy(
@@ -116,9 +122,7 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.createProject({ name: "app" });
       yield* Prisma.updateProject("project-1", { name: "renamed" });
       yield* Prisma.deleteProject("project-1");
-      yield* Prisma.transferProject("project-1", {
-        recipientAccessToken: "recipient-token",
-      });
+      yield* Prisma.transferProject("project-1", { recipientAccessToken: "recipient-token" });
 
       yield* Prisma.listDatabases({ projectId: "project-1" });
       yield* Prisma.listProjectDatabases("project-1", { limit: 1 });
@@ -126,21 +130,13 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.createDatabase({ projectId: "project-1" });
       yield* Prisma.createProjectDatabase("project-1", {
         region: "us-east-1",
-        source: {
-          type: "backup",
-          databaseId: "database-source",
-          backupId: "backup-1",
-        },
+        source: { type: "backup", databaseId: "database-source", backupId: "backup-1" },
       });
       yield* Prisma.updateDatabase("database-1", { name: "renamed" });
       yield* Prisma.deleteDatabase("database-1");
       yield* Prisma.listBackups("database-1", { limit: 1 });
       yield* Prisma.restoreDatabase("database-1", {
-        source: {
-          type: "backup",
-          databaseId: "source-database",
-          backupId: "backup-1",
-        },
+        source: { type: "backup", databaseId: "source-database", backupId: "backup-1" },
       });
       yield* Prisma.getDatabaseUsage("database-1", {
         startDate: "2026-01-01",
@@ -150,10 +146,7 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.listConnections({ databaseId: "database-1" });
       yield* Prisma.listDatabaseConnections("database-1", { limit: 1 });
       yield* Prisma.getConnection("connection-1");
-      yield* Prisma.createConnection({
-        databaseId: "database-1",
-        name: "api",
-      });
+      yield* Prisma.createConnection({ databaseId: "database-1", name: "api" });
       yield* Prisma.createDatabaseConnection("database-1", { name: "api" });
       yield* Prisma.deleteConnection("connection-1");
       yield* Prisma.rotateConnection("connection-1");
@@ -163,6 +156,14 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.createBranch("project-1", { gitName: "main" });
       yield* Prisma.updateBranch("branch-1", { isDefault: true });
       yield* Prisma.deleteBranch("branch-1");
+
+      yield* Prisma.listBuckets({ projectId: "project-1" });
+      yield* Prisma.getBucket("bucket-1");
+      yield* Prisma.createBucket({ projectId: "project-1", name: "uploads" });
+      yield* Prisma.deleteBucket("bucket-1");
+      yield* Prisma.listBucketKeys("bucket-1", { limit: 1 });
+      yield* Prisma.createBucketKey("bucket-1", { role: "read_write" });
+      yield* Prisma.deleteBucketKey("bucket-1", "key-1");
 
       yield* Prisma.getCustomDomain("domain-1");
       yield* Prisma.deleteCustomDomain("domain-1");
@@ -204,13 +205,8 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.revokeWorkspaceIntegration("workspace-1", "client-1");
 
       yield* Prisma.listScmInstallations({ workspaceId: "workspace-1" });
-      yield* Prisma.createScmInstallIntent({
-        provider: "github",
-        workspaceId: "workspace-1",
-      });
-      yield* Prisma.listScmInstallationRepositories("scminstall-1", {
-        limit: 10,
-      });
+      yield* Prisma.createScmInstallIntent({ provider: "github", workspaceId: "workspace-1" });
+      yield* Prisma.listScmInstallationRepositories("scminstall-1", { limit: 10 });
 
       yield* Prisma.listSourceRepositories({ projectId: "project-1" });
       yield* Prisma.getSourceRepository("repo-1");
@@ -221,10 +217,24 @@ describe("Prisma operation helpers", () => {
       });
       yield* Prisma.deleteSourceRepository("repo-1");
 
-      expect(Object.keys(Prisma).sort()).toEqual(
-        [...expectedOperationHelpers].sort(),
+      expect(Object.keys(Prisma).sort()).toEqual([...expectedOperationHelpers].sort());
+      // The log-request builders resolve the distilled Credentials service
+      // directly instead of delegating to the client, so they never appear in
+      // `calls`.
+      expect(calls.map(([name]) => name)).toEqual(
+        expectedOperationHelpers.filter(
+          (name) => name !== "getDeploymentLogsRequest" && name !== "getBuildLogsRequest",
+        ),
       );
-      expect(calls.map(([name]) => name)).toEqual(expectedOperationHelpers);
-    }).pipe(Effect.provideService(PrismaClient, client));
+    }).pipe(
+      Effect.provideService(PrismaClient, client),
+      Effect.provideService(
+        Credentials,
+        Effect.succeed({
+          apiToken: Redacted.make("test-token"),
+          apiBaseUrl: "https://api.prisma.test",
+        }),
+      ),
+    );
   });
 });

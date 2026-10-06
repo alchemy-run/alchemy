@@ -4,7 +4,6 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -82,11 +81,8 @@ export type SendingSubdomain = Resource<
  * prior state, `read` scans the zone for an existing subdomain with the
  * same name and reports it as `Unowned`, so the engine refuses to take it
  * over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Email
- * @category Email
- * @section Registering a sending subdomain
- * @example Send mail from `mail.example.com`
+ * ### Registering a sending subdomain
+ * **Example:** Send mail from `mail.example.com`
  * ```typescript
  * const sending = yield* Cloudflare.Email.SendingSubdomain("Mail", {
  *   zoneId: zone.zoneId,
@@ -96,8 +92,8 @@ export type SendingSubdomain = Resource<
  * // sending.dkimSelector / sending.returnPathDomain — provisioned config
  * ```
  *
- * @section Externally-hosted zones
- * @example Look up the DNS records to create manually
+ * ### Externally-hosted zones
+ * **Example:** Look up the DNS records to create manually
  * ```typescript
  * import * as emailSending from "@distilled.cloud/cloudflare/email-sending";
  *
@@ -110,11 +106,14 @@ export type SendingSubdomain = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/email-sending/
+ *
+ * @resource
+ * @product Email
+ * @category Email
  */
-export const SendingSubdomain = Resource<SendingSubdomain>(
-  SendingSubdomainTypeId,
-  { aliases: ["Cloudflare.EmailSendingSubdomain"] },
-);
+export const SendingSubdomain = Resource<SendingSubdomain>(SendingSubdomainTypeId, {
+  aliases: ["Cloudflare.EmailSendingSubdomain"],
+});
 
 /**
  * Returns true if the given value is an SendingSubdomain resource.
@@ -125,14 +124,7 @@ export const isSendingSubdomain = (value: unknown): value is SendingSubdomain =>
 export const SendingSubdomainProvider = () =>
   Provider.succeed(SendingSubdomain, {
     // No update API exists — every attribute is stable across updates.
-    stables: [
-      "subdomainId",
-      "zoneId",
-      "name",
-      "dkimSelector",
-      "returnPathDomain",
-      "created",
-    ],
+    stables: ["subdomainId", "zoneId", "name", "dkimSelector", "returnPathDomain", "created"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -147,9 +139,7 @@ export const SendingSubdomainProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((subdomain) =>
-                  toAttributes(subdomain, zone.id),
-                ),
+                (page.result ?? []).map((subdomain) => toAttributes(subdomain, zone.id)),
               ),
             ),
             // Email Sending may be unavailable / plan-gated on a zone —
@@ -169,20 +159,14 @@ export const SendingSubdomainProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
 
       // Owned path: refresh by our persisted subdomain id.
@@ -286,9 +270,7 @@ type ObservedSubdomain = emailSending.GetSubdomainResponse;
 const getSubdomain = (zoneId: string, subdomainId: string) =>
   emailSending.getSubdomain({ zoneId, subdomainId }).pipe(
     Effect.map((subdomain): ObservedSubdomain | undefined => subdomain),
-    Effect.catchTag("SendingSubdomainNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("SendingSubdomainNotFound", () => Effect.succeed(undefined)),
   );
 
 /**

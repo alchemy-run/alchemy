@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * and grants `forecast:DescribeForecast` on `*`. Provide the implementation
  * with `Effect.provide(AWS.Forecast.DescribeForecastHttp)`.
  *
- * @binding
- * @section Generating Forecasts
- * @example Wait for a Forecast to Become Queryable
+ * ### Generating Forecasts
+ * **Example:** Wait for a Forecast to Become Queryable
  * ```typescript
  * // init
  * const describeForecast = yield* AWS.Forecast.DescribeForecast();
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * yield* Effect.log(`forecast ${detail.Status}`);
  * ```
+ *
+ * @binding
  */
 export interface DescribeForecast extends Binding.Service<
   DescribeForecast,
@@ -31,12 +32,7 @@ export interface DescribeForecast extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.DescribeForecastRequest,
-    ) => Effect.Effect<
-      forecast.DescribeForecastResponse,
-      forecast.DescribeForecastError
-    >
+    ) => Effect.Effect<forecast.DescribeForecastResponse, forecast.DescribeForecastError>
   >
 > {}
-export const DescribeForecast = Binding.Service<DescribeForecast>(
-  "AWS.Forecast.DescribeForecast",
-);
+export const DescribeForecast = Binding.Service<DescribeForecast>("AWS.Forecast.DescribeForecast");

@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.DisassociateFacesHttp)`.
  *
- * @binding
- * @section User Search
- * @example Disassociate Faces from a User
+ * ### User Search
+ * **Example:** Disassociate Faces from a User
  * ```typescript
  * // init
  * const disassociateFaces = yield* AWS.Rekognition.DisassociateFaces();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  *   FaceIds: [faceId],
  * });
  * ```
+ *
+ * @binding
  */
 export interface DisassociateFaces extends Binding.Service<
   DisassociateFaces,
@@ -32,10 +33,7 @@ export interface DisassociateFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DisassociateFacesRequest,
-    ) => Effect.Effect<
-      rekognition.DisassociateFacesResponse,
-      rekognition.DisassociateFacesError
-    >
+    ) => Effect.Effect<rekognition.DisassociateFacesResponse, rekognition.DisassociateFacesError>
   >
 > {}
 export const DisassociateFaces = Binding.Service<DisassociateFaces>(

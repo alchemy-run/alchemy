@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -77,18 +76,15 @@ export type VirtualNetwork = Resource<
  * requires that no routes reference it — express that relationship by
  * passing `vnet.virtualNetworkId` into your `Route`s so destroy
  * ordering is correct.
- * @resource
- * @product Tunnels
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Virtual Network
- * @example Basic virtual network
+ * ### Creating a Virtual Network
+ * **Example:** Basic virtual network
  * ```typescript
  * const vnet = yield* Cloudflare.Tunnel.VirtualNetwork("Staging", {
  *   comment: "staging private network",
  * });
  * ```
  *
- * @example Route a tunnel CIDR through the virtual network
+ * **Example:** Route a tunnel CIDR through the virtual network
  * ```typescript
  * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
  * yield* Cloudflare.Tunnel.Route("StagingNet", {
@@ -98,8 +94,8 @@ export type VirtualNetwork = Resource<
  * });
  * ```
  *
- * @section Default network
- * @example Promote a virtual network to the account default
+ * ### Default network
+ * **Example:** Promote a virtual network to the account default
  * ```typescript
  * // Only one default per account — promoting demotes the previous one.
  * const vnet = yield* Cloudflare.Tunnel.VirtualNetwork("Primary", {
@@ -108,6 +104,10 @@ export type VirtualNetwork = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/cloudflared/tunnel-virtual-networks/
+ *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  */
 export const VirtualNetwork = Resource<VirtualNetwork>(TypeId);
 
@@ -244,16 +244,14 @@ export const VirtualNetworkProvider = () =>
                 // ("it is the default virtual network"); never enumerate it
                 // for account-wide teardown.
                 .filter((v) => !v.isDefaultNetwork)
-                .map(
-                  (v): VirtualNetworkAttributes => ({
-                    virtualNetworkId: v.id,
-                    accountId,
-                    name: v.name,
-                    comment: v.comment,
-                    isDefaultNetwork: v.isDefaultNetwork,
-                    createdAt: v.createdAt,
-                  }),
-                ),
+                .map((v): VirtualNetworkAttributes => ({
+                  virtualNetworkId: v.id,
+                  accountId,
+                  name: v.name,
+                  comment: v.comment,
+                  isDefaultNetwork: v.isDefaultNetwork,
+                  createdAt: v.createdAt,
+                })),
             ),
           ),
         );
@@ -277,13 +275,11 @@ const getVnet = (accountId: string, virtualNetworkId: string) =>
  * so at most one live network can match.
  */
 const findByName = (accountId: string, name: string) =>
-  zeroTrust.listNetworkVirtualNetworks
-    .items({ accountId, name, isDeleted: false })
-    .pipe(
-      Stream.filter((v): v is ObservedVnet => v.name === name && !v.deletedAt),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-    );
+  zeroTrust.listNetworkVirtualNetworks.items({ accountId, name, isDeleted: false }).pipe(
+    Stream.filter((v): v is ObservedVnet => v.name === name && !v.deletedAt),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -291,10 +287,7 @@ const resolveName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
-const toAttributes = (
-  vnet: ObservedVnet,
-  accountId: string,
-): VirtualNetworkAttributes => ({
+const toAttributes = (vnet: ObservedVnet, accountId: string): VirtualNetworkAttributes => ({
   virtualNetworkId: vnet.id,
   accountId,
   name: vnet.name,

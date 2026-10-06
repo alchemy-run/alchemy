@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * snapshot-rotation job that finds manual snapshots older than the retention
  * window before deleting them. Provide the implementation with
  * `Effect.provide(AWS.Redshift.DescribeClusterSnapshotsHttp)`.
- * @binding
- * @section Managing Snapshots
- * @example List a Cluster's Manual Snapshots
+ * ### Managing Snapshots
+ * **Example:** List a Cluster's Manual Snapshots
  * ```typescript
  * const describeClusterSnapshots =
  *   yield* AWS.Redshift.DescribeClusterSnapshots();
@@ -23,6 +22,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const identifiers = page.Snapshots?.map((s) => s.SnapshotIdentifier);
  * ```
+ *
+ * @binding
  */
 export interface DescribeClusterSnapshots extends Binding.Service<
   DescribeClusterSnapshots,
@@ -30,13 +31,9 @@ export interface DescribeClusterSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: redshift.DescribeClusterSnapshotsMessage,
-    ) => Effect.Effect<
-      redshift.SnapshotMessage,
-      redshift.DescribeClusterSnapshotsError
-    >
+    ) => Effect.Effect<redshift.SnapshotMessage, redshift.DescribeClusterSnapshotsError>
   >
 > {}
-export const DescribeClusterSnapshots =
-  Binding.Service<DescribeClusterSnapshots>(
-    "AWS.Redshift.DescribeClusterSnapshots",
-  );
+export const DescribeClusterSnapshots = Binding.Service<DescribeClusterSnapshots>(
+  "AWS.Redshift.DescribeClusterSnapshots",
+);

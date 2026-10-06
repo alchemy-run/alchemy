@@ -1,7 +1,6 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -55,18 +54,15 @@ export type KeyConfiguration = Resource<
  * rotation interval when the observed value differs from the desired one;
  * destroy restores the interval the account had before Alchemy first managed
  * it (captured as `initialKeyRotationIntervalDays`).
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Managing the rotation interval
- * @example Rotate Access service keys every 30 days
+ * ### Managing the rotation interval
+ * **Example:** Rotate Access service keys every 30 days
  * ```typescript
  * const keys = yield* Cloudflare.Access.KeyConfiguration("Keys", {
  *   keyRotationIntervalDays: 30,
  * });
  * ```
  *
- * @example Inspect rotation status
+ * **Example:** Inspect rotation status
  * ```typescript
  * const keys = yield* Cloudflare.Access.KeyConfiguration("Keys", {
  *   keyRotationIntervalDays: 90,
@@ -75,6 +71,10 @@ export type KeyConfiguration = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/keys/
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const KeyConfiguration = Resource<KeyConfiguration>(TypeId);
 
@@ -96,13 +96,7 @@ export const KeyConfigurationProvider = () =>
       // instance and return it as a one-element array. The observed
       // interval becomes the value restored on destroy (adoption read).
       const observed = yield* zeroTrust.getAccessKey({ accountId });
-      return [
-        toAttributes(
-          accountId,
-          observed,
-          observed.keyRotationIntervalDays ?? undefined,
-        ),
-      ];
+      return [toAttributes(accountId, observed, observed.keyRotationIntervalDays ?? undefined)];
     }),
 
     diff: Effect.fn(function* ({ output }) {

@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link GetWorkflowRun} runtime callable. The
  * `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type GetWorkflowRunInput = Omit<
-  mwaa.GetWorkflowRunRequest,
-  "WorkflowArn"
->;
+export type GetWorkflowRunInput = Omit<mwaa.GetWorkflowRunRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:GetWorkflowRun`.
@@ -18,9 +15,8 @@ export type GetWorkflowRunInput = Omit<
  * Reads the detail of a single run of the bound {@link Workflow} — its
  * status, timings, error message, and task-instance ids. Provide the
  * implementation with `Effect.provide(AWS.MWAAServerless.GetWorkflowRunHttp)`.
- * @binding
- * @section Observing Runs
- * @example Read A Run's Status
+ * ### Observing Runs
+ * **Example:** Read A Run's Status
  * ```typescript
  * // init — bind the operation to the workflow
  * const getWorkflowRun = yield* AWS.MWAAServerless.GetWorkflowRun(workflow);
@@ -29,6 +25,8 @@ export type GetWorkflowRunInput = Omit<
  * const run = yield* getWorkflowRun({ RunId: runId });
  * yield* Effect.log(`run ${run.RunId}: ${run.RunDetail?.RunState}`);
  * ```
+ *
+ * @binding
  */
 export interface GetWorkflowRun extends Binding.Service<
   GetWorkflowRun,
@@ -41,6 +39,4 @@ export interface GetWorkflowRun extends Binding.Service<
     ) => Effect.Effect<mwaa.GetWorkflowRunResponse, mwaa.GetWorkflowRunError>
   >
 > {}
-export const GetWorkflowRun = Binding.Service<GetWorkflowRun>(
-  "AWS.MWAAServerless.GetWorkflowRun",
-);
+export const GetWorkflowRun = Binding.Service<GetWorkflowRun>("AWS.MWAAServerless.GetWorkflowRun");

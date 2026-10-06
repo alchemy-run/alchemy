@@ -7,10 +7,7 @@ import type { Vault } from "./Vault.ts";
  * `ListJobs` request with `accountId` and `vaultName` injected from the bound
  * {@link Vault}.
  */
-export interface ListJobsRequest extends Omit<
-  glacier.ListJobsInput,
-  "accountId" | "vaultName"
-> {}
+export interface ListJobsRequest extends Omit<glacier.ListJobsInput, "accountId" | "vaultName"> {}
 
 /**
  * Runtime binding for the `ListJobs` operation (IAM action
@@ -20,14 +17,15 @@ export interface ListJobsRequest extends Omit<
  * {@link Vault}, optionally filtered by status code or completion.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.ListJobsHttp)`.
- * @binding
- * @section Retrieving Archives
- * @example List the vault's jobs
+ * ### Retrieving Archives
+ * **Example:** List the vault's jobs
  * ```typescript
  * const listJobs = yield* AWS.Glacier.ListJobs(vault);
  *
  * const { JobList } = yield* listJobs({ completed: "true" });
  * ```
+ *
+ * @binding
  */
 export interface ListJobs extends Binding.Service<
   ListJobs,
@@ -35,9 +33,7 @@ export interface ListJobs extends Binding.Service<
   (
     vault: Vault,
   ) => Effect.Effect<
-    (
-      request?: ListJobsRequest,
-    ) => Effect.Effect<glacier.ListJobsOutput, glacier.ListJobsError>
+    (request?: ListJobsRequest) => Effect.Effect<glacier.ListJobsOutput, glacier.ListJobsError>
   >
 > {}
 export const ListJobs = Binding.Service<ListJobs>("AWS.Glacier.ListJobs");

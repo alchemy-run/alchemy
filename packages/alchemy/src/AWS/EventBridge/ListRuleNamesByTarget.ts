@@ -2,8 +2,7 @@ import type * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListRuleNamesByTargetRequest
-  extends eventbridge.ListRuleNamesByTargetRequest {}
+export interface ListRuleNamesByTargetRequest extends eventbridge.ListRuleNamesByTargetRequest {}
 
 /**
  * Lists the EventBridge rules that route events to a given target ARN
@@ -13,9 +12,8 @@ export interface ListRuleNamesByTargetRequest
  * feed a target (e.g. the function itself, or one of its queues). Provide
  * the `ListRuleNamesByTargetHttp` layer on the Function to satisfy the
  * binding.
- * @binding
- * @section Listing Rules
- * @example List Rules Feeding a Target
+ * ### Listing Rules
+ * **Example:** List Rules Feeding a Target
  * ```typescript
  * // init — bind the operation (provide AWS.EventBridge.ListRuleNamesByTargetHttp on the Function)
  * const listRuleNamesByTarget = yield* AWS.EventBridge.ListRuleNamesByTarget();
@@ -25,6 +23,8 @@ export interface ListRuleNamesByTargetRequest
  *   TargetArn: "arn:aws:lambda:us-east-1:123456789012:function:my-fn",
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListRuleNamesByTarget extends Binding.Service<
   ListRuleNamesByTarget,

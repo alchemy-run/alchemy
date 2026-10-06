@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface SendInvitesRequest extends Omit<
-  repostspace.SendInvitesInput,
-  "spaceId"
-> {}
+export interface SendInvitesRequest extends Omit<repostspace.SendInvitesInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `SendInvites` operation (IAM action
@@ -17,9 +14,8 @@ export interface SendInvitesRequest extends Omit<
  * Center accessor ids.
  * Provide the implementation with
  * `Effect.provide(AWS.RePostSpace.SendInvitesHttp)`.
- * @binding
- * @section Inviting Users
- * @example Invite users to the private re:Post
+ * ### Inviting Users
+ * **Example:** Invite users to the private re:Post
  * ```typescript
  * const sendInvites = yield* AWS.RePostSpace.SendInvites(space);
  *
@@ -29,6 +25,8 @@ export interface SendInvitesRequest extends Omit<
  *   body: "Ask and answer questions about our AWS workloads.",
  * });
  * ```
+ *
+ * @binding
  */
 export interface SendInvites extends Binding.Service<
   SendInvites,
@@ -38,12 +36,7 @@ export interface SendInvites extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendInvitesRequest,
-    ) => Effect.Effect<
-      repostspace.SendInvitesResponse,
-      repostspace.SendInvitesError
-    >
+    ) => Effect.Effect<repostspace.SendInvitesResponse, repostspace.SendInvitesError>
   >
 > {}
-export const SendInvites = Binding.Service<SendInvites>(
-  "AWS.RePostSpace.SendInvites",
-);
+export const SendInvites = Binding.Service<SendInvites>("AWS.RePostSpace.SendInvites");

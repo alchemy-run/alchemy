@@ -17,14 +17,15 @@ export interface InitiateLayerUploadRequest extends Omit<
  *
  * Opens a layer-blob upload to the bound repository, returning the `uploadId` that `UploadLayerPart` and `CompleteLayerUpload` continue. Provide the implementation with
  * `Effect.provide(AWS.ECR.InitiateLayerUploadHttp)`.
- * @binding
- * @section Pushing Images
- * @example Start a Layer Upload
+ * ### Pushing Images
+ * **Example:** Start a Layer Upload
  * ```typescript
  * const initiateUpload = yield* AWS.ECR.InitiateLayerUpload(repository);
  *
  * const { uploadId } = yield* initiateUpload();
  * ```
+ *
+ * @binding
  */
 export interface InitiateLayerUpload extends Binding.Service<
   InitiateLayerUpload,
@@ -34,10 +35,7 @@ export interface InitiateLayerUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: InitiateLayerUploadRequest,
-    ) => Effect.Effect<
-      ecr.InitiateLayerUploadResponse,
-      ecr.InitiateLayerUploadError
-    >
+    ) => Effect.Effect<ecr.InitiateLayerUploadResponse, ecr.InitiateLayerUploadError>
   >
 > {}
 

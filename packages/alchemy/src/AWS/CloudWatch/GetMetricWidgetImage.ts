@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetMetricWidgetImageRequest
-  extends cloudwatch.GetMetricWidgetImageInput {}
+export interface GetMetricWidgetImageRequest extends cloudwatch.GetMetricWidgetImageInput {}
 
 /**
  * Runtime binding for `cloudwatch:GetMetricWidgetImage` — render a metric
@@ -11,9 +10,8 @@ export interface GetMetricWidgetImageRequest
  *
  * Provide `CloudWatch.GetMetricWidgetImageHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Rendering Metric Graphs
- * @example Render a Metric Graph as PNG
+ * ### Rendering Metric Graphs
+ * **Example:** Render a Metric Graph as PNG
  * ```typescript
  * // init — grants cloudwatch:GetMetricWidgetImage
  * const getMetricWidgetImage = yield* AWS.CloudWatch.GetMetricWidgetImage();
@@ -29,6 +27,8 @@ export interface GetMetricWidgetImageRequest
  * });
  * const png = result.MetricWidgetImage; // image bytes
  * ```
+ *
+ * @binding
  */
 export interface GetMetricWidgetImage extends Binding.Service<
   GetMetricWidgetImage,
@@ -36,10 +36,7 @@ export interface GetMetricWidgetImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetMetricWidgetImageRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetMetricWidgetImageOutput,
-      cloudwatch.GetMetricWidgetImageError
-    >
+    ) => Effect.Effect<cloudwatch.GetMetricWidgetImageOutput, cloudwatch.GetMetricWidgetImageError>
   >
 > {}
 

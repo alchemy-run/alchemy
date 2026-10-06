@@ -2,7 +2,6 @@ import * as dnsFirewall from "@distilled.cloud/cloudflare/dns-firewall";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -172,13 +171,7 @@ export type FirewallAttributes = {
   modifiedOn: string;
 };
 
-export type Firewall = Resource<
-  TypeId,
-  FirewallProps,
-  FirewallAttributes,
-  never,
-  Providers
->;
+export type Firewall = Resource<TypeId, FirewallProps, FirewallAttributes, never, Providers>;
 
 /**
  * A Cloudflare DNS Firewall cluster.
@@ -196,11 +189,8 @@ export type Firewall = Resource<
  *
  * All settings are mutable in place; only `name` (the cold-state recovery
  * identity) triggers a replacement.
- * @resource
- * @product DNS Firewall
- * @category Domains & DNS
- * @section Creating a Cluster
- * @example Basic cluster
+ * ### Creating a Cluster
+ * **Example:** Basic cluster
  * ```typescript
  * const cluster = yield* Cloudflare.DNS.Firewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1", "192.0.2.2"],
@@ -209,7 +199,7 @@ export type Firewall = Resource<
  * const ips = cluster.dnsFirewallIps;
  * ```
  *
- * @example Tuned caching and attack mitigation
+ * **Example:** Tuned caching and attack mitigation
  * ```typescript
  * const cluster = yield* Cloudflare.DNS.Firewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1"],
@@ -225,8 +215,8 @@ export type Firewall = Resource<
  * });
  * ```
  *
- * @section Reverse DNS
- * @example Managing PTR records for cluster IPs
+ * ### Reverse DNS
+ * **Example:** Managing PTR records for cluster IPs
  * ```typescript
  * const cluster = yield* Cloudflare.DNS.Firewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1"],
@@ -237,6 +227,10 @@ export type Firewall = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/dns-firewall/
+ *
+ * @resource
+ * @product DNS Firewall
+ * @category Domains & DNS
  */
 export const Firewall = Resource<Firewall>(TypeId, {
   aliases: ["Cloudflare.DnsFirewall"],
@@ -276,9 +270,7 @@ export const FirewallProvider = () =>
         const observed = yield* getCluster(acct, output.dnsFirewallId);
         if (!observed) return undefined;
         const reverseDns =
-          olds?.reverseDns !== undefined
-            ? yield* getReverseDns(acct, observed.id)
-            : undefined;
+          olds?.reverseDns !== undefined ? yield* getReverseDns(acct, observed.id) : undefined;
         return toAttributes(observed, acct, reverseDns);
       }
 
@@ -290,9 +282,7 @@ export const FirewallProvider = () =>
       const match = yield* findByName(acct, name);
       if (!match) return undefined;
       const reverseDns =
-        olds?.reverseDns !== undefined
-          ? yield* getReverseDns(acct, match.id)
-          : undefined;
+        olds?.reverseDns !== undefined ? yield* getReverseDns(acct, match.id) : undefined;
       return Unowned(toAttributes(match, acct, reverseDns));
     }),
     list: Effect.fn(function* () {
@@ -354,8 +344,7 @@ export const FirewallProvider = () =>
           upstreamIps: news.upstreamIps,
           attackMitigation: {
             enabled: news.attackMitigation?.enabled ?? false,
-            onlyWhenUpstreamUnhealthy:
-              news.attackMitigation?.onlyWhenUpstreamUnhealthy ?? false,
+            onlyWhenUpstreamUnhealthy: news.attackMitigation?.onlyWhenUpstreamUnhealthy ?? false,
           },
           deprecateAnyRequests: news.deprecateAnyRequests ?? false,
           ecsFallback: news.ecsFallback ?? false,
@@ -365,9 +354,7 @@ export const FirewallProvider = () =>
           ratelimit: news.ratelimit ?? null,
           retries: news.retries ?? 2,
         };
-        const observedMitigation = normalizeMitigation(
-          observed.attackMitigation,
-        );
+        const observedMitigation = normalizeMitigation(observed.attackMitigation);
         const dirty =
           observed.name !== desired.name ||
           !sameIps(observed.upstreamIps, desired.upstreamIps) ||

@@ -19,9 +19,8 @@ export interface BatchPutGeofenceRequest extends Omit<
  * `geo:BatchPutGeofence`), scoped to one {@link GeofenceCollection}. Provide the implementation with
  * `Effect.provide(AWS.Location.BatchPutGeofenceHttp)`.
  *
- * @binding
- * @section Managing Geofences
- * @example Store Several Geofences at Once
+ * ### Managing Geofences
+ * **Example:** Store Several Geofences at Once
  * ```typescript
  * const batchPut = yield* Location.BatchPutGeofence(collection);
  *
@@ -35,6 +34,8 @@ export interface BatchPutGeofenceRequest extends Omit<
  * });
  * // result.Successes / result.Errors → per-geofence outcomes
  * ```
+ *
+ * @binding
  */
 export interface BatchPutGeofence extends Binding.Service<
   BatchPutGeofence,
@@ -44,12 +45,7 @@ export interface BatchPutGeofence extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchPutGeofenceRequest,
-    ) => Effect.Effect<
-      location.BatchPutGeofenceResponse,
-      location.BatchPutGeofenceError
-    >
+    ) => Effect.Effect<location.BatchPutGeofenceResponse, location.BatchPutGeofenceError>
   >
 > {}
-export const BatchPutGeofence = Binding.Service<BatchPutGeofence>(
-  "AWS.Location.BatchPutGeofence",
-);
+export const BatchPutGeofence = Binding.Service<BatchPutGeofence>("AWS.Location.BatchPutGeofence");

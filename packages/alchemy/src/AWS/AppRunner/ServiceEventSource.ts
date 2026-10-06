@@ -45,8 +45,7 @@ export interface OperationStatusChangeDetail {
 export type ServiceStatusChangeEvent = EventRecord<ServiceStatusChangeDetail>;
 
 /** An operation-status-change EventBridge event delivered to the handler. */
-export type OperationStatusChangeEvent =
-  EventRecord<OperationStatusChangeDetail>;
+export type OperationStatusChangeEvent = EventRecord<OperationStatusChangeDetail>;
 
 export interface ServiceStatusChangeEventSourceProps extends EventRouteProps {
   /**
@@ -87,8 +86,8 @@ export interface OperationStatusChangeEventSourceProps extends EventRouteProps {
  * multiple services share the Function. Provide `AWS.Lambda.EventSource` on
  * the Function effect to implement the subscription.
  *
- * @section Reacting To Status Changes
- * @example Alert when a Service Pauses
+ * ### Reacting To Status Changes
+ * **Example:** Alert when a Service Pauses
  * ```typescript
  * yield* AWS.AppRunner.consumeServiceStatusChanges(
  *   { currentStatus: ["PAUSED"] },
@@ -113,9 +112,7 @@ export const consumeServiceStatusChanges = <StreamReq = never, Req = never>(
       {
         source: ["aws.apprunner"],
         "detail-type": ["AppRunner Service Status Change"],
-        ...(currentStatus && currentStatus.length > 0
-          ? { detail: { currentStatus } }
-          : {}),
+        ...(currentStatus && currentStatus.length > 0 ? { detail: { currentStatus } } : {}),
       },
       routeProps,
       process,
@@ -134,8 +131,8 @@ export const consumeServiceStatusChanges = <StreamReq = never, Req = never>(
  * `AWS.Lambda.EventSource` on the Function effect to implement the
  * subscription.
  *
- * @section Reacting To Deployments
- * @example Alert on Failed Deployments
+ * ### Reacting To Deployments
+ * **Example:** Alert on Failed Deployments
  * ```typescript
  * yield* AWS.AppRunner.consumeOperationStatusChanges(
  *   { operationStatus: ["DeploymentFailed"] },
@@ -160,9 +157,7 @@ export const consumeOperationStatusChanges = <StreamReq = never, Req = never>(
       {
         source: ["aws.apprunner"],
         "detail-type": ["AppRunner Service Operation Status Change"],
-        ...(operationStatus && operationStatus.length > 0
-          ? { detail: { operationStatus } }
-          : {}),
+        ...(operationStatus && operationStatus.length > 0 ? { detail: { operationStatus } } : {}),
       },
       routeProps,
       process,

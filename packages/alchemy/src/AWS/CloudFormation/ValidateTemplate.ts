@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * and declaration errors — e.g. a platform service that lints user-submitted
  * templates before deploying them. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.ValidateTemplateHttp)`.
- * @binding
- * @section Validating Templates
- * @example Validate a Template Body
+ * ### Validating Templates
+ * **Example:** Validate a Template Body
  * ```typescript
  * const validateTemplate = yield* AWS.CloudFormation.ValidateTemplate();
  *
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   TemplateBody: templateJson,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ValidateTemplate extends Binding.Service<
   ValidateTemplate,
@@ -28,10 +29,7 @@ export interface ValidateTemplate extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudformation.ValidateTemplateInput,
-    ) => Effect.Effect<
-      cloudformation.ValidateTemplateOutput,
-      cloudformation.ValidateTemplateError
-    >
+    ) => Effect.Effect<cloudformation.ValidateTemplateOutput, cloudformation.ValidateTemplateError>
   >
 > {}
 export const ValidateTemplate = Binding.Service<ValidateTemplate>(

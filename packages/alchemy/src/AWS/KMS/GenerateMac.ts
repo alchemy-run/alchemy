@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface GenerateMacRequest extends Omit<
-  kms.GenerateMacRequest,
-  "KeyId"
-> {}
+export interface GenerateMacRequest extends Omit<kms.GenerateMacRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:GenerateMac`.
@@ -18,9 +15,8 @@ export interface GenerateMacRequest extends Omit<
  * so any party with `kms:VerifyMac` can validate tokens without ever
  * holding the shared secret.
  *
- * @binding
- * @section Message Authentication
- * @example Compute an HMAC
+ * ### Message Authentication
+ * **Example:** Compute an HMAC
  * ```typescript
  * const generateMac = yield* AWS.KMS.GenerateMac(hmacKey);
  *
@@ -29,6 +25,8 @@ export interface GenerateMacRequest extends Omit<
  *   MacAlgorithm: "HMAC_SHA_256",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GenerateMac extends Binding.Service<
   GenerateMac,
@@ -36,9 +34,7 @@ export interface GenerateMac extends Binding.Service<
   (
     key: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request: GenerateMacRequest,
-    ) => Effect.Effect<kms.GenerateMacResponse, kms.GenerateMacError>
+    (request: GenerateMacRequest) => Effect.Effect<kms.GenerateMacResponse, kms.GenerateMacError>
   >
 > {}
 

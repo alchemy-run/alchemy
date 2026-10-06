@@ -13,9 +13,8 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
  * new job run's `id`/`arn` for use with `DescribeJobRun` / `CancelJobRun`.
  * Provide the implementation with
  * `Effect.provide(AWS.EMRContainers.StartJobRunHttp)`.
- * @binding
- * @section Running Jobs
- * @example Start A Templated Spark Job
+ * ### Running Jobs
+ * **Example:** Start A Templated Spark Job
  * ```typescript
  * // init — bind the operation to the virtual cluster
  * const startJobRun = yield* AWS.EMRContainers.StartJobRun(virtualCluster);
@@ -27,16 +26,15 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
  * });
  * yield* Effect.log(`job run started: ${id}`);
  * ```
+ *
+ * @binding
  */
 export interface StartJobRun extends Binding.Service<
   StartJobRun,
   "AWS.EMRContainers.StartJobRun",
   (virtualCluster: VirtualCluster) => Effect.Effect<
     (
-      request: Omit<
-        emrc.StartJobRunRequest,
-        "virtualClusterId" | "clientToken"
-      > & {
+      request: Omit<emrc.StartJobRunRequest, "virtualClusterId" | "clientToken"> & {
         /**
          * Idempotency token for the job run submission.
          * @default auto-generated per call
@@ -46,6 +44,4 @@ export interface StartJobRun extends Binding.Service<
     ) => Effect.Effect<emrc.StartJobRunResponse, emrc.StartJobRunError>
   >
 > {}
-export const StartJobRun = Binding.Service<StartJobRun>(
-  "AWS.EMRContainers.StartJobRun",
-);
+export const StartJobRun = Binding.Service<StartJobRun>("AWS.EMRContainers.StartJobRun");

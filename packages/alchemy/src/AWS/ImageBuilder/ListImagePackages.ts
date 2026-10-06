@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * versions are created dynamically by pipeline runs, so this is an
  * account-level binding. Provide the implementation with
  * `Effect.provide(AWS.ImageBuilder.ListImagePackagesHttp)`.
- * @binding
- * @section Observing Builds
- * @example List the Packages Inside a Built Image
+ * ### Observing Builds
+ * **Example:** List the Packages Inside a Built Image
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listImagePackages = yield* AWS.ImageBuilder.ListImagePackages();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   imageBuildVersionArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListImagePackages extends Binding.Service<
   ListImagePackages,
@@ -29,10 +30,7 @@ export interface ListImagePackages extends Binding.Service<
   () => Effect.Effect<
     (
       request: imagebuilder.ListImagePackagesRequest,
-    ) => Effect.Effect<
-      imagebuilder.ListImagePackagesResponse,
-      imagebuilder.ListImagePackagesError
-    >
+    ) => Effect.Effect<imagebuilder.ListImagePackagesResponse, imagebuilder.ListImagePackagesError>
   >
 > {}
 export const ListImagePackages = Binding.Service<ListImagePackages>(

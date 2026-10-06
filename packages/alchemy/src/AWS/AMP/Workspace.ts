@@ -78,16 +78,15 @@ export interface Workspace extends Resource<
  * via remote-write and queried through the workspace's Prometheus-compatible
  * endpoint.
  *
- * @resource
- * @section Creating a Workspace
- * @example Basic Workspace
+ * ### Creating a Workspace
+ * **Example:** Basic Workspace
  * ```typescript
  * const workspace = yield* AMP.Workspace("Metrics", {
  *   alias: "production-metrics",
  * });
  * ```
  *
- * @example Workspace with Customer-Managed Encryption
+ * **Example:** Workspace with Customer-Managed Encryption
  * ```typescript
  * const workspace = yield* AMP.Workspace("Metrics", {
  *   alias: "production-metrics",
@@ -96,7 +95,7 @@ export interface Workspace extends Resource<
  * });
  * ```
  *
- * @example Workspace with Custom Retention and Series Limits
+ * **Example:** Workspace with Custom Retention and Series Limits
  * ```typescript
  * const workspace = yield* AMP.Workspace("Metrics", {
  *   alias: "production-metrics",
@@ -108,15 +107,15 @@ export interface Workspace extends Resource<
  * });
  * ```
  *
- * @section Using the Endpoint
- * @example Read the Remote-Write URL
+ * ### Using the Endpoint
+ * **Example:** Read the Remote-Write URL
  * ```typescript
  * // prometheusEndpoint ends in a trailing slash; append `api/v1/remote_write`
  * const remoteWrite = `${workspace.prometheusEndpoint}api/v1/remote_write`;
  * ```
  *
- * @section Runtime Bindings
- * @example Write and Query Metrics from a Function
+ * ### Runtime Bindings
+ * **Example:** Write and Query Metrics from a Function
  * ```typescript
  * // inside a Lambda Function's effect (provide the *Http layers):
  * const remoteWrite = yield* AMP.RemoteWrite(workspace);
@@ -127,6 +126,8 @@ export interface Workspace extends Resource<
  * });
  * const result = yield* metrics.query({ query: "jobs_done_total" });
  * ```
+ *
+ * @resource
  */
 export const Workspace = Resource<Workspace>("AWS.AMP.Workspace");
 
@@ -146,11 +147,7 @@ export const WorkspaceProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeWorkspace({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.workspace;
       });
 
@@ -161,12 +158,8 @@ export const WorkspaceProvider = () =>
        * this tag search is the only way to reclaim the existing workspace
        * instead of creating an orphan-producing duplicate.
        */
-      const findByInternalTags = Effect.fn(function* (
-        internalTags: Record<string, string>,
-      ) {
-        const pages = yield* amp.listWorkspaces
-          .pages({})
-          .pipe(Stream.runCollect);
+      const findByInternalTags = Effect.fn(function* (internalTags: Record<string, string>) {
+        const pages = yield* amp.listWorkspaces.pages({}).pipe(Stream.runCollect);
         const summary = Array.from(pages)
           .flatMap((page) => page.workspaces)
           .find(
@@ -176,9 +169,7 @@ export const WorkspaceProvider = () =>
                 ([key, value]) => toTagRecord(w.tags)[key] === value,
               ),
           );
-        return summary === undefined
-          ? undefined
-          : yield* describe(summary.workspaceId);
+        return summary === undefined ? undefined : yield* describe(summary.workspaceId);
       });
 
       /**
@@ -196,18 +187,12 @@ export const WorkspaceProvider = () =>
             .map((entry) => ({
               labelSet: Object.fromEntries(
                 Object.entries(entry.labelSet)
-                  .filter(
-                    (kv): kv is [string, string] => typeof kv[1] === "string",
-                  )
+                  .filter((kv): kv is [string, string] => typeof kv[1] === "string")
                   .sort(([a], [b]) => a.localeCompare(b)),
               ),
               maxSeries: entry.maxSeries ?? null,
             }))
-            .sort((a, b) =>
-              JSON.stringify(a.labelSet).localeCompare(
-                JSON.stringify(b.labelSet),
-              ),
-            ),
+            .sort((a, b) => JSON.stringify(a.labelSet).localeCompare(JSON.stringify(b.labelSet))),
         );
 
       /**
@@ -220,10 +205,7 @@ export const WorkspaceProvider = () =>
         workspaceId: string,
         news: WorkspaceProps,
       ) {
-        if (
-          news.retentionPeriod === undefined &&
-          news.limitsPerLabelSet === undefined
-        ) {
+        if (news.retentionPeriod === undefined && news.limitsPerLabelSet === undefined) {
           return;
         }
         const observed = (yield* amp.describeWorkspaceConfiguration({
@@ -232,8 +214,7 @@ export const WorkspaceProvider = () =>
 
         const desiredDays = toWireDays(news.retentionPeriod);
         const retentionDrifts =
-          desiredDays !== undefined &&
-          desiredDays !== observed.retentionPeriodInDays;
+          desiredDays !== undefined && desiredDays !== observed.retentionPeriodInDays;
 
         const desiredLimits = news.limitsPerLabelSet?.map((entry) => ({
           labelSet: entry.labelSet,
@@ -267,10 +248,7 @@ export const WorkspaceProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("6 seconds"),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("6 seconds"), Schedule.recurs(15)]),
             }),
           );
 
@@ -280,14 +258,10 @@ export const WorkspaceProvider = () =>
         yield* amp.describeWorkspaceConfiguration({ workspaceId }).pipe(
           Effect.map((r) => r.workspaceConfiguration),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
             until: (c): boolean =>
               c.status.statusCode === "ACTIVE" &&
-              (desiredDays === undefined ||
-                c.retentionPeriodInDays === desiredDays),
+              (desiredDays === undefined || c.retentionPeriodInDays === desiredDays),
           }),
         );
       });
@@ -300,10 +274,7 @@ export const WorkspaceProvider = () =>
         const workspace = yield* amp.describeWorkspace({ workspaceId }).pipe(
           Effect.map((r) => r.workspace),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
             until: (w) => w.status.statusCode === "ACTIVE",
           }),
         );
@@ -323,9 +294,7 @@ export const WorkspaceProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           // Encryption configuration is immutable — a change replaces.
-          if (
-            (olds?.kmsKeyArn ?? undefined) !== (news?.kmsKeyArn ?? undefined)
-          ) {
+          if ((olds?.kmsKeyArn ?? undefined) !== (news?.kmsKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -397,10 +366,7 @@ export const WorkspaceProvider = () =>
             // A workspace mid-transition rejects deletion; retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
         }),
@@ -408,9 +374,7 @@ export const WorkspaceProvider = () =>
         list: () =>
           amp.listWorkspaces.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.workspaces),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.workspaces)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Parameter } from "./Parameter.ts";
 
-export interface GetParametersByPathRequest extends Omit<
-  SSM.GetParametersByPathRequest,
-  "Path"
-> {}
+export interface GetParametersByPathRequest extends Omit<SSM.GetParametersByPathRequest, "Path"> {}
 
 /**
  * Runtime binding for `ssm:GetParametersByPath`.
@@ -18,9 +15,8 @@ export interface GetParametersByPathRequest extends Omit<
  * `/*` subtree wildcard, plus `kms:Decrypt` on the bound parameter's
  * encryption key so `WithDecryption: true` works for `SecureString` children
  * encrypted with the same key.
- * @binding
- * @section Reading a Parameter Subtree
- * @example Read All Parameters Under a Path
+ * ### Reading a Parameter Subtree
+ * **Example:** Read All Parameters Under a Path
  * ```typescript
  * const root = yield* SSM.Parameter("ConfigRoot", {
  *   name: "/my-app/config",
@@ -31,6 +27,8 @@ export interface GetParametersByPathRequest extends Omit<
  * // returns /my-app/config/db-url, /my-app/config/flags/beta, …
  * const result = yield* getByPath({ Recursive: true });
  * ```
+ *
+ * @binding
  */
 export interface GetParametersByPath extends Binding.Service<
   GetParametersByPath,
@@ -40,10 +38,7 @@ export interface GetParametersByPath extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetParametersByPathRequest,
-    ) => Effect.Effect<
-      SSM.GetParametersByPathResult,
-      SSM.GetParametersByPathError
-    >
+    ) => Effect.Effect<SSM.GetParametersByPathResult, SSM.GetParametersByPathError>
   >
 > {}
 export const GetParametersByPath = Binding.Service<GetParametersByPath>(

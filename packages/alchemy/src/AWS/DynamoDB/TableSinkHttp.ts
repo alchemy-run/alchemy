@@ -20,15 +20,11 @@ const encoder = new TextEncoder();
  * echoed entries verbatim so nothing is ever silently dropped from the retry.
  */
 const selectUnprocessed = (
-  unprocessed:
-    | { [key: string]: DynamoDB.WriteRequest[] | undefined }
-    | undefined,
+  unprocessed: { [key: string]: DynamoDB.WriteRequest[] | undefined } | undefined,
   batch: readonly TableSinkEntry[],
 ): readonly TableSinkEntry[] => {
   // The sink writes a single table, so at most one key is present.
-  const echoed = Object.values(unprocessed ?? {}).flatMap(
-    (requests) => requests ?? [],
-  );
+  const echoed = Object.values(unprocessed ?? {}).flatMap((requests) => requests ?? []);
   if (echoed.length === 0) {
     return [];
   }
@@ -78,12 +74,10 @@ export const TableSinkHttp = Layer.effect(
         maxRecords: 25,
         maxBytes: 16_777_216,
         sizeOf: (request) => encoder.encode(JSON.stringify(request)).length,
-        send: (batch) =>
-          write({ RequestItems: { [table.LogicalId]: [...batch] } }),
+        send: (batch) => write({ RequestItems: { [table.LogicalId]: [...batch] } }),
         // UnprocessedItems are transient (throttling, internal errors) —
         // re-submit them on the bounded schedule.
-        unprocessed: (out, batch) =>
-          selectUnprocessed(out.UnprocessedItems, batch),
+        unprocessed: (out, batch) => selectUnprocessed(out.UnprocessedItems, batch),
       });
     });
   }),

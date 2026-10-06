@@ -76,8 +76,8 @@ export interface PipelineEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Pipeline Events
- * @example Alert On Failed Executions
+ * ### Consuming Pipeline Events
+ * **Example:** Alert On Failed Executions
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -108,9 +108,7 @@ export const consumePipelineEvents = <StreamReq = never, Req = never>(
     props.id ?? "CodePipelineEvents",
     {
       source: ["aws.codepipeline"],
-      "detail-type": (props.kinds ?? (["execution"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
+      "detail-type": (props.kinds ?? (["execution"] as const)).map((kind) => DETAIL_TYPES[kind]),
       ...(props.pipelineNames !== undefined
         ? { detail: { pipeline: [...props.pipelineNames] } }
         : {}),

@@ -67,23 +67,24 @@ export interface Instance extends Resource<
  *
  * Use `mode: "existing"` to adopt a pre-enabled organization instance. Use
  * `mode: "account"` only for standalone or member-account account instances.
- * @resource
- * @section Discovering Existing Instances
- * @example Adopt An Existing Instance
+ * ### Discovering Existing Instances
+ * **Example:** Adopt An Existing Instance
  * ```typescript
  * const instance = yield* Instance("IdentityCenter", {
  *   mode: "existing",
  * });
  * ```
  *
- * @section Creating Account Instances
- * @example Create A Member Account Instance
+ * ### Creating Account Instances
+ * **Example:** Create A Member Account Instance
  * ```typescript
  * const instance = yield* Instance("IdentityCenter", {
  *   mode: "account",
  *   name: "customer-a",
  * });
  * ```
+ *
+ * @resource
  */
 export const Instance = Resource<Instance>("AWS.IdentityCenter.Instance");
 
@@ -110,9 +111,7 @@ export const InstanceProvider = () =>
                 ): instance is ssoAdmin.InstanceMetadata & {
                   InstanceArn: string;
                   IdentityStoreId: string;
-                } =>
-                  instance.InstanceArn != null &&
-                  instance.IdentityStoreId != null,
+                } => instance.InstanceArn != null && instance.IdentityStoreId != null,
               )
               .map((instance) => ({
                 ...toInstanceAttributes(instance),
@@ -179,9 +178,7 @@ export const InstanceProvider = () =>
           });
           if (!created) {
             return yield* Effect.fail(
-              new Error(
-                "failed to resolve Identity Center instance after create",
-              ),
+              new Error("failed to resolve Identity Center instance after create"),
             );
           }
 
@@ -230,7 +227,5 @@ const readInstance = Effect.fn(function* ({
     (instances.length === 1 ? instances[0] : undefined) ??
     instances.find((instance) => instance.Status === "ACTIVE");
 
-  return match?.InstanceArn && match.IdentityStoreId
-    ? toInstanceAttributes(match)
-    : undefined;
+  return match?.InstanceArn && match.IdentityStoreId ? toInstanceAttributes(match) : undefined;
 });

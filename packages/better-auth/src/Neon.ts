@@ -7,11 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import {
-  Database,
-  type DatabaseService,
-  type DirectDatabase,
-} from "./Database.ts";
+import { Database, type DatabaseService, type DirectDatabase } from "./Database.ts";
 import { makeMigrateSupport, type SqlLayerOptions } from "./Postgres.ts";
 
 export interface NeonOptions extends SqlLayerOptions {}
@@ -20,27 +16,19 @@ export interface NeonOptions extends SqlLayerOptions {}
 // duck-types it as a Postgres pool via its `connect` method) but speaks
 // WebSocket instead of TCP — no `pg`, no Hyperdrive, no nodejs socket
 // APIs. Loaded dynamically so the driver stays an optional peer.
-const loadNeonPool = Effect.promise(
-  () => import("@neondatabase/serverless"),
-).pipe(
+const loadNeonPool = Effect.promise(() => import("@neondatabase/serverless")).pipe(
   Effect.map((mod) =>
     (mod as { default?: { Pool?: unknown } }).default?.Pool !== undefined
       ? (
           mod as unknown as {
             default: {
-              Pool: new (config: {
-                connectionString: string;
-                max?: number;
-              }) => unknown;
+              Pool: new (config: { connectionString: string; max?: number }) => unknown;
             };
           }
         ).default.Pool
       : (
           mod as unknown as {
-            Pool: new (config: {
-              connectionString: string;
-              max?: number;
-            }) => unknown;
+            Pool: new (config: { connectionString: string; max?: number }) => unknown;
           }
         ).Pool,
   ),
@@ -69,16 +57,12 @@ const openPool = (
  * For TCP access through Cloudflare Hyperdrive use `CloudflareHyperdrive`;
  * for a generic `pg` connection use `Postgres`.
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer @neondatabase/serverless
- * @product Neon
  *
- * @section Connecting from a Worker or Lambda
+ * ### Connecting from a Worker or Lambda
  * The `connectionUri` Output binds into the host environment at deploy
  * and is read back at runtime; the same source drives the deploy-time
  * migration Action.
- * @example Worker (or Lambda) with a Neon-backed BetterAuth
+ * **Example:** Worker (or Lambda) with a Neon-backed BetterAuth
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
@@ -96,20 +80,22 @@ const openPool = (
  * )
  * ```
  *
- * @section Branch-per-stage setups
+ * ### Branch-per-stage setups
  * Point the layer at a branch's connection string instead of the project's
  * to isolate auth data per stage.
- * @example Using a Neon branch
+ * **Example:** Using a Neon branch
  * ```typescript
  * const branch = yield* Neon.Branch("auth-db", { project });
  * // ...
  * Effect.provide(Layer.unwrap(Effect.map(branch, (b) => NeonDatabase(b.connectionUri))))
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer @neondatabase/serverless
+ * @product Neon
  */
-export const Neon = (
-  url: ConnectionSource,
-  options?: NeonOptions,
-): Layer.Layer<Database> =>
+export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<Database> =>
   Layer.effect(
     Database,
     Effect.gen(function* () {

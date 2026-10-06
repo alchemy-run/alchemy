@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListCostAllocationTags}.
  */
-export interface ListCostAllocationTagsRequest
-  extends ce.ListCostAllocationTagsRequest {}
+export interface ListCostAllocationTagsRequest extends ce.ListCostAllocationTagsRequest {}
 
 /**
  * Runtime binding for `ce:ListCostAllocationTags`.
@@ -14,9 +13,8 @@ export interface ListCostAllocationTagsRequest
  * List your cost allocation tags with their activation status —
  * user-defined and AWS-generated. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.ListCostAllocationTagsHttp)`.
- * @binding
- * @section Cost Allocation Tags
- * @example List Cost Allocation Tags
+ * ### Cost Allocation Tags
+ * **Example:** List Cost Allocation Tags
  * ```typescript
  * // init — account-level binding takes no resource
  * const listCostAllocationTags = yield* AWS.CostExplorer.ListCostAllocationTags();
@@ -25,6 +23,8 @@ export interface ListCostAllocationTagsRequest
  * const result = yield* listCostAllocationTags();
  * const tags = result.CostAllocationTags;
  * ```
+ *
+ * @binding
  */
 export interface ListCostAllocationTags extends Binding.Service<
   ListCostAllocationTags,
@@ -32,10 +32,7 @@ export interface ListCostAllocationTags extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListCostAllocationTagsRequest,
-    ) => Effect.Effect<
-      ce.ListCostAllocationTagsResponse,
-      ce.ListCostAllocationTagsError
-    >
+    ) => Effect.Effect<ce.ListCostAllocationTagsResponse, ce.ListCostAllocationTagsError>
   >
 > {}
 

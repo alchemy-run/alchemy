@@ -1,9 +1,8 @@
+import crypto from "node:crypto";
 import * as intel from "@distilled.cloud/cloudflare/intel";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-import crypto from "node:crypto";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -107,18 +106,15 @@ export type IndicatorFeed = Resource<
  * adopts an existing feed with the same name instead of creating a
  * duplicate.
  * :::
- * @resource
- * @product Intel
- * @category Observability & Analytics
- * @section Creating a Feed
- * @example Basic feed
+ * ### Creating a Feed
+ * **Example:** Basic feed
  * ```typescript
  * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
  * });
  * ```
  *
- * @example Public, downloadable feed
+ * **Example:** Public, downloadable feed
  * ```typescript
  * const feed = yield* Cloudflare.Intel.IndicatorFeed("public-feed", {
  *   name: "acme-public-indicators",
@@ -129,8 +125,8 @@ export type IndicatorFeed = Resource<
  * });
  * ```
  *
- * @section Publishing Indicators
- * @example Upload a STIX 2.x snapshot inline
+ * ### Publishing Indicators
+ * **Example:** Upload a STIX 2.x snapshot inline
  * ```typescript
  * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
@@ -142,8 +138,8 @@ export type IndicatorFeed = Resource<
  * });
  * ```
  *
- * @section Sharing a Feed
- * @example Grant another account access
+ * ### Sharing a Feed
+ * **Example:** Grant another account access
  * ```typescript
  * yield* Cloudflare.Intel.IndicatorFeedPermission("partner-access", {
  *   feedId: feed.feedId,
@@ -152,6 +148,10 @@ export type IndicatorFeed = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/security-center/indicator-feeds/
+ *
+ * @resource
+ * @product Intel
+ * @category Observability & Analytics
  */
 export const IndicatorFeed = Resource<IndicatorFeed>(TypeId);
 
@@ -177,9 +177,7 @@ export const IndicatorFeedProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? [])
-              .map((f) => f.id)
-              .filter((id): id is number => id != null),
+            (page.result ?? []).map((f) => f.id).filter((id): id is number => id != null),
           ),
         ),
         Effect.catchTag("Forbidden", () => Effect.succeed([] as number[])),
@@ -189,9 +187,7 @@ export const IndicatorFeedProvider = () =>
         (feedId) =>
           getFeed(accountId, feedId).pipe(
             Effect.map((observed) =>
-              observed
-                ? toAttributes(observed, accountId, undefined)
-                : undefined,
+              observed ? toAttributes(observed, accountId, undefined) : undefined,
             ),
             // A feed may vanish between list and get, or the account may
             // lack access to an individual feed — skip either case.
@@ -199,9 +195,7 @@ export const IndicatorFeedProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is IndicatorFeedAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is IndicatorFeedAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -222,9 +216,7 @@ export const IndicatorFeedProvider = () =>
 
       if (output?.feedId !== undefined) {
         const observed = yield* getFeed(acct, output.feedId);
-        return observed
-          ? toAttributes(observed, acct, output.snapshotHash)
-          : undefined;
+        return observed ? toAttributes(observed, acct, output.snapshotHash) : undefined;
       }
       // Cold read — recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
@@ -270,8 +262,7 @@ export const IndicatorFeedProvider = () =>
           // The create response is fully optional in the API schema; fall
           // back to the by-name lookup for the id we just created.
           const match = yield* findByName(accountId, name);
-          observed =
-            match?.id != null ? yield* getFeed(accountId, match.id) : undefined;
+          observed = match?.id != null ? yield* getFeed(accountId, match.id) : undefined;
         } else {
           observed = yield* getFeed(accountId, created.id);
         }

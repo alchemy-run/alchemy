@@ -15,9 +15,8 @@ export interface BatchUpdateMemoryRecordsRequest extends Omit<
  * AgentCore data-plane API against it. Provide `AgentCore.BatchUpdateMemoryRecordsHttp`
  * on the Function effect to implement the binding.
  *
- * @binding
- * @section Writing Memory Records
- * @example Update a Record's Content
+ * ### Writing Memory Records
+ * **Example:** Update a Record's Content
  * ```typescript
  * // init
  * const batchUpdateMemoryRecords = yield* AgentCore.BatchUpdateMemoryRecords(memory);
@@ -41,6 +40,8 @@ export interface BatchUpdateMemoryRecordsRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface BatchUpdateMemoryRecords extends Binding.Service<
   BatchUpdateMemoryRecords,
@@ -56,7 +57,6 @@ export interface BatchUpdateMemoryRecords extends Binding.Service<
     >
   >
 > {}
-export const BatchUpdateMemoryRecords =
-  Binding.Service<BatchUpdateMemoryRecords>(
-    "AWS.BedrockAgentCore.BatchUpdateMemoryRecords",
-  );
+export const BatchUpdateMemoryRecords = Binding.Service<BatchUpdateMemoryRecords>(
+  "AWS.BedrockAgentCore.BatchUpdateMemoryRecords",
+);

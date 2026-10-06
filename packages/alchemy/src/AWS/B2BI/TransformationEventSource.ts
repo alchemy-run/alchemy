@@ -111,13 +111,9 @@ export type TransformationEvent = EventRecord<TransformationEventDetail>;
 /** An acknowledgement EventBridge event delivered to the handler. */
 export type AcknowledgementEvent = EventRecord<AcknowledgementEventDetail>;
 
-export type TransformationEventType =
-  | "Transformation Completed"
-  | "Transformation Failed";
+export type TransformationEventType = "Transformation Completed" | "Transformation Failed";
 
-export type AcknowledgementEventType =
-  | "Acknowledgement Completed"
-  | "Acknowledgement Failed";
+export type AcknowledgementEventType = "Acknowledgement Completed" | "Acknowledgement Failed";
 
 export interface TransformationEventSourceProps extends EventRouteProps {
   /**
@@ -158,8 +154,8 @@ export interface AcknowledgementEventSourceProps extends EventRouteProps {
  * partnerships share the Function. Provide `AWS.Lambda.EventSource` on the
  * Function effect to implement the subscription.
  *
- * @section Reacting to Transformations
- * @example Post-Process Completed Transformations
+ * ### Reacting to Transformations
+ * **Example:** Post-Process Completed Transformations
  * ```typescript
  * yield* AWS.B2BI.consumeTransformationEvents(
  *   { events: ["Transformation Completed"] },
@@ -204,8 +200,8 @@ export const consumeTransformationEvents = <StreamReq = never, Req = never>(
  * Provide `AWS.Lambda.EventSource` on the Function effect to implement the
  * subscription.
  *
- * @section Reacting to Acknowledgements
- * @example Alert on Failed Acknowledgements
+ * ### Reacting to Acknowledgements
+ * **Example:** Alert on Failed Acknowledgements
  * ```typescript
  * yield* AWS.B2BI.consumeAcknowledgementEvents(
  *   { events: ["Acknowledgement Failed"] },

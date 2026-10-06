@@ -1,19 +1,17 @@
-import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
+import * as NodeV8 from "node:v8";
+import { layerRuntime, registerHttpServer } from "@alchemy.run/cloudflare-runtime/core";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as NodeV8 from "node:v8";
-import {
-  Artifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "../../Artifacts.ts";
-import { CloudflareAuth } from "../Auth/AuthProvider.ts";
-import * as Credentials from "../Credentials.ts";
+import { Artifacts, createArtifactStore, makeScopedArtifacts } from "../../Artifacts.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
+import { CloudflareAuth } from "../Auth/AuthProvider.ts";
+import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
+import * as Credentials from "../Credentials.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError } from "./Source.ts";
 import * as Vite from "./Sources/Vite.ts";
@@ -26,22 +24,35 @@ import {
 const readConfig = Effect.gen(function* () {
   const stdio = yield* Stdio.Stdio;
   const chunks = yield* Stream.runCollect(stdio.stdin);
-  return NodeV8.deserialize(Buffer.concat(chunks)) as ViteChildConfig;
+  const bytes = Buffer.concat(chunks);
+  // A cross-runtime spawn (bun engine → node child) sends JSON because
+  // bun's `v8.serialize` output is unreadable by real V8. Sniff the
+  // encoding by the JSON marker: only JSON starts with `{` — node's V8
+  // payloads start with 0xFF and bun's JSC serialization with its own
+  // binary header, so same-runtime spawns fall through to deserialize.
+  return (
+    bytes[0] === 0x7b // "{"
+      ? JSON.parse(bytes.toString("utf8"))
+      : NodeV8.deserialize(bytes)
+  ) as ViteChildConfig;
 });
 
 const program = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* readConfig;
     const credentials = Credentials.fromAuthProvider().pipe(
+      Layer.provideMerge(CloudflareEnvironment.fromProfile()),
       Layer.provide(CloudflareAuth),
     );
-    const runtimeContext = yield* layerRuntime({
-      api: { accountId: config.accountId },
-      storage: { directory: config.storageDirectory },
-    }).pipe(
-      Layer.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)),
-      Layer.build,
-    );
+    const runtimeContext = yield* Layer.unwrap(
+      Effect.gen(function* () {
+        const environment = yield* CloudflareEnvironment.CloudflareEnvironment;
+        return layerRuntime({
+          api: { accountId: Effect.map(environment, (env) => env.accountId) },
+          storage: { directory: config.storageDirectory },
+        });
+      }),
+    ).pipe(Layer.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)), Layer.build);
     // The non-runtime fields are consumed here; everything else in
     // `config.worker` is the runtime worker shape `viteDev` expects, so new
     // runtime fields flow through without being re-listed.
@@ -52,6 +63,7 @@ const program = Effect.scoped(
       hasAssets,
       bindingDescriptors,
       devRemote,
+      devAccess,
       ...runtimeWorker
     } = config.worker;
     const bindings = yield* materializeRuntimeBindings(
@@ -61,12 +73,9 @@ const program = Effect.scoped(
         hasAssets,
         bindingDescriptors,
         devRemote,
+        devAccess,
       },
-      {
-        accountId: config.accountId,
-        selfUrl: config.publicUrl,
-        stack: config.stack,
-      },
+      { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
     );
     const source = config.source;
     const viteHost = "127.0.0.1";
@@ -80,13 +89,11 @@ const program = Effect.scoped(
           // (which includes the per-run Artifacts cache the live provider
           // supplies); the dev child has no run-scoped cache, so hand the
           // module a fresh one.
-          Effect.provideService(
-            Artifacts,
-            makeScopedArtifacts(createArtifactStore(), source.id),
-          ),
+          Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), source.fqn)),
           Effect.flatMap((provider) =>
             provider.dev({
               id: source.id,
+              fqn: source.fqn,
               workerName: config.worker.name,
               compatibility,
               entry: { kind: "external" },
@@ -105,15 +112,26 @@ const program = Effect.scoped(
             }),
           ),
           Effect.flatMap((handle) =>
-            handle.mode === "server"
-              ? Effect.succeed(handle.url.toString())
-              : Effect.fail(
+            Match.value(handle).pipe(
+              Match.when({ mode: "server" }, (handle) =>
+                (handle.serviceBinding === "http"
+                  ? registerHttpServer(config.worker.name, handle.url).pipe(
+                      Effect.provideContext(runtimeContext),
+                    )
+                  : Effect.void
+                ).pipe(Effect.as(handle.url.toString())),
+              ),
+              Match.when({ mode: "bundle" }, () =>
+                Effect.fail(
                   new SourceProviderError({
                     provider: source.descriptor.provider,
                     message:
                       "A source declared devMode 'server' but returned a bundle-mode dev handle.",
                   }),
                 ),
+              ),
+              Match.exhaustive,
+            ),
           ),
         )
       : yield* Vite.viteDev(
@@ -127,19 +145,13 @@ const program = Effect.scoped(
             worker: { ...runtimeWorker, bindings },
             context: runtimeContext,
           },
-          {
-            host: viteHost,
-            port: vitePort,
-            strictPort: false,
-          },
+          { host: viteHost, port: vitePort, strictPort: false },
         ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {
       return yield* Effect.die("Dev server child started without a local URL");
     }
     yield* Effect.sync(() => {
-      process.stdout.write(
-        `${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}\n`,
-      );
+      process.stdout.write(`${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}\n`);
     });
     return yield* Effect.never;
   }),
@@ -147,7 +159,6 @@ const program = Effect.scoped(
 
 runMain(
   program.pipe(
-    Effect.provide(RpcServerEnvironment.fromEnv()),
-    Effect.provide(PlatformServices),
+    Effect.provide(RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices))),
   ),
 );

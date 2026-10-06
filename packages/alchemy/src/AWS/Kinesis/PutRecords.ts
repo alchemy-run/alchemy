@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface PutRecordsRequest extends Omit<
-  Kinesis.PutRecordsInput,
-  "StreamName"
-> {}
+export interface PutRecordsRequest extends Omit<Kinesis.PutRecordsInput, "StreamName"> {}
 
 /**
  * Runtime binding for `kinesis:PutRecords`.
@@ -16,9 +13,8 @@ export interface PutRecordsRequest extends Omit<
  * granted on the stream. Provide the implementation with
  * `Effect.provide(AWS.Kinesis.PutRecordsHttp)`. For unbounded batching with
  * automatic partial-failure retry, use `AWS.Kinesis.StreamSink` instead.
- * @binding
- * @section Writing Batches
- * @example Put a Batch of Records
+ * ### Writing Batches
+ * **Example:** Put a Batch of Records
  * ```typescript
  * // init — bind the operation to the stream
  * const putRecords = yield* AWS.Kinesis.PutRecords(stream);
@@ -32,6 +28,8 @@ export interface PutRecordsRequest extends Omit<
  * });
  * // result.FailedRecordCount > 0 means some entries need re-submission
  * ```
+ *
+ * @binding
  */
 export interface PutRecords extends Binding.Service<
   PutRecords,
@@ -39,9 +37,7 @@ export interface PutRecords extends Binding.Service<
   (
     stream: Stream,
   ) => Effect.Effect<
-    (
-      request: PutRecordsRequest,
-    ) => Effect.Effect<Kinesis.PutRecordsOutput, Kinesis.PutRecordsError>
+    (request: PutRecordsRequest) => Effect.Effect<Kinesis.PutRecordsOutput, Kinesis.PutRecordsError>
   >
 > {}
 

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface ListJobsRequest extends Omit<
-  amplify.ListJobsRequest,
-  "appId"
-> {}
+export interface ListJobsRequest extends Omit<amplify.ListJobsRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:ListJobs`.
@@ -14,9 +11,8 @@ export interface ListJobsRequest extends Omit<
  * Bind an {@link App} in the function's init phase to get a callable that
  * lists the build jobs of one of the app's branches, newest first. Provide the
  * implementation with `Effect.provide(AWS.Amplify.ListJobsHttp)`.
- * @binding
- * @section Observing Jobs
- * @example Read the Latest Job of a Branch
+ * ### Observing Jobs
+ * **Example:** Read the Latest Job of a Branch
  * ```typescript
  * // init — bind the operation to the app
  * const listJobs = yield* AWS.Amplify.ListJobs(app);
@@ -28,6 +24,8 @@ export interface ListJobsRequest extends Omit<
  * });
  * const latest = jobSummaries[0];
  * ```
+ *
+ * @binding
  */
 export interface ListJobs extends Binding.Service<
   ListJobs,
@@ -35,9 +33,7 @@ export interface ListJobs extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: ListJobsRequest,
-    ) => Effect.Effect<amplify.ListJobsResult, amplify.ListJobsError>
+    (request: ListJobsRequest) => Effect.Effect<amplify.ListJobsResult, amplify.ListJobsError>
   >
 > {}
 

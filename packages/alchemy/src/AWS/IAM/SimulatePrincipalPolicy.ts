@@ -13,9 +13,8 @@ import * as Binding from "../../Binding.ts";
  * arguments and grants `iam:SimulatePrincipalPolicy` on `*`. Provide the
  * implementation with `Effect.provide(AWS.IAM.SimulatePrincipalPolicyHttp)`.
  *
- * @binding
- * @section Simulating Policies
- * @example Check What a Role May Do
+ * ### Simulating Policies
+ * **Example:** Check What a Role May Do
  * ```typescript
  * // init
  * const simulatePrincipalPolicy = yield* IAM.SimulatePrincipalPolicy();
@@ -29,6 +28,8 @@ import * as Binding from "../../Binding.ts";
  *   (r) => r.EvalDecision !== "allowed",
  * );
  * ```
+ *
+ * @binding
  */
 export interface SimulatePrincipalPolicy extends Binding.Service<
   SimulatePrincipalPolicy,
@@ -36,10 +37,7 @@ export interface SimulatePrincipalPolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request: iam.SimulatePrincipalPolicyRequest,
-    ) => Effect.Effect<
-      iam.SimulatePolicyResponse,
-      iam.SimulatePrincipalPolicyError
-    >
+    ) => Effect.Effect<iam.SimulatePolicyResponse, iam.SimulatePrincipalPolicyError>
   >
 > {}
 export const SimulatePrincipalPolicy = Binding.Service<SimulatePrincipalPolicy>(

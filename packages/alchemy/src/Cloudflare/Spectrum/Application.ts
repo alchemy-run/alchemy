@@ -2,7 +2,6 @@ import * as spectrum from "@distilled.cloud/cloudflare/spectrum";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -220,11 +219,8 @@ export type Application = Resource<
  * no prior state, `read` scans the zone for an application with the same
  * `dns.name` + `protocol` and reports it as `Unowned`, so the engine
  * refuses to take it over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Spectrum
- * @category Network
- * @section Proxying SSH
- * @example SSH on a fixed origin address
+ * ### Proxying SSH
+ * **Example:** SSH on a fixed origin address
  * ```typescript
  * const ssh = yield* Cloudflare.Spectrum.Application("Ssh", {
  *   zoneId: zone.zoneId,
@@ -234,8 +230,8 @@ export type Application = Resource<
  * });
  * ```
  *
- * @section Origin via DNS
- * @example Resolve the origin by hostname
+ * ### Origin via DNS
+ * **Example:** Resolve the origin by hostname
  * ```typescript
  * yield* Cloudflare.Spectrum.Application("Minecraft", {
  *   zoneId: zone.zoneId,
@@ -246,8 +242,8 @@ export type Application = Resource<
  * });
  * ```
  *
- * @section Enterprise features
- * @example UDP with IP firewall and PROXY protocol
+ * ### Enterprise features
+ * **Example:** UDP with IP firewall and PROXY protocol
  * ```typescript
  * // Arbitrary ports/protocols, UDP, and proxyProtocol require an
  * // Enterprise plan with Spectrum.
@@ -262,6 +258,10 @@ export type Application = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/spectrum/
+ *
+ * @resource
+ * @product Spectrum
+ * @category Network
  */
 export const Application = Resource<Application>(TypeId);
 
@@ -292,9 +292,7 @@ export const ApplicationProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
 
       // Owned path: refresh by our persisted application id.
@@ -323,9 +321,7 @@ export const ApplicationProvider = () =>
       // 1. Observe — the app id cached on `output` is a hint, not a
       //    guarantee: a missing application falls through to the identity
       //    scan and then to create.
-      let observed = output?.appId
-        ? yield* getApp(zoneId, output.appId)
-        : undefined;
+      let observed = output?.appId ? yield* getApp(zoneId, output.appId) : undefined;
 
       // 2. Fall back to scanning the zone for a hostname + protocol match.
       //    Ownership has already been verified upstream — `read` reports
@@ -385,9 +381,7 @@ export const ApplicationProvider = () =>
                 (page.result ?? []).map((app) => toAttributes(app, zone.id)),
               ),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as ApplicationAttributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as ApplicationAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -407,10 +401,7 @@ type ObservedApp = spectrum.GetAppResponse;
  * partial shape.
  */
 type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
-type AnyApp =
-  | ObservedApp
-  | spectrum.CreateAppResponse
-  | spectrum.UpdateAppResponse;
+type AnyApp = ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse;
 const asFull = (app: AnyApp): Partial<FullApp> & AnyApp => app;
 
 /**
@@ -429,9 +420,7 @@ const getApp = (zoneId: string, appId: string) =>
  */
 const findByIdentity = (zoneId: string, dnsName: string, protocol: string) =>
   spectrum.listApps.items({ zoneId }).pipe(
-    Stream.filter(
-      (app) => app.dns.name === dnsName && app.protocol === protocol,
-    ),
+    Stream.filter((app) => app.dns.name === dnsName && app.protocol === protocol),
     Stream.take(1),
     Stream.runCollect,
     Effect.map((chunk): ObservedApp | undefined => Array.from(chunk)[0]),
@@ -484,16 +473,12 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
 
 const edgeIpsDirty = (o: Partial<FullApp>, desired: EdgeIps): boolean => {
   const observed = o.edgeIps ?? {};
-  const observedIps =
-    "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
+  const observedIps = "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
   const observedConnectivity =
-    "connectivity" in observed
-      ? (observed.connectivity ?? "all")
-      : ("all" as const);
+    "connectivity" in observed ? (observed.connectivity ?? "all") : ("all" as const);
   return (
     (observed.type ?? "dynamic") !== (desired.type ?? "dynamic") ||
-    (desired.connectivity !== undefined &&
-      observedConnectivity !== desired.connectivity) ||
+    (desired.connectivity !== undefined && observedConnectivity !== desired.connectivity) ||
     (desired.ips !== undefined && !sameList(observedIps, desired.ips))
   );
 };
@@ -521,9 +506,7 @@ const toAttributes = (
       ? {
           name: a.originDns.name ?? undefined,
           ttl: a.originDns.ttl ?? undefined,
-          type: (a.originDns.type ?? undefined) as
-            | OriginDns["type"]
-            | undefined,
+          type: (a.originDns.type ?? undefined) as OriginDns["type"] | undefined,
         }
       : undefined,
     originPort: a.originPort ?? undefined,

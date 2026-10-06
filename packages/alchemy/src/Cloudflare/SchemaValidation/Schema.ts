@@ -2,7 +2,6 @@ import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -94,11 +93,8 @@ export type SchemaValidationSchema = Resource<
  * delete those operations). The schema body is immutable: changing `source`
  * uploads a new schema and deletes the old one (replacement). Only the
  * `validationEnabled` flag is mutable in place.
- * @resource
- * @product Schema Validation
- * @category Application Security
- * @section Uploading a Schema
- * @example Upload an OpenAPI v3 schema
+ * ### Uploading a Schema
+ * **Example:** Upload an OpenAPI v3 schema
  * ```typescript
  * const schema = yield* Cloudflare.SchemaValidation.SchemaValidationSchema("ApiSchema", {
  *   zoneId: zone.zoneId,
@@ -118,7 +114,7 @@ export type SchemaValidationSchema = Resource<
  * });
  * ```
  *
- * @example Upload a schema without enabling validation
+ * **Example:** Upload a schema without enabling validation
  * ```typescript
  * const schema = yield* Cloudflare.SchemaValidation.SchemaValidationSchema("DraftSchema", {
  *   zoneId: zone.zoneId,
@@ -127,8 +123,8 @@ export type SchemaValidationSchema = Resource<
  * });
  * ```
  *
- * @section Toggling validation
- * @example Enable a previously-disabled schema in place
+ * ### Toggling validation
+ * **Example:** Enable a previously-disabled schema in place
  * ```typescript
  * // Enabling (false → true) patches the schema in place. Disabling an
  * // enabled schema is rejected by Cloudflare, so `true` → `false` (like a
@@ -141,6 +137,10 @@ export type SchemaValidationSchema = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
+ *
+ * @resource
+ * @product Schema Validation
+ * @category Application Security
  */
 export const SchemaValidationSchema = Resource<SchemaValidationSchema>(TypeId);
 
@@ -172,11 +172,7 @@ export const SchemaProvider = () =>
       // There is no rename API. A generated name (news.name undefined) is
       // deterministic and therefore never drifts.
       const oldName = output?.name ?? olds?.name;
-      if (
-        news.name !== undefined &&
-        oldName !== undefined &&
-        news.name !== oldName
-      ) {
+      if (news.name !== undefined && oldName !== undefined && news.name !== oldName) {
         return { action: "replace" } as const;
       }
       // The uploaded source is immutable. Prefer the previously-passed
@@ -190,8 +186,7 @@ export const SchemaProvider = () =>
       // ("Disabling a schema is not allowed, delete schema instead.") —
       // converge by replacing: upload a new, disabled copy and delete the
       // old one. Enabling (false → true) is a plain in-place update.
-      const oldEnabled =
-        output?.validationEnabled ?? olds?.validationEnabled ?? true;
+      const oldEnabled = output?.validationEnabled ?? olds?.validationEnabled ?? true;
       if (oldEnabled && news.validationEnabled === false) {
         return { action: "replace" } as const;
       }
@@ -199,9 +194,7 @@ export const SchemaProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
 
       if (output?.schemaId) {
@@ -228,9 +221,7 @@ export const SchemaProvider = () =>
 
       // 1. Observe — the cached schemaId is a hint, not a guarantee: a
       //    SchemaNotFound falls through to "missing" and we re-upload.
-      const observed = output?.schemaId
-        ? yield* getSchema(zoneId, output.schemaId)
-        : undefined;
+      const observed = output?.schemaId ? yield* getSchema(zoneId, output.schemaId) : undefined;
 
       // 2. Ensure — upload when missing. Names are not unique server-side,
       //    so there is no AlreadyExists race to tolerate.
@@ -281,26 +272,22 @@ export const SchemaProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          schemaValidation.listSchemas
-            .pages({ zoneId: zone.id, omitSource: false })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((schema) =>
-                    toAttributes(zone.id, schema),
-                  ),
-                ),
-              ),
-              // Skip zones schema-validation can't enumerate: `InvalidRoute`
-              // (feature not available on the zone), `ZonePurged` (the
-              // account-wide zone listing can momentarily include a zone that
-              // has since been purged), and `Forbidden` (the scoped token /
-              // zone plan doesn't grant schema-validation access).
-              Effect.catchTag(["InvalidRoute", "ZonePurged", "Forbidden"], () =>
-                Effect.succeed<SchemaAttributes[]>([]),
+          schemaValidation.listSchemas.pages({ zoneId: zone.id, omitSource: false }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((schema) => toAttributes(zone.id, schema)),
               ),
             ),
+            // Skip zones schema-validation can't enumerate: `InvalidRoute`
+            // (feature not available on the zone), `ZonePurged` (the
+            // account-wide zone listing can momentarily include a zone that
+            // has since been purged), and `Forbidden` (the scoped token /
+            // zone plan doesn't grant schema-validation access).
+            Effect.catchTag(["InvalidRoute", "ZonePurged", "Forbidden"], () =>
+              Effect.succeed<SchemaAttributes[]>([]),
+            ),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();

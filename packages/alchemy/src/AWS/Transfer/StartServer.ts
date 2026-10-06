@@ -14,9 +14,8 @@ import type { Server } from "./Server.ts";
  * Starting a server that is not `OFFLINE` fails with the typed
  * `InvalidRequestException`. Provide the implementation with
  * `Effect.provide(AWS.Transfer.StartServerHttp)`.
- * @binding
- * @section Controlling Server Availability
- * @example Bring the Server Online
+ * ### Controlling Server Availability
+ * **Example:** Bring the Server Online
  * ```typescript
  * // init — bind the operation to the server
  * const startServer = yield* AWS.Transfer.StartServer(server);
@@ -24,6 +23,8 @@ import type { Server } from "./Server.ts";
  * // runtime
  * yield* startServer();
  * ```
+ *
+ * @binding
  */
 export interface StartServer extends Binding.Service<
   StartServer,
@@ -36,6 +37,4 @@ export interface StartServer extends Binding.Service<
     ) => Effect.Effect<transfer.StartServerResponse, transfer.StartServerError>
   >
 > {}
-export const StartServer = Binding.Service<StartServer>(
-  "AWS.Transfer.StartServer",
-);
+export const StartServer = Binding.Service<StartServer>("AWS.Transfer.StartServer");

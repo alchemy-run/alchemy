@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ComputeQuotaProps {
@@ -120,9 +115,8 @@ export interface ComputeQuota extends Resource<
  * A SageMaker HyperPod compute allocation (task governance) — reserves
  * instance capacity on an EKS-orchestrated HyperPod cluster for a team,
  * with fair-share weights and borrow/lend rules for idle compute.
- * @resource
- * @section Creating Compute Allocations
- * @example Team Quota with Borrowing
+ * ### Creating Compute Allocations
+ * **Example:** Team Quota with Borrowing
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -135,15 +129,13 @@ export interface ComputeQuota extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const ComputeQuota = Resource<ComputeQuota>(
-  "AWS.SageMaker.ComputeQuota",
-);
+export const ComputeQuota = Resource<ComputeQuota>("AWS.SageMaker.ComputeQuota");
 
 const createQuotaName = (id: string, props: { name?: string | undefined }) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 63 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 63 });
 
 const describeQuotaOrUndefined = (quotaId: string) =>
   sagemaker
@@ -155,23 +147,17 @@ const describeQuotaOrUndefined = (quotaId: string) =>
  * (read without output) or a create raced.
  */
 const findQuotaByName = Effect.fn(function* (name: string) {
-  const summaries = yield* sagemaker.listComputeQuotas
-    .pages({ NameContains: name })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.ComputeQuotaSummaries ?? []),
-      ),
-    );
+  const summaries = yield* sagemaker.listComputeQuotas.pages({ NameContains: name }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.ComputeQuotaSummaries ?? [])),
+  );
   return summaries.find((s) => s.Name === name && s.Status !== "Deleted");
 });
 
 const fetchQuotaTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(
-      Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -179,9 +165,7 @@ const fetchQuotaTags = Effect.fn(function* (arn: string) {
   );
 });
 
-const toAttrs = (
-  described: sagemaker.DescribeComputeQuotaResponse,
-): ComputeQuota["Attributes"] => {
+const toAttrs = (described: sagemaker.DescribeComputeQuotaResponse): ComputeQuota["Attributes"] => {
   const teamName = described.ComputeQuotaTarget?.TeamName ?? "";
   return {
     computeQuotaId: described.ComputeQuotaId,
@@ -251,17 +235,12 @@ const waitForQuota = (quotaId: string, target: "Ready" | "Gone") =>
             }),
           );
         }
-        return yield* Effect.fail(
-          new ComputeQuotaNotReady({ quotaId, status: described.Status }),
-        );
+        return yield* Effect.fail(new ComputeQuotaNotReady({ quotaId, status: described.Status }));
       }
       if (described?.Status === "Created" || described?.Status === "Updated") {
         return;
       }
-      if (
-        described !== undefined &&
-        FAILED_STATUSES.includes(described.Status)
-      ) {
+      if (described !== undefined && FAILED_STATUSES.includes(described.Status)) {
         return yield* Effect.fail(
           new ComputeQuotaFailed({
             quotaId,
@@ -270,9 +249,7 @@ const waitForQuota = (quotaId: string, target: "Ready" | "Gone") =>
           }),
         );
       }
-      return yield* Effect.fail(
-        new ComputeQuotaNotReady({ quotaId, status: described?.Status }),
-      );
+      return yield* Effect.fail(new ComputeQuotaNotReady({ quotaId, status: described?.Status }));
     }),
   );
 
@@ -287,9 +264,7 @@ export const ComputeQuotaProvider = () =>
             const summaries = yield* sagemaker.listComputeQuotas.pages({}).pipe(
               EffectStream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.ComputeQuotaSummaries ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.ComputeQuotaSummaries ?? []),
               ),
             );
             return summaries.flatMap((s) => {
@@ -314,22 +289,15 @@ export const ComputeQuotaProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const quotaId =
             output?.computeQuotaId ??
-            (yield* findQuotaByName(yield* createQuotaName(id, olds ?? {})))
-              ?.ComputeQuotaId;
+            (yield* findQuotaByName(yield* createQuotaName(id, olds ?? {})))?.ComputeQuotaId;
           if (quotaId === undefined) return undefined;
           const described = yield* describeQuotaOrUndefined(quotaId);
-          if (
-            !described ||
-            described.Status === "Deleting" ||
-            described.Status === "Deleted"
-          ) {
+          if (!described || described.Status === "Deleting" || described.Status === "Deleted") {
             return undefined;
           }
           const attrs = toAttrs(described);
           const tags = yield* fetchQuotaTags(attrs.computeQuotaArn);
-          return (yield* hasAlchemyTags(id, tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -343,9 +311,7 @@ export const ComputeQuotaProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("SageMaker ComputeQuota requires props"),
-            );
+            return yield* Effect.fail(new Error("SageMaker ComputeQuota requires props"));
           }
           const name = yield* createQuotaName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -354,9 +320,7 @@ export const ComputeQuotaProvider = () =>
           // Observe — by cached id first, then by name (lost state or race).
           let quotaId = output?.computeQuotaId;
           let described =
-            quotaId !== undefined
-              ? yield* describeQuotaOrUndefined(quotaId)
-              : undefined;
+            quotaId !== undefined ? yield* describeQuotaOrUndefined(quotaId) : undefined;
           if (described === undefined) {
             const found = yield* findQuotaByName(name);
             described =
@@ -381,18 +345,10 @@ export const ComputeQuotaProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
-            quotaId =
-              created?.ComputeQuotaId ??
-              (yield* findQuotaByName(name))?.ComputeQuotaId;
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+            quotaId = created?.ComputeQuotaId ?? (yield* findQuotaByName(name))?.ComputeQuotaId;
             if (quotaId === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to create compute quota ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to create compute quota ${name}`));
             }
             yield* session.note(`Creating compute quota ${name}...`);
             yield* waitForQuota(quotaId, "Ready");
@@ -410,8 +366,7 @@ export const ComputeQuotaProvider = () =>
                   JSON.stringify(news.computeQuotaTarget) ||
                 (news.activationState !== undefined &&
                   described.ActivationState !== news.activationState) ||
-                (described.Description ?? undefined) !==
-                  (news.description ?? undefined))
+                (described.Description ?? undefined) !== (news.description ?? undefined))
             ) {
               yield* sagemaker.updateComputeQuota({
                 ComputeQuotaId: quotaId,
@@ -428,9 +383,7 @@ export const ComputeQuotaProvider = () =>
 
           described = yield* describeQuotaOrUndefined(quotaId);
           if (described === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled compute quota ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled compute quota ${name}`));
           }
           const attrs = toAttrs(described);
 

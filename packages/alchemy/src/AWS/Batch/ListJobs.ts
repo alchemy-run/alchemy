@@ -7,10 +7,7 @@ import type { JobQueue } from "./JobQueue.ts";
  * The queue is injected by the binding; filter by `jobStatus` (default
  * `RUNNING`), `filters`, or paginate with `nextToken`/`maxResults`.
  */
-export interface ListJobsRequest extends Omit<
-  batch.ListJobsRequest,
-  "jobQueue"
-> {}
+export interface ListJobsRequest extends Omit<batch.ListJobsRequest, "jobQueue"> {}
 
 /**
  * List AWS Batch jobs in the bound job queue from runtime code.
@@ -18,13 +15,14 @@ export interface ListJobsRequest extends Omit<
  * service-scoped; the queue anchors the binding and is injected as the
  * `jobQueue` selector.
  *
- * @binding
- * @section Listing Jobs
- * @example List runnable jobs in the queue
+ * ### Listing Jobs
+ * **Example:** List runnable jobs in the queue
  * ```typescript
  * const listJobs = yield* Batch.ListJobs(queue);
  * const { jobSummaryList } = yield* listJobs({ jobStatus: "RUNNABLE" });
  * ```
+ *
+ * @binding
  */
 export interface ListJobs extends Binding.Service<
   ListJobs,
@@ -32,9 +30,7 @@ export interface ListJobs extends Binding.Service<
   (
     queue: JobQueue,
   ) => Effect.Effect<
-    (
-      request?: ListJobsRequest,
-    ) => Effect.Effect<batch.ListJobsResponse, batch.ListJobsError>
+    (request?: ListJobsRequest) => Effect.Effect<batch.ListJobsResponse, batch.ListJobsError>
   >
 > {}
 export const ListJobs = Binding.Service<ListJobs>("AWS.Batch.ListJobs");

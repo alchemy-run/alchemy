@@ -21,9 +21,8 @@ export interface DeleteKnowledgeBaseDocumentsRequest extends Omit<
  * The binding grants the function `bedrock:DeleteKnowledgeBaseDocuments`
  * scoped to the data source's parent knowledge base.
  *
- * @binding
- * @section Direct Document Ingestion
- * @example Delete a Document
+ * ### Direct Document Ingestion
+ * **Example:** Delete a Document
  * ```typescript
  * // init
  * const deleteDocuments =
@@ -36,6 +35,8 @@ export interface DeleteKnowledgeBaseDocumentsRequest extends Omit<
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface DeleteKnowledgeBaseDocuments extends Binding.Service<
   DeleteKnowledgeBaseDocuments,
@@ -51,7 +52,6 @@ export interface DeleteKnowledgeBaseDocuments extends Binding.Service<
     >
   >
 > {}
-export const DeleteKnowledgeBaseDocuments =
-  Binding.Service<DeleteKnowledgeBaseDocuments>(
-    "AWS.Bedrock.DeleteKnowledgeBaseDocuments",
-  );
+export const DeleteKnowledgeBaseDocuments = Binding.Service<DeleteKnowledgeBaseDocuments>(
+  "AWS.Bedrock.DeleteKnowledgeBaseDocuments",
+);

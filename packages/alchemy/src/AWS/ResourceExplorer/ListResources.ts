@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { View } from "./View.ts";
 
-export interface ListResourcesRequest extends Omit<
-  RE2.ListResourcesInput,
-  "ViewArn"
-> {}
+export interface ListResourcesRequest extends Omit<RE2.ListResourcesInput, "ViewArn"> {}
 
 /**
  * Runtime binding for `resource-explorer-2:ListResources`.
@@ -17,9 +14,8 @@ export interface ListResourcesRequest extends Omit<
  * view exposes and act on each one. The view's ARN is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.ResourceExplorer.ListResourcesHttp)`.
- * @binding
- * @section Listing Resources
- * @example List Resources Through a View
+ * ### Listing Resources
+ * **Example:** List Resources Through a View
  * ```typescript
  * // init — bind the operation to the view
  * const listResources = yield* AWS.ResourceExplorer.ListResources(view);
@@ -33,6 +29,8 @@ export interface ListResourcesRequest extends Omit<
  *   yield* Effect.log(`${resource.ResourceType}: ${resource.Arn}`);
  * }
  * ```
+ *
+ * @binding
  */
 export interface ListResources extends Binding.Service<
   ListResources,
@@ -45,6 +43,4 @@ export interface ListResources extends Binding.Service<
     ) => Effect.Effect<RE2.ListResourcesOutput, RE2.ListResourcesError>
   >
 > {}
-export const ListResources = Binding.Service<ListResources>(
-  "AWS.ResourceExplorer.ListResources",
-);
+export const ListResources = Binding.Service<ListResources>("AWS.ResourceExplorer.ListResources");

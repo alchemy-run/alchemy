@@ -20,14 +20,15 @@ export interface DeleteArchiveRequest extends Omit<
  * idempotent — deleting an already-deleted archive is not an error.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.DeleteArchiveHttp)`.
- * @binding
- * @section Deleting Archives
- * @example Delete an archive by ID
+ * ### Deleting Archives
+ * **Example:** Delete an archive by ID
  * ```typescript
  * const deleteArchive = yield* AWS.Glacier.DeleteArchive(vault);
  *
  * yield* deleteArchive({ archiveId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteArchive extends Binding.Service<
   DeleteArchive,
@@ -37,12 +38,7 @@ export interface DeleteArchive extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteArchiveRequest,
-    ) => Effect.Effect<
-      glacier.DeleteArchiveResponse,
-      glacier.DeleteArchiveError
-    >
+    ) => Effect.Effect<glacier.DeleteArchiveResponse, glacier.DeleteArchiveError>
   >
 > {}
-export const DeleteArchive = Binding.Service<DeleteArchive>(
-  "AWS.Glacier.DeleteArchive",
-);
+export const DeleteArchive = Binding.Service<DeleteArchive>("AWS.Glacier.DeleteArchive");

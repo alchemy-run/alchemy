@@ -1,12 +1,12 @@
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import path from "pathe";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import * as Lambda from "@/AWS/Lambda";
 import * as SecurityLake from "@/AWS/SecurityLake";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -17,7 +17,7 @@ export class SecurityLakeBindingsFunction extends Lambda.Function<Lambda.Functio
 export default SecurityLakeBindingsFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const { region } = yield* AWSEnvironment.current;
@@ -85,10 +85,7 @@ export default SecurityLakeBindingsFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        SecurityLake.ListDataLakeExceptionsHttp,
-        SecurityLake.GetDataLakeSourcesHttp,
-      ),
+      Layer.mergeAll(SecurityLake.ListDataLakeExceptionsHttp, SecurityLake.GetDataLakeSourcesHttp),
     ),
   ),
 );

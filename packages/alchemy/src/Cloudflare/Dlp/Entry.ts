@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -60,13 +59,7 @@ export type EntryAttributes = {
   profileId: string | undefined;
 };
 
-export type Entry = Resource<
-  TypeId,
-  EntryProps,
-  EntryAttributes,
-  never,
-  Providers
->;
+export type Entry = Resource<TypeId, EntryProps, EntryAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust **DLP custom entry** — a standalone regular-
@@ -76,11 +69,8 @@ export type Entry = Resource<
  *
  * Requires the Cloudflare DLP entitlement (a paid Zero Trust add-on);
  * accounts without it receive the typed `Forbidden` error on all writes.
- * @resource
- * @product DLP
- * @category Cloudflare One (Zero Trust)
- * @section Creating a DLP entry
- * @example Attach a regex entry to a profile
+ * ### Creating a DLP entry
+ * **Example:** Attach a regex entry to a profile
  * ```typescript
  * const entry = yield* Cloudflare.Dlp.Entry("EmployeeId", {
  *   pattern: { regex: "EMP-[0-9]{6}" },
@@ -88,7 +78,7 @@ export type Entry = Resource<
  * });
  * ```
  *
- * @example Luhn-validated card entry
+ * **Example:** Luhn-validated card entry
  * ```typescript
  * const card = yield* Cloudflare.Dlp.Entry("CardNumber", {
  *   pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
@@ -97,6 +87,10 @@ export type Entry = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/data-loss-prevention/dlp-profiles/
+ *
+ * @resource
+ * @product DLP
+ * @category Cloudflare One (Zero Trust)
  */
 export const Entry = Resource<Entry>(TypeId);
 
@@ -159,9 +153,7 @@ export const EntryProvider = () =>
       const name = yield* createEntryName(id, news.name);
 
       // 1. Observe.
-      const observed = output?.entryId
-        ? yield* observeEntry(accountId, output.entryId)
-        : undefined;
+      const observed = output?.entryId ? yield* observeEntry(accountId, output.entryId) : undefined;
 
       // 2. Ensure — create when missing.
       if (!observed) {
@@ -170,12 +162,8 @@ export const EntryProvider = () =>
           name,
           enabled: news.enabled ?? true,
           pattern: encodePattern(news.pattern),
-          ...(news.description !== undefined
-            ? { description: news.description }
-            : {}),
-          ...(news.profileId !== undefined
-            ? { profileId: news.profileId }
-            : {}),
+          ...(news.description !== undefined ? { description: news.description } : {}),
+          ...(news.profileId !== undefined ? { profileId: news.profileId } : {}),
         });
         return toAttributes(created, accountId);
       }
@@ -196,9 +184,7 @@ export const EntryProvider = () =>
         name,
         enabled: news.enabled ?? true,
         pattern: encodePattern(news.pattern),
-        ...(news.description !== undefined
-          ? { description: news.description }
-          : {}),
+        ...(news.description !== undefined ? { description: news.description } : {}),
       });
       return toAttributes(updated, accountId);
     }),
@@ -250,15 +236,10 @@ const encodePattern = (pattern: {
   validation?: "luhn";
 }): { regex: string; validation?: "luhn" } => ({
   regex: pattern.regex,
-  ...(pattern.validation !== undefined
-    ? { validation: pattern.validation }
-    : {}),
+  ...(pattern.validation !== undefined ? { validation: pattern.validation } : {}),
 });
 
-const toAttributes = (
-  entry: ObservedEntry,
-  accountId: string,
-): EntryAttributes => ({
+const toAttributes = (entry: ObservedEntry, accountId: string): EntryAttributes => ({
   entryId: entry.id,
   accountId,
   name: entry.name,

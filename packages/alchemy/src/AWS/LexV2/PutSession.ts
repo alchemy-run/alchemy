@@ -8,10 +8,7 @@ import type { BotAlias } from "./BotAlias.ts";
  * `botAliasId` removed. `sessionState` is the new state of the conversation
  * (active intent, slots, dialog action, session attributes).
  */
-export interface PutSessionRequest extends Omit<
-  lexr.PutSessionRequest,
-  "botId" | "botAliasId"
-> {}
+export interface PutSessionRequest extends Omit<lexr.PutSessionRequest, "botId" | "botAliasId"> {}
 
 /**
  * Runtime binding for `lex:PutSession` — create or overwrite the session
@@ -19,9 +16,8 @@ export interface PutSessionRequest extends Omit<
  * application steer the dialog (e.g. pre-fill slots or elicit a specific
  * intent).
  *
- * @binding
- * @section Managing Sessions
- * @example Steer the Conversation
+ * ### Managing Sessions
+ * **Example:** Steer the Conversation
  * ```typescript
  * // init
  * const putSession = yield* AWS.LexV2.PutSession(alias);
@@ -36,6 +32,8 @@ export interface PutSessionRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutSession extends Binding.Service<
   PutSession,
@@ -43,9 +41,7 @@ export interface PutSession extends Binding.Service<
   (
     alias: BotAlias,
   ) => Effect.Effect<
-    (
-      request: PutSessionRequest,
-    ) => Effect.Effect<lexr.PutSessionResponse, lexr.PutSessionError>
+    (request: PutSessionRequest) => Effect.Effect<lexr.PutSessionResponse, lexr.PutSessionError>
   >
 > {}
 

@@ -12,9 +12,8 @@ export interface DescribeApplicationSnapshotRequest extends Omit<
  * Runtime binding for `kinesisanalytics:DescribeApplicationSnapshot` —
  * reads a snapshot's status (`CREATING` → `READY` / `FAILED`), e.g. to poll
  * a savepoint taken with {@link CreateApplicationSnapshot} to completion.
- * @binding
- * @section Managing Snapshots
- * @example Poll a snapshot until READY
+ * ### Managing Snapshots
+ * **Example:** Poll a snapshot until READY
  * ```typescript
  * const describeSnapshot = yield* AWS.KinesisAnalyticsV2.DescribeApplicationSnapshot(app);
  *
@@ -22,6 +21,8 @@ export interface DescribeApplicationSnapshotRequest extends Omit<
  *   SnapshotName: "pre-deploy",
  * });
  * ```
+ *
+ * @binding
  */
 export interface DescribeApplicationSnapshot extends Binding.Service<
   DescribeApplicationSnapshot,
@@ -37,7 +38,6 @@ export interface DescribeApplicationSnapshot extends Binding.Service<
     >
   >
 > {}
-export const DescribeApplicationSnapshot =
-  Binding.Service<DescribeApplicationSnapshot>(
-    "AWS.KinesisAnalyticsV2.DescribeApplicationSnapshot",
-  );
+export const DescribeApplicationSnapshot = Binding.Service<DescribeApplicationSnapshot>(
+  "AWS.KinesisAnalyticsV2.DescribeApplicationSnapshot",
+);

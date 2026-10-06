@@ -9,11 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  cleanMap,
-  retryWhileConcurrentModification,
-  tableArn,
-} from "./internal.ts";
+import { cleanMap, retryWhileConcurrentModification, tableArn } from "./internal.ts";
 
 export interface GlueColumn {
   /** Column name. */
@@ -142,9 +138,8 @@ export interface Table extends Resource<
  * An AWS Glue Data Catalog table — a schema (columns), storage location, and
  * SerDe over data in S3 (or another store). This is the unit Athena, Redshift
  * Spectrum, and EMR query; it is the analytics foundation of a Glue database.
- * @resource
- * @section Creating Tables
- * @example Parquet Table over S3
+ * ### Creating Tables
+ * **Example:** Parquet Table over S3
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -175,6 +170,8 @@ export interface Table extends Resource<
  *   parameters: { classification: "parquet" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Table = Resource<Table>("AWS.Glue.Table");
 
@@ -194,8 +191,7 @@ export const TableProvider = () =>
         props: { tableName?: string | undefined },
       ) {
         return (
-          props.tableName ??
-          (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
+          props.tableName ?? (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
         );
       });
 
@@ -212,9 +208,7 @@ export const TableProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.Table),
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -256,12 +250,8 @@ export const TableProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const dbPages = yield* glue.getDatabases
-              .pages({})
-              .pipe(Stream.runCollect);
-            const databases = Array.from(dbPages).flatMap(
-              (page) => page.DatabaseList ?? [],
-            );
+            const dbPages = yield* glue.getDatabases.pages({}).pipe(Stream.runCollect);
+            const databases = Array.from(dbPages).flatMap((page) => page.DatabaseList ?? []);
             const nested = yield* Effect.forEach(
               databases,
               (db) =>
@@ -313,9 +303,7 @@ export const TableProvider = () =>
             ),
             catalogId: table.CatalogId ?? catalogId,
           };
-          return (yield* hasAlchemyTags(id, cleanMap(table.Parameters)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, cleanMap(table.Parameters))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -375,12 +363,7 @@ export const TableProvider = () =>
           return {
             tableName: name,
             databaseName: news.databaseName,
-            tableArn: tableArn(
-              region,
-              table?.CatalogId ?? catalogId,
-              news.databaseName,
-              name,
-            ),
+            tableArn: tableArn(region, table?.CatalogId ?? catalogId, news.databaseName, name),
             catalogId: table?.CatalogId ?? catalogId,
           };
         }),

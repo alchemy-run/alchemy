@@ -55,9 +55,8 @@ export interface Preset extends Resource<
  * output settings (container, video codec/resolution/bitrate, audio, and
  * captions) that job templates and jobs reference to produce one output.
  *
- * @resource
- * @section Creating a Preset
- * @example MP4 / H.264 Preset
+ * ### Creating a Preset
+ * **Example:** MP4 / H.264 Preset
  * ```typescript
  * const preset = yield* MediaConvert.Preset("Mp4", {
  *   description: "1080p H.264 MP4",
@@ -86,6 +85,8 @@ export interface Preset extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Preset = Resource<Preset>("AWS.MediaConvert.Preset");
 
@@ -94,10 +95,7 @@ export const PresetProvider = () =>
     Preset,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: PresetProps) {
-        return (
-          props.presetName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.presetName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const toAttrs = (preset: mediaconvert.Preset & { Name: string }) => ({
@@ -111,11 +109,7 @@ export const PresetProvider = () =>
       const getPreset = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getPreset({ Name: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         return response?.Preset;
       });
 
@@ -130,8 +124,7 @@ export const PresetProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.presetName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.presetName ?? (yield* createName(id, olds ?? {}));
           const preset = yield* getPreset(name);
           if (preset === undefined) return undefined;
           const attrs = toAttrs(preset);
@@ -184,9 +177,7 @@ export const PresetProvider = () =>
         list: () =>
           mediaconvert.listPresets.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Presets ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Presets ?? [])),
             Effect.map((presets) => presets.map(toAttrs)),
           ),
       };

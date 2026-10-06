@@ -14,14 +14,15 @@ export interface ListAccessPreviewsRequest extends Omit<
  *
  * Lists the analyzer's access previews. Provide the implementation with
  * `Effect.provide(AWS.AccessAnalyzer.ListAccessPreviewsHttp)`.
- * @binding
- * @section Access Previews
- * @example List Access Previews
+ * ### Access Previews
+ * **Example:** List Access Previews
  * ```typescript
  * const listPreviews =
  *   yield* AWS.AccessAnalyzer.ListAccessPreviews(analyzer);
  * const page = yield* listPreviews();
  * ```
+ *
+ * @binding
  */
 export interface ListAccessPreviews extends Binding.Service<
   ListAccessPreviews,
@@ -31,10 +32,7 @@ export interface ListAccessPreviews extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListAccessPreviewsRequest,
-    ) => Effect.Effect<
-      aa.ListAccessPreviewsResponse,
-      aa.ListAccessPreviewsError
-    >
+    ) => Effect.Effect<aa.ListAccessPreviewsResponse, aa.ListAccessPreviewsError>
   >
 > {}
 

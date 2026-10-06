@@ -13,9 +13,8 @@ export interface DisassociateThirdPartyFirewallRequest
  *
  * Disassociates a Firewall Manager policy administrator from a third-party firewall tenant. The third-party vendor deletes all of the firewalls
  * associated with the account. Provide the implementation with `Effect.provide(AWS.FMS.DisassociateThirdPartyFirewallHttp)`.
- * @binding
- * @section Third-Party Firewalls
- * @example Offboard a Third-Party Firewall Vendor
+ * ### Third-Party Firewalls
+ * **Example:** Offboard a Third-Party Firewall Vendor
  * ```typescript
  * // init — account-level binding takes no resource
  * const disassociateThirdPartyFirewall = yield* AWS.FMS.DisassociateThirdPartyFirewall();
@@ -26,6 +25,8 @@ export interface DisassociateThirdPartyFirewallRequest
  * });
  * console.log(result.ThirdPartyFirewallStatus);
  * ```
+ *
+ * @binding
  */
 export interface DisassociateThirdPartyFirewall extends Binding.Service<
   DisassociateThirdPartyFirewall,
@@ -40,7 +41,6 @@ export interface DisassociateThirdPartyFirewall extends Binding.Service<
   >
 > {}
 
-export const DisassociateThirdPartyFirewall =
-  Binding.Service<DisassociateThirdPartyFirewall>(
-    "AWS.FMS.DisassociateThirdPartyFirewall",
-  );
+export const DisassociateThirdPartyFirewall = Binding.Service<DisassociateThirdPartyFirewall>(
+  "AWS.FMS.DisassociateThirdPartyFirewall",
+);

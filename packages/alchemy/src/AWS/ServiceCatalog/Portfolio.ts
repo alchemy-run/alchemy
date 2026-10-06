@@ -57,9 +57,8 @@ export interface Portfolio extends Resource<
  * An AWS Service Catalog portfolio — a container that organizes products
  * and grants access to them for a set of principals.
  *
- * @resource
- * @section Creating a Portfolio
- * @example Basic Portfolio
+ * ### Creating a Portfolio
+ * **Example:** Basic Portfolio
  * ```typescript
  * import * as ServiceCatalog from "alchemy/AWS/ServiceCatalog";
  *
@@ -68,7 +67,7 @@ export interface Portfolio extends Resource<
  * });
  * ```
  *
- * @example Portfolio with Description and Tags
+ * **Example:** Portfolio with Description and Tags
  * ```typescript
  * const portfolio = yield* ServiceCatalog.Portfolio("Tools", {
  *   displayName: "engineering-tools",
@@ -78,8 +77,8 @@ export interface Portfolio extends Resource<
  * });
  * ```
  *
- * @section Granting Access
- * @example Associate a principal (IAM role)
+ * ### Granting Access
+ * **Example:** Associate a principal (IAM role)
  * ```typescript
  * yield* ServiceCatalog.PrincipalPortfolioAssociation("DevAccess", {
  *   portfolioId: portfolio.portfolioId,
@@ -87,14 +86,16 @@ export interface Portfolio extends Resource<
  * });
  * ```
  *
- * @section Adding Products
- * @example Associate a product
+ * ### Adding Products
+ * **Example:** Associate a product
  * ```typescript
  * yield* ServiceCatalog.PortfolioProductAssociation("ToolsVpcProduct", {
  *   portfolioId: portfolio.portfolioId,
  *   productId: product.productId,
  * });
  * ```
+ *
+ * @resource
  */
 export const Portfolio = Resource<Portfolio>("AWS.ServiceCatalog.Portfolio");
 
@@ -106,10 +107,7 @@ export const PortfolioProvider = () =>
         id: string,
         props: Pick<PortfolioProps, "displayName">,
       ) {
-        return (
-          props.displayName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.displayName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       // Portfolio display names are not unique, so the fallback lookup
@@ -129,11 +127,7 @@ export const PortfolioProvider = () =>
       const observe = Effect.fn(function* (portfolioId: string) {
         return yield* servicecatalog
           .describePortfolio({ Id: portfolioId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Portfolio.Provider.of({
@@ -144,9 +138,7 @@ export const PortfolioProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk)
                 .flatMap((page) => page.PortfolioDetails ?? [])
-                .filter(
-                  (d) => d.Id != null && d.ARN != null && d.DisplayName != null,
-                )
+                .filter((d) => d.Id != null && d.ARN != null && d.DisplayName != null)
                 .map((d) => ({
                   portfolioId: d.Id!,
                   portfolioArn: d.ARN!,
@@ -170,19 +162,11 @@ export const PortfolioProvider = () =>
             portfolioArn: detail.ARN!,
             portfolioName: detail.DisplayName!,
           };
-          return (yield* hasAlchemyTags(id, tagRecord(described?.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(described?.Tags))) ? attrs : Unowned(attrs);
         }),
         // Display name, provider name, description, and tags are all
         // updatable in place — no diff needed (identity is the generated ID).
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const displayName = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags: Record<string, string> = {
@@ -191,9 +175,7 @@ export const PortfolioProvider = () =>
           };
 
           // 1. OBSERVE — cloud is authoritative; output caches the ID only.
-          let described = output?.portfolioId
-            ? yield* observe(output.portfolioId)
-            : undefined;
+          let described = output?.portfolioId ? yield* observe(output.portfolioId) : undefined;
           if (!described?.PortfolioDetail?.Id) {
             const found = yield* findByDisplayName(displayName);
             described = found?.Id ? yield* observe(found.Id) : undefined;
@@ -231,17 +213,10 @@ export const PortfolioProvider = () =>
           if (detail.ProviderName !== news.providerName) {
             changes.ProviderName = news.providerName;
           }
-          if (
-            news.description !== undefined &&
-            detail.Description !== news.description
-          ) {
+          if (news.description !== undefined && detail.Description !== news.description) {
             changes.Description = news.description;
           }
-          if (
-            Object.keys(changes).length > 0 ||
-            upsert.length > 0 ||
-            removed.length > 0
-          ) {
+          if (Object.keys(changes).length > 0 || upsert.length > 0 || removed.length > 0) {
             yield* servicecatalog.updatePortfolio({
               Id: portfolioId,
               ...changes,
@@ -263,9 +238,7 @@ export const PortfolioProvider = () =>
           // transiently report ResourceInUseException.
           yield* retryWhileResourceInUse(
             servicecatalog.deletePortfolio({ Id: output.portfolioId }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

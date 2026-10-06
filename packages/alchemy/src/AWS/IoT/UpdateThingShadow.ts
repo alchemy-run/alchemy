@@ -15,9 +15,8 @@ export interface UpdateThingShadowRequest extends Omit<
  * Bind it to a {@link Thing} to write the thing's device shadow — the thing
  * name is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.IoT.UpdateThingShadowHttp)`.
- * @binding
- * @section Device Shadows
- * @example Set Desired State
+ * ### Device Shadows
+ * **Example:** Set Desired State
  * ```typescript
  * const updateShadow = yield* AWS.IoT.UpdateThingShadow(thing);
  *
@@ -26,13 +25,15 @@ export interface UpdateThingShadowRequest extends Omit<
  * });
  * ```
  *
- * @example Write a Named Shadow
+ * **Example:** Write a Named Shadow
  * ```typescript
  * yield* updateShadow({
  *   shadowName: "telemetry",
  *   payload: JSON.stringify({ state: { reported: { t: 22.5 } } }),
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateThingShadow extends Binding.Service<
   UpdateThingShadow,
@@ -42,13 +43,8 @@ export interface UpdateThingShadow extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateThingShadowRequest,
-    ) => Effect.Effect<
-      iotdata.UpdateThingShadowResponse,
-      iotdata.UpdateThingShadowError
-    >
+    ) => Effect.Effect<iotdata.UpdateThingShadowResponse, iotdata.UpdateThingShadowError>
   >
 > {}
 
-export const UpdateThingShadow = Binding.Service<UpdateThingShadow>(
-  "AWS.IoT.UpdateThingShadow",
-);
+export const UpdateThingShadow = Binding.Service<UpdateThingShadow>("AWS.IoT.UpdateThingShadow");

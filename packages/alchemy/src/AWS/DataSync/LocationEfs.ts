@@ -6,11 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readObservedTags,
-  retryWhileRoleNotAssumable,
-  syncTags,
-} from "./internal.ts";
+import { readObservedTags, retryWhileRoleNotAssumable, syncTags } from "./internal.ts";
 
 export interface LocationEfsProps {
   /**
@@ -80,9 +76,8 @@ export interface LocationEfs extends Resource<
  * system, subnet, security groups, subdirectory, access point, or encryption
  * replaces the location.
  *
- * @resource
- * @section Creating EFS Locations
- * @example File system + subnet + security group
+ * ### Creating EFS Locations
+ * **Example:** File system + subnet + security group
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -95,8 +90,8 @@ export interface LocationEfs extends Resource<
  * });
  * ```
  *
- * @section Transferring Data
- * @example Back up EFS to S3
+ * ### Transferring Data
+ * **Example:** Back up EFS to S3
  * ```typescript
  * const dest = yield* AWS.DataSync.LocationS3("Backups", {
  *   s3BucketArn: bucket.bucketArn,
@@ -109,6 +104,8 @@ export interface LocationEfs extends Resource<
  *   schedule: { ScheduleExpression: "cron(0 2 * * ? *)" },
  * });
  * ```
+ *
+ * @resource
  */
 export const LocationEfs = Resource<LocationEfs>("AWS.DataSync.LocationEfs");
 
@@ -119,11 +116,7 @@ export const LocationEfsProvider = () =>
       const describe = Effect.fn(function* (locationArn: string) {
         return yield* datasync
           .describeLocationEfs({ LocationArn: locationArn })
-          .pipe(
-            Effect.catchTag("LocationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("LocationNotFound", () => Effect.succeed(undefined)));
       });
 
       return LocationEfs.Provider.of({
@@ -158,8 +151,7 @@ export const LocationEfsProvider = () =>
           const replaced =
             news.efsFilesystemArn !== olds.efsFilesystemArn ||
             news.subnetArn !== olds.subnetArn ||
-            JSON.stringify(news.securityGroupArns) !==
-              JSON.stringify(olds.securityGroupArns) ||
+            JSON.stringify(news.securityGroupArns) !== JSON.stringify(olds.securityGroupArns) ||
             (news.subdirectory ?? "/") !== (olds.subdirectory ?? "/") ||
             news.accessPointArn !== olds.accessPointArn ||
             news.fileSystemAccessRoleArn !== olds.fileSystemAccessRoleArn ||

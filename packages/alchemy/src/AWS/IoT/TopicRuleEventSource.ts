@@ -30,9 +30,7 @@ export interface TopicRuleEventSourceProps {
   awsIotSqlVersion?: string;
 }
 
-type MessagesHandler<Req> = (
-  stream: Stream.Stream<IoTMessage>,
-) => Effect.Effect<void, never, Req>;
+type MessagesHandler<Req> = (stream: Stream.Stream<IoTMessage>) => Effect.Effect<void, never, Req>;
 
 /**
  * Invoke an Effect handler for every MQTT message matching an IoT topic
@@ -107,9 +105,7 @@ export function consumeTopicMessages<Req = never>(
     typeof propsOrProcess === "function"
       ? [{} as TopicRuleEventSourceProps, propsOrProcess]
       : [propsOrProcess, maybeProcess!];
-  return TopicRuleEventSource.use((source) =>
-    source(topicFilter, props, process),
-  );
+  return TopicRuleEventSource.use((source) => source(topicFilter, props, process));
 }
 
 /**
@@ -120,6 +116,7 @@ export function consumeTopicMessages<Req = never>(
  * `AWS.Lambda.TopicRuleEventSource`, which deploys an IoT {@link TopicRule}
  * with a Lambda action (plus the invoke permission) and streams matching
  * messages into the registered handler.
+ *
  * @binding
  */
 export class TopicRuleEventSource extends Context.Service<
@@ -130,7 +127,5 @@ export class TopicRuleEventSource extends Context.Service<
 export type TopicRuleEventSourceService = <Req = never>(
   topicFilter: string,
   props: TopicRuleEventSourceProps,
-  process: (
-    stream: Stream.Stream<IoTMessage>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<IoTMessage>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

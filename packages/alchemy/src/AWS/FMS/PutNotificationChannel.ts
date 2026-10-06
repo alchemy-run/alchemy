@@ -5,17 +5,15 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link PutNotificationChannel}.
  */
-export interface PutNotificationChannelRequest
-  extends fms.PutNotificationChannelRequest {}
+export interface PutNotificationChannelRequest extends fms.PutNotificationChannelRequest {}
 
 /**
  * Runtime binding for `fms:PutNotificationChannel`.
  *
  * Designates the SNS topic and IAM role that Firewall Manager uses to record SNS logs — the channel through which Firewall Manager notifications flow. Provide the
  * implementation with `Effect.provide(AWS.FMS.PutNotificationChannelHttp)`.
- * @binding
- * @section Notification Channel
- * @example Set the Notification Channel
+ * ### Notification Channel
+ * **Example:** Set the Notification Channel
  * ```typescript
  * // init — account-level binding takes no resource
  * const putNotificationChannel = yield* AWS.FMS.PutNotificationChannel();
@@ -26,6 +24,8 @@ export interface PutNotificationChannelRequest
  *   SnsRoleName: roleArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutNotificationChannel extends Binding.Service<
   PutNotificationChannel,
@@ -33,10 +33,7 @@ export interface PutNotificationChannel extends Binding.Service<
   () => Effect.Effect<
     (
       request: PutNotificationChannelRequest,
-    ) => Effect.Effect<
-      fms.PutNotificationChannelResponse,
-      fms.PutNotificationChannelError
-    >
+    ) => Effect.Effect<fms.PutNotificationChannelResponse, fms.PutNotificationChannelError>
   >
 > {}
 

@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryWhileConflict,
-  retryWhileThrottled,
-  syncIvsTags,
-  toTagRecord,
-} from "./internal.ts";
+import { retryWhileConflict, retryWhileThrottled, syncIvsTags, toTagRecord } from "./internal.ts";
 
 export interface ChannelProps {
   /**
@@ -113,16 +108,15 @@ export interface Channel extends Resource<
  * A channel stores configuration for broadcasting live streams: broadcast
  * software sends video to the channel's `ingestEndpoint` (authenticated
  * with a `StreamKey`) and viewers watch via the channel's `playbackUrl`.
- * @resource
- * @section Creating Channels
- * @example Basic Channel
+ * ### Creating Channels
+ * **Example:** Basic Channel
  * ```typescript
  * import * as IVS from "alchemy/AWS/IVS";
  *
  * const channel = yield* IVS.Channel("LiveChannel");
  * ```
  *
- * @example Basic Low-Cost Channel
+ * **Example:** Basic Low-Cost Channel
  * ```typescript
  * const channel = yield* IVS.Channel("LiveChannel", {
  *   type: "BASIC",
@@ -130,16 +124,16 @@ export interface Channel extends Resource<
  * });
  * ```
  *
- * @section Private Channels
- * @example Channel with Playback Authorization
+ * ### Private Channels
+ * **Example:** Channel with Playback Authorization
  * ```typescript
  * const channel = yield* IVS.Channel("PrivateChannel", {
  *   authorized: true,
  * });
  * ```
  *
- * @section Streaming
- * @example Channel with a Stream Key
+ * ### Streaming
+ * **Example:** Channel with a Stream Key
  * ```typescript
  * const channel = yield* IVS.Channel("LiveChannel");
  * const streamKey = yield* IVS.StreamKey("LiveKey", {
@@ -147,6 +141,8 @@ export interface Channel extends Resource<
  * });
  * // broadcast to rtmps://{channel.ingestEndpoint}:443/app/ with streamKey.value
  * ```
+ *
+ * @resource
  */
 export const Channel = Resource<Channel>("AWS.IVS.Channel");
 
@@ -154,9 +150,9 @@ export const Channel = Resource<Channel>("AWS.IVS.Channel");
  * Raised when the IVS API returns a channel that is missing its ARN, name,
  * ingest endpoint, or playback URL.
  */
-export class IvsChannelIncomplete extends Data.TaggedError(
-  "IvsChannelIncomplete",
-)<{ message: string }> {}
+export class IvsChannelIncomplete extends Data.TaggedError("IvsChannelIncomplete")<{
+  message: string;
+}> {}
 
 export const ChannelProvider = () =>
   Provider.effect(
@@ -176,8 +172,7 @@ export const ChannelProvider = () =>
         ) {
           return yield* Effect.fail(
             new IvsChannelIncomplete({
-              message:
-                "IVS channel is missing its ARN, name, ingest endpoint, or playback URL",
+              message: "IVS channel is missing its ARN, name, ingest endpoint, or playback URL",
             }),
           );
         }
@@ -195,9 +190,7 @@ export const ChannelProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getChannel({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
         return response?.channel;
       });
@@ -208,15 +201,11 @@ export const ChannelProvider = () =>
        * output ARN cache is unavailable (state-persistence failure).
        */
       const findByName = Effect.fn(function* (name: string) {
-        const summaries = yield* ivs.listChannels
-          .pages({ filterByName: name })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.channels),
-            ),
-            retryWhileThrottled,
-          );
+        const summaries = yield* ivs.listChannels.pages({ filterByName: name }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.channels)),
+          retryWhileThrottled,
+        );
         const match = summaries.find((s) => s.name === name && s.arn);
         return match?.arn ? yield* getByArn(match.arn) : undefined;
       });
@@ -230,9 +219,7 @@ export const ChannelProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (channel === undefined) return undefined;
           const attrs = yield* toAttrs(channel);
-          return (yield* hasAlchemyTags(id, toTagRecord(channel.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(channel.tags))) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -279,25 +266,18 @@ export const ChannelProvider = () =>
           // (including the name) are mutable via UpdateChannel.
           const patch: Partial<ivs.UpdateChannelRequest> = {};
           if (observed.name !== name) patch.name = name;
-          if (
-            news.latencyMode !== undefined &&
-            observed.latencyMode !== news.latencyMode
-          ) {
+          if (news.latencyMode !== undefined && observed.latencyMode !== news.latencyMode) {
             patch.latencyMode = news.latencyMode;
           }
           if (news.type !== undefined && observed.type !== news.type) {
             patch.type = news.type;
           }
-          if (
-            news.authorized !== undefined &&
-            observed.authorized !== news.authorized
-          ) {
+          if (news.authorized !== undefined && observed.authorized !== news.authorized) {
             patch.authorized = news.authorized;
           }
           if (
             news.recordingConfigurationArn !== undefined &&
-            observed.recordingConfigurationArn !==
-              news.recordingConfigurationArn
+            observed.recordingConfigurationArn !== news.recordingConfigurationArn
           ) {
             patch.recordingConfigurationArn = news.recordingConfigurationArn;
           }
@@ -312,11 +292,9 @@ export const ChannelProvider = () =>
           }
           if (
             news.playbackRestrictionPolicyArn !== undefined &&
-            observed.playbackRestrictionPolicyArn !==
-              news.playbackRestrictionPolicyArn
+            observed.playbackRestrictionPolicyArn !== news.playbackRestrictionPolicyArn
           ) {
-            patch.playbackRestrictionPolicyArn =
-              news.playbackRestrictionPolicyArn;
+            patch.playbackRestrictionPolicyArn = news.playbackRestrictionPolicyArn;
           }
           if (Object.keys(patch).length > 0) {
             yield* ivs
@@ -354,9 +332,7 @@ export const ChannelProvider = () =>
         list: () =>
           ivs.listChannels.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.channels),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.channels)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>
@@ -364,9 +340,7 @@ export const ChannelProvider = () =>
                     ? Effect.succeed(undefined)
                     : getByArn(summary.arn).pipe(
                         Effect.flatMap((channel) =>
-                          channel === undefined
-                            ? Effect.succeed(undefined)
-                            : toAttrs(channel),
+                          channel === undefined ? Effect.succeed(undefined) : toAttrs(channel),
                         ),
                       ),
                 { concurrency: 5 },

@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface VerifySMSSandboxPhoneNumberRequest
-  extends sns.VerifySMSSandboxPhoneNumberInput {}
+export interface VerifySMSSandboxPhoneNumberRequest extends sns.VerifySMSSandboxPhoneNumberInput {}
 
 /**
  * Runtime binding for `sns:VerifySMSSandboxPhoneNumber`.
@@ -11,9 +10,8 @@ export interface VerifySMSSandboxPhoneNumberRequest
  * An account-scoped operation — verifies a sandbox destination phone
  * number with the one-time password SNS texted to it.
  * Provide the `VerifySMSSandboxPhoneNumberHttp` layer on the Function to implement the binding.
- * @binding
- * @section SMS Sandbox
- * @example Verify a Sandbox Number
+ * ### SMS Sandbox
+ * **Example:** Verify a Sandbox Number
  * ```typescript
  * const verifySandboxNumber = yield* SNS.VerifySMSSandboxPhoneNumber();
  * yield* verifySandboxNumber({
@@ -21,6 +19,8 @@ export interface VerifySMSSandboxPhoneNumberRequest
  *   OneTimePassword: "123456",
  * });
  * ```
+ *
+ * @binding
  */
 export interface VerifySMSSandboxPhoneNumber extends Binding.Service<
   VerifySMSSandboxPhoneNumber,
@@ -28,14 +28,10 @@ export interface VerifySMSSandboxPhoneNumber extends Binding.Service<
   () => Effect.Effect<
     (
       request: VerifySMSSandboxPhoneNumberRequest,
-    ) => Effect.Effect<
-      sns.VerifySMSSandboxPhoneNumberResult,
-      sns.VerifySMSSandboxPhoneNumberError
-    >
+    ) => Effect.Effect<sns.VerifySMSSandboxPhoneNumberResult, sns.VerifySMSSandboxPhoneNumberError>
   >
 > {}
 
-export const VerifySMSSandboxPhoneNumber =
-  Binding.Service<VerifySMSSandboxPhoneNumber>(
-    "AWS.SNS.VerifySMSSandboxPhoneNumber",
-  );
+export const VerifySMSSandboxPhoneNumber = Binding.Service<VerifySMSSandboxPhoneNumber>(
+  "AWS.SNS.VerifySMSSandboxPhoneNumber",
+);

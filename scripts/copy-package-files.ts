@@ -5,16 +5,15 @@ const root = path.resolve(import.meta.dir, "..");
 const packagesDirectory = path.join(root, "packages");
 const thirdPartyPackages: Array<string> = [
   "alchemy",
-  "cloudflare-frameworks",
+  "frontend-frameworks",
   "cloudflare-runtime",
+  "node-utils",
 ];
 const readmePackages: Array<string> = ["alchemy"];
 
 const packageNames = await readdir(packagesDirectory, {
   withFileTypes: true,
-}).then((entries) =>
-  entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name),
-);
+}).then((entries) => entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
 
 const requestedPackage = process.argv[2];
 const targets = requestedPackage ? [requestedPackage] : packageNames;
@@ -25,14 +24,8 @@ for (const packageName of targets) {
   }
 
   const packageDirectory = path.join(packagesDirectory, packageName);
-  await copyFile(
-    path.join(root, "LICENSE"),
-    path.join(packageDirectory, "LICENSE"),
-  );
-  await copyFile(
-    path.join(root, "NOTICE"),
-    path.join(packageDirectory, "NOTICE"),
-  );
+  await copyFile(path.join(root, "LICENSE"), path.join(packageDirectory, "LICENSE"));
+  await copyFile(path.join(root, "NOTICE"), path.join(packageDirectory, "NOTICE"));
 
   if (thirdPartyPackages.includes(packageName)) {
     await copyFile(
@@ -42,9 +35,6 @@ for (const packageName of targets) {
   }
 
   if (readmePackages.includes(packageName)) {
-    await copyFile(
-      path.join(root, "README.md"),
-      path.join(packageDirectory, "README.md"),
-    );
+    await copyFile(path.join(root, "README.md"), path.join(packageDirectory, "README.md"));
   }
 }

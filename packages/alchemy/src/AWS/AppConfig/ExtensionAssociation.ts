@@ -61,9 +61,8 @@ export interface ExtensionAssociation extends Resource<
  * application, environment, or configuration profile so the extension's
  * actions fire for that resource's workflow events.
  *
- * @resource
- * @section Associating an Extension
- * @example Attach an Extension to an Application
+ * ### Associating an Extension
+ * **Example:** Attach an Extension to an Application
  * ```typescript
  * const association = yield* AppConfig.ExtensionAssociation("Hook", {
  *   extensionIdentifier: extension.extensionId,
@@ -71,7 +70,7 @@ export interface ExtensionAssociation extends Resource<
  * });
  * ```
  *
- * @example Attach with Parameter Values
+ * **Example:** Attach with Parameter Values
  * ```typescript
  * const association = yield* AppConfig.ExtensionAssociation("Hook", {
  *   extensionIdentifier: extension.extensionId,
@@ -79,6 +78,8 @@ export interface ExtensionAssociation extends Resource<
  *   parameters: { topicArn: topic.topicArn },
  * });
  * ```
+ *
+ * @resource
  */
 export const ExtensionAssociation = Resource<ExtensionAssociation>(
   "AWS.AppConfig.ExtensionAssociation",
@@ -88,18 +89,12 @@ export const ExtensionAssociationProvider = () =>
   Provider.effect(
     ExtensionAssociation,
     Effect.gen(function* () {
-      const readAssociation = Effect.fn(function* (
-        extensionAssociationId: string,
-      ) {
+      const readAssociation = Effect.fn(function* (extensionAssociationId: string) {
         return yield* appconfig
           .getExtensionAssociation({
             ExtensionAssociationId: extensionAssociationId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       /**
@@ -112,30 +107,19 @@ export const ExtensionAssociationProvider = () =>
        * client-side via its resolved id (association `ExtensionArn`s are
        * versioned, `.../extension/{id}/{version}`).
        */
-      const findByIdentifiers = Effect.fn(function* (
-        props: Partial<ExtensionAssociationProps>,
-      ) {
-        if (
-          props.extensionIdentifier === undefined ||
-          props.resourceIdentifier === undefined
-        ) {
+      const findByIdentifiers = Effect.fn(function* (props: Partial<ExtensionAssociationProps>) {
+        if (props.extensionIdentifier === undefined || props.resourceIdentifier === undefined) {
           return undefined;
         }
         const extension = yield* appconfig
           .getExtension({ ExtensionIdentifier: props.extensionIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         if (extension?.Id === undefined) return undefined;
         const summaries = yield* appconfig.listExtensionAssociations
           .pages({ ResourceIdentifier: props.resourceIdentifier })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Items ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
           );
         const summary = summaries.find(
           (item) =>
@@ -143,20 +127,15 @@ export const ExtensionAssociationProvider = () =>
             item.ExtensionArn !== undefined &&
             item.ExtensionArn.includes(extension.Id!),
         );
-        return summary?.Id === undefined
-          ? undefined
-          : yield* readAssociation(summary.Id);
+        return summary?.Id === undefined ? undefined : yield* readAssociation(summary.Id);
       });
 
-      const toAttrs = Effect.fn(function* (
-        association: appconfig.ExtensionAssociation,
-      ) {
+      const toAttrs = Effect.fn(function* (association: appconfig.ExtensionAssociation) {
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
           extensionAssociationId: association.Id!,
           extensionAssociationArn:
-            association.Arn ??
-            extensionAssociationArn(region, accountId, association.Id!),
+            association.Arn ?? extensionAssociationArn(region, accountId, association.Id!),
           extensionArn: association.ExtensionArn!,
           resourceArn: association.ResourceArn!,
         };
@@ -218,10 +197,7 @@ export const ExtensionAssociationProvider = () =>
             // 3. Sync — parameter values are mutable in place.
             const observedParameters = toTagRecord(observed.Parameters);
             const desiredParameters = news.parameters ?? {};
-            const { removed, upsert } = diffTags(
-              observedParameters,
-              desiredParameters,
-            );
+            const { removed, upsert } = diffTags(observedParameters, desiredParameters);
             if (removed.length > 0 || upsert.length > 0) {
               observed = yield* appconfig.updateExtensionAssociation({
                 ExtensionAssociationId: observed.Id,
@@ -244,22 +220,16 @@ export const ExtensionAssociationProvider = () =>
             .deleteExtensionAssociation({
               ExtensionAssociationId: output.extensionAssociationId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const summaries = yield* appconfig.listExtensionAssociations
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Items ?? []),
-                ),
-              );
+            const summaries = yield* appconfig.listExtensionAssociations.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+            );
             return summaries.flatMap((summary) =>
               summary.Id !== undefined &&
               summary.ExtensionArn !== undefined &&

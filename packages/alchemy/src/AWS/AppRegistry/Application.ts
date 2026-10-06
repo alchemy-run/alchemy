@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { clientToken, stripAwsSystemTags } from "./internal.ts";
 
@@ -53,16 +48,15 @@ export interface Application extends Resource<
  * groups related cloud resources and metadata under a single logical
  * application (surfaced in myApplications and the `awsApplication` tag).
  *
- * @resource
- * @section Creating an Application
- * @example Basic Application
+ * ### Creating an Application
+ * **Example:** Basic Application
  * ```typescript
  * import * as AppRegistry from "alchemy/AWS/AppRegistry";
  *
  * const app = yield* AppRegistry.Application("Storefront", {});
  * ```
  *
- * @example Application with Description and Tags
+ * **Example:** Application with Description and Tags
  * ```typescript
  * const app = yield* AppRegistry.Application("Storefront", {
  *   applicationName: "storefront",
@@ -70,6 +64,8 @@ export interface Application extends Resource<
  *   tags: { team: "commerce" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Application = Resource<Application>("AWS.AppRegistry.Application");
 
@@ -81,21 +77,14 @@ export const ApplicationProvider = () =>
         id: string,
         props: Pick<ApplicationProps, "applicationName">,
       ) {
-        return (
-          props.applicationName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.applicationName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       // getApplication accepts a name, ID, or ARN specifier.
       const observe = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getApplication({ application: specifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Application.Provider.of({
@@ -115,8 +104,7 @@ export const ApplicationProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const specifier =
-            output?.applicationId ?? (yield* createName(id, olds ?? {}));
+          const specifier = output?.applicationId ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(specifier);
           if (!found?.id) return undefined;
           const attrs = {
@@ -124,9 +112,7 @@ export const ApplicationProvider = () =>
             applicationArn: found.arn!,
             applicationName: found.name!,
           };
-          return (yield* hasAlchemyTags(id, tagRecord(found.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(found.tags))) ? attrs : Unowned(attrs);
         }),
         // The application name is its user-facing identity — changing it
         // replaces the application.
@@ -136,13 +122,7 @@ export const ApplicationProvider = () =>
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const applicationName = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags: Record<string, string> = {
@@ -151,9 +131,7 @@ export const ApplicationProvider = () =>
           };
 
           // 1. OBSERVE — cloud is authoritative; output caches the ID only.
-          let found = output?.applicationId
-            ? yield* observe(output.applicationId)
-            : undefined;
+          let found = output?.applicationId ? yield* observe(output.applicationId) : undefined;
           if (!found?.id) {
             found = yield* observe(applicationName);
           }
@@ -176,10 +154,7 @@ export const ApplicationProvider = () =>
           const applicationArn = found!.arn!;
 
           // 3a. SYNC description — apply only when it actually changed.
-          if (
-            news.description !== undefined &&
-            found!.description !== news.description
-          ) {
+          if (news.description !== undefined && found!.description !== news.description) {
             yield* appregistry.updateApplication({
               application: applicationId,
               description: news.description,
@@ -213,9 +188,7 @@ export const ApplicationProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* appregistry
             .deleteApplication({ application: output.applicationId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

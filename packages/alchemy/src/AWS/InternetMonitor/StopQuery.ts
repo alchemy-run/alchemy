@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface StopQueryRequest extends Omit<
-  im.StopQueryInput,
-  "MonitorName"
-> {}
+export interface StopQueryRequest extends Omit<im.StopQueryInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:StopQuery` — cancel an in-progress
@@ -15,9 +12,8 @@ export interface StopQueryRequest extends Omit<
  *
  * Provide `InternetMonitor.StopQueryHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Querying Measurements
- * @example Cancel a Running Query
+ * ### Querying Measurements
+ * **Example:** Cancel a Running Query
  * ```typescript
  * // init — grants internetmonitor:StopQuery on the monitor
  * const stopQuery = yield* AWS.InternetMonitor.StopQuery(monitor);
@@ -25,6 +21,8 @@ export interface StopQueryRequest extends Omit<
  * // runtime
  * yield* stopQuery({ QueryId: queryId });
  * ```
+ *
+ * @binding
  */
 export interface StopQuery extends Binding.Service<
   StopQuery,
@@ -32,12 +30,8 @@ export interface StopQuery extends Binding.Service<
   (
     monitor: Monitor,
   ) => Effect.Effect<
-    (
-      request: StopQueryRequest,
-    ) => Effect.Effect<im.StopQueryOutput, im.StopQueryError>
+    (request: StopQueryRequest) => Effect.Effect<im.StopQueryOutput, im.StopQueryError>
   >
 > {}
 
-export const StopQuery = Binding.Service<StopQuery>(
-  "AWS.InternetMonitor.StopQuery",
-);
+export const StopQuery = Binding.Service<StopQuery>("AWS.InternetMonitor.StopQuery");

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CheckoutLicense}.
  */
-export interface CheckoutLicenseRequest
-  extends licensemanager.CheckoutLicenseRequest {}
+export interface CheckoutLicenseRequest extends licensemanager.CheckoutLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:CheckoutLicense` — check out
@@ -17,9 +16,8 @@ export interface CheckoutLicenseRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.CheckoutLicenseHttp)`.
- * @binding
- * @section License Checkout Data Plane
- * @example Check Out an Entitlement
+ * ### License Checkout Data Plane
+ * **Example:** Check Out an Entitlement
  * ```typescript
  * // init — account-level binding takes no resource
  * const checkoutLicense = yield* AWS.LicenseManager.CheckoutLicense();
@@ -36,6 +34,8 @@ export interface CheckoutLicenseRequest
  * // on the Function effect:
  * // .pipe(Effect.provide(AWS.LicenseManager.CheckoutLicenseHttp))
  * ```
+ *
+ * @binding
  */
 export interface CheckoutLicense extends Binding.Service<
   CheckoutLicense,
@@ -43,10 +43,7 @@ export interface CheckoutLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: CheckoutLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.CheckoutLicenseResponse,
-      licensemanager.CheckoutLicenseError
-    >
+    ) => Effect.Effect<licensemanager.CheckoutLicenseResponse, licensemanager.CheckoutLicenseError>
   >
 > {}
 export const CheckoutLicense = Binding.Service<CheckoutLicense>(

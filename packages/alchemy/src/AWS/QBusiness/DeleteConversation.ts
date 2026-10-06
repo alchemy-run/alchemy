@@ -19,14 +19,15 @@ export interface DeleteConversationRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.DeleteConversationHttp)`.
  *
- * @binding
- * @section Conversations
- * @example Delete a Conversation
+ * ### Conversations
+ * **Example:** Delete a Conversation
  * ```typescript
  * const deleteConversation = yield* AWS.QBusiness.DeleteConversation(app);
  *
  * yield* deleteConversation({ conversationId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteConversation extends Binding.Service<
   DeleteConversation,
@@ -36,10 +37,7 @@ export interface DeleteConversation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteConversationRequest,
-    ) => Effect.Effect<
-      qbusiness.DeleteConversationResponse,
-      qbusiness.DeleteConversationError
-    >
+    ) => Effect.Effect<qbusiness.DeleteConversationResponse, qbusiness.DeleteConversationError>
   >
 > {}
 export const DeleteConversation = Binding.Service<DeleteConversation>(

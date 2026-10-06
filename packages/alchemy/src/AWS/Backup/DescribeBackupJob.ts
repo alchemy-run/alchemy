@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Returns the details of a backup job by its ID — poll a job started with
  * `StartBackupJob` until it completes. Provide the implementation with
  * `Effect.provide(AWS.Backup.DescribeBackupJobHttp)`.
- * @binding
- * @section Monitoring Backup Jobs
- * @example Poll A Backup Job
+ * ### Monitoring Backup Jobs
+ * **Example:** Poll A Backup Job
  * ```typescript
  * const describeBackupJob = yield* AWS.Backup.DescribeBackupJob();
  *
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  *   yield* Effect.log(`recovery point: ${job.RecoveryPointArn}`);
  * }
  * ```
+ *
+ * @binding
  */
 export interface DescribeBackupJob extends Binding.Service<
   DescribeBackupJob,
@@ -27,12 +28,7 @@ export interface DescribeBackupJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: backup.DescribeBackupJobInput,
-    ) => Effect.Effect<
-      backup.DescribeBackupJobOutput,
-      backup.DescribeBackupJobError
-    >
+    ) => Effect.Effect<backup.DescribeBackupJobOutput, backup.DescribeBackupJobError>
   >
 > {}
-export const DescribeBackupJob = Binding.Service<DescribeBackupJob>(
-  "AWS.Backup.DescribeBackupJob",
-);
+export const DescribeBackupJob = Binding.Service<DescribeBackupJob>("AWS.Backup.DescribeBackupJob");

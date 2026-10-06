@@ -3,11 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
-import {
-  Database,
-  type DatabaseService,
-  type DirectDatabase,
-} from "./Database.ts";
+import { Database, type DatabaseService, type DirectDatabase } from "./Database.ts";
 import type { BetterAuthMigrationError } from "./Errors.ts";
 
 /**
@@ -18,15 +14,12 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  * migrations run over the D1 HTTP query API — which also transparently
  * targets the local D1 simulator under `alchemy dev`.
  *
- * @layer
- * @provides BetterAuth.Database
- * @product D1
  *
- * @section Using D1 as the auth database
+ * ### Using D1 as the auth database
  * Provide the layer on the Worker impl effect that yields `BetterAuth`.
  * The database resource can be referenced from module scope — the layer
  * accepts the resource or its Effect.
- * @example Worker with a D1-backed BetterAuth
+ * **Example:** Worker with a D1-backed BetterAuth
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
@@ -56,22 +49,24 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  * ) {}
  * ```
  *
- * @section Migrations
+ * ### Migrations
  * The schema migration Action connects over the D1 HTTP API at deploy
  * time — the Worker's native binding is never used outside the deployed
  * runtime, and no migration code ships in the Worker bundle.
- * @example Opting out of automatic migrations
+ * **Example:** Opting out of automatic migrations
  * ```typescript
  * const auth = yield* BetterAuth({
  *   migrate: false, // manage the schema yourself
  *   emailAndPassword: { enabled: true },
  * });
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @product D1
  */
 export const CloudflareD1 = (
-  database:
-    | Cloudflare.D1.Database
-    | Effect.Effect<Cloudflare.D1.Database, never, any>,
+  database: Cloudflare.D1.Database | Effect.Effect<Cloudflare.D1.Database, never, any>,
 ) =>
   Layer.effect(
     Database,
@@ -100,10 +95,7 @@ export const CloudflareD1 = (
               // deferred accessor that resolves at apply.
               const local = yield* Cloudflare.D1.QueryDatabase(db);
               // Apply half — materialize the HTTP D1 facade.
-              return Effect.map(
-                local.raw,
-                (database) => database as DirectDatabase,
-              );
+              return Effect.map(local.raw, (database) => database as DirectDatabase);
             }).pipe(
               Effect.provide(Cloudflare.D1.QueryDatabaseLocal),
               (effect) =>
@@ -111,11 +103,7 @@ export const CloudflareD1 = (
                 // credentials, HttpClient) are ambient during stack-eval
                 // where the init half runs.
                 effect as unknown as Effect.Effect<
-                  Effect.Effect<
-                    DirectDatabase,
-                    BetterAuthMigrationError,
-                    Scope.Scope
-                  >,
+                  Effect.Effect<DirectDatabase, BetterAuthMigrationError, Scope.Scope>,
                   never,
                   RuntimeContext
                 >,

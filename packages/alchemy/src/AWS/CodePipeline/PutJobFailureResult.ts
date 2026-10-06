@@ -2,8 +2,7 @@ import type * as SVC from "@distilled.cloud/aws/codepipeline";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface PutJobFailureResultRequest
-  extends SVC.PutJobFailureResultInput {}
+export interface PutJobFailureResultRequest extends SVC.PutJobFailureResultInput {}
 
 /**
  * Runtime binding for `codepipeline:PutJobFailureResult` — reports failure
@@ -13,9 +12,8 @@ export interface PutJobFailureResultRequest
  * CodePipeline job operations do not support resource-level permissions, so
  * the grant is on `*`. The binding takes no resource — the job id arrives
  * with the invocation event.
- * @binding
- * @section Job Workers
- * @example Fail an Invoke-Action Job
+ * ### Job Workers
+ * **Example:** Fail an Invoke-Action Job
  * ```typescript
  * const putJobFailure = yield* AWS.CodePipeline.PutJobFailureResult();
  *
@@ -24,6 +22,8 @@ export interface PutJobFailureResultRequest
  *   failureDetails: { type: "JobFailed", message: "smoke test failed" },
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutJobFailureResult extends Binding.Service<
   PutJobFailureResult,
@@ -31,10 +31,7 @@ export interface PutJobFailureResult extends Binding.Service<
   () => Effect.Effect<
     (
       request: PutJobFailureResultRequest,
-    ) => Effect.Effect<
-      SVC.PutJobFailureResultResponse,
-      SVC.PutJobFailureResultError
-    >
+    ) => Effect.Effect<SVC.PutJobFailureResultResponse, SVC.PutJobFailureResultError>
   >
 > {}
 export const PutJobFailureResult = Binding.Service<PutJobFailureResult>(

@@ -2,8 +2,7 @@ import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetOperationDetailRequest
-  extends route53domains.GetOperationDetailRequest {}
+export interface GetOperationDetailRequest extends route53domains.GetOperationDetailRequest {}
 
 /**
  * Runtime binding for `route53domains:GetOperationDetail` — return the
@@ -20,9 +19,8 @@ export interface GetOperationDetailRequest
  * Provide the implementation with
  * `Effect.provide(AWS.Route53Domains.GetOperationDetailHttp)`.
  *
- * @binding
- * @section Tracking Registration Operations
- * @example Poll a Registration Until It Completes
+ * ### Tracking Registration Operations
+ * **Example:** Poll a Registration Until It Completes
  * ```typescript
  * // init
  * const getOperationDetail = yield* AWS.Route53Domains.GetOperationDetail();
@@ -36,6 +34,8 @@ export interface GetOperationDetailRequest
  *   }),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetOperationDetail extends Binding.Service<
   GetOperationDetail,

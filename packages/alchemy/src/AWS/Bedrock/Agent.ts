@@ -160,9 +160,8 @@ export interface Agent extends Resource<
  * prepared (unless `prepare: false`) so it is immediately invocable and can
  * back an {@link AgentAlias}.
  *
- * @resource
- * @section Creating Agents
- * @example Minimal Agent
+ * ### Creating Agents
+ * **Example:** Minimal Agent
  * ```typescript
  * import * as Bedrock from "alchemy/AWS/Bedrock";
  *
@@ -173,7 +172,7 @@ export interface Agent extends Resource<
  * });
  * ```
  *
- * @example Agent with a Guardrail and Custom Session TTL
+ * **Example:** Agent with a Guardrail and Custom Session TTL
  * ```typescript
  * const agent = yield* Bedrock.Agent("assistant", {
  *   foundationModel: "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -186,7 +185,7 @@ export interface Agent extends Resource<
  * });
  * ```
  *
- * @example Agent with Long-Term Memory
+ * **Example:** Agent with Long-Term Memory
  * ```typescript
  * // Session summaries are retained for 30 days and readable at runtime
  * // through the GetAgentMemory binding.
@@ -199,6 +198,8 @@ export interface Agent extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Agent = Resource<Agent>("AWS.Bedrock.Agent");
 
@@ -215,15 +216,10 @@ const toWireMemoryConfiguration = (
       };
 
 /** Agent status values from which no further transition is pending. */
-const AGENT_SETTLED = new Set(["NOT_PREPARED", "PREPARED", "FAILED"]);
+const _AGENT_SETTLED = new Set(["NOT_PREPARED", "PREPARED", "FAILED"]);
 
 /** Agent status values indicating an in-flight transition to wait out. */
-const AGENT_TRANSIENT = new Set([
-  "CREATING",
-  "UPDATING",
-  "PREPARING",
-  "VERSIONING",
-]);
+const AGENT_TRANSIENT = new Set(["CREATING", "UPDATING", "PREPARING", "VERSIONING"]);
 
 /**
  * A freshly created IAM role is eventually consistent; `createAgent` can
@@ -249,27 +245,20 @@ export const AgentProvider = () =>
     Agent,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: AgentProps) {
-        return (
-          props.agentName ?? (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.agentName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
       const getAgentOrUndefined = Effect.fn(function* (agentId: string) {
         return yield* bedrock.getAgent({ agentId }).pipe(
           Effect.map((r) => r.agent),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* bedrock.listAgents
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* bedrock.listAgents.pages({}).pipe(Stream.runCollect);
         const summary = Array.from(pages)
           .flatMap((page) => page.agentSummaries ?? [])
           .find((s) => s.agentName === name);
@@ -290,13 +279,10 @@ export const AgentProvider = () =>
       const waitForSettled = Effect.fn(function* (agentId: string) {
         return yield* bedrock.getAgent({ agentId }).pipe(
           Effect.map((r) => r.agent),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
-            until: (agent) =>
-              agent === undefined || !AGENT_TRANSIENT.has(agent.agentStatus),
+            until: (agent) => agent === undefined || !AGENT_TRANSIENT.has(agent.agentStatus),
             times: 40,
           }),
         );
@@ -351,10 +337,7 @@ export const AgentProvider = () =>
             Statement: [
               {
                 Effect: "Allow",
-                Action: [
-                  "bedrock:InvokeModel",
-                  "bedrock:InvokeModelWithResponseStream",
-                ],
+                Action: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
                 Resource: bedrockModelArns(region, accountId, foundationModel),
               },
             ],
@@ -370,12 +353,8 @@ export const AgentProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { region, accountId } = yield* AWSEnvironment.current;
-            const pages = yield* bedrock.listAgents
-              .pages({})
-              .pipe(Stream.runCollect);
-            const summaries = Array.from(pages).flatMap(
-              (page) => page.agentSummaries ?? [],
-            );
+            const pages = yield* bedrock.listAgents.pages({}).pipe(Stream.runCollect);
+            const summaries = Array.from(pages).flatMap((page) => page.agentSummaries ?? []);
             return summaries.map((s) => ({
               agentId: s.agentId,
               agentArn: `arn:aws:bedrock:${region}:${accountId}:agent/${s.agentId}`,
@@ -390,8 +369,7 @@ export const AgentProvider = () =>
           const agentId =
             output?.agentId ??
             (yield* findByName(
-              output?.agentName ??
-                (yield* createName(id, olds ?? ({} as AgentProps))),
+              output?.agentName ?? (yield* createName(id, olds ?? ({} as AgentProps))),
             ));
           if (agentId === undefined) return undefined;
           const agent = yield* getAgentOrUndefined(agentId);
@@ -421,12 +399,7 @@ export const AgentProvider = () =>
           // tags all converge via updateAgent.
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {} as AgentProps,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news = {} as AgentProps, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.agentName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -449,9 +422,7 @@ export const AgentProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative; output is only an id
           //    cache. Fall back to a name lookup after state loss.
-          let agent = output?.agentId
-            ? yield* getAgentOrUndefined(output.agentId)
-            : undefined;
+          let agent = output?.agentId ? yield* getAgentOrUndefined(output.agentId) : undefined;
           if (agent === undefined) {
             const foundId = yield* findByName(name);
             if (foundId !== undefined) {
@@ -471,9 +442,7 @@ export const AgentProvider = () =>
                 idleSessionTTLInSeconds: toWireSeconds(news.idleSessionTTL),
                 customerEncryptionKeyArn: news.customerEncryptionKeyArn,
                 guardrailConfiguration: news.guardrailConfiguration,
-                memoryConfiguration: toWireMemoryConfiguration(
-                  news.memoryConfiguration,
-                ),
+                memoryConfiguration: toWireMemoryConfiguration(news.memoryConfiguration),
                 tags: desiredTags,
               }),
             );
@@ -492,9 +461,7 @@ export const AgentProvider = () =>
               idleSessionTTLInSeconds: toWireSeconds(news.idleSessionTTL),
               customerEncryptionKeyArn: news.customerEncryptionKeyArn,
               guardrailConfiguration: news.guardrailConfiguration,
-              memoryConfiguration: toWireMemoryConfiguration(
-                news.memoryConfiguration,
-              ),
+              memoryConfiguration: toWireMemoryConfiguration(news.memoryConfiguration),
             });
             agent = (yield* waitForSettled(agent.agentId)) ?? agent;
           }
@@ -509,9 +476,7 @@ export const AgentProvider = () =>
           if (upsert.length > 0) {
             yield* bedrock.tagResource({
               resourceArn: agentArn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
           if (removed.length > 0) {
@@ -545,9 +510,7 @@ export const AgentProvider = () =>
               agentId: output.agentId,
               skipResourceInUseCheck: true,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           // Tear down the managed execution role (absent when an explicit
           // agentResourceRoleArn was supplied). Every step tolerates a
@@ -559,14 +522,10 @@ export const AgentProvider = () =>
                 RoleName: roleName,
                 PolicyName: "BedrockAgentInvokeModel",
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             yield* iam
               .deleteRole({ RoleName: roleName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }),
       });

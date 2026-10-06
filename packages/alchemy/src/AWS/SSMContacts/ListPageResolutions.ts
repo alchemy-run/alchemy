@@ -9,14 +9,15 @@ import * as Binding from "../../Binding.ts";
  * on-call-schedule hops that led Incident Manager to the engaged contact.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ListPageResolutionsHttp)`.
- * @binding
- * @section Working with Pages
- * @example Trace How a Contact Was Paged
+ * ### Working with Pages
+ * **Example:** Trace How a Contact Was Paged
  * ```typescript
  * const listPageResolutions = yield* AWS.SSMContacts.ListPageResolutions();
  *
  * const { PageResolutions } = yield* listPageResolutions({ PageId: pageArn });
  * ```
+ *
+ * @binding
  */
 export interface ListPageResolutions extends Binding.Service<
   ListPageResolutions,
@@ -24,10 +25,7 @@ export interface ListPageResolutions extends Binding.Service<
   () => Effect.Effect<
     (
       request: ssm.ListPageResolutionsRequest,
-    ) => Effect.Effect<
-      ssm.ListPageResolutionsResult,
-      ssm.ListPageResolutionsError
-    >
+    ) => Effect.Effect<ssm.ListPageResolutionsResult, ssm.ListPageResolutionsError>
   >
 > {}
 export const ListPageResolutions = Binding.Service<ListPageResolutions>(

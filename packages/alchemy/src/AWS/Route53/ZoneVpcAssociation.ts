@@ -58,9 +58,8 @@ export interface ZoneVpcAssociation extends Resource<
  *
  * The initial VPC of a private zone cannot be modeled with this resource —
  * Route 53 refuses to disassociate the last VPC from a private zone.
- * @resource
- * @section Associating VPCs
- * @example Attach a Second VPC
+ * ### Associating VPCs
+ * **Example:** Attach a Second VPC
  * ```typescript
  * const zone = yield* HostedZone("InternalZone", {
  *   name: "internal.example.com",
@@ -74,10 +73,10 @@ export interface ZoneVpcAssociation extends Resource<
  *   vpcRegion: "us-west-2",
  * });
  * ```
+ *
+ * @resource
  */
-export const ZoneVpcAssociation = Resource<ZoneVpcAssociation>(
-  "AWS.Route53.ZoneVpcAssociation",
-);
+export const ZoneVpcAssociation = Resource<ZoneVpcAssociation>("AWS.Route53.ZoneVpcAssociation");
 
 /**
  * Route 53 zone-change submissions can collide with other in-flight changes
@@ -104,17 +103,10 @@ export const ZoneVpcAssociationProvider = () =>
     Effect.gen(function* () {
       // Observe via the zone detail — `getHostedZone` returns every
       // associated VPC for a private zone.
-      const observe = Effect.fn(function* (
-        hostedZoneId: string,
-        vpcId: string,
-      ) {
+      const observe = Effect.fn(function* (hostedZoneId: string, vpcId: string) {
         const detail = yield* route53
           .getHostedZone({ Id: hostedZoneId })
-          .pipe(
-            Effect.catchTag("NoSuchHostedZone", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
         return (detail?.VPCs ?? []).find((vpc) => vpc.VPCId === vpcId);
       });
 
@@ -148,8 +140,7 @@ export const ZoneVpcAssociationProvider = () =>
           return {
             hostedZoneId,
             vpcId,
-            vpcRegion:
-              observed.VPCRegion ?? output?.vpcRegion ?? olds?.vpcRegion ?? "",
+            vpcRegion: observed.VPCRegion ?? output?.vpcRegion ?? olds?.vpcRegion ?? "",
           };
         }),
         // Existence-only: observe → if missing, associate. There is no sync

@@ -2,8 +2,7 @@ import * as omics from "@distilled.cloud/aws/omics";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListAnnotationImportJobsRequest
-  extends omics.ListAnnotationImportJobsRequest {}
+export interface ListAnnotationImportJobsRequest extends omics.ListAnnotationImportJobsRequest {}
 
 /**
  * Runtime binding for `omics:ListAnnotationImportJobs`.
@@ -11,15 +10,16 @@ export interface ListAnnotationImportJobsRequest
  * An account-level operation (no resource argument) that lists annotation
  * import jobs, optionally filtered by store name or status. Provide the
  * implementation with `Effect.provide(AWS.Omics.ListAnnotationImportJobsHttp)`.
- * @binding
- * @section Annotation Imports
- * @example Call ListAnnotationImportJobs
+ * ### Annotation Imports
+ * **Example:** Call ListAnnotationImportJobs
  * ```typescript
  * // init — account-level binding takes no resource
  * const listImports = yield* AWS.Omics.ListAnnotationImportJobs();
  * // runtime
  * const result = yield* listImports({});
  * ```
+ *
+ * @binding
  */
 export interface ListAnnotationImportJobs extends Binding.Service<
   ListAnnotationImportJobs,
@@ -27,14 +27,10 @@ export interface ListAnnotationImportJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListAnnotationImportJobsRequest,
-    ) => Effect.Effect<
-      omics.ListAnnotationImportJobsResponse,
-      omics.ListAnnotationImportJobsError
-    >
+    ) => Effect.Effect<omics.ListAnnotationImportJobsResponse, omics.ListAnnotationImportJobsError>
   >
 > {}
 
-export const ListAnnotationImportJobs =
-  Binding.Service<ListAnnotationImportJobs>(
-    "AWS.Omics.ListAnnotationImportJobs",
-  );
+export const ListAnnotationImportJobs = Binding.Service<ListAnnotationImportJobs>(
+  "AWS.Omics.ListAnnotationImportJobs",
+);

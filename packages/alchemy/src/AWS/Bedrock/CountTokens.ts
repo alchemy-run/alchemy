@@ -7,10 +7,7 @@ import * as Binding from "../../Binding.ts";
  * optional: it defaults to the first bound model id and may be overridden
  * per call with any of the bound model ids.
  */
-export interface CountTokensRequest extends Omit<
-  bedrock.CountTokensRequest,
-  "modelId"
-> {
+export interface CountTokensRequest extends Omit<bedrock.CountTokensRequest, "modelId"> {
   /**
    * The model whose tokenizer counts the input. Must be one of the model
    * ids the binding was created with (IAM is scoped to exactly those).
@@ -34,9 +31,8 @@ export interface CountTokensRequest extends Omit<
  * with a `ValidationException` ("The provided model doesn't support
  * counting tokens").
  *
- * @binding
- * @section Counting Tokens
- * @example Count Tokens for a Converse Request
+ * ### Counting Tokens
+ * **Example:** Count Tokens for a Converse Request
  * ```typescript
  * // init
  * const countTokens = yield* Bedrock.CountTokens(
@@ -54,7 +50,7 @@ export interface CountTokensRequest extends Omit<
  * const tokens = result.inputTokens;
  * ```
  *
- * @example Count Tokens for a Raw InvokeModel Payload
+ * **Example:** Count Tokens for a Raw InvokeModel Payload
  * ```typescript
  * const result = yield* countTokens({
  *   input: {
@@ -66,6 +62,8 @@ export interface CountTokensRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface CountTokens extends Binding.Service<
   CountTokens,
@@ -79,6 +77,4 @@ export interface CountTokens extends Binding.Service<
     ) => Effect.Effect<bedrock.CountTokensResponse, bedrock.CountTokensError>
   >
 > {}
-export const CountTokens = Binding.Service<CountTokens>(
-  "AWS.Bedrock.CountTokens",
-);
+export const CountTokens = Binding.Service<CountTokens>("AWS.Bedrock.CountTokens");

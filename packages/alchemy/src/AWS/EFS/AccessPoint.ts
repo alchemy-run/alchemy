@@ -88,9 +88,8 @@ export interface AccessPoint extends Resource<
  * pass `accessPoint.accessPointArn` to a Lambda Function's
  * `fileSystemConfigs`. The POSIX user and root directory are immutable —
  * changing them replaces the access point.
- * @resource
- * @section Creating Access Points
- * @example Access point with a POSIX identity and auto-created root
+ * ### Creating Access Points
+ * **Example:** Access point with a POSIX identity and auto-created root
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -105,8 +104,8 @@ export interface AccessPoint extends Resource<
  * });
  * ```
  *
- * @section Mounting into Lambda
- * @example Mount at /mnt/files
+ * ### Mounting into Lambda
+ * **Example:** Mount at /mnt/files
  * ```typescript
  * const fn = yield* AWS.Lambda.Function("Api", {
  *   main: "./src/handler.ts",
@@ -116,6 +115,8 @@ export interface AccessPoint extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const AccessPoint = Resource<AccessPoint>("AWS.EFS.AccessPoint");
 
@@ -123,9 +124,10 @@ export const AccessPoint = Resource<AccessPoint>("AWS.EFS.AccessPoint");
  * Internal marker error used to drive the bounded wait for an access point
  * to reach the `available` lifecycle state.
  */
-export class AccessPointNotAvailable extends Data.TaggedError(
-  "AccessPointNotAvailable",
-)<{ accessPointId: string; state: string }> {}
+export class AccessPointNotAvailable extends Data.TaggedError("AccessPointNotAvailable")<{
+  accessPointId: string;
+  state: string;
+}> {}
 
 /**
  * Access points settle to `available` in seconds. Bounded poll (~60s),
@@ -148,21 +150,14 @@ const retryUntilAccessPointAvailable = <E extends { _tag: string }, R>(
     ),
     {
       while: (e) => e._tag === "AccessPointNotAvailable",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
     },
   );
 
-const efsTagsToRecord = (
-  tags: readonly efs.Tag[] | undefined,
-): Record<string, string> =>
+const efsTagsToRecord = (tags: readonly efs.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
-const toWirePosixUser = (
-  posixUser: AccessPointPosixUser | undefined,
-): efs.PosixUser | undefined =>
+const toWirePosixUser = (posixUser: AccessPointPosixUser | undefined): efs.PosixUser | undefined =>
   posixUser === undefined
     ? undefined
     : {
@@ -179,9 +174,7 @@ const toWireRootDirectory = (
   rootDirectory === undefined
     ? undefined
     : {
-        ...(rootDirectory.path !== undefined
-          ? { Path: rootDirectory.path }
-          : {}),
+        ...(rootDirectory.path !== undefined ? { Path: rootDirectory.path } : {}),
         ...(rootDirectory.creationInfo !== undefined
           ? {
               CreationInfo: {
@@ -202,30 +195,17 @@ export const AccessPointProvider = () =>
       });
 
       const findById = Effect.fn(function* (accessPointId: string) {
-        return yield* efs
-          .describeAccessPoints({ AccessPointId: accessPointId })
-          .pipe(
-            Effect.map((r) => r.AccessPoints?.[0]),
-            Effect.catchTag("AccessPointNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* efs.describeAccessPoints({ AccessPointId: accessPointId }).pipe(
+          Effect.map((r) => r.AccessPoints?.[0]),
+          Effect.catchTag("AccessPointNotFound", () => Effect.succeed(undefined)),
+        );
       });
 
-      const findByToken = Effect.fn(function* (
-        fileSystemId: string,
-        token: string,
-      ) {
-        return yield* efs
-          .describeAccessPoints({ FileSystemId: fileSystemId })
-          .pipe(
-            Effect.map((r) =>
-              r.AccessPoints?.find((ap) => ap.ClientToken === token),
-            ),
-            Effect.catchTag("FileSystemNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const findByToken = Effect.fn(function* (fileSystemId: string, token: string) {
+        return yield* efs.describeAccessPoints({ FileSystemId: fileSystemId }).pipe(
+          Effect.map((r) => r.AccessPoints?.find((ap) => ap.ClientToken === token)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+        );
       });
 
       return AccessPoint.Provider.of({
@@ -242,26 +222,20 @@ export const AccessPointProvider = () =>
             const perSystem = yield* Effect.forEach(
               systems,
               (fs) =>
-                efs
-                  .describeAccessPoints({ FileSystemId: fs.FileSystemId })
-                  .pipe(
-                    Effect.map((r) =>
-                      (r.AccessPoints ?? [])
-                        .filter(
-                          (ap) =>
-                            ap.AccessPointId !== undefined &&
-                            ap.LifeCycleState !== "deleted",
-                        )
-                        .map((ap) => ({
-                          accessPointId: ap.AccessPointId!,
-                          accessPointArn: ap.AccessPointArn!,
-                          fileSystemId: ap.FileSystemId!,
-                        })),
-                    ),
-                    Effect.catchTag("FileSystemNotFound", () =>
-                      Effect.succeed([]),
-                    ),
+                efs.describeAccessPoints({ FileSystemId: fs.FileSystemId }).pipe(
+                  Effect.map((r) =>
+                    (r.AccessPoints ?? [])
+                      .filter(
+                        (ap) => ap.AccessPointId !== undefined && ap.LifeCycleState !== "deleted",
+                      )
+                      .map((ap) => ({
+                        accessPointId: ap.AccessPointId!,
+                        accessPointArn: ap.AccessPointArn!,
+                        fileSystemId: ap.FileSystemId!,
+                      })),
                   ),
+                  Effect.catchTag("FileSystemNotFound", () => Effect.succeed([])),
+                ),
               { concurrency: 5 },
             );
             return perSystem.flat();
@@ -273,10 +247,7 @@ export const AccessPointProvider = () =>
             : olds?.fileSystemId
               ? yield* findByToken(olds.fileSystemId, yield* createToken(id))
               : undefined;
-          if (
-            ap?.AccessPointId === undefined ||
-            ap.LifeCycleState === "deleted"
-          ) {
+          if (ap?.AccessPointId === undefined || ap.LifeCycleState === "deleted") {
             return undefined;
           }
           const attrs = {
@@ -284,9 +255,7 @@ export const AccessPointProvider = () =>
             accessPointArn: ap.AccessPointArn!,
             fileSystemId: ap.FileSystemId!,
           };
-          return (yield* hasAlchemyTags(id, efsTagsToRecord(ap.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, efsTagsToRecord(ap.Tags))) ? attrs : Unowned(attrs);
         }),
 
         // posixUser, rootDirectory, and the file system are all immutable on
@@ -328,9 +297,10 @@ export const AccessPointProvider = () =>
                 FileSystemId: news.fileSystemId,
                 PosixUser: toWirePosixUser(news.posixUser),
                 RootDirectory: toWireRootDirectory(news.rootDirectory),
-                Tags: Object.entries({ ...news.tags, ...internalTags }).map(
-                  ([Key, Value]) => ({ Key, Value }),
-                ),
+                Tags: Object.entries({ ...news.tags, ...internalTags }).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
               })
               .pipe(
                 Effect.catchTag("AccessPointAlreadyExists", (e) =>

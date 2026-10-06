@@ -13,9 +13,8 @@ import type { DBCluster } from "./DBCluster.ts";
  * the account's `cluster-snapshot` ARN space (both resources must be allowed
  * for snapshot creation). Provide the implementation with
  * `Effect.provide(AWS.DocDB.CreateDBClusterSnapshotHttp)`.
- * @binding
- * @section Operating a Cluster
- * @example Snapshot Before a Migration
+ * ### Operating a Cluster
+ * **Example:** Snapshot Before a Migration
  * ```typescript
  * // init — bind the operation to the cluster
  * const createDBClusterSnapshot =
@@ -26,6 +25,8 @@ import type { DBCluster } from "./DBCluster.ts";
  *   DBClusterSnapshotIdentifier: `pre-migration-${runId}`,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateDBClusterSnapshot extends Binding.Service<
   CreateDBClusterSnapshot,
@@ -34,14 +35,8 @@ export interface CreateDBClusterSnapshot extends Binding.Service<
     cluster: DBCluster,
   ) => Effect.Effect<
     (
-      request: Omit<
-        docdb.CreateDBClusterSnapshotMessage,
-        "DBClusterIdentifier"
-      >,
-    ) => Effect.Effect<
-      docdb.CreateDBClusterSnapshotResult,
-      docdb.CreateDBClusterSnapshotError
-    >
+      request: Omit<docdb.CreateDBClusterSnapshotMessage, "DBClusterIdentifier">,
+    ) => Effect.Effect<docdb.CreateDBClusterSnapshotResult, docdb.CreateDBClusterSnapshotError>
   >
 > {}
 export const CreateDBClusterSnapshot = Binding.Service<CreateDBClusterSnapshot>(

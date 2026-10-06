@@ -5,17 +5,15 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetNotificationChannel}.
  */
-export interface GetNotificationChannelRequest
-  extends fms.GetNotificationChannelRequest {}
+export interface GetNotificationChannelRequest extends fms.GetNotificationChannelRequest {}
 
 /**
  * Runtime binding for `fms:GetNotificationChannel`.
  *
  * Returns the SNS topic that is used to record Firewall Manager SNS logs. Provide the
  * implementation with `Effect.provide(AWS.FMS.GetNotificationChannelHttp)`.
- * @binding
- * @section Notification Channel
- * @example Read the Notification Channel
+ * ### Notification Channel
+ * **Example:** Read the Notification Channel
  * ```typescript
  * // init — account-level binding takes no resource
  * const getNotificationChannel = yield* AWS.FMS.GetNotificationChannel();
@@ -24,6 +22,8 @@ export interface GetNotificationChannelRequest
  * const result = yield* getNotificationChannel();
  * console.log(result.SnsTopicArn);
  * ```
+ *
+ * @binding
  */
 export interface GetNotificationChannel extends Binding.Service<
   GetNotificationChannel,
@@ -31,10 +31,7 @@ export interface GetNotificationChannel extends Binding.Service<
   () => Effect.Effect<
     (
       request?: GetNotificationChannelRequest,
-    ) => Effect.Effect<
-      fms.GetNotificationChannelResponse,
-      fms.GetNotificationChannelError
-    >
+    ) => Effect.Effect<fms.GetNotificationChannelResponse, fms.GetNotificationChannelError>
   >
 > {}
 

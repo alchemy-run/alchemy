@@ -98,9 +98,8 @@ type LogEventsHandler<Req> = (
  * @param props Optional subscription filter configuration.
  * @param process The handler invoked with a stream of decoded log events
  * (last argument).
- * @binding
- * @section Consuming Log Events
- * @example Forward Error Logs
+ * ### Consuming Log Events
+ * **Example:** Forward Error Logs
  * ```typescript
  * yield* AWS.Logs.consumeLogEvents(
  *   logGroup,
@@ -112,7 +111,7 @@ type LogEventsHandler<Req> = (
  * );
  * ```
  *
- * @example Wire the Event Source into a Lambda Function
+ * **Example:** Wire the Event Source into a Lambda Function
  * ```typescript
  * // The Lambda implementation layer (AWS.Lambda.LogGroupEventSource)
  * // satisfies the LogGroupEventSource requirement of consumeLogEvents.
@@ -131,6 +130,8 @@ type LogEventsHandler<Req> = (
  *   }).pipe(Effect.provide(AWS.Lambda.LogGroupEventSource)),
  * );
  * ```
+ *
+ * @binding
  */
 export function consumeLogEvents<G extends LogGroup, Req = never>(
   logGroup: G,
@@ -161,7 +162,5 @@ export class LogGroupEventSource extends Context.Service<
 export type LogGroupEventSourceService = <Req = never>(
   logGroup: LogGroup,
   props: LogGroupEventSourceProps,
-  process: (
-    events: Stream.Stream<LogEventRecord>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<LogEventRecord>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

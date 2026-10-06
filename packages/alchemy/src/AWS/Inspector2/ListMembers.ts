@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.ListMembersHttp)`.
- * @binding
- * @section Organization & Members
- * @example List Member Accounts
+ * ### Organization & Members
+ * **Example:** List Member Accounts
  * ```typescript
  * // init
  * const listMembers = yield* AWS.Inspector2.ListMembers();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { members } = yield* listMembers();
  * ```
+ *
+ * @binding
  */
 export interface ListMembers extends Binding.Service<
   ListMembers,
@@ -27,12 +28,7 @@ export interface ListMembers extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListMembersRequest,
-    ) => Effect.Effect<
-      inspector2.ListMembersResponse,
-      inspector2.ListMembersError
-    >
+    ) => Effect.Effect<inspector2.ListMembersResponse, inspector2.ListMembersError>
   >
 > {}
-export const ListMembers = Binding.Service<ListMembers>(
-  "AWS.Inspector2.ListMembers",
-);
+export const ListMembers = Binding.Service<ListMembers>("AWS.Inspector2.ListMembers");

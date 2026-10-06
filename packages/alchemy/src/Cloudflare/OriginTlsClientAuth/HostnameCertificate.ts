@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -91,26 +90,23 @@ export type HostnameCertificate = Resource<
  * property triggers a replacement. Deployment is asynchronous — the
  * certificate starts in `pending_deployment` and becomes `active` within a
  * few minutes; deletion likewise passes through `pending_deletion`.
- * @resource
- * @product Origin TLS Client Auth
- * @category SSL/TLS & Certificates
- * @section Uploading a hostname certificate
- * @example Hostname client certificate
+ * ### Uploading a hostname certificate
+ * **Example:** Hostname client certificate
  * ```typescript
  * const cert = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate("AopHostCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
- *   privateKey: yield* Config.redacted("AOP_CLIENT_KEY"),
+ *   privateKey: yield* Config.Redacted("AOP_CLIENT_KEY"),
  * });
  * ```
  *
- * @section Enabling AOP for a hostname
- * @example Upload the certificate and associate a hostname
+ * ### Enabling AOP for a hostname
+ * **Example:** Upload the certificate and associate a hostname
  * ```typescript
  * const cert = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate("AopHostCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
- *   privateKey: yield* Config.redacted("AOP_CLIENT_KEY"),
+ *   privateKey: yield* Config.Redacted("AOP_CLIENT_KEY"),
  * });
  *
  * yield* Cloudflare.OriginTlsClientAuth.HostnameAssociation("AopHost", {
@@ -122,6 +118,10 @@ export type HostnameCertificate = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/set-up/per-hostname/
+ *
+ * @resource
+ * @product Origin TLS Client Auth
+ * @category SSL/TLS & Certificates
  */
 export const HostnameCertificate = Resource<HostnameCertificate>(TypeId);
 
@@ -129,9 +129,7 @@ export const HostnameCertificate = Resource<HostnameCertificate>(TypeId);
  * Returns true if the given value is an HostnameCertificate
  * resource.
  */
-export const isHostnameCertificate = (
-  value: unknown,
-): value is HostnameCertificate =>
+export const isHostnameCertificate = (value: unknown): value is HostnameCertificate =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameCertificateProvider = () =>
@@ -271,8 +269,7 @@ export const HostnameCertificateProvider = () =>
           // with a bounded retry.
           Effect.retry({
             while: (e) =>
-              e._tag === "HostnameCertificateInUse" ||
-              e._tag === "CertificatePendingDeployment",
+              e._tag === "HostnameCertificateInUse" || e._tag === "CertificatePendingDeployment",
             schedule: Schedule.spaced("5 seconds"),
             times: 10,
           }),
@@ -295,9 +292,7 @@ const isLive = (status: string | null | undefined): boolean =>
 const observeById = (zoneId: string, certificateId: string) =>
   originTls.getHostnameCertificate({ zoneId, certificateId }).pipe(
     Effect.map((cert) => (isLive(cert.status) ? cert : undefined)),
-    Effect.catchTag("HostnameCertificateNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("HostnameCertificateNotFound", () => Effect.succeed(undefined)),
   );
 
 // Locate a live certificate by exact PEM content. Tombstoned certificates
@@ -307,9 +302,7 @@ const findByContent = (zoneId: string, certificate: string) =>
   Effect.gen(function* () {
     const list = yield* originTls.listHostnameCertificates({ zoneId });
     return list.result.find(
-      (c) =>
-        isLive(c.status) &&
-        normalizePem(c.certificate ?? "") === normalizePem(certificate),
+      (c) => isLive(c.status) && normalizePem(c.certificate ?? "") === normalizePem(certificate),
     );
   });
 
@@ -328,10 +321,7 @@ type CertificateShape = {
   uploadedOn?: string | null;
 };
 
-const toAttributes = (
-  cert: CertificateShape,
-  zoneId: string,
-): HostnameCertificateAttributes => ({
+const toAttributes = (cert: CertificateShape, zoneId: string): HostnameCertificateAttributes => ({
   certificateId: cert.id!,
   zoneId,
   status: cert.status ?? undefined,

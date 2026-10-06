@@ -6,18 +6,9 @@ import type { Index } from "./VectorIndex.ts";
 /** Fields the binding injects from the bound {@link Index}. */
 type IndexRef = "vectorBucketName" | "indexName" | "indexArn";
 
-export interface QueryVectorsRequest extends Omit<
-  s3vectors.QueryVectorsInput,
-  IndexRef
-> {}
-export interface GetVectorsRequest extends Omit<
-  s3vectors.GetVectorsInput,
-  IndexRef
-> {}
-export interface ListVectorsRequest extends Omit<
-  s3vectors.ListVectorsInput,
-  IndexRef
-> {}
+export interface QueryVectorsRequest extends Omit<s3vectors.QueryVectorsInput, IndexRef> {}
+export interface GetVectorsRequest extends Omit<s3vectors.GetVectorsInput, IndexRef> {}
+export interface ListVectorsRequest extends Omit<s3vectors.ListVectorsInput, IndexRef> {}
 
 /**
  * The read-only runtime client returned by binding an {@link Index} via
@@ -49,9 +40,8 @@ export interface ReadVectorsClient {
  * endpoint that never writes embeddings). Provide the implementation with
  * `Effect.provide(AWS.S3Vectors.VectorsReadHttp)`.
  *
- * @binding
- * @section Reading Vectors
- * @example Query Nearest Neighbors (read-only)
+ * ### Reading Vectors
+ * **Example:** Query Nearest Neighbors (read-only)
  * ```typescript
  * // init
  * const vectors = yield* AWS.S3Vectors.VectorsRead(index);
@@ -63,12 +53,12 @@ export interface ReadVectorsClient {
  *   returnDistance: true,
  * });
  * ```
+ *
+ * @binding
  */
 export interface VectorsRead extends Binding.Service<
   VectorsRead,
   "AWS.S3Vectors.VectorsRead",
   <I extends Index>(index: I) => Effect.Effect<ReadVectorsClient>
 > {}
-export const VectorsRead = Binding.Service<VectorsRead>(
-  "AWS.S3Vectors.VectorsRead",
-);
+export const VectorsRead = Binding.Service<VectorsRead>("AWS.S3Vectors.VectorsRead");

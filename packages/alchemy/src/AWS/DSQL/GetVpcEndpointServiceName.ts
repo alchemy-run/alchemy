@@ -13,9 +13,8 @@ import type { Cluster } from "./Cluster.ts";
  * Provide `DSQL.GetVpcEndpointServiceNameHttp` on the Function effect to
  * implement the binding.
  *
- * @binding
- * @section Resolving the VPC Endpoint Service Name
- * @example Look Up the PrivateLink Service Name
+ * ### Resolving the VPC Endpoint Service Name
+ * **Example:** Look Up the PrivateLink Service Name
  * ```typescript
  * // init
  * const getVpcEndpointServiceName =
@@ -29,6 +28,8 @@ import type { Cluster } from "./Cluster.ts";
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface GetVpcEndpointServiceName extends Binding.Service<
   GetVpcEndpointServiceName,
@@ -36,13 +37,9 @@ export interface GetVpcEndpointServiceName extends Binding.Service<
   <R extends Cluster>(
     cluster: R,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      dsql.GetVpcEndpointServiceNameOutput,
-      dsql.GetVpcEndpointServiceNameError
-    >
+    () => Effect.Effect<dsql.GetVpcEndpointServiceNameOutput, dsql.GetVpcEndpointServiceNameError>
   >
 > {}
-export const GetVpcEndpointServiceName =
-  Binding.Service<GetVpcEndpointServiceName>(
-    "AWS.DSQL.GetVpcEndpointServiceName",
-  );
+export const GetVpcEndpointServiceName = Binding.Service<GetVpcEndpointServiceName>(
+  "AWS.DSQL.GetVpcEndpointServiceName",
+);

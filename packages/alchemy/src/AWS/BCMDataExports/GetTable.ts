@@ -16,9 +16,8 @@ export interface GetTableRequest extends bcm.GetTableRequest {}
  * query builders that validate an SQL statement's columns before calling
  * `UpdateExport`. Provide the implementation with
  * `Effect.provide(AWS.BCMDataExports.GetTableHttp)`.
- * @binding
- * @section Browsing the Table Dictionary
- * @example Read a Table's Schema
+ * ### Browsing the Table Dictionary
+ * **Example:** Read a Table's Schema
  * ```typescript
  * // init — account-level binding takes no resource
  * const getTable = yield* AWS.BCMDataExports.GetTable();
@@ -27,17 +26,15 @@ export interface GetTableRequest extends bcm.GetTableRequest {}
  * const table = yield* getTable({ TableName: "COST_AND_USAGE_REPORT" });
  * const columns = (table.Schema ?? []).map((column) => column.Name);
  * ```
+ *
+ * @binding
  */
 export interface GetTable extends Binding.Service<
   GetTable,
   "AWS.BCMDataExports.GetTable",
   () => Effect.Effect<
-    (
-      request: GetTableRequest,
-    ) => Effect.Effect<bcm.GetTableResponse, bcm.GetTableError>
+    (request: GetTableRequest) => Effect.Effect<bcm.GetTableResponse, bcm.GetTableError>
   >
 > {}
 
-export const GetTable = Binding.Service<GetTable>(
-  "AWS.BCMDataExports.GetTable",
-);
+export const GetTable = Binding.Service<GetTable>("AWS.BCMDataExports.GetTable");

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface ListArtifactsRequest extends Omit<
-  amplify.ListArtifactsRequest,
-  "appId"
-> {}
+export interface ListArtifactsRequest extends Omit<amplify.ListArtifactsRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:ListArtifacts`.
@@ -15,9 +12,8 @@ export interface ListArtifactsRequest extends Omit<
  * lists the artifacts (e.g. test reports) a build job produced. Fetch an
  * individual artifact with {@link GetArtifactUrl}. Provide the implementation
  * with `Effect.provide(AWS.Amplify.ListArtifactsHttp)`.
- * @binding
- * @section Reading Artifacts
- * @example List a Job's Artifacts
+ * ### Reading Artifacts
+ * **Example:** List a Job's Artifacts
  * ```typescript
  * // init — bind the operation to the app
  * const listArtifacts = yield* AWS.Amplify.ListArtifacts(app);
@@ -28,6 +24,8 @@ export interface ListArtifactsRequest extends Omit<
  *   jobId: "42",
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListArtifacts extends Binding.Service<
   ListArtifacts,
@@ -41,6 +39,4 @@ export interface ListArtifacts extends Binding.Service<
   >
 > {}
 
-export const ListArtifacts = Binding.Service<ListArtifacts>(
-  "AWS.Amplify.ListArtifacts",
-);
+export const ListArtifacts = Binding.Service<ListArtifacts>("AWS.Amplify.ListArtifacts");

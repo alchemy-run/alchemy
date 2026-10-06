@@ -89,9 +89,8 @@ export interface Terminology extends Resource<
  * product names, domain jargon) are translated. Reference it by name from
  * `TranslateText`, `TranslateDocument`, or batch translation jobs.
  *
- * @resource
- * @section Managing Terminologies
- * @example Import a CSV terminology
+ * ### Managing Terminologies
+ * **Example:** Import a CSV terminology
  * ```typescript
  * const glossary = yield* AWS.Translate.Terminology("BrandGlossary", {
  *   file: ["en,es", "Alchemy,Alquimia"].join("\n"),
@@ -99,7 +98,7 @@ export interface Terminology extends Resource<
  * });
  * ```
  *
- * @example Translate text with the terminology applied
+ * **Example:** Translate text with the terminology applied
  * ```typescript
  * const translateText = yield* AWS.Translate.TranslateText();
  * const result = yield* translateText({
@@ -109,6 +108,8 @@ export interface Terminology extends Resource<
  *   TerminologyNames: [glossary.terminologyName],
  * });
  * ```
+ *
+ * @resource
  */
 export const Terminology = Resource<Terminology>("AWS.Translate.Terminology");
 
@@ -116,9 +117,7 @@ const toAttributes = (props: translate.TerminologyProperties) => ({
   terminologyName: props.Name!,
   terminologyArn: props.Arn!,
   sourceLanguageCode: props.SourceLanguageCode,
-  targetLanguageCodes: props.TargetLanguageCodes
-    ? [...props.TargetLanguageCodes]
-    : undefined,
+  targetLanguageCodes: props.TargetLanguageCodes ? [...props.TargetLanguageCodes] : undefined,
   termCount: props.TermCount,
   skippedTermCount: props.SkippedTermCount,
   sizeBytes: props.SizeBytes,
@@ -129,26 +128,16 @@ export const TerminologyProvider = () =>
   Provider.effect(
     Terminology,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: TerminologyProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: TerminologyProps) {
         // Translate names must match ^([A-Za-z0-9-]_?)+$ (≤ 256 chars);
         // createPhysicalName's hyphenated output satisfies it directly.
-        return (
-          props.terminologyName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.terminologyName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const getOne = Effect.fn(function* (name: string) {
         return yield* translate
           .getTerminology({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -163,8 +152,7 @@ export const TerminologyProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
-            output?.terminologyName ??
-            (yield* createName(id, olds ?? { file: "", format: "CSV" }));
+            output?.terminologyName ?? (yield* createName(id, olds ?? { file: "", format: "CSV" }));
           const found = yield* getOne(name);
           if (found?.TerminologyProperties === undefined) return undefined;
           const attrs = toAttributes(found.TerminologyProperties);
@@ -188,15 +176,11 @@ export const TerminologyProvider = () =>
             olds.file !== news.file ||
             olds.format !== news.format ||
             (olds.directionality ?? "UNI") !== (news.directionality ?? "UNI") ||
-            (olds.description ?? undefined) !==
-              (news.description ?? undefined) ||
-            (olds.encryptionKeyId ?? undefined) !==
-              (news.encryptionKeyId ?? undefined);
+            (olds.description ?? undefined) !== (news.description ?? undefined) ||
+            (olds.encryptionKeyId ?? undefined) !== (news.encryptionKeyId ?? undefined);
 
           if (observed?.TerminologyProperties === undefined || changed) {
-            const bytes = yield* Effect.sync(() =>
-              new TextEncoder().encode(news.file),
-            );
+            const bytes = yield* Effect.sync(() => new TextEncoder().encode(news.file));
             yield* translate.importTerminology({
               Name: name,
               MergeStrategy: "OVERWRITE",
@@ -225,9 +209,7 @@ export const TerminologyProvider = () =>
           // Idempotent — the terminology may already be gone.
           yield* translate
             .deleteTerminology({ Name: output.terminologyName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

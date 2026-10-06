@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Service } from "./Service.ts";
 
-export interface DescribeServiceDeploymentsRequest
-  extends ECS.DescribeServiceDeploymentsRequest {}
+export interface DescribeServiceDeploymentsRequest extends ECS.DescribeServiceDeploymentsRequest {}
 
 /**
  * Runtime binding for `ecs:DescribeServiceDeployments`.
@@ -14,9 +13,8 @@ export interface DescribeServiceDeploymentsRequest
  * circuit-breaker status, target service revision. The host is granted
  * `ecs:DescribeServiceDeployments` on the service's deployments (deployment
  * ARNs are only known at runtime, e.g. from `ListServiceDeployments`).
- * @binding
- * @section Service Deployments
- * @example Inspect a Deployment's Rollout State
+ * ### Service Deployments
+ * **Example:** Inspect a Deployment's Rollout State
  * ```typescript
  * const describeServiceDeployments =
  *   yield* AWS.ECS.DescribeServiceDeployments(service);
@@ -26,6 +24,8 @@ export interface DescribeServiceDeploymentsRequest
  * });
  * const status = response.serviceDeployments?.[0]?.status;
  * ```
+ *
+ * @binding
  */
 export interface DescribeServiceDeployments extends Binding.Service<
   DescribeServiceDeployments,
@@ -35,13 +35,9 @@ export interface DescribeServiceDeployments extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeServiceDeploymentsRequest,
-    ) => Effect.Effect<
-      ECS.DescribeServiceDeploymentsResponse,
-      ECS.DescribeServiceDeploymentsError
-    >
+    ) => Effect.Effect<ECS.DescribeServiceDeploymentsResponse, ECS.DescribeServiceDeploymentsError>
   >
 > {}
-export const DescribeServiceDeployments =
-  Binding.Service<DescribeServiceDeployments>(
-    "AWS.ECS.DescribeServiceDeployments",
-  );
+export const DescribeServiceDeployments = Binding.Service<DescribeServiceDeployments>(
+  "AWS.ECS.DescribeServiceDeployments",
+);

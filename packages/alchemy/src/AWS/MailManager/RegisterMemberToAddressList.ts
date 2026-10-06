@@ -10,9 +10,8 @@ import type { AddressList } from "./AddressList.ts";
  * is injected from the binding. Registering an already-present address
  * succeeds (idempotent upsert). Provide the implementation with
  * `Effect.provide(AWS.MailManager.RegisterMemberToAddressListHttp)`.
- * @binding
- * @section Managing Address List Members
- * @example Block a Sender
+ * ### Managing Address List Members
+ * **Example:** Block a Sender
  * ```typescript
  * // init — bind the operation to the address list
  * const registerMember = yield* MailManager.RegisterMemberToAddressList(blockList);
@@ -20,6 +19,8 @@ import type { AddressList } from "./AddressList.ts";
  * // runtime
  * yield* registerMember({ Address: "spammer@example.com" });
  * ```
+ *
+ * @binding
  */
 export interface RegisterMemberToAddressList extends Binding.Service<
   RegisterMemberToAddressList,
@@ -29,13 +30,9 @@ export interface RegisterMemberToAddressList extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.RegisterMemberToAddressListRequest, "AddressListId">,
-    ) => Effect.Effect<
-      mm.RegisterMemberToAddressListResponse,
-      mm.RegisterMemberToAddressListError
-    >
+    ) => Effect.Effect<mm.RegisterMemberToAddressListResponse, mm.RegisterMemberToAddressListError>
   >
 > {}
-export const RegisterMemberToAddressList =
-  Binding.Service<RegisterMemberToAddressList>(
-    "AWS.MailManager.RegisterMemberToAddressList",
-  );
+export const RegisterMemberToAddressList = Binding.Service<RegisterMemberToAddressList>(
+  "AWS.MailManager.RegisterMemberToAddressList",
+);

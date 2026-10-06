@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide `WAFv2.GetWebACLForResourceHttp` on the hosting Lambda Function
  * to satisfy the requirement.
- * @binding
- * @section Inspecting Associations
- * @example Look Up the Web ACL Protecting a Load Balancer
+ * ### Inspecting Associations
+ * **Example:** Look Up the Web ACL Protecting a Load Balancer
  * ```typescript
  * // init — grants wafv2:GetWebACLForResource + wafv2:GetWebACL
  * const getWebACLForResource = yield* AWS.WAFv2.GetWebACLForResource();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   ResourceArn: loadBalancerArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetWebACLForResource extends Binding.Service<
   GetWebACLForResource,
@@ -29,10 +30,7 @@ export interface GetWebACLForResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: WAFV2.GetWebACLForResourceRequest,
-    ) => Effect.Effect<
-      WAFV2.GetWebACLForResourceResponse,
-      WAFV2.GetWebACLForResourceError
-    >
+    ) => Effect.Effect<WAFV2.GetWebACLForResourceResponse, WAFV2.GetWebACLForResourceError>
   >
 > {}
 

@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  * {@link RestoreVolumeFromSnapshot}. Pass a `ClientRequestToken` to make
  * the call idempotent. Provide the implementation with
  * `Effect.provide(AWS.FSx.CreateSnapshotHttp)`.
- * @binding
- * @section Managing Snapshots at Runtime
- * @example Snapshot a volume before a risky write
+ * ### Managing Snapshots at Runtime
+ * **Example:** Snapshot a volume before a risky write
  * ```typescript
  * const createSnapshot = yield* AWS.FSx.CreateSnapshot();
  *
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * yield* Effect.log(`snapshot ${response.Snapshot?.SnapshotId} started`);
  * ```
+ *
+ * @binding
  */
 export interface CreateSnapshot extends Binding.Service<
   CreateSnapshot,
@@ -34,6 +35,4 @@ export interface CreateSnapshot extends Binding.Service<
     ) => Effect.Effect<fsx.CreateSnapshotResponse, fsx.CreateSnapshotError>
   >
 > {}
-export const CreateSnapshot = Binding.Service<CreateSnapshot>(
-  "AWS.FSx.CreateSnapshot",
-);
+export const CreateSnapshot = Binding.Service<CreateSnapshot>("AWS.FSx.CreateSnapshot");

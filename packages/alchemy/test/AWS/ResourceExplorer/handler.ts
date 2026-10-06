@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as ResourceExplorer from "@/AWS/ResourceExplorer";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as ResourceExplorer from "@/AWS/ResourceExplorer";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -16,7 +16,7 @@ export class ResourceExplorerTestFunction extends Lambda.Function<Lambda.Functio
 export default ResourceExplorerTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // search over a fresh index can be slow on cold start — AWS's 3s
     // default intermittently times out
     timeout: Duration.seconds(30),
@@ -30,8 +30,7 @@ export default ResourceExplorerTestFunction.make(
     });
     const search = yield* ResourceExplorer.Search(view);
     const listResources = yield* ResourceExplorer.ListResources(view);
-    const listSupportedResourceTypes =
-      yield* ResourceExplorer.ListSupportedResourceTypes();
+    const listSupportedResourceTypes = yield* ResourceExplorer.ListSupportedResourceTypes();
 
     return {
       fetch: Effect.gen(function* () {
@@ -67,16 +66,11 @@ export default ResourceExplorerTestFunction.make(
             MaxResults: 100,
           });
           return yield* HttpServerResponse.json({
-            resourceTypes: (result.ResourceTypes ?? []).map(
-              (t) => t.ResourceType,
-            ),
+            resourceTypes: (result.ResourceTypes ?? []).map((t) => t.ResourceType),
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

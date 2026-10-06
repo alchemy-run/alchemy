@@ -15,9 +15,8 @@ export interface ListApplicationAssociationsRequest extends Omit<
  *
  * Provide the `ListApplicationAssociationsHttp` layer on the Function to
  * satisfy the binding.
- * @binding
- * @section Listing Application Associations
- * @example List an Application's Associations
+ * ### Listing Application Associations
+ * **Example:** List an Application's Associations
  * ```typescript
  * // init (provide AWS.AppIntegrations.ListApplicationAssociationsHttp on the Function)
  * const listApplicationAssociations =
@@ -26,6 +25,8 @@ export interface ListApplicationAssociationsRequest extends Omit<
  * // runtime — the ApplicationId is injected automatically
  * const { ApplicationAssociations } = yield* listApplicationAssociations();
  * ```
+ *
+ * @binding
  */
 export interface ListApplicationAssociations extends Binding.Service<
   ListApplicationAssociations,
@@ -41,7 +42,6 @@ export interface ListApplicationAssociations extends Binding.Service<
     >
   >
 > {}
-export const ListApplicationAssociations =
-  Binding.Service<ListApplicationAssociations>(
-    "AWS.AppIntegrations.ListApplicationAssociations",
-  );
+export const ListApplicationAssociations = Binding.Service<ListApplicationAssociations>(
+  "AWS.AppIntegrations.ListApplicationAssociations",
+);

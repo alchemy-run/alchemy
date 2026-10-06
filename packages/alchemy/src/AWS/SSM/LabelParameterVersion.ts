@@ -16,15 +16,16 @@ export interface LabelParameterVersionRequest extends Omit<
  * the bound parameter. Omitting `ParameterVersion` labels the latest version.
  * Labels enable versioned rollouts: readers pass `Name:label` selectors to
  * `GetParameter` while writers move the label between versions.
- * @binding
- * @section Labeling Parameter Versions
- * @example Mark the Latest Version as Current
+ * ### Labeling Parameter Versions
+ * **Example:** Mark the Latest Version as Current
  * ```typescript
  * const label = yield* SSM.LabelParameterVersion(config);
  *
  * const result = yield* label({ Labels: ["current"] });
  * yield* Effect.log(`labeled version ${result.ParameterVersion}`);
  * ```
+ *
+ * @binding
  */
 export interface LabelParameterVersion extends Binding.Service<
   LabelParameterVersion,
@@ -34,10 +35,7 @@ export interface LabelParameterVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: LabelParameterVersionRequest,
-    ) => Effect.Effect<
-      SSM.LabelParameterVersionResult,
-      SSM.LabelParameterVersionError
-    >
+    ) => Effect.Effect<SSM.LabelParameterVersionResult, SSM.LabelParameterVersionError>
   >
 > {}
 export const LabelParameterVersion = Binding.Service<LabelParameterVersion>(

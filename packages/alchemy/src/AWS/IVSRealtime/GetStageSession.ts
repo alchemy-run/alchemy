@@ -13,9 +13,8 @@ export interface GetStageSessionRequest extends Omit<
  * Read a session of the bound stage — its start time and, once the last
  * participant leaves, its end time.
  *
- * @binding
- * @section Inspecting Stage Sessions
- * @example Look up a session
+ * ### Inspecting Stage Sessions
+ * **Example:** Look up a session
  * ```typescript
  * // init
  * const getStageSession = yield* IVSRealtime.GetStageSession(stage);
@@ -25,6 +24,8 @@ export interface GetStageSessionRequest extends Omit<
  *   sessionId: "st-a1b2c3d4e5f6",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetStageSession extends Binding.Service<
   GetStageSession,
@@ -34,12 +35,7 @@ export interface GetStageSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetStageSessionRequest,
-    ) => Effect.Effect<
-      ivsrealtime.GetStageSessionResponse,
-      ivsrealtime.GetStageSessionError
-    >
+    ) => Effect.Effect<ivsrealtime.GetStageSessionResponse, ivsrealtime.GetStageSessionError>
   >
 > {}
-export const GetStageSession = Binding.Service<GetStageSession>(
-  "AWS.IVSRealtime.GetStageSession",
-);
+export const GetStageSession = Binding.Service<GetStageSession>("AWS.IVSRealtime.GetStageSession");

@@ -64,14 +64,7 @@ export interface BrokerLogs {
  */
 export interface BrokerMaintenanceWindow {
   /** Day of week, e.g. `"SUNDAY"`. */
-  dayOfWeek:
-    | "MONDAY"
-    | "TUESDAY"
-    | "WEDNESDAY"
-    | "THURSDAY"
-    | "FRIDAY"
-    | "SATURDAY"
-    | "SUNDAY";
+  dayOfWeek: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
   /** Start time in 24h `HH:mm` format, e.g. `"03:00"`. */
   timeOfDay: string;
   /** IANA time zone, e.g. `"UTC"`. */
@@ -116,10 +109,7 @@ export interface BrokerProps {
    * (RabbitMQ) provide HA. Immutable — changing it replaces the broker.
    * @default "SINGLE_INSTANCE"
    */
-  deploymentMode?:
-    | "SINGLE_INSTANCE"
-    | "ACTIVE_STANDBY_MULTI_AZ"
-    | "CLUSTER_MULTI_AZ";
+  deploymentMode?: "SINGLE_INSTANCE" | "ACTIVE_STANDBY_MULTI_AZ" | "CLUSTER_MULTI_AZ";
   /**
    * Broker users. ActiveMQ requires at least one; RabbitMQ requires exactly
    * one. Users are provisioned at creation and are not reconciled on update.
@@ -215,9 +205,8 @@ export interface Broker extends Resource<
  * the provider waits (bounded) for the broker to reach `RUNNING` before
  * returning, and waits for it to disappear on delete.
  *
- * @resource
- * @section Creating a Broker
- * @example Single-instance ActiveMQ (cheapest)
+ * ### Creating a Broker
+ * **Example:** Single-instance ActiveMQ (cheapest)
  * ```typescript
  * const broker = yield* MQ.Broker("Orders", {
  *   engineType: "ACTIVEMQ",
@@ -230,7 +219,7 @@ export interface Broker extends Resource<
  * // broker.endpoints -> ["ssl://b-xxxx-1.mq.us-west-2.amazonaws.com:61617", ...]
  * ```
  *
- * @example Single-instance RabbitMQ
+ * **Example:** Single-instance RabbitMQ
  * ```typescript
  * const broker = yield* MQ.Broker("Events", {
  *   engineType: "RABBITMQ",
@@ -241,8 +230,8 @@ export interface Broker extends Resource<
  * });
  * ```
  *
- * @section Networking and Encryption
- * @example Private broker in specific subnets with a customer KMS key
+ * ### Networking and Encryption
+ * **Example:** Private broker in specific subnets with a customer KMS key
  * ```typescript
  * const broker = yield* MQ.Broker("Orders", {
  *   engineType: "ACTIVEMQ",
@@ -257,8 +246,8 @@ export interface Broker extends Resource<
  * });
  * ```
  *
- * @section Logging and Maintenance
- * @example Enable CloudWatch logs and pin a maintenance window
+ * ### Logging and Maintenance
+ * **Example:** Enable CloudWatch logs and pin a maintenance window
  * ```typescript
  * const broker = yield* MQ.Broker("Orders", {
  *   engineType: "ACTIVEMQ",
@@ -274,13 +263,13 @@ export interface Broker extends Resource<
  * });
  * ```
  *
- * @section Consuming Messages
+ * ### Consuming Messages
  * Subscribe a Lambda function to broker queues from the init phase via
  * {@link consumeBrokerMessages}. The event-source mapping, IAM grants, and
  * runtime dispatch are created automatically (provide
  * `Lambda.BrokerEventSource` on the function).
  *
- * @example Process queue messages in a Lambda function
+ * **Example:** Process queue messages in a Lambda function
  * ```typescript
  * // init
  * yield* MQ.consumeBrokerMessages(
@@ -297,6 +286,8 @@ export interface Broker extends Resource<
  *     ),
  * );
  * ```
+ *
+ * @resource
  */
 export const Broker = Resource<Broker>("AWS.MQ.Broker");
 
@@ -305,10 +296,7 @@ class BrokerNotSettled extends Data.TaggedError("BrokerNotSettled")<{
   readonly state: string;
 }> {}
 
-const sameArray = (
-  a: readonly string[] | undefined,
-  b: readonly string[] | undefined,
-): boolean => {
+const sameArray = (a: readonly string[] | undefined, b: readonly string[] | undefined): boolean => {
   const as = [...(a ?? [])].sort();
   const bs = [...(b ?? [])].sort();
   return as.length === bs.length && as.every((v, i) => v === bs[i]);
@@ -337,11 +325,7 @@ export const BrokerProvider = () =>
       const readBroker = Effect.fn(function* (brokerId: string) {
         return yield* mq
           .describeBroker({ BrokerId: brokerId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       /** Find a live broker by name (listBrokers has no name filter). */
@@ -365,20 +349,14 @@ export const BrokerProvider = () =>
         return yield* readBroker(brokerId).pipe(
           Effect.flatMap((broker) => {
             const state = broker?.BrokerState;
-            if (
-              state === "CREATION_IN_PROGRESS" ||
-              state === "REBOOT_IN_PROGRESS"
-            ) {
+            if (state === "CREATION_IN_PROGRESS" || state === "REBOOT_IN_PROGRESS") {
               return Effect.fail(new BrokerNotSettled({ brokerId, state }));
             }
             return Effect.succeed(broker);
           }),
           Effect.retry({
             while: (e) => e instanceof BrokerNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(72),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(72)]),
           }),
         );
       });
@@ -398,10 +376,7 @@ export const BrokerProvider = () =>
           }),
           Effect.retry({
             while: (e) => e instanceof BrokerNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(72),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(72)]),
           }),
         );
       });
@@ -420,32 +395,21 @@ export const BrokerProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          const replaced =
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}));
+          const replaced = (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}));
           if (replaced) return { action: "replace" } as const;
           // Create-only properties.
-          if (
-            (news.engineType ?? undefined) !== (olds?.engineType ?? undefined)
-          )
+          if ((news.engineType ?? undefined) !== (olds?.engineType ?? undefined))
             return { action: "replace" } as const;
           if (
             (news.deploymentMode ?? "SINGLE_INSTANCE") !==
             (olds?.deploymentMode ?? "SINGLE_INSTANCE")
           )
             return { action: "replace" } as const;
-          if (
-            (news.publiclyAccessible ?? false) !==
-            (olds?.publiclyAccessible ?? false)
-          )
+          if ((news.publiclyAccessible ?? false) !== (olds?.publiclyAccessible ?? false))
             return { action: "replace" } as const;
-          if (
-            (news.storageType ?? undefined) !== (olds?.storageType ?? undefined)
-          )
+          if ((news.storageType ?? undefined) !== (olds?.storageType ?? undefined))
             return { action: "replace" } as const;
-          if (
-            news.subnetIds !== undefined &&
-            !sameArray(news.subnetIds, olds?.subnetIds)
-          )
+          if (news.subnetIds !== undefined && !sameArray(news.subnetIds, olds?.subnetIds))
             return { action: "replace" } as const;
           if (
             (news.encryptionOptions?.kmsKeyId ?? undefined) !==
@@ -472,9 +436,7 @@ export const BrokerProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
 
           // 1. Observe — cloud state is authoritative.
-          let observed = output?.brokerId
-            ? yield* readBroker(output.brokerId)
-            : undefined;
+          let observed = output?.brokerId ? yield* readBroker(output.brokerId) : undefined;
           if (observed === undefined) {
             observed = yield* findByName(name);
           }
@@ -530,9 +492,7 @@ export const BrokerProvider = () =>
                       return { BrokerId: existing.BrokerId };
                     }
                     return yield* Effect.fail(
-                      new Error(
-                        `MQ broker '${name}' create conflicted but no broker was found`,
-                      ),
+                      new Error(`MQ broker '${name}' create conflicted but no broker was found`),
                     );
                   }),
                 ),
@@ -541,9 +501,7 @@ export const BrokerProvider = () =>
           }
 
           if (observed?.BrokerId === undefined) {
-            return yield* Effect.fail(
-              new Error(`MQ broker '${name}' could not be reconciled`),
-            );
+            return yield* Effect.fail(new Error(`MQ broker '${name}' could not be reconciled`));
           }
           const brokerId = observed.BrokerId;
 
@@ -557,9 +515,7 @@ export const BrokerProvider = () =>
           observed = settled;
           if (observed.BrokerState === "CREATION_FAILED") {
             return yield* Effect.fail(
-              new Error(
-                `MQ broker '${name}' failed to create (state: CREATION_FAILED)`,
-              ),
+              new Error(`MQ broker '${name}' failed to create (state: CREATION_FAILED)`),
             );
           }
 
@@ -604,8 +560,7 @@ export const BrokerProvider = () =>
           if (
             news.configuration !== undefined &&
             (news.configuration.id !== observed.Configurations?.Current?.Id ||
-              news.configuration.revision !==
-                observed.Configurations?.Current?.Revision)
+              news.configuration.revision !== observed.Configurations?.Current?.Revision)
           ) {
             update.Configuration = {
               Id: news.configuration.id,
@@ -614,12 +569,9 @@ export const BrokerProvider = () =>
           }
           if (
             news.maintenanceWindow !== undefined &&
-            (news.maintenanceWindow.dayOfWeek !==
-              observed.MaintenanceWindowStartTime?.DayOfWeek ||
-              news.maintenanceWindow.timeOfDay !==
-                observed.MaintenanceWindowStartTime?.TimeOfDay ||
-              news.maintenanceWindow.timeZone !==
-                observed.MaintenanceWindowStartTime?.TimeZone)
+            (news.maintenanceWindow.dayOfWeek !== observed.MaintenanceWindowStartTime?.DayOfWeek ||
+              news.maintenanceWindow.timeOfDay !== observed.MaintenanceWindowStartTime?.TimeOfDay ||
+              news.maintenanceWindow.timeZone !== observed.MaintenanceWindowStartTime?.TimeZone)
           ) {
             update.MaintenanceWindowStartTime = {
               DayOfWeek: news.maintenanceWindow.dayOfWeek,
@@ -630,8 +582,7 @@ export const BrokerProvider = () =>
           if (
             news.authenticationStrategy !== undefined &&
             news.authenticationStrategy !== observed.AuthenticationStrategy &&
-            news.authenticationStrategy !==
-              observed.PendingAuthenticationStrategy
+            news.authenticationStrategy !== observed.PendingAuthenticationStrategy
           ) {
             update.AuthenticationStrategy = news.authenticationStrategy;
           }
@@ -640,11 +591,7 @@ export const BrokerProvider = () =>
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
-          yield* syncMqTags(
-            observed.BrokerArn!,
-            toTagRecord(observed.Tags),
-            desiredTags,
-          );
+          yield* syncMqTags(observed.BrokerArn!, toTagRecord(observed.Tags), desiredTags);
 
           // 4. Re-read for fresh attributes (endpoints appear once RUNNING).
           const final = (yield* readBroker(brokerId)) ?? observed;
@@ -654,9 +601,7 @@ export const BrokerProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A broker mid-operation rejects deletion — wait for it to settle.
-          yield* waitForSettled(output.brokerId).pipe(
-            Effect.catch(() => Effect.void),
-          );
+          yield* waitForSettled(output.brokerId).pipe(Effect.catch(() => Effect.void));
           yield* mq
             .deleteBroker({ BrokerId: output.brokerId })
             .pipe(Effect.catchTag("NotFoundException", () => Effect.void));

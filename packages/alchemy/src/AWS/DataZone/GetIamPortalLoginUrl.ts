@@ -9,9 +9,8 @@ import type { Domain } from "./Domain.ts";
  * Mints a single-use data portal sign-in URL for the bound domain, e.g. to embed in a notification. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.GetIamPortalLoginUrlHttp)`.
- * @binding
- * @section Portal, Profiles & Notifications
- * @example Mint a Portal URL
+ * ### Portal, Profiles & Notifications
+ * **Example:** Mint a Portal URL
  * ```typescript
  * // init — bind the operation to the domain
  * const getIamPortalLoginUrl = yield* AWS.DataZone.GetIamPortalLoginUrl(domain);
@@ -19,6 +18,8 @@ import type { Domain } from "./Domain.ts";
  * // runtime
  * const { authCodeUrl } = yield* getIamPortalLoginUrl();
  * ```
+ *
+ * @binding
  */
 export interface GetIamPortalLoginUrl extends Binding.Service<
   GetIamPortalLoginUrl,
@@ -26,10 +27,7 @@ export interface GetIamPortalLoginUrl extends Binding.Service<
   (
     domain: Domain,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      datazone.GetIamPortalLoginUrlOutput,
-      datazone.GetIamPortalLoginUrlError
-    >
+    () => Effect.Effect<datazone.GetIamPortalLoginUrlOutput, datazone.GetIamPortalLoginUrlError>
   >
 > {}
 export const GetIamPortalLoginUrl = Binding.Service<GetIamPortalLoginUrl>(

@@ -3,10 +3,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createAlchemyTagFilters,
@@ -16,15 +15,14 @@ import {
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { RegionID } from "../Region.ts";
 import type { Providers } from "../Providers.ts";
+import type { RegionID } from "../Region.ts";
 
 export type VolumeId<ID extends string = string> = `vol-${ID}`;
 export const VolumeId = <ID extends string>(id: ID): ID & VolumeId<ID> =>
   `vol-${id}` as ID & VolumeId<ID>;
 
-export type VolumeArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:volume/${VolumeId}`;
+export type VolumeArn = `arn:aws:ec2:${RegionID}:${AccountID}:volume/${VolumeId}`;
 
 export interface VolumeProps {
   /**
@@ -170,9 +168,8 @@ export interface Volume extends Resource<
  * `throughput`, or `volumeType` are applied in place via `modifyVolume` (note
  * AWS enforces a 6-hour cooldown between volume modifications).
  *
- * @resource
- * @section Creating a Volume
- * @example Basic gp3 Volume
+ * ### Creating a Volume
+ * **Example:** Basic gp3 Volume
  * ```typescript
  * const volume = yield* AWS.EC2.Volume("DataVolume", {
  *   availabilityZone: "us-east-1a",
@@ -184,8 +181,8 @@ export interface Volume extends Resource<
  * The minimal volume: a 20 GiB general-purpose `gp3` volume in one AZ. It must
  * be in the same AZ as the instance you attach it to.
  *
- * @section Provisioned Performance
- * @example gp3 with Provisioned IOPS and Throughput
+ * ### Provisioned Performance
+ * **Example:** gp3 with Provisioned IOPS and Throughput
  * ```typescript
  * const fast = yield* AWS.EC2.Volume("FastVolume", {
  *   availabilityZone: "us-east-1a",
@@ -200,8 +197,8 @@ export interface Volume extends Resource<
  * 16,000 IOPS and 1,000 MiB/s independently. Use `io2` for the highest
  * durability and IOPS ceilings.
  *
- * @section Encryption
- * @example Encrypted Volume with a KMS Key
+ * ### Encryption
+ * **Example:** Encrypted Volume with a KMS Key
  * ```typescript
  * const secure = yield* AWS.EC2.Volume("SecureVolume", {
  *   availabilityZone: "us-east-1a",
@@ -214,8 +211,8 @@ export interface Volume extends Resource<
  * Setting `kmsKeyId` implies encryption. Omit it while setting `encrypted:
  * true` to use the account's default EBS KMS key.
  *
- * @section Creating from a Snapshot
- * @example Restore a Volume from a Snapshot
+ * ### Creating from a Snapshot
+ * **Example:** Restore a Volume from a Snapshot
  * ```typescript
  * const restored = yield* AWS.EC2.Volume("RestoredVolume", {
  *   availabilityZone: "us-east-1a",
@@ -225,6 +222,8 @@ export interface Volume extends Resource<
  *
  * When you create a volume from a snapshot, `size` defaults to the snapshot's
  * size and can only be grown, never shrunk.
+ *
+ * @resource
  */
 export const Volume = Resource<Volume>("AWS.EC2.Volume");
 
@@ -236,25 +235,16 @@ export const VolumeProvider = () =>
       // volume after state persistence failure via the resource instance tag;
       // logical-id-only tags are insufficient during replacement because the
       // old and new volume instances can coexist.
-      const findVolumeByInstanceTags = Effect.fn(function* (
-        id: string,
-        instanceId: string,
-      ) {
+      const findVolumeByInstanceTags = Effect.fn(function* (id: string, instanceId: string) {
         const filters = yield* createAlchemyTagFilters(id);
         const pages = yield* ec2.describeVolumes
           .pages({
-            Filters: [
-              ...filters,
-              { Name: "tag:alchemy::instance", Values: [instanceId] },
-            ],
+            Filters: [...filters, { Name: "tag:alchemy::instance", Values: [instanceId] }],
           })
           .pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.Volumes ?? [])
-          .find(
-            (volume) =>
-              volume.State !== "deleting" && volume.State !== "deleted",
-          );
+          .find((volume) => volume.State !== "deleting" && volume.State !== "deleted");
       });
 
       return {
@@ -280,22 +270,12 @@ export const VolumeProvider = () =>
             return { action: "replace" };
           }
           // Shrinking a volume is not supported in place — replace.
-          if (
-            olds.size !== undefined &&
-            news.size !== undefined &&
-            news.size < olds.size
-          ) {
+          if (olds.size !== undefined && news.size !== undefined && news.size < olds.size) {
             return { action: "replace" };
           }
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const alchemyTags = yield* createInternalTags(id);
           const desiredTags = {
@@ -311,16 +291,10 @@ export const VolumeProvider = () =>
             const lookup = yield* ec2
               .describeVolumes({ VolumeIds: [output.volumeId] })
               .pipe(
-                Effect.catchTag("InvalidVolume.NotFound", () =>
-                  Effect.succeed({ Volumes: [] }),
-                ),
+                Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })),
               );
             const found = lookup.Volumes?.[0];
-            if (
-              found &&
-              found.State !== "deleting" &&
-              found.State !== "deleted"
-            ) {
+            if (found && found.State !== "deleting" && found.State !== "deleted") {
               volume = found;
             }
           }
@@ -337,9 +311,7 @@ export const VolumeProvider = () =>
               VolumeType: news.volumeType ?? "gp3",
               Iops: news.iops,
               Throughput: news.throughput,
-              Encrypted:
-                news.encrypted ??
-                (news.kmsKeyId !== undefined ? true : undefined),
+              Encrypted: news.encrypted ?? (news.kmsKeyId !== undefined ? true : undefined),
               KmsKeyId: news.kmsKeyId,
               SnapshotId: news.snapshotId,
               MultiAttachEnabled: news.multiAttachEnabled,
@@ -368,10 +340,7 @@ export const VolumeProvider = () =>
             modify.Size = news.size;
             needsModify = true;
           }
-          if (
-            news.volumeType !== undefined &&
-            news.volumeType !== volume.VolumeType
-          ) {
+          if (news.volumeType !== undefined && news.volumeType !== volume.VolumeType) {
             modify.VolumeType = news.volumeType;
             needsModify = true;
           }
@@ -379,10 +348,7 @@ export const VolumeProvider = () =>
             modify.Iops = news.iops;
             needsModify = true;
           }
-          if (
-            news.throughput !== undefined &&
-            news.throughput !== volume.Throughput
-          ) {
+          if (news.throughput !== undefined && news.throughput !== volume.Throughput) {
             modify.Throughput = news.throughput;
             needsModify = true;
           }
@@ -423,13 +389,9 @@ export const VolumeProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const chunk = yield* ec2.describeVolumes
-              .pages({})
-              .pipe(Stream.runCollect);
+            const chunk = yield* ec2.describeVolumes.pages({}).pipe(Stream.runCollect);
             return Array.from(chunk).flatMap((page) =>
-              (page.Volumes ?? []).map((v) =>
-                toVolumeAttributes(v, region, accountId),
-              ),
+              (page.Volumes ?? []).map((v) => toVolumeAttributes(v, region, accountId)),
             );
           }),
 
@@ -444,14 +406,9 @@ export const VolumeProvider = () =>
             // until the detach completes.
             Effect.retry({
               while: (e) => e._tag === "VolumeInUse",
-              schedule: Schedule.max([
-                Schedule.fixed(3000),
-                Schedule.recurs(20),
-              ]).pipe(
+              schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(20)]).pipe(
                 Schedule.tap(({ attempt }) =>
-                  session.note(
-                    `Waiting for volume to detach... (attempt ${attempt + 1})`,
-                  ),
+                  session.note(`Waiting for volume to detach... (attempt ${attempt + 1})`),
                 ),
               ),
             }),
@@ -472,8 +429,7 @@ const toVolumeAttributes = (
   const volumeId = volume.VolumeId! as VolumeId;
   return {
     volumeId,
-    volumeArn:
-      `arn:aws:ec2:${region}:${accountId}:volume/${volumeId}` as VolumeArn,
+    volumeArn: `arn:aws:ec2:${region}:${accountId}:volume/${volumeId}` as VolumeArn,
     availabilityZone: volume.AvailabilityZone!,
     size: volume.Size ?? 0,
     volumeType: volume.VolumeType ?? "gp3",
@@ -481,10 +437,7 @@ const toVolumeAttributes = (
     throughput: volume.Throughput,
     encrypted: volume.Encrypted ?? false,
     kmsKeyId: volume.KmsKeyId,
-    snapshotId:
-      volume.SnapshotId && volume.SnapshotId.length > 0
-        ? volume.SnapshotId
-        : undefined,
+    snapshotId: volume.SnapshotId && volume.SnapshotId.length > 0 ? volume.SnapshotId : undefined,
     multiAttachEnabled: volume.MultiAttachEnabled ?? false,
     state: volume.State ?? "creating",
   };
@@ -504,10 +457,7 @@ class VolumeStillExists extends Data.TaggedError("VolumeStillExists")<{
 /**
  * Wait for the volume to reach the `available` state.
  */
-const waitForVolumeAvailable = (
-  volumeId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForVolumeAvailable = (volumeId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeVolumes({ VolumeIds: [volumeId] });
     const volume = result.Volumes?.[0];
@@ -518,9 +468,7 @@ const waitForVolumeAvailable = (
       return volume;
     }
     if (volume.State === "error") {
-      return yield* Effect.fail(
-        new Error(`Volume ${volumeId} entered error state`),
-      );
+      return yield* Effect.fail(new Error(`Volume ${volumeId} entered error state`));
     }
     return yield* new VolumeNotReady({ volumeId, state: volume.State! });
   }).pipe(
@@ -532,9 +480,7 @@ const waitForVolumeAvailable = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for volume to be available... (${(attempt + 1) * 2}s)`,
-              )
+            ? session.note(`Waiting for volume to be available... (${(attempt + 1) * 2}s)`)
             : Effect.void,
         ),
       ),
@@ -544,18 +490,11 @@ const waitForVolumeAvailable = (
 /**
  * Wait for the volume to be fully deleted.
  */
-const waitForVolumeDeleted = (
-  volumeId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForVolumeDeleted = (volumeId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeVolumes({ VolumeIds: [volumeId] })
-      .pipe(
-        Effect.catchTag("InvalidVolume.NotFound", () =>
-          Effect.succeed({ Volumes: [] }),
-        ),
-      );
+      .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
     const volume = result.Volumes?.[0];
     // Do not treat `deleting` as deleted. The provider's delete contract is
     // complete only after EC2 stops returning the volume; otherwise nuke can
@@ -575,13 +514,13 @@ const waitForVolumeDeleted = (
       while: (e) => e instanceof VolumeStillExists,
       schedule: Schedule.max([
         Schedule.fixed(2000),
-        // give the delete call ~60s to be reflected by describeVolumes
-        Schedule.recurs(30),
+        // DeleteVolume is accepted immediately but describe can keep
+        // returning `deleting` well past a minute after a snapshot (the
+        // suite log hit the old 60s cap with the volume still present).
+        Schedule.recurs(45),
       ]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(
-            `Waiting for volume deletion... (${(attempt + 1) * 2}s)`,
-          ),
+          session.note(`Waiting for volume deletion... (${(attempt + 1) * 2}s)`),
         ),
       ),
     }),

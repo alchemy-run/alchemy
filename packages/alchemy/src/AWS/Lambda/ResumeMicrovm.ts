@@ -10,13 +10,14 @@ export interface ResumeMicrovmRequest extends microvms.ResumeMicrovmRequest {}
  *
  * Bind it to a {@link MicrovmImage} to get a callable that resumes a suspended
  * MicroVM by `microvmIdentifier`, restoring it to `RUNNING`.
- * @binding
- * @section Lifecycle
- * @example Resume a MicroVM
+ * ### Lifecycle
+ * **Example:** Resume a MicroVM
  * ```typescript
  * const resumeMicrovm = yield* AWS.Lambda.ResumeMicrovm(Sandbox);
  * yield* resumeMicrovm({ microvmIdentifier: id });
  * ```
+ *
+ * @binding
  */
 export interface ResumeMicrovm extends Binding.Service<
   ResumeMicrovm,
@@ -26,12 +27,7 @@ export interface ResumeMicrovm extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ResumeMicrovmRequest,
-    ) => Effect.Effect<
-      microvms.ResumeMicrovmResponse,
-      microvms.ResumeMicrovmError
-    >
+    ) => Effect.Effect<microvms.ResumeMicrovmResponse, microvms.ResumeMicrovmError>
   >
 > {}
-export const ResumeMicrovm = Binding.Service<ResumeMicrovm>(
-  "AWS.Lambda.ResumeMicrovm",
-);
+export const ResumeMicrovm = Binding.Service<ResumeMicrovm>("AWS.Lambda.ResumeMicrovm");

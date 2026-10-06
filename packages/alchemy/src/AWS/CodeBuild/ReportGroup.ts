@@ -88,16 +88,15 @@ export interface ReportGroup extends Resource<
  * bindings ({@link BatchGetReports}, {@link DescribeTestCases}, …) let
  * runtime code query them.
  *
- * @resource
- * @section Creating a Report Group
- * @example Test Report Group
+ * ### Creating a Report Group
+ * **Example:** Test Report Group
  * ```typescript
  * const reports = yield* CodeBuild.ReportGroup("UnitTests", {
  *   type: "TEST",
  * });
  * ```
  *
- * @example Coverage Group Exported to S3
+ * **Example:** Coverage Group Exported to S3
  * ```typescript
  * const coverage = yield* CodeBuild.ReportGroup("Coverage", {
  *   type: "CODE_COVERAGE",
@@ -107,6 +106,8 @@ export interface ReportGroup extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const ReportGroup = Resource<ReportGroup>("AWS.CodeBuild.ReportGroup");
 
@@ -145,13 +146,9 @@ const sameExportConfig = (
   desired: codebuild.ReportExportConfig,
 ): boolean =>
   (observed?.exportConfigType ?? "NO_EXPORT") === desired.exportConfigType &&
-  JSON.stringify(observed?.s3Destination ?? null) ===
-    JSON.stringify(desired.s3Destination ?? null);
+  JSON.stringify(observed?.s3Destination ?? null) === JSON.stringify(desired.s3Destination ?? null);
 
-const sameTags = (
-  observed: Record<string, string>,
-  desired: Record<string, string>,
-): boolean =>
+const sameTags = (observed: Record<string, string>, desired: Record<string, string>): boolean =>
   Object.keys(observed).length === Object.keys(desired).length &&
   Object.entries(desired).every(([k, v]) => observed[k] === v);
 
@@ -179,8 +176,7 @@ export const ReportGroupProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           if (
-            (yield* toName(id, olds ?? {})) !==
-              (yield* toName(id, news ?? {})) ||
+            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {})) ||
             olds?.type !== news.type
           ) {
             return { action: "replace" } as const;
@@ -188,8 +184,7 @@ export const ReportGroupProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.reportGroupName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.reportGroupName ?? (yield* toName(id, olds ?? {}));
           const arn = output?.reportGroupArn ?? (yield* reportGroupArn(name));
           const group = yield* getReportGroup(arn);
           if (group === undefined || group.arn === undefined) {
@@ -232,9 +227,7 @@ export const ReportGroupProvider = () =>
               })
               .pipe(
                 Effect.map((res) => res.reportGroup),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               );
           }
 
@@ -249,17 +242,13 @@ export const ReportGroupProvider = () =>
               })
               .pipe(
                 Effect.map((res) => res.reportGroup),
-                Effect.catchTag("ResourceAlreadyExistsException", () =>
-                  getReportGroup(arn),
-                ),
+                Effect.catchTag("ResourceAlreadyExistsException", () => getReportGroup(arn)),
               );
           }
 
           if (observed === undefined || observed.arn === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `CodeBuild report group '${name}' disappeared while reconciling`,
-              ),
+              new Error(`CodeBuild report group '${name}' disappeared while reconciling`),
             );
           }
 
@@ -283,14 +272,10 @@ export const ReportGroupProvider = () =>
         list: () =>
           codebuild.listReportGroups.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.reportGroups ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.reportGroups ?? [])),
             Effect.flatMap((arns) =>
               arns.length === 0
-                ? Effect.succeed(
-                    [] as { reportGroupName: string; reportGroupArn: string }[],
-                  )
+                ? Effect.succeed([] as { reportGroupName: string; reportGroupArn: string }[])
                 : Effect.forEach(
                     // batchGetReportGroups accepts up to 100 ARNs per call.
                     chunkArns(arns, 100),

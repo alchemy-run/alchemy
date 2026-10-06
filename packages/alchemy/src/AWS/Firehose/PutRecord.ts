@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { DeliveryStream } from "./DeliveryStream.ts";
 
-export interface PutRecordRequest extends Omit<
-  Firehose.PutRecordInput,
-  "DeliveryStreamName"
-> {}
+export interface PutRecordRequest extends Omit<Firehose.PutRecordInput, "DeliveryStreamName"> {}
 
 /**
  * Writes a single data record into a Firehose delivery stream.
@@ -14,9 +11,8 @@ export interface PutRecordRequest extends Omit<
  * Grants `firehose:PutRecord` on the bound delivery stream. The data blob
  * can be up to 1,000 KiB; Firehose buffers records before delivering them to
  * the destination, so use a delimiter (e.g. `\n`) to disambiguate records.
- * @binding
- * @section Putting Records
- * @example Put a record from a handler
+ * ### Putting Records
+ * **Example:** Put a record from a handler
  * ```typescript
  * // init
  * const putRecord = yield* AWS.Firehose.PutRecord(deliveryStream);
@@ -31,6 +27,8 @@ export interface PutRecordRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface PutRecord extends Binding.Service<
   PutRecord,
@@ -38,9 +36,7 @@ export interface PutRecord extends Binding.Service<
   (
     deliveryStream: DeliveryStream,
   ) => Effect.Effect<
-    (
-      request: PutRecordRequest,
-    ) => Effect.Effect<Firehose.PutRecordOutput, Firehose.PutRecordError>
+    (request: PutRecordRequest) => Effect.Effect<Firehose.PutRecordOutput, Firehose.PutRecordError>
   >
 > {}
 

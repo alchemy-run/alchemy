@@ -46,9 +46,8 @@ export interface SigningCertificate extends Resource<
  *
  * `SigningCertificate` uploads an X.509 signing certificate for legacy
  * IAM-integrated workflows that still depend on user-scoped certificates.
- * @resource
- * @section Managing User Certificates
- * @example Upload a Signing Certificate
+ * ### Managing User Certificates
+ * **Example:** Upload a Signing Certificate
  * ```typescript
  * const user = yield* User("Signer", {
  *   userName: "build-signer",
@@ -59,10 +58,10 @@ export interface SigningCertificate extends Resource<
  *   certificateBody: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
  * });
  * ```
+ *
+ * @resource
  */
-export const SigningCertificate = Resource<SigningCertificate>(
-  "AWS.IAM.SigningCertificate",
-);
+export const SigningCertificate = Resource<SigningCertificate>("AWS.IAM.SigningCertificate");
 
 export const SigningCertificateProvider = () =>
   Provider.succeed(SigningCertificate, {
@@ -76,9 +75,7 @@ export const SigningCertificateProvider = () =>
     list: Effect.fn(function* () {
       const users = yield* iam.listUsers.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.Users ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Users ?? [])),
       );
       const perUser = yield* Effect.forEach(
         users,
@@ -105,10 +102,7 @@ export const SigningCertificateProvider = () =>
     }),
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
-      if (
-        olds.userName !== news.userName ||
-        olds.certificateBody !== news.certificateBody
-      ) {
+      if (olds.userName !== news.userName || olds.certificateBody !== news.certificateBody) {
         return { action: "replace" } as const;
       }
     }),
@@ -139,18 +133,12 @@ export const SigningCertificateProvider = () =>
       // immutable (`diff` triggers replacement on body change), so a
       // missing entry always means we need to upload.
       const observed = output
-        ? yield* iam
-            .listSigningCertificates({ UserName: output.userName })
-            .pipe(
-              Effect.map((r) =>
-                r.Certificates.find(
-                  (entry) => entry.CertificateId === output.certificateId,
-                ),
-              ),
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            )
+        ? yield* iam.listSigningCertificates({ UserName: output.userName }).pipe(
+            Effect.map((r) =>
+              r.Certificates.find((entry) => entry.CertificateId === output.certificateId),
+            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          )
         : undefined;
 
       // Ensure — upload when missing.

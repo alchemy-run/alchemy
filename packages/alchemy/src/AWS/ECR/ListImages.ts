@@ -17,15 +17,16 @@ export interface ListImagesRequest extends Omit<
  *
  * Lists the image IDs (digest + tag) in the bound repository. Provide the implementation with
  * `Effect.provide(AWS.ECR.ListImagesHttp)`.
- * @binding
- * @section Reading Images
- * @example List Tagged Image IDs
+ * ### Reading Images
+ * **Example:** List Tagged Image IDs
  * ```typescript
  * const listImages = yield* AWS.ECR.ListImages(repository);
  *
  * const res = yield* listImages({ filter: { tagStatus: "TAGGED" } });
  * for (const id of res.imageIds ?? []) console.log(id.imageTag);
  * ```
+ *
+ * @binding
  */
 export interface ListImages extends Binding.Service<
   ListImages,
@@ -33,9 +34,7 @@ export interface ListImages extends Binding.Service<
   (
     repository: Repository,
   ) => Effect.Effect<
-    (
-      request?: ListImagesRequest,
-    ) => Effect.Effect<ecr.ListImagesResponse, ecr.ListImagesError>
+    (request?: ListImagesRequest) => Effect.Effect<ecr.ListImagesResponse, ecr.ListImagesError>
   >
 > {}
 

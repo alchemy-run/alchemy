@@ -7,20 +7,11 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
+import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
 import type { ServiceNetworkAuthType } from "./ServiceNetwork.ts";
-import {
-  retryOnConflict,
-  waitUntilAbsent,
-  waitUntilStable,
-} from "./internal.ts";
 
 export interface ServiceProps {
   /**
@@ -96,14 +87,13 @@ export interface Service extends Resource<
  * (running on Lambda, ECS, EC2, or elsewhere) that is made discoverable through
  * a service network. Cheap control-plane resource.
  *
- * @resource
- * @section Creating Services
- * @example Basic Service
+ * ### Creating Services
+ * **Example:** Basic Service
  * ```typescript
  * const service = yield* Service("PaymentsService", {});
  * ```
  *
- * @example Service with Custom Domain
+ * **Example:** Service with Custom Domain
  * ```typescript
  * const service = yield* Service("PaymentsService", {
  *   customDomainName: "payments.internal.example.com",
@@ -112,6 +102,8 @@ export interface Service extends Resource<
  *   idleTimeout: "60 seconds",
  * });
  * ```
+ *
+ * @resource
  */
 export const Service = Resource<Service>("AWS.VpcLattice.Service");
 
@@ -128,11 +120,7 @@ export const ServiceProvider = () =>
       const observe = (serviceIdentifier: string) =>
         vpclattice
           .getService({ serviceIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findByName = (name: string) =>
         vpclattice.listServices.pages({}).pipe(
@@ -147,17 +135,11 @@ export const ServiceProvider = () =>
           ),
         );
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({
           resourceArn: arn,
         });
-        const { removed, upsert } = diffTags(
-          tagRecord(listed.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(tagRecord(listed.tags), desiredTags);
         if (upsert.length > 0) {
           yield* vpclattice.tagResource({
             resourceArn: arn,
@@ -176,9 +158,7 @@ export const ServiceProvider = () =>
         stables: ["serviceId", "serviceArn", "name"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Custom domain name is fixed at creation time.
@@ -203,9 +183,7 @@ export const ServiceProvider = () =>
             authType: (service.authType as ServiceNetworkAuthType) ?? "NONE",
             tags: tagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, listed.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -229,13 +207,9 @@ export const ServiceProvider = () =>
                 certificateArn: news.certificateArn,
                 idleTimeoutSeconds: desiredIdleTimeoutSeconds,
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () => findByName(name)),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(
-                new Error(`Failed to create service ${name}`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create service ${name}`));
             }
             serviceId = created.id;
             serviceArn = created.arn;
@@ -269,8 +243,7 @@ export const ServiceProvider = () =>
             serviceArn,
             name,
             status: final?.status ?? stable?.status ?? "ACTIVE",
-            dnsName:
-              final?.dnsEntry?.domainName ?? stable?.dnsEntry?.domainName,
+            dnsName: final?.dnsEntry?.domainName ?? stable?.dnsEntry?.domainName,
             authType: desiredAuthType,
             tags: desiredTags,
           };
@@ -279,14 +252,11 @@ export const ServiceProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* vpclattice.listServices.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.items ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
             );
             return yield* Effect.forEach(
               summaries.filter(
-                (s): s is typeof s & { id: string; arn: string } =>
-                  s.id != null && s.arn != null,
+                (s): s is typeof s & { id: string; arn: string } => s.id != null && s.arn != null,
               ),
               (summary) =>
                 Effect.gen(function* () {
@@ -300,8 +270,7 @@ export const ServiceProvider = () =>
                     name: summary.name!,
                     status: summary.status ?? "UNKNOWN",
                     dnsName: summary.dnsEntry?.domainName,
-                    authType:
-                      (service?.authType as ServiceNetworkAuthType) ?? "NONE",
+                    authType: (service?.authType as ServiceNetworkAuthType) ?? "NONE",
                     tags: tagRecord(listed.tags),
                   };
                 }),
@@ -311,9 +280,7 @@ export const ServiceProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* retryOnConflict(
             vpclattice.deleteService({ serviceIdentifier: output.serviceId }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitUntilAbsent(observe(output.serviceId));
         }),
       };

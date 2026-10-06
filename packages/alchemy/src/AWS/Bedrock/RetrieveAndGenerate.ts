@@ -10,8 +10,7 @@ import type { KnowledgeBase } from "./KnowledgeBase.ts";
  * binding scopes IAM to the bound knowledge base and the bound generation
  * models.
  */
-export interface RetrieveAndGenerateRequest
-  extends bedrock.RetrieveAndGenerateRequest {}
+export interface RetrieveAndGenerateRequest extends bedrock.RetrieveAndGenerateRequest {}
 
 /**
  * Runtime binding for `bedrock-agent-runtime:RetrieveAndGenerate` — the fully
@@ -25,9 +24,8 @@ export interface RetrieveAndGenerateRequest
  * `bedrock:InvokeModel` scoped to the bound models (or all foundation models
  * and cross-region inference profiles when none are named).
  *
- * @binding
- * @section Retrieving and Generating
- * @example One-Shot Grounded Answer
+ * ### Retrieving and Generating
+ * **Example:** One-Shot Grounded Answer
  * ```typescript
  * // init
  * const rag = yield* Bedrock.RetrieveAndGenerate(
@@ -48,6 +46,8 @@ export interface RetrieveAndGenerateRequest
  * });
  * const answer = result.output.text;
  * ```
+ *
+ * @binding
  */
 export interface RetrieveAndGenerate extends Binding.Service<
   RetrieveAndGenerate,
@@ -58,10 +58,7 @@ export interface RetrieveAndGenerate extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RetrieveAndGenerateRequest,
-    ) => Effect.Effect<
-      bedrock.RetrieveAndGenerateResponse,
-      bedrock.RetrieveAndGenerateError
-    >
+    ) => Effect.Effect<bedrock.RetrieveAndGenerateResponse, bedrock.RetrieveAndGenerateError>
   >
 > {}
 export const RetrieveAndGenerate = Binding.Service<RetrieveAndGenerate>(

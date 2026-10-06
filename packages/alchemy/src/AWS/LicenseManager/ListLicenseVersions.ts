@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListLicenseVersions}.
  */
-export interface ListLicenseVersionsRequest
-  extends licensemanager.ListLicenseVersionsRequest {}
+export interface ListLicenseVersionsRequest extends licensemanager.ListLicenseVersionsRequest {}
 
 /**
  * Runtime binding for `license-manager:ListLicenseVersions` — list all
@@ -14,9 +13,8 @@ export interface ListLicenseVersionsRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.ListLicenseVersionsHttp)`.
- * @binding
- * @section Reading Licenses and Grants
- * @example List a License's Versions
+ * ### Reading Licenses and Grants
+ * **Example:** List a License's Versions
  * ```typescript
  * // init
  * const listVersions = yield* AWS.LicenseManager.ListLicenseVersions();
@@ -24,6 +22,8 @@ export interface ListLicenseVersionsRequest
  * // runtime
  * const { Licenses } = yield* listVersions({ LicenseArn: licenseArn });
  * ```
+ *
+ * @binding
  */
 export interface ListLicenseVersions extends Binding.Service<
   ListLicenseVersions,

@@ -1,6 +1,6 @@
+import { describe, expect, it } from "alchemy-test";
 import * as Prisma from "@/Prisma";
 import type { PrismaManagementClient } from "@/Prisma/Client";
-import { describe, expect, it } from "alchemy-test";
 import {
   managementApiContract,
   productionManagementApiRoutes,
@@ -72,6 +72,25 @@ const lifecycleResources = [
       "GET /v1/branches/{branchId}",
       "PATCH /v1/branches/{branchId}",
       "DELETE /v1/branches/{branchId}",
+    ],
+  },
+  {
+    name: "Bucket",
+    resource: Prisma.Bucket,
+    routes: [
+      "GET /v1/buckets",
+      "POST /v1/buckets",
+      "GET /v1/buckets/{bucketId}",
+      "DELETE /v1/buckets/{bucketId}",
+    ],
+  },
+  {
+    name: "BucketAccessKey",
+    resource: Prisma.BucketAccessKey,
+    routes: [
+      "GET /v1/buckets/{bucketId}/keys",
+      "POST /v1/buckets/{bucketId}/keys",
+      "DELETE /v1/buckets/{bucketId}/keys/{keyId}",
     ],
   },
   {
@@ -162,31 +181,63 @@ const expectedManagementApiRoutes = [
   ...operationOnlyRoutes,
 ].sort();
 
-describe("Prisma Management API coverage", () => {
-  it("maps lifecycle route groups to Alchemy resources", () => {
-    for (const { name, resource } of lifecycleResources) {
-      expect(resource.Type).toBe(`Prisma.${name}`);
-    }
-  });
+describe("Prisma Management API coverage", { tags: ["unit", "provider:prisma", "local"] }, () => {
+  it(
+    "maps lifecycle route groups to Alchemy resources",
+    () => {
+      for (const { name, resource } of lifecycleResources) {
+        expect(resource.Type).toBe(`Prisma.${name}`);
+      }
+    },
+    {
+      tags: [
+        "provider:prisma:app",
+        "provider:prisma:branch",
+        "provider:prisma:bucket",
+        "provider:prisma:bucketaccesskey",
+        "provider:prisma:connection",
+        "provider:prisma:customdomain",
+        "provider:prisma:database",
+        "provider:prisma:deployment",
+        "provider:prisma:environmentvariable",
+        "provider:prisma:project",
+        "provider:prisma:sourcerepository",
+      ],
+    },
+  );
 
-  it("accounts for every route in the pinned Management API contract", () => {
-    expect(managementApiContract.repository).toBe("prisma/pdp-control-plane");
-    expect(managementApiContract.commit).toMatch(/^[0-9a-f]{40}$/);
-    expect(managementApiContract.routes).toHaveLength(78);
-    expect(managementApiContract.deferredRoutes).toHaveLength(7);
-    expect(
-      managementApiContract.deferredRoutes.every((route) =>
-        managementApiContract.routes.includes(route),
-      ),
-    ).toBe(true);
-    expect(expectedManagementApiRoutes).toHaveLength(71);
-    expect(expectedManagementApiRoutes).toEqual(
-      [...productionManagementApiRoutes].sort(),
-    );
-    expect(
-      expectedManagementApiRoutes.some((route) => route.includes("/__admin")),
-    ).toBe(false);
-  });
+  it(
+    "accounts for every route in the pinned Management API contract",
+    () => {
+      expect(managementApiContract.repository).toBe("prisma/pdp-control-plane");
+      expect(managementApiContract.commit).toMatch(/^[0-9a-f]{40}$/);
+      expect(managementApiContract.routes).toHaveLength(78);
+      expect(managementApiContract.deferredRoutes).toHaveLength(0);
+      expect(
+        managementApiContract.deferredRoutes.every((route) =>
+          managementApiContract.routes.includes(route),
+        ),
+      ).toBe(true);
+      expect(expectedManagementApiRoutes).toHaveLength(78);
+      expect(expectedManagementApiRoutes).toEqual([...productionManagementApiRoutes].sort());
+      expect(expectedManagementApiRoutes.some((route) => route.includes("/__admin"))).toBe(false);
+    },
+    {
+      tags: [
+        "provider:prisma:app",
+        "provider:prisma:branch",
+        "provider:prisma:bucket",
+        "provider:prisma:bucketaccesskey",
+        "provider:prisma:connection",
+        "provider:prisma:customdomain",
+        "provider:prisma:database",
+        "provider:prisma:deployment",
+        "provider:prisma:environmentvariable",
+        "provider:prisma:project",
+        "provider:prisma:sourcerepository",
+      ],
+    },
+  );
 
   it("exports the canonical app and deployment operations", () => {
     for (const operation of canonicalComputeOperations) {

@@ -1,11 +1,10 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 import { isResolved } from "../../Diff.ts";
+import { hashDockerBuildInputs, resolveDockerBuildPaths } from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -35,9 +34,7 @@ export const getEcrRegistryCredentials = Effect.gen(function* () {
   const token = authData?.authorizationToken;
   const proxyEndpoint = authData?.proxyEndpoint;
   if (!token || !proxyEndpoint) {
-    return yield* Effect.die(
-      new Error("Failed to get ECR authorization token"),
-    );
+    return yield* Effect.die(new Error("Failed to get ECR authorization token"));
   }
   const password = yield* Effect.sync(() => {
     const raw = Redacted.isRedacted(token) ? Redacted.value(token) : token;
@@ -71,6 +68,8 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform?: string;
     /** Docker build arguments. */
     buildArgs?: Record<string, string>;
+    /** Additional arguments appended to `docker image build`. */
+    args?: string[];
   },
 ) {
   const credentials = yield* getEcrRegistryCredentials;
@@ -80,8 +79,18 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     file: options.dockerfile,
     platform: options.platform,
     "build-arg": options.buildArgs,
+    args: options.args,
   });
-  yield* docker.image.push(options.imageUri, credentials);
+  // Pushes are idempotent; transient registry-transport failures (Docker
+  // Desktop's embedded proxy timing out under load, ECR 503s, credential
+  // helper contention) resolve on a bounded re-attempt.
+  yield* docker.image.push(options.imageUri, credentials).pipe(
+    Effect.retry({
+      while: (): boolean => true,
+      schedule: Schedule.exponential("2 seconds"),
+      times: 3,
+    }),
+  );
   return options.imageUri;
 });
 
@@ -96,8 +105,8 @@ export interface ImageProps {
   /**
    * Docker build context directory. Every file under the context (plus the
    * Dockerfile, platform, and build args) participates in the content hash
-   * that identifies the image — the image is rebuilt and pushed only when
-   * that hash changes.
+   * that identifies the image. An existing image with the same hash is reused;
+   * missing images are rebuilt and pushed to the desired repository.
    */
   context: string;
   /**
@@ -144,13 +153,12 @@ export interface Image extends Resource<
  * ECR repository.
  *
  * The image is identified by a content hash over the build context,
- * Dockerfile, platform, and build args. Reconcile rebuilds and pushes only
- * when that hash changes — a content change produces a new tag and digest on
- * the same resource, so replacement is never needed.
+ * Dockerfile, platform, and build args. An existing image with that hash is
+ * reused; a missing image is rebuilt and pushed. A content change produces a
+ * new tag on the same resource, so replacement is never needed.
  *
- * @resource
- * @section Building Images
- * @example Push to an ECR Repository
+ * ### Building Images
+ * **Example:** Push to an ECR Repository
  * ```typescript
  * const repository = yield* AWS.ECR.Repository("AppRepository", {});
  * const image = yield* AWS.ECR.Image("AppImage", {
@@ -159,15 +167,30 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @example Auto-created Repository
+ * **Example:** Auto-created Repository
  * ```typescript
  * const image = yield* AWS.ECR.Image("AppImage", {
  *   context: "./app",
  * });
  * ```
  *
- * @section Build Configuration
- * @example Custom Dockerfile, Platform, and Build Args
+ * ### Moving an Unchanged Build Context
+ * **Example:** Relocate identical build inputs without rebuilding
+ * ```diff
+ * const image = yield* AWS.ECR.Image("AppImage", {
+ *   repositoryUri: repository.repositoryUri,
+ * -  context: "./app",
+ * +  context: "./relocated-app",
+ * });
+ * ```
+ *
+ * Absolute paths are not part of the image's identity. With identical build
+ * inputs and the same repository setting, this plans a no-op. Content,
+ * Dockerfile, platform, build-argument, and repository changes still update
+ * the image. A deleted image or auto-created repository is recreated on deploy.
+ *
+ * ### Build Configuration
+ * **Example:** Custom Dockerfile, Platform, and Build Args
  * ```typescript
  * const image = yield* AWS.ECR.Image("WorkerImage", {
  *   repositoryUri: repository.repositoryUri,
@@ -178,14 +201,16 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @section Consuming the Image
- * @example Reference from a Task Definition
+ * ### Consuming the Image
+ * **Example:** Reference from a Task Definition
  * ```typescript
  * const task = yield* AWS.ECS.Task("ApiTask", {
  *   main: import.meta.url,
  *   sidecars: [{ name: "proxy", image: image.imageUri, essential: false }],
  * });
  * ```
+ *
+ * @resource
  */
 export const Image = Resource<Image>("AWS.ECR.Image");
 
@@ -198,8 +223,6 @@ export const ImageProvider = () =>
     Image,
     Effect.gen(function* () {
       const docker = yield* Docker;
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
 
       const toOwnedRepositoryName = (id: string) =>
         createPhysicalName({
@@ -208,77 +231,32 @@ export const ImageProvider = () =>
           lowercase: true,
         });
 
-      const resolveBuildPaths = Effect.fn(function* (props: ImageProps) {
-        const context = path.resolve(props.context);
-        const dockerfile = props.dockerfile
-          ? path.isAbsolute(props.dockerfile)
-            ? props.dockerfile
-            : path.resolve(context, props.dockerfile)
-          : path.resolve(context, "Dockerfile");
-        if (!(yield* fs.exists(context))) {
-          return yield* Effect.fail(
-            new Error(`Docker build context does not exist: ${context}`),
-          );
-        }
-        if (!(yield* fs.exists(dockerfile))) {
-          return yield* Effect.fail(
-            new Error(`Dockerfile does not exist: ${dockerfile}`),
-          );
-        }
-        return { context, dockerfile };
-      });
-
       // Content hash over everything that affects the built image: the
       // Dockerfile, every file in the build context (relative path + bytes),
       // the target platform, and the build args. Absolute paths deliberately
       // do NOT participate, so relocating an identical context (e.g. a temp
       // dir) produces the same tag.
-      const hashBuildInputs = Effect.fn(function* (props: ImageProps) {
-        const { context, dockerfile } = yield* resolveBuildPaths(props);
-        const hasher = yield* Effect.sync(() => crypto.createHash("sha256"));
-        yield* Effect.sync(() =>
-          hasher.update(
-            JSON.stringify({
-              platform: props.platform ?? "linux/amd64",
-              buildArgs: Object.entries(props.buildArgs ?? {}).sort(
-                ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
-              ),
-            }),
-          ),
+      const hashBuildInputs = (props: ImageProps) =>
+        hashDockerBuildInputs(
+          {
+            context: props.context,
+            dockerfile: props.dockerfile ?? "Dockerfile",
+            platform: props.platform ?? "linux/amd64",
+            buildArgs: props.buildArgs,
+          },
+          "all",
         );
-        const dockerfileContent = yield* fs.readFile(dockerfile);
-        yield* Effect.sync(() => {
-          hasher.update("Dockerfile\0");
-          hasher.update(dockerfileContent);
-        });
-        const entries = yield* fs.readDirectory(context, { recursive: true });
-        for (const entry of [...entries].sort()) {
-          const full = path.join(context, entry);
-          const info = yield* fs.stat(full);
-          if (info.type !== "File") continue;
-          const content = yield* fs.readFile(full);
-          yield* Effect.sync(() => {
-            hasher.update(`${entry}\0`);
-            hasher.update(content);
-          });
-        }
-        return (yield* Effect.sync(() => hasher.digest("hex"))).slice(0, 32);
-      });
 
       // Observe the pushed image in ECR. Missing repository or tag → undefined.
-      const describeImage = Effect.fn(function* (
-        repositoryName: string,
-        imageTag: string,
-      ) {
+      const describeImage = Effect.fn(function* (repositoryName: string, imageTag: string) {
         const described = yield* ecr
           .describeImages({
             repositoryName,
             imageIds: [{ imageTag }],
           })
           .pipe(
-            Effect.catchTag(
-              ["ImageNotFoundException", "RepositoryNotFoundException"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
+              Effect.succeed(undefined),
             ),
           );
         return described?.imageDetails?.[0];
@@ -286,10 +264,7 @@ export const ImageProvider = () =>
 
       // Ensure the auto-created repository exists. Idempotent: tolerates
       // `RepositoryAlreadyExistsException` as a race / re-run and re-describes.
-      const ensureOwnedRepository = Effect.fn(function* (
-        id: string,
-        repositoryName: string,
-      ) {
+      const ensureOwnedRepository = Effect.fn(function* (id: string, repositoryName: string) {
         const internalTags = yield* createInternalTags(id);
         const created = yield* ecr
           .createRepository({
@@ -304,17 +279,13 @@ export const ImageProvider = () =>
             Effect.catchTag("RepositoryAlreadyExistsException", () =>
               ecr
                 .describeRepositories({ repositoryNames: [repositoryName] })
-                .pipe(
-                  Effect.map((res) => ({ repository: res.repositories?.[0] })),
-                ),
+                .pipe(Effect.map((res) => ({ repository: res.repositories?.[0] }))),
             ),
           );
         const repositoryUri = created.repository?.repositoryUri;
         if (!repositoryUri) {
           return yield* Effect.fail(
-            new Error(
-              `Failed to create or read ECR repository '${repositoryName}'`,
-            ),
+            new Error(`Failed to create or read ECR repository '${repositoryName}'`),
           );
         }
         return repositoryUri;
@@ -325,10 +296,7 @@ export const ImageProvider = () =>
           // The content hash cannot be recovered without running a build, so
           // a lost-state read has nothing to look up.
           if (!output) return undefined;
-          const detail = yield* describeImage(
-            output.repositoryName,
-            output.imageTag,
-          );
+          const detail = yield* describeImage(output.repositoryName, output.imageTag);
           if (!detail?.imageDigest) return undefined;
           return { ...output, digest: detail.imageDigest };
         }),
@@ -337,36 +305,39 @@ export const ImageProvider = () =>
         // the build inputs and request an update when the hash drifts from
         // the pushed tag. Replacement is never needed — a new hash is just a
         // new tag + digest on the same resource.
-        diff: Effect.fn(function* ({ news, output }) {
+        diff: Effect.fn(function* ({ news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
           const hash = yield* hashBuildInputs(news);
-          if (hash !== output.imageTag) {
+          if (hash !== output.imageTag || olds.repositoryUri !== news.repositoryUri) {
             return { action: "update" } as const;
           }
+          const image = yield* describeImage(output.repositoryName, hash);
+          if (!image?.imageDigest) return { action: "update" } as const;
+          // Build paths may move without changing an existing image.
+          return { action: "noop" } as const;
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Resolve the target repository: user-supplied URI, or an
           // auto-created repository owned by this Image.
-          const { repositoryName, repositoryUri, ownsRepository } =
-            yield* Effect.gen(function* () {
-              if (news.repositoryUri) {
-                return {
-                  repositoryName: repositoryNameFromUri(news.repositoryUri),
-                  repositoryUri: news.repositoryUri,
-                  ownsRepository: false,
-                };
-              }
-              const repositoryName = output?.ownsRepository
-                ? output.repositoryName
-                : yield* toOwnedRepositoryName(id);
-              const repositoryUri = yield* ensureOwnedRepository(
-                id,
-                repositoryName,
-              );
-              return { repositoryName, repositoryUri, ownsRepository: true };
-            });
+          const { repositoryName, repositoryUri, ownsRepository } = yield* Effect.gen(function* () {
+            if (news.repositoryUri) {
+              return {
+                repositoryName: repositoryNameFromUri(news.repositoryUri),
+                repositoryUri: news.repositoryUri,
+                ownsRepository: false,
+              };
+            }
+            const repositoryName = output?.ownsRepository
+              ? output.repositoryName
+              : yield* toOwnedRepositoryName(id);
+            const repositoryUri = yield* ensureOwnedRepository(id, repositoryName);
+            return { repositoryName, repositoryUri, ownsRepository: true };
+          });
 
-          const { context, dockerfile } = yield* resolveBuildPaths(news);
+          const { context, dockerfile } = yield* resolveDockerBuildPaths({
+            context: news.context,
+            dockerfile: news.dockerfile ?? "Dockerfile",
+          });
           const imageTag = yield* hashBuildInputs(news);
           const imageUri = `${repositoryUri}:${imageTag}`;
 
@@ -393,13 +364,16 @@ export const ImageProvider = () =>
             dockerfile,
             platform: news.platform ?? "linux/amd64",
             buildArgs: news.buildArgs,
+            // Engines using the containerd image store attach provenance
+            // attestations by default, turning the pushed tag into an OCI
+            // image index — which Lambda (a valid consumer of these images)
+            // rejects. Disable: single-manifest pushes work everywhere.
+            args: ["--provenance=false"],
           });
 
           const pushed = yield* describeImage(repositoryName, imageTag);
           if (!pushed?.imageDigest) {
-            return yield* Effect.fail(
-              new Error(`Image ${imageUri} not found in ECR after push`),
-            );
+            return yield* Effect.fail(new Error(`Image ${imageUri} not found in ECR after push`));
           }
           yield* session.note(imageUri);
           return {
@@ -421,9 +395,7 @@ export const ImageProvider = () =>
           Effect.gen(function* () {
             const repositories = yield* ecr.describeRepositories.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.repositories ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.repositories ?? [])),
             );
             const nested = yield* Effect.forEach(
               repositories.filter(
@@ -435,34 +407,28 @@ export const ImageProvider = () =>
                 } => r.repositoryName != null && r.repositoryUri != null,
               ),
               (repository) =>
-                ecr.describeImages
-                  .pages({ repositoryName: repository.repositoryName })
-                  .pipe(
-                    Stream.runCollect,
-                    Effect.map((chunk) =>
-                      Array.from(chunk).flatMap(
-                        (page) => page.imageDetails ?? [],
-                      ),
-                    ),
-                    Effect.map((details) =>
-                      details.flatMap((detail) =>
-                        detail.imageDigest === undefined
-                          ? []
-                          : (detail.imageTags ?? []).map((imageTag) => ({
-                              imageUri: `${repository.repositoryUri}:${imageTag}`,
-                              digest: detail.imageDigest!,
-                              repositoryUri: repository.repositoryUri,
-                              repositoryName: repository.repositoryName,
-                              imageTag,
-                              ownsRepository: false,
-                            })),
-                      ),
-                    ),
-                    // Repository deleted between the list and the describe.
-                    Effect.catchTag("RepositoryNotFoundException", () =>
-                      Effect.succeed([]),
+                ecr.describeImages.pages({ repositoryName: repository.repositoryName }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) => page.imageDetails ?? []),
+                  ),
+                  Effect.map((details) =>
+                    details.flatMap((detail) =>
+                      detail.imageDigest === undefined
+                        ? []
+                        : (detail.imageTags ?? []).map((imageTag) => ({
+                            imageUri: `${repository.repositoryUri}:${imageTag}`,
+                            digest: detail.imageDigest!,
+                            repositoryUri: repository.repositoryUri,
+                            repositoryName: repository.repositoryName,
+                            imageTag,
+                            ownsRepository: false,
+                          })),
                     ),
                   ),
+                  // Repository deleted between the list and the describe.
+                  Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed([])),
+                ),
               { concurrency: 10 },
             );
             return nested.flat();
@@ -474,12 +440,7 @@ export const ImageProvider = () =>
                 repositoryName: output.repositoryName,
                 force: true,
               })
-              .pipe(
-                Effect.catchTag(
-                  "RepositoryNotFoundException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
             return;
           }
           // Foreign repository: delete only our tag. `batchDeleteImage`
@@ -490,9 +451,7 @@ export const ImageProvider = () =>
               repositoryName: output.repositoryName,
               imageIds: [{ imageTag: output.imageTag }],
             })
-            .pipe(
-              Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
         }),
       };
     }),

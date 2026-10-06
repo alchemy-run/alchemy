@@ -69,9 +69,8 @@ export interface DomainName extends Resource<
  * Requires a validated ACM certificate in the same region. Point DNS
  * (a Route 53 alias or CNAME) at the returned `ApiGatewayDomainName`
  * target and map APIs onto the domain with {@link ApiMapping}.
- * @resource
- * @section Custom domains
- * @example Regional custom domain
+ * ### Custom domains
+ * **Example:** Regional custom domain
  * ```typescript
  * const domain = yield* ApiGatewayV2.DomainName("Domain", {
  *   domainName: "api.example.com",
@@ -88,12 +87,12 @@ export interface DomainName extends Resource<
  *   stage: stage.stageName,
  * });
  * ```
+ *
+ * @resource
  */
 export const DomainName = Resource<DomainName>("AWS.ApiGatewayV2.DomainName");
 
-const snapshotFromDomain = (
-  domain: agw2.GetDomainNameResponse,
-): DomainName["Attributes"] => ({
+const snapshotFromDomain = (domain: agw2.GetDomainNameResponse): DomainName["Attributes"] => ({
   domainName: domain.DomainName!,
   domainNameArn: domain.DomainNameArn,
   domainNameConfigurations: domain.DomainNameConfigurations as
@@ -112,20 +111,14 @@ export const DomainNameProvider = () =>
       const getDomainSafe = (domainName: string) =>
         agw2
           .getDomainName({ DomainName: domainName })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return DomainName.Provider.of({
         stables: ["domainName", "domainNameArn"],
 
         list: () =>
           Effect.gen(function* () {
-            const items = yield* collectAllPages((NextToken) =>
-              agw2.getDomainNames({ NextToken }),
-            );
+            const items = yield* collectAllPages((NextToken) => agw2.getDomainNames({ NextToken }));
             return items
               .filter((domain) => domain.DomainName != null)
               .map((domain) => snapshotFromDomain(domain));
@@ -171,25 +164,20 @@ export const DomainNameProvider = () =>
           const snapshot = snapshotFromDomain(observed);
 
           // 3. SYNC — updateDomainName converges certificate/mTLS config.
-          const desiredCerts = (news.domainNameConfigurations ?? []).map(
-            (config) => ({
-              CertificateArn: config.CertificateArn,
-              EndpointType: config.EndpointType,
-              SecurityPolicy: config.SecurityPolicy,
-            }),
-          );
-          const observedCerts = (snapshot.domainNameConfigurations ?? []).map(
-            (config) => ({
-              CertificateArn: config.CertificateArn,
-              EndpointType: config.EndpointType,
-              SecurityPolicy: config.SecurityPolicy,
-            }),
-          );
+          const desiredCerts = (news.domainNameConfigurations ?? []).map((config) => ({
+            CertificateArn: config.CertificateArn,
+            EndpointType: config.EndpointType,
+            SecurityPolicy: config.SecurityPolicy,
+          }));
+          const observedCerts = (snapshot.domainNameConfigurations ?? []).map((config) => ({
+            CertificateArn: config.CertificateArn,
+            EndpointType: config.EndpointType,
+            SecurityPolicy: config.SecurityPolicy,
+          }));
           const drift =
             (news.domainNameConfigurations !== undefined &&
               !deepEqual(observedCerts, desiredCerts)) ||
-            (news.routingMode !== undefined &&
-              snapshot.routingMode !== news.routingMode);
+            (news.routingMode !== undefined && snapshot.routingMode !== news.routingMode);
           if (drift) {
             yield* retryOnTooManyRequests(
               agw2.updateDomainName({
@@ -205,8 +193,7 @@ export const DomainNameProvider = () =>
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
           if (!deepEqual(snapshot.tags, desiredTags)) {
             yield* syncTags({
-              resourceArn:
-                snapshot.domainNameArn ?? domainNameArn(region, name),
+              resourceArn: snapshot.domainNameArn ?? domainNameArn(region, name),
               oldTags: snapshot.tags,
               newTags: desiredTags,
             });

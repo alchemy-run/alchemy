@@ -2,8 +2,7 @@ import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListRetainedMessagesRequest
-  extends iotdata.ListRetainedMessagesRequest {}
+export interface ListRetainedMessagesRequest extends iotdata.ListRetainedMessagesRequest {}
 
 /**
  * Runtime binding for the IoT data-plane `ListRetainedMessages` operation
@@ -14,14 +13,15 @@ export interface ListRetainedMessagesRequest
  * messages in the account; read a payload with
  * {@link GetRetainedMessage}. Provide the implementation with
  * `Effect.provide(AWS.IoT.ListRetainedMessagesHttp)`.
- * @binding
- * @section Retained Messages
- * @example List Retained Topics
+ * ### Retained Messages
+ * **Example:** List Retained Topics
  * ```typescript
  * const listRetained = yield* AWS.IoT.ListRetainedMessages();
  *
  * const { retainedTopics } = yield* listRetained();
  * ```
+ *
+ * @binding
  */
 export interface ListRetainedMessages extends Binding.Service<
   ListRetainedMessages,
@@ -29,10 +29,7 @@ export interface ListRetainedMessages extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListRetainedMessagesRequest,
-    ) => Effect.Effect<
-      iotdata.ListRetainedMessagesResponse,
-      iotdata.ListRetainedMessagesError
-    >
+    ) => Effect.Effect<iotdata.ListRetainedMessagesResponse, iotdata.ListRetainedMessagesError>
   >
 > {}
 

@@ -12,9 +12,8 @@ import type { Graph } from "./Graph.ts";
  * the bound {@link Graph}.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.ListIndicatorsHttp)`.
- * @binding
- * @section Running Investigations
- * @example Read An Investigation's Indicators
+ * ### Running Investigations
+ * **Example:** Read An Investigation's Indicators
  * ```typescript
  * // init
  * const listIndicators = yield* AWS.Detective.ListIndicators(graph);
@@ -22,6 +21,8 @@ import type { Graph } from "./Graph.ts";
  * // runtime
  * const { Indicators } = yield* listIndicators({ InvestigationId: id });
  * ```
+ *
+ * @binding
  */
 export interface ListIndicators extends Binding.Service<
   ListIndicators,
@@ -31,12 +32,7 @@ export interface ListIndicators extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<detective.ListIndicatorsRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.ListIndicatorsResponse,
-      detective.ListIndicatorsError
-    >
+    ) => Effect.Effect<detective.ListIndicatorsResponse, detective.ListIndicatorsError>
   >
 > {}
-export const ListIndicators = Binding.Service<ListIndicators>(
-  "AWS.Detective.ListIndicators",
-);
+export const ListIndicators = Binding.Service<ListIndicators>("AWS.Detective.ListIndicators");

@@ -10,9 +10,8 @@ import type { Cluster } from "./Cluster.ts";
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:ListPodIdentityAssociations` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.ListPodIdentityAssociationsHttp)`.
- * @binding
- * @section Inspecting Identity and Access
- * @example List Pod Identity Associations in a Namespace
+ * ### Inspecting Identity and Access
+ * **Example:** List Pod Identity Associations in a Namespace
  * ```typescript
  * // init
  * const listPodIdentityAssociations =
@@ -23,6 +22,8 @@ import type { Cluster } from "./Cluster.ts";
  *   namespace: "default",
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListPodIdentityAssociations extends Binding.Service<
   ListPodIdentityAssociations,
@@ -38,7 +39,6 @@ export interface ListPodIdentityAssociations extends Binding.Service<
     >
   >
 > {}
-export const ListPodIdentityAssociations =
-  Binding.Service<ListPodIdentityAssociations>(
-    "AWS.EKS.ListPodIdentityAssociations",
-  );
+export const ListPodIdentityAssociations = Binding.Service<ListPodIdentityAssociations>(
+  "AWS.EKS.ListPodIdentityAssociations",
+);

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface ResetJobBookmarkRequest extends Omit<
-  glue.ResetJobBookmarkRequest,
-  "JobName"
-> {}
+export interface ResetJobBookmarkRequest extends Omit<glue.ResetJobBookmarkRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:ResetJobBookmark`.
@@ -16,9 +13,8 @@ export interface ResetJobBookmarkRequest extends Omit<
  * after a bad deploy consumed data incorrectly. The job name is injected
  * from the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.ResetJobBookmarkHttp)`.
- * @binding
- * @section Job Bookmarks
- * @example Reset the Bookmark
+ * ### Job Bookmarks
+ * **Example:** Reset the Bookmark
  * ```typescript
  * // init
  * const resetJobBookmark = yield* AWS.Glue.ResetJobBookmark(job);
@@ -26,6 +22,8 @@ export interface ResetJobBookmarkRequest extends Omit<
  * // runtime
  * yield* resetJobBookmark();
  * ```
+ *
+ * @binding
  */
 export interface ResetJobBookmark extends Binding.Service<
   ResetJobBookmark,
@@ -35,13 +33,8 @@ export interface ResetJobBookmark extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ResetJobBookmarkRequest,
-    ) => Effect.Effect<
-      glue.ResetJobBookmarkResponse,
-      glue.ResetJobBookmarkError
-    >
+    ) => Effect.Effect<glue.ResetJobBookmarkResponse, glue.ResetJobBookmarkError>
   >
 > {}
 
-export const ResetJobBookmark = Binding.Service<ResetJobBookmark>(
-  "AWS.Glue.ResetJobBookmark",
-);
+export const ResetJobBookmark = Binding.Service<ResetJobBookmark>("AWS.Glue.ResetJobBookmark");

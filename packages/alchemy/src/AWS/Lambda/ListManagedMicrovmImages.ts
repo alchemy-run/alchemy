@@ -2,16 +2,16 @@ import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListManagedMicrovmImagesRequest
-  extends microvms.ListManagedMicrovmImagesInput {}
+export interface ListManagedMicrovmImagesRequest extends microvms.ListManagedMicrovmImagesInput {}
 
 /**
  * Runtime binding for `ListManagedMicrovmImages` (account-scoped).
  *
  * Lists the AWS-managed base MicroVM images available for use as
  * `baseImage`. Bind with no resource: `yield* AWS.Lambda.ListManagedMicrovmImages()`.
+ * ### Managed Base Images
+ *
  * @binding
- * @section Managed Base Images
  */
 export interface ListManagedMicrovmImages extends Binding.Service<
   ListManagedMicrovmImages,
@@ -25,7 +25,6 @@ export interface ListManagedMicrovmImages extends Binding.Service<
     >
   >
 > {}
-export const ListManagedMicrovmImages =
-  Binding.Service<ListManagedMicrovmImages>(
-    "AWS.Lambda.ListManagedMicrovmImages",
-  );
+export const ListManagedMicrovmImages = Binding.Service<ListManagedMicrovmImages>(
+  "AWS.Lambda.ListManagedMicrovmImages",
+);

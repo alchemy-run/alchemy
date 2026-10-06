@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface DeriveSharedSecretRequest extends Omit<
-  kms.DeriveSharedSecretRequest,
-  "KeyId"
-> {}
+export interface DeriveSharedSecretRequest extends Omit<kms.DeriveSharedSecretRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:DeriveSharedSecret`.
@@ -21,9 +18,8 @@ export interface DeriveSharedSecretRequest extends Omit<
  * The `SharedSecret` in the response is wrapped in `Redacted` so it never
  * leaks into logs — unwrap with `Redacted.value(...)` at the point of use.
  *
- * @binding
- * @section Key Agreement
- * @example Derive a Shared Secret
+ * ### Key Agreement
+ * **Example:** Derive a Shared Secret
  * ```typescript
  * const deriveSharedSecret = yield* AWS.KMS.DeriveSharedSecret(agreementKey);
  *
@@ -32,6 +28,8 @@ export interface DeriveSharedSecretRequest extends Omit<
  *   PublicKey: peerPublicKeyDer, // DER-encoded SubjectPublicKeyInfo
  * });
  * ```
+ *
+ * @binding
  */
 export interface DeriveSharedSecret extends Binding.Service<
   DeriveSharedSecret,
@@ -41,13 +39,8 @@ export interface DeriveSharedSecret extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeriveSharedSecretRequest,
-    ) => Effect.Effect<
-      kms.DeriveSharedSecretResponse,
-      kms.DeriveSharedSecretError
-    >
+    ) => Effect.Effect<kms.DeriveSharedSecretResponse, kms.DeriveSharedSecretError>
   >
 > {}
 
-export const DeriveSharedSecret = Binding.Service<DeriveSharedSecret>(
-  "AWS.KMS.DeriveSharedSecret",
-);
+export const DeriveSharedSecret = Binding.Service<DeriveSharedSecret>("AWS.KMS.DeriveSharedSecret");

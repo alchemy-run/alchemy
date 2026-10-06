@@ -2,7 +2,6 @@ import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -93,11 +92,8 @@ export type LiveInputOutput = Resource<
  * the output. Toggling `enabled` updates the output in place.
  *
  * Requires the Stream subscription to be enabled on the account.
- * @resource
- * @product Stream
- * @category Media
- * @section Creating an output
- * @example Restream a live input to YouTube
+ * ### Creating an output
+ * **Example:** Restream a live input to YouTube
  * ```typescript
  * const input = yield* Cloudflare.Stream.LiveInput("Broadcast", {});
  *
@@ -108,8 +104,8 @@ export type LiveInputOutput = Resource<
  * });
  * ```
  *
- * @section Managing an output
- * @example Pause restreaming without deleting the output
+ * ### Managing an output
+ * **Example:** Pause restreaming without deleting the output
  * ```typescript
  * const youtube = yield* Cloudflare.Stream.LiveInputOutput("YouTube", {
  *   liveInputId: input.liveInputId,
@@ -120,6 +116,10 @@ export type LiveInputOutput = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/stream/stream-live/simulcasting/
+ *
+ * @resource
+ * @product Stream
+ * @category Media
  */
 export const LiveInputOutput = Resource<LiveInputOutput>(TypeId);
 
@@ -166,14 +166,8 @@ export const LiveInputOutputProvider = () =>
       // lost before the uid was persisted) cannot recover the resource —
       // rely on the cached uid.
       if (output?.outputId === undefined) return undefined;
-      const observed = yield* findOutput(
-        output.accountId,
-        output.liveInputId,
-        output.outputId,
-      );
-      return observed
-        ? toAttributes(observed, output.accountId, output.liveInputId)
-        : undefined;
+      const observed = yield* findOutput(output.accountId, output.liveInputId, output.outputId);
+      return observed ? toAttributes(observed, output.accountId, output.liveInputId) : undefined;
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -185,11 +179,7 @@ export const LiveInputOutputProvider = () =>
       // a missing output (or live input) falls through to "missing" and
       // we recreate.
       const observed = output?.outputId
-        ? yield* findOutput(
-            output.accountId ?? accountId,
-            liveInputId,
-            output.outputId,
-          )
+        ? yield* findOutput(output.accountId ?? accountId, liveInputId, output.outputId)
         : undefined;
 
       if (!observed) {
@@ -231,9 +221,7 @@ export const LiveInputOutputProvider = () =>
       // Cloudflare returns this list either wrapped (`{ liveInputs: [...] }`)
       // or as a bare `result` array depending on the account — handle both.
       const inputs = yield* stream.listLiveInputs({ accountId });
-      const liveInputIds = (
-        Array.isArray(inputs) ? inputs : (inputs.liveInputs ?? [])
-      )
+      const liveInputIds = (Array.isArray(inputs) ? inputs : (inputs.liveInputs ?? []))
         .map((input) => input.uid)
         .filter((uid): uid is string => typeof uid === "string");
 
@@ -249,9 +237,7 @@ export const LiveInputOutputProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  page.result.map((observed) =>
-                    toAttributes(observed, accountId, liveInputId),
-                  ),
+                  page.result.map((observed) => toAttributes(observed, accountId, liveInputId)),
                 ),
               ),
               // A live input deleted between enumeration and listing its
@@ -291,14 +277,10 @@ type ObservedOutput = {
  * There is no get-by-uid endpoint, so observation goes through the list.
  */
 const findOutput = (accountId: string, liveInputId: string, outputId: string) =>
-  stream
-    .listLiveInputOutputs({ accountId, liveInputIdentifier: liveInputId })
-    .pipe(
-      Effect.map((page) =>
-        page.result.find((candidate) => candidate.uid === outputId),
-      ),
-      Effect.catchTag("LiveInputNotFound", () => Effect.succeed(undefined)),
-    );
+  stream.listLiveInputOutputs({ accountId, liveInputIdentifier: liveInputId }).pipe(
+    Effect.map((page) => page.result.find((candidate) => candidate.uid === outputId)),
+    Effect.catchTag("LiveInputNotFound", () => Effect.succeed(undefined)),
+  );
 
 const toAttributes = (
   output:

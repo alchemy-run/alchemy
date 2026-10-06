@@ -62,8 +62,7 @@ export interface PackageVersionStateChangeDetail {
  * A CodeArtifact package version state change EventBridge event delivered to
  * the handler.
  */
-export type PackageVersionStateChangeEvent =
-  EventRecord<PackageVersionStateChangeDetail>;
+export type PackageVersionStateChangeEvent = EventRecord<PackageVersionStateChangeDetail>;
 
 export interface PackageVersionStateChangesProps extends EventRouteProps {
   /**
@@ -107,8 +106,8 @@ export interface PackageVersionStateChangesProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Package Version Events
- * @example React to Published Versions
+ * ### Consuming Package Version Events
+ * **Example:** React to Published Versions
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -129,10 +128,7 @@ export interface PackageVersionStateChangesProps extends EventRouteProps {
  * );
  * ```
  */
-export const consumePackageVersionStateChanges = <
-  StreamReq = never,
-  Req = never,
->(
+export const consumePackageVersionStateChanges = <StreamReq = never, Req = never>(
   props: PackageVersionStateChangesProps,
   process: (
     events: Stream.Stream<PackageVersionStateChangeEvent, never, StreamReq>,
@@ -147,13 +143,9 @@ export const consumePackageVersionStateChanges = <
         ? {
             detail: {
               ...(props.domains ? { domainName: [...props.domains] } : {}),
-              ...(props.repositories
-                ? { repositoryName: [...props.repositories] }
-                : {}),
+              ...(props.repositories ? { repositoryName: [...props.repositories] } : {}),
               ...(props.formats ? { packageFormat: [...props.formats] } : {}),
-              ...(props.states
-                ? { packageVersionState: [...props.states] }
-                : {}),
+              ...(props.states ? { packageVersionState: [...props.states] } : {}),
             },
           }
         : {}),

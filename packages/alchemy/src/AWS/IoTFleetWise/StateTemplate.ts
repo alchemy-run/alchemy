@@ -83,9 +83,8 @@ export interface StateTemplate extends Resource<
  * mutable — changing the name or signal catalog replaces the template.
  * AWS IoT FleetWise is allowlist-gated and offered in
  * `us-east-1`/`eu-central-1` only.
- * @resource
- * @section Creating a State Template
- * @example Track Last-Known Speed
+ * ### Creating a State Template
+ * **Example:** Track Last-Known Speed
  * ```typescript
  * const template = yield* StateTemplate("SpeedState", {
  *   signalCatalogArn: catalog.signalCatalogArn,
@@ -93,7 +92,7 @@ export interface StateTemplate extends Resource<
  * });
  * ```
  *
- * @example Associate with a Vehicle
+ * **Example:** Associate with a Vehicle
  * ```typescript
  * const vehicle = yield* Vehicle("TestVehicle", {
  *   modelManifestArn: model.modelManifestArn,
@@ -106,10 +105,10 @@ export interface StateTemplate extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
-export const StateTemplate = Resource<StateTemplate>(
-  "AWS.IoTFleetWise.StateTemplate",
-);
+export const StateTemplate = Resource<StateTemplate>("AWS.IoTFleetWise.StateTemplate");
 
 export const StateTemplateProvider = () =>
   Provider.effect(
@@ -123,15 +122,11 @@ export const StateTemplateProvider = () =>
       const readTemplate = Effect.fn(function* (identifier: string) {
         return yield* iotfleetwise.getStateTemplate({ identifier }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
-      const toAttrs = Effect.fn(function* (
-        template: iotfleetwise.GetStateTemplateResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (template: iotfleetwise.GetStateTemplateResponse) {
         if (template.name === undefined || template.arn === undefined) {
           return yield* Effect.fail(
             new Error(`StateTemplate '${template.name}' is missing its ARN`),
@@ -142,9 +137,7 @@ export const StateTemplateProvider = () =>
           stateTemplateArn: template.arn,
           stateTemplateId: template.id,
           signalCatalogArn: template.signalCatalogArn,
-          stateTemplateProperties: [
-            ...(template.stateTemplateProperties ?? []),
-          ],
+          stateTemplateProperties: [...(template.stateTemplateProperties ?? [])],
         };
       });
 
@@ -163,8 +156,7 @@ export const StateTemplateProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.stateTemplateName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.stateTemplateName ?? (yield* toName(id, olds ?? {}));
           const found = yield* readTemplate(name);
           if (found?.arn === undefined) return undefined;
           const attrs = yield* toAttrs(found);
@@ -215,20 +207,13 @@ export const StateTemplateProvider = () =>
             (fqn) => !news.stateTemplateProperties.includes(fqn),
           );
           const descriptionChanged =
-            news.description !== undefined &&
-            news.description !== observed.description;
+            news.description !== undefined && news.description !== observed.description;
           const dataDimensionsChanged =
             news.dataExtraDimensions !== undefined &&
-            !stableEquals(
-              observed.dataExtraDimensions ?? [],
-              news.dataExtraDimensions,
-            );
+            !stableEquals(observed.dataExtraDimensions ?? [], news.dataExtraDimensions);
           const metadataDimensionsChanged =
             news.metadataExtraDimensions !== undefined &&
-            !stableEquals(
-              observed.metadataExtraDimensions ?? [],
-              news.metadataExtraDimensions,
-            );
+            !stableEquals(observed.metadataExtraDimensions ?? [], news.metadataExtraDimensions);
           if (
             toAdd.length > 0 ||
             toRemove.length > 0 ||
@@ -240,13 +225,9 @@ export const StateTemplateProvider = () =>
               .updateStateTemplate({
                 identifier: name,
                 description: descriptionChanged ? news.description : undefined,
-                stateTemplatePropertiesToAdd:
-                  toAdd.length > 0 ? toAdd : undefined,
-                stateTemplatePropertiesToRemove:
-                  toRemove.length > 0 ? toRemove : undefined,
-                dataExtraDimensions: dataDimensionsChanged
-                  ? news.dataExtraDimensions
-                  : undefined,
+                stateTemplatePropertiesToAdd: toAdd.length > 0 ? toAdd : undefined,
+                stateTemplatePropertiesToRemove: toRemove.length > 0 ? toRemove : undefined,
+                dataExtraDimensions: dataDimensionsChanged ? news.dataExtraDimensions : undefined,
                 metadataExtraDimensions: metadataDimensionsChanged
                   ? news.metadataExtraDimensions
                   : undefined,

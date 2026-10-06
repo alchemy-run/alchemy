@@ -14,11 +14,7 @@ interface EventDescriptor {
 
 export interface QueueRouteTargetProps extends Pick<
   RuleTarget,
-  | "Input"
-  | "InputPath"
-  | "InputTransformer"
-  | "RetryPolicy"
-  | "DeadLetterConfig"
+  "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
 > {
   sqsParameters?: RuleTarget["SqsParameters"];
 }
@@ -29,11 +25,12 @@ export interface QueueRouteTargetProps extends Pick<
  * Creates a {@link Rule} targeting the queue and binds a queue policy that
  * allows `events.amazonaws.com` to send messages from that rule. Usually
  * reached through the `events(...)` builder rather than called directly.
- * @binding
- * @example Route Matching Events to an SQS Queue
+ * **Example:** Route Matching Events to an SQS Queue
  * ```typescript
  * yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toQueue(queue);
  * ```
+ *
+ * @binding
  */
 export const toQueue = (
   descriptor: EventDescriptor,
@@ -41,8 +38,7 @@ export const toQueue = (
   props: QueueRouteTargetProps = {},
 ) =>
   Effect.gen(function* () {
-    const routeId =
-      descriptor.id ?? createRouteId(descriptor, `${queue.LogicalId}Queue`);
+    const routeId = descriptor.id ?? createRouteId(descriptor, `${queue.LogicalId}Queue`);
 
     const rule = yield* Rule(routeId, {
       description: descriptor.props?.description,

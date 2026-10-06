@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListRepositoryLinks}.
  */
-export interface ListRepositoryLinksRequest
-  extends codeconnections.ListRepositoryLinksInput {}
+export interface ListRepositoryLinksRequest extends codeconnections.ListRepositoryLinksInput {}
 
 /**
  * Runtime binding for `codeconnections:ListRepositoryLinks`.
@@ -17,9 +16,8 @@ export interface ListRepositoryLinksRequest
  * that discover which repositories are wired up before drilling into their
  * sync status. Provide the implementation with
  * `Effect.provide(AWS.CodeConnections.ListRepositoryLinksHttp)`.
- * @binding
- * @section Monitoring Git Sync
- * @example List the Account's Repository Links
+ * ### Monitoring Git Sync
+ * **Example:** List the Account's Repository Links
  * ```typescript
  * // init — account-level binding takes no resource
  * const listRepositoryLinks =
@@ -29,6 +27,8 @@ export interface ListRepositoryLinksRequest
  * const result = yield* listRepositoryLinks();
  * const repos = (result.RepositoryLinks ?? []).map((l) => l.RepositoryName);
  * ```
+ *
+ * @binding
  */
 export interface ListRepositoryLinks extends Binding.Service<
   ListRepositoryLinks,

@@ -5,17 +5,15 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListDiscoveredResources}.
  */
-export interface ListDiscoveredResourcesRequest
-  extends fms.ListDiscoveredResourcesRequest {}
+export interface ListDiscoveredResourcesRequest extends fms.ListDiscoveredResourcesRequest {}
 
 /**
  * Runtime binding for `fms:ListDiscoveredResources`.
  *
  * Returns an array of resources in the organization's accounts that are available to be associated with a resource set. Provide the
  * implementation with `Effect.provide(AWS.FMS.ListDiscoveredResourcesHttp)`.
- * @binding
- * @section Resource Sets
- * @example Discover Associable Resources
+ * ### Resource Sets
+ * **Example:** Discover Associable Resources
  * ```typescript
  * // init — account-level binding takes no resource
  * const listDiscoveredResources = yield* AWS.FMS.ListDiscoveredResources();
@@ -27,6 +25,8 @@ export interface ListDiscoveredResourcesRequest
  * });
  * console.log(result.Items?.length);
  * ```
+ *
+ * @binding
  */
 export interface ListDiscoveredResources extends Binding.Service<
   ListDiscoveredResources,
@@ -34,10 +34,7 @@ export interface ListDiscoveredResources extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListDiscoveredResourcesRequest,
-    ) => Effect.Effect<
-      fms.ListDiscoveredResourcesResponse,
-      fms.ListDiscoveredResourcesError
-    >
+    ) => Effect.Effect<fms.ListDiscoveredResourcesResponse, fms.ListDiscoveredResourcesError>
   >
 > {}
 

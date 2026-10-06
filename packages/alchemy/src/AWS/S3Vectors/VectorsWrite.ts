@@ -6,14 +6,8 @@ import type { Index } from "./VectorIndex.ts";
 /** Fields the binding injects from the bound {@link Index}. */
 type IndexRef = "vectorBucketName" | "indexName" | "indexArn";
 
-export interface PutVectorsRequest extends Omit<
-  s3vectors.PutVectorsInput,
-  IndexRef
-> {}
-export interface DeleteVectorsRequest extends Omit<
-  s3vectors.DeleteVectorsInput,
-  IndexRef
-> {}
+export interface PutVectorsRequest extends Omit<s3vectors.PutVectorsInput, IndexRef> {}
+export interface DeleteVectorsRequest extends Omit<s3vectors.DeleteVectorsInput, IndexRef> {}
 
 /**
  * The write-only runtime client returned by binding an {@link Index} via
@@ -28,10 +22,7 @@ export interface WriteVectorsClient {
   /** Delete vectors by key. */
   readonly delete: (
     request: DeleteVectorsRequest,
-  ) => Effect.Effect<
-    s3vectors.DeleteVectorsOutput,
-    s3vectors.DeleteVectorsError
-  >;
+  ) => Effect.Effect<s3vectors.DeleteVectorsOutput, s3vectors.DeleteVectorsError>;
 }
 
 /**
@@ -43,9 +34,8 @@ export interface WriteVectorsClient {
  * pipelines that write embeddings but never query them. Provide the
  * implementation with `Effect.provide(AWS.S3Vectors.VectorsWriteHttp)`.
  *
- * @binding
- * @section Writing Vectors
- * @example Insert Embeddings (write-only)
+ * ### Writing Vectors
+ * **Example:** Insert Embeddings (write-only)
  * ```typescript
  * // init
  * const vectors = yield* AWS.S3Vectors.VectorsWrite(index);
@@ -55,12 +45,12 @@ export interface WriteVectorsClient {
  *   vectors: [{ key: "doc-1", data: { float32: [0.1, 0.2, 0.3] } }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface VectorsWrite extends Binding.Service<
   VectorsWrite,
   "AWS.S3Vectors.VectorsWrite",
   <I extends Index>(index: I) => Effect.Effect<WriteVectorsClient>
 > {}
-export const VectorsWrite = Binding.Service<VectorsWrite>(
-  "AWS.S3Vectors.VectorsWrite",
-);
+export const VectorsWrite = Binding.Service<VectorsWrite>("AWS.S3Vectors.VectorsWrite");

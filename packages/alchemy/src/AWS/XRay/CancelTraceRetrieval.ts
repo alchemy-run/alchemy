@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface CancelTraceRetrievalRequest
-  extends xray.CancelTraceRetrievalRequest {}
+export interface CancelTraceRetrievalRequest extends xray.CancelTraceRetrievalRequest {}
 
 /**
  * Cancel an ongoing Transaction Search trace retrieval job by its
@@ -13,9 +12,8 @@ export interface CancelTraceRetrievalRequest
  * provide the implementation with `Effect.provide(XRay.CancelTraceRetrievalHttp)`.
  * The action is account-scoped: X-Ray does not support resource-level
  * permissions for `xray:CancelTraceRetrieval`, so the binding grants it on `*`.
- * @binding
- * @section Transaction Search
- * @example Cancel a retrieval job
+ * ### Transaction Search
+ * **Example:** Cancel a retrieval job
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -25,6 +23,8 @@ export interface CancelTraceRetrievalRequest
  * // runtime
  * yield* cancelTraceRetrieval({ RetrievalToken: token });
  * ```
+ *
+ * @binding
  */
 export interface CancelTraceRetrieval extends Binding.Service<
   CancelTraceRetrieval,
@@ -32,10 +32,7 @@ export interface CancelTraceRetrieval extends Binding.Service<
   () => Effect.Effect<
     (
       request: CancelTraceRetrievalRequest,
-    ) => Effect.Effect<
-      xray.CancelTraceRetrievalResult,
-      xray.CancelTraceRetrievalError
-    >
+    ) => Effect.Effect<xray.CancelTraceRetrievalResult, xray.CancelTraceRetrievalError>
   >
 > {}
 export const CancelTraceRetrieval = Binding.Service<CancelTraceRetrieval>(

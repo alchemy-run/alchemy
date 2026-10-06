@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface SubscribeRequest extends Omit<
-  sns.SubscribeInput,
-  "TopicArn"
-> {}
+export interface SubscribeRequest extends Omit<sns.SubscribeInput, "TopicArn"> {}
 
 /**
  * Runtime binding for `sns:Subscribe`.
@@ -16,9 +13,8 @@ export interface SubscribeRequest extends Omit<
  * user's email address from an API handler. The `TopicArn` is injected
  * automatically.
  * Provide the `SubscribeHttp` layer on the Function to implement the binding.
- * @binding
- * @section Subscribing Endpoints
- * @example Subscribe an Email Address
+ * ### Subscribing Endpoints
+ * **Example:** Subscribe an Email Address
  * ```typescript
  * const subscribe = yield* SNS.Subscribe(topic);
  * const response = yield* subscribe({
@@ -26,6 +22,8 @@ export interface SubscribeRequest extends Omit<
  *   Endpoint: "user@example.com",
  * });
  * ```
+ *
+ * @binding
  */
 export interface Subscribe extends Binding.Service<
   Subscribe,
@@ -33,9 +31,7 @@ export interface Subscribe extends Binding.Service<
   (
     topic: Topic,
   ) => Effect.Effect<
-    (
-      request: SubscribeRequest,
-    ) => Effect.Effect<sns.SubscribeResponse, sns.SubscribeError>
+    (request: SubscribeRequest) => Effect.Effect<sns.SubscribeResponse, sns.SubscribeError>
   >
 > {}
 

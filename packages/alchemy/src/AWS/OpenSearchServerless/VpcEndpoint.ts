@@ -60,9 +60,8 @@ export interface VpcEndpoint extends Resource<
  * collection's access to only that endpoint. Creation is asynchronous — the
  * provider polls (bounded) until the endpoint reaches `ACTIVE`.
  *
- * @resource
- * @section Creating VPC Endpoints
- * @example Interface Endpoint in a VPC
+ * ### Creating VPC Endpoints
+ * **Example:** Interface Endpoint in a VPC
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -73,10 +72,10 @@ export interface VpcEndpoint extends Resource<
  *   securityGroupIds: [securityGroup.groupId],
  * });
  * ```
+ *
+ * @resource
  */
-export const VpcEndpoint = Resource<VpcEndpoint>(
-  "AWS.OpenSearchServerless.VpcEndpoint",
-);
+export const VpcEndpoint = Resource<VpcEndpoint>("AWS.OpenSearchServerless.VpcEndpoint");
 
 export const VpcEndpointProvider = () =>
   Provider.effect(
@@ -87,24 +86,18 @@ export const VpcEndpointProvider = () =>
         props: { endpointName?: string | undefined },
       ) {
         return (
-          props.endpointName ??
-          (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
+          props.endpointName ?? (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
         );
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* aoss.listVpcEndpoints
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* aoss.listVpcEndpoints.pages({}).pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.vpcEndpointSummaries ?? [])
           .find((s) => s.name === name);
       });
 
-      const observe = Effect.fn(function* (
-        name: string,
-        vpcEndpointId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, vpcEndpointId: string | undefined) {
         if (vpcEndpointId !== undefined) {
           const byId = yield* aoss
             .batchGetVpcEndpoint({ ids: [vpcEndpointId] })
@@ -127,9 +120,7 @@ export const VpcEndpointProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* aoss.listVpcEndpoints
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* aoss.listVpcEndpoints.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.vpcEndpointSummaries ?? [])
               .filter((s) => s.id !== undefined && s.name !== undefined)
@@ -141,8 +132,7 @@ export const VpcEndpointProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.endpointName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.endpointName ?? (yield* createName(id, olds ?? {}));
           const detail = yield* observe(name, output?.vpcEndpointId);
           if (detail?.id === undefined) {
             return undefined;
@@ -186,9 +176,7 @@ export const VpcEndpointProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.createVpcEndpointDetail),
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
               );
             const endpointId = created?.id ?? (yield* findByName(name))?.id;
             if (endpointId === undefined) {
@@ -207,12 +195,8 @@ export const VpcEndpointProvider = () =>
           // 3. SYNC — subnet/security-group membership deltas
           const observedSubnets = new Set(detail.subnetIds ?? []);
           const desiredSubnets = new Set(news.subnetIds);
-          const addSubnetIds = news.subnetIds.filter(
-            (s) => !observedSubnets.has(s),
-          );
-          const removeSubnetIds = (detail.subnetIds ?? []).filter(
-            (s) => !desiredSubnets.has(s),
-          );
+          const addSubnetIds = news.subnetIds.filter((s) => !observedSubnets.has(s));
+          const removeSubnetIds = (detail.subnetIds ?? []).filter((s) => !desiredSubnets.has(s));
           const observedSgs = new Set(detail.securityGroupIds ?? []);
           const desiredSgs = new Set(news.securityGroupIds ?? []);
           const addSecurityGroupIds = (news.securityGroupIds ?? []).filter(
@@ -230,16 +214,10 @@ export const VpcEndpointProvider = () =>
             yield* aoss.updateVpcEndpoint({
               id: detail.id!,
               addSubnetIds: addSubnetIds.length > 0 ? addSubnetIds : undefined,
-              removeSubnetIds:
-                removeSubnetIds.length > 0 ? removeSubnetIds : undefined,
-              addSecurityGroupIds:
-                addSecurityGroupIds.length > 0
-                  ? addSecurityGroupIds
-                  : undefined,
+              removeSubnetIds: removeSubnetIds.length > 0 ? removeSubnetIds : undefined,
+              addSecurityGroupIds: addSecurityGroupIds.length > 0 ? addSecurityGroupIds : undefined,
               removeSecurityGroupIds:
-                removeSecurityGroupIds.length > 0
-                  ? removeSecurityGroupIds
-                  : undefined,
+                removeSecurityGroupIds.length > 0 ? removeSecurityGroupIds : undefined,
             });
           }
 
@@ -252,9 +230,7 @@ export const VpcEndpointProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* retryWhileConflict(
-            aoss.deleteVpcEndpoint({ id: output.vpcEndpointId }),
-          ).pipe(
+          yield* retryWhileConflict(aoss.deleteVpcEndpoint({ id: output.vpcEndpointId })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
         }),

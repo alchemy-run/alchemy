@@ -18,9 +18,8 @@ export interface PrepareQueryRequest extends TSQ.PrepareQueryRequest {}
  * Provide `Timestream.PrepareQueryHttp` on the Function to implement the
  * binding.
  *
- * @binding
- * @section Querying Data
- * @example Validate a query before running it
+ * ### Querying Data
+ * **Example:** Validate a query before running it
  * ```typescript
  * // init — bind the operation to the table the SQL reads
  * const prepareQuery = yield* Timestream.PrepareQuery(table);
@@ -32,6 +31,8 @@ export interface PrepareQueryRequest extends TSQ.PrepareQueryRequest {}
  * });
  * // prepared.Columns[0].Name === "c"
  * ```
+ *
+ * @binding
  */
 export interface PrepareQuery extends Binding.Service<
   PrepareQuery,
@@ -41,13 +42,8 @@ export interface PrepareQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PrepareQueryRequest,
-    ) => Effect.Effect<
-      TSQ.PrepareQueryResponse,
-      TSQ.PrepareQueryError | TSQ.DescribeEndpointsError
-    >
+    ) => Effect.Effect<TSQ.PrepareQueryResponse, TSQ.PrepareQueryError | TSQ.DescribeEndpointsError>
   >
 > {}
 
-export const PrepareQuery = Binding.Service<PrepareQuery>(
-  "AWS.Timestream.PrepareQuery",
-);
+export const PrepareQuery = Binding.Service<PrepareQuery>("AWS.Timestream.PrepareQuery");

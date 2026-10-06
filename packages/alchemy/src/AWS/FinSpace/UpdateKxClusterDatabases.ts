@@ -7,9 +7,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * Runtime binding for `finspace:UpdateKxClusterDatabases` — remounts a running cluster's databases at new changesets (with rolling or no-restart deployment) — how ingestion pipelines roll fresh data out to clusters that don't read through dataviews.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.UpdateKxClusterDatabasesHttp)`.
- * @binding
- * @section Deploying to Clusters
- * @example Roll a Cluster to a New Changeset
+ * ### Deploying to Clusters
+ * **Example:** Roll a Cluster to a New Changeset
  * ```typescript
  * const updateClusterDatabases = yield* AWS.FinSpace.UpdateKxClusterDatabases(kdb);
  *
@@ -20,6 +19,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  *   clientToken: crypto.randomUUID(),
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateKxClusterDatabases extends Binding.Service<
   UpdateKxClusterDatabases,
@@ -29,13 +30,9 @@ export interface UpdateKxClusterDatabases extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.UpdateKxClusterDatabasesRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.UpdateKxClusterDatabasesResponse,
-      SVC.UpdateKxClusterDatabasesError
-    >
+    ) => Effect.Effect<SVC.UpdateKxClusterDatabasesResponse, SVC.UpdateKxClusterDatabasesError>
   >
 > {}
-export const UpdateKxClusterDatabases =
-  Binding.Service<UpdateKxClusterDatabases>(
-    "AWS.FinSpace.UpdateKxClusterDatabases",
-  );
+export const UpdateKxClusterDatabases = Binding.Service<UpdateKxClusterDatabases>(
+  "AWS.FinSpace.UpdateKxClusterDatabases",
+);

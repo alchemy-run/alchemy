@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.DeleteFacesHttp)`.
  *
- * @binding
- * @section Face Collections
- * @example Delete Faces from a Collection
+ * ### Face Collections
+ * **Example:** Delete Faces from a Collection
  * ```typescript
  * // init
  * const deleteFaces = yield* AWS.Rekognition.DeleteFaces();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * // result.DeletedFaces, result.UnsuccessfulFaceDeletions
  * ```
+ *
+ * @binding
  */
 export interface DeleteFaces extends Binding.Service<
   DeleteFaces,
@@ -32,12 +33,7 @@ export interface DeleteFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DeleteFacesRequest,
-    ) => Effect.Effect<
-      rekognition.DeleteFacesResponse,
-      rekognition.DeleteFacesError
-    >
+    ) => Effect.Effect<rekognition.DeleteFacesResponse, rekognition.DeleteFacesError>
   >
 > {}
-export const DeleteFaces = Binding.Service<DeleteFaces>(
-  "AWS.Rekognition.DeleteFaces",
-);
+export const DeleteFaces = Binding.Service<DeleteFaces>("AWS.Rekognition.DeleteFaces");

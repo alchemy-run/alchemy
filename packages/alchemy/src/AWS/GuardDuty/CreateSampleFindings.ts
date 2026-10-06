@@ -10,9 +10,8 @@ import type { Detector } from "./Detector.ts";
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.CreateSampleFindingsHttp)`.
- * @binding
- * @section Working with Findings
- * @example Generate a Sample Finding
+ * ### Working with Findings
+ * **Example:** Generate a Sample Finding
  * ```typescript
  * // init
  * const createSampleFindings = yield* AWS.GuardDuty.CreateSampleFindings(detector);
@@ -22,6 +21,8 @@ import type { Detector } from "./Detector.ts";
  *   FindingTypes: ["Recon:EC2/PortProbeUnprotectedPort"],
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateSampleFindings extends Binding.Service<
   CreateSampleFindings,
@@ -31,10 +32,7 @@ export interface CreateSampleFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.CreateSampleFindingsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.CreateSampleFindingsResponse,
-      guardduty.CreateSampleFindingsError
-    >
+    ) => Effect.Effect<guardduty.CreateSampleFindingsResponse, guardduty.CreateSampleFindingsError>
   >
 > {}
 export const CreateSampleFindings = Binding.Service<CreateSampleFindings>(

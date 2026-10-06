@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { PlatformApplication } from "./PlatformApplication.ts";
 
-export interface GetEndpointAttributesRequest
-  extends sns.GetEndpointAttributesInput {}
+export interface GetEndpointAttributesRequest extends sns.GetEndpointAttributesInput {}
 
 /**
  * Runtime binding for `sns:GetEndpointAttributes`.
@@ -13,15 +12,16 @@ export interface GetEndpointAttributesRequest
  * attributes (`Token`, `Enabled`, `CustomUserData`) of one of its device
  * endpoints.
  * Provide the `GetEndpointAttributesHttp` layer on the Function to implement the binding.
- * @binding
- * @section Mobile Push
- * @example Read Endpoint Attributes
+ * ### Mobile Push
+ * **Example:** Read Endpoint Attributes
  * ```typescript
  * const getEndpointAttributes = yield* SNS.GetEndpointAttributes(app);
  * const { Attributes } = yield* getEndpointAttributes({
  *   EndpointArn: endpointArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetEndpointAttributes extends Binding.Service<
   GetEndpointAttributes,
@@ -31,10 +31,7 @@ export interface GetEndpointAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetEndpointAttributesRequest,
-    ) => Effect.Effect<
-      sns.GetEndpointAttributesResponse,
-      sns.GetEndpointAttributesError
-    >
+    ) => Effect.Effect<sns.GetEndpointAttributesResponse, sns.GetEndpointAttributesError>
   >
 > {}
 

@@ -107,9 +107,8 @@ export interface Extension extends Resource<
  * Associate the extension with an application, environment, or configuration
  * profile using {@link ExtensionAssociation}.
  *
- * @resource
- * @section Creating an Extension
- * @example Notify a Lambda when a deployment completes
+ * ### Creating an Extension
+ * **Example:** Notify a Lambda when a deployment completes
  * ```typescript
  * const extension = yield* AppConfig.Extension("DeployHook", {
  *   actions: {
@@ -124,7 +123,7 @@ export interface Extension extends Resource<
  * });
  * ```
  *
- * @example Validate content before a deployment starts
+ * **Example:** Validate content before a deployment starts
  * ```typescript
  * const extension = yield* AppConfig.Extension("PreflightCheck", {
  *   description: "Reject deployments outside business hours",
@@ -135,6 +134,8 @@ export interface Extension extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Extension = Resource<Extension>("AWS.AppConfig.Extension");
 
@@ -193,37 +194,23 @@ export const ExtensionProvider = () =>
       const readExtension = Effect.fn(function* (extensionId: string) {
         return yield* appconfig
           .getExtension({ ExtensionIdentifier: extensionId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const summaries = yield* appconfig.listExtensions
-          .pages({ Name: name })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Items ?? []),
-            ),
-          );
+        const summaries = yield* appconfig.listExtensions.pages({ Name: name }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+        );
         // listExtensions returns one summary per version — take the latest.
         const latest = summaries.reduce(
-          (
-            acc: appconfig.ExtensionSummary | undefined,
-            summary: appconfig.ExtensionSummary,
-          ) =>
-            acc === undefined ||
-            (summary.VersionNumber ?? 0) > (acc.VersionNumber ?? 0)
+          (acc: appconfig.ExtensionSummary | undefined, summary: appconfig.ExtensionSummary) =>
+            acc === undefined || (summary.VersionNumber ?? 0) > (acc.VersionNumber ?? 0)
               ? summary
               : acc,
           undefined,
         );
-        return latest?.Id === undefined
-          ? undefined
-          : yield* readExtension(latest.Id);
+        return latest?.Id === undefined ? undefined : yield* readExtension(latest.Id);
       });
 
       const toAttrs = (extension: appconfig.Extension) => ({
@@ -238,9 +225,7 @@ export const ExtensionProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -263,9 +248,7 @@ export const ExtensionProvider = () =>
           const desiredParameters = toWireParameters(news.parameters);
 
           // 1. Observe.
-          let observed = output?.extensionId
-            ? yield* readExtension(output.extensionId)
-            : undefined;
+          let observed = output?.extensionId ? yield* readExtension(output.extensionId) : undefined;
           if (observed === undefined) {
             observed = yield* findByName(name);
           }
@@ -290,11 +273,9 @@ export const ExtensionProvider = () =>
                 }),
               );
           } else if (
-            (observed.Description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (observed.Description ?? undefined) !== (news.description ?? undefined) ||
             stableJson(observed.Actions ?? {}) !== stableJson(desiredActions) ||
-            stableJson(observed.Parameters ?? {}) !==
-              stableJson(desiredParameters ?? {})
+            stableJson(observed.Parameters ?? {}) !== stableJson(desiredParameters ?? {})
           ) {
             // 3. Sync — description, actions, and parameters are mutable
             // (AppConfig records the change as a new extension version).
@@ -320,25 +301,21 @@ export const ExtensionProvider = () =>
           // the engine deletes them first, but the API is eventually
           // consistent, so absorb the dependency-violation window (surfaced
           // as BadRequestException) with a bounded retry.
-          yield* appconfig
-            .deleteExtension({ ExtensionIdentifier: output.extensionId })
-            .pipe(
-              Effect.retry({
-                while: (e): boolean => e._tag === "BadRequestException",
-                schedule: Schedule.fixed("3 seconds"),
-                times: 5,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* appconfig.deleteExtension({ ExtensionIdentifier: output.extensionId }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "BadRequestException",
+              schedule: Schedule.fixed("3 seconds"),
+              times: 5,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
 
         list: () =>
           Effect.gen(function* () {
             const summaries = yield* appconfig.listExtensions.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Items ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
             );
             // One summary per version — keep the latest version per id.
             const latest = new Map<string, appconfig.ExtensionSummary>();

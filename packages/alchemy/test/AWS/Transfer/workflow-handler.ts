@@ -1,12 +1,12 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Transfer from "@/AWS/Transfer";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Transfer from "@/AWS/Transfer";
 
 const main = path.resolve(import.meta.dirname, "workflow-handler.ts");
 
@@ -23,7 +23,7 @@ export class TransferWorkflowTestFunction extends Lambda.Function<Lambda.Functio
 export default TransferWorkflowTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
@@ -34,9 +34,7 @@ export default TransferWorkflowTestFunction.make(
       { kinds: ["file-upload-completed", "file-upload-failed"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `transfer ${event["detail-type"]}: ${event.detail.username}`,
-          ),
+          Effect.log(`transfer ${event["detail-type"]}: ${event.detail.username}`),
         ),
     );
 
@@ -64,9 +62,7 @@ export default TransferWorkflowTestFunction.make(
             Status: "SUCCESS",
           }).pipe(Effect.result);
           return yield* HttpServerResponse.json(
-            sent._tag === "Success"
-              ? { ok: true }
-              : { ok: false, tag: sent.failure._tag },
+            sent._tag === "Success" ? { ok: true } : { ok: false, tag: sent.failure._tag },
           );
         }
 
@@ -76,9 +72,5 @@ export default TransferWorkflowTestFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(Lambda.EventSource, Transfer.SendWorkflowStepStateHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(Lambda.EventSource, Transfer.SendWorkflowStepStateHttp))),
 );

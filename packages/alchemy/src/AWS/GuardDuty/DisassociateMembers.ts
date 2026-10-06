@@ -10,9 +10,8 @@ import type { Detector } from "./Detector.ts";
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.DisassociateMembersHttp)`.
- * @binding
- * @section Member Administration
- * @example Disassociate Members
+ * ### Member Administration
+ * **Example:** Disassociate Members
  * ```typescript
  * // init
  * const disassociateMembers = yield* AWS.GuardDuty.DisassociateMembers(detector);
@@ -20,6 +19,8 @@ import type { Detector } from "./Detector.ts";
  * // runtime
  * yield* disassociateMembers({ AccountIds: ["111122223333"] });
  * ```
+ *
+ * @binding
  */
 export interface DisassociateMembers extends Binding.Service<
   DisassociateMembers,
@@ -29,10 +30,7 @@ export interface DisassociateMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.DisassociateMembersRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.DisassociateMembersResponse,
-      guardduty.DisassociateMembersError
-    >
+    ) => Effect.Effect<guardduty.DisassociateMembersResponse, guardduty.DisassociateMembersError>
   >
 > {}
 export const DisassociateMembers = Binding.Service<DisassociateMembers>(

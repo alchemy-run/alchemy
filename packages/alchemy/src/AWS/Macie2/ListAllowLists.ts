@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListAllowListsHttp)`.
- * @binding
- * @section Custom Data Identifiers & Lists
- * @example List Allow Lists
+ * ### Custom Data Identifiers & Lists
+ * **Example:** List Allow Lists
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listAllowLists = yield* AWS.Macie2.ListAllowLists();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { allowLists } = yield* listAllowLists();
  * ```
+ *
+ * @binding
  */
 export interface ListAllowLists extends Binding.Service<
   ListAllowLists,
@@ -26,12 +27,7 @@ export interface ListAllowLists extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.ListAllowListsRequest,
-    ) => Effect.Effect<
-      macie2.ListAllowListsResponse,
-      macie2.ListAllowListsError
-    >
+    ) => Effect.Effect<macie2.ListAllowListsResponse, macie2.ListAllowListsError>
   >
 > {}
-export const ListAllowLists = Binding.Service<ListAllowLists>(
-  "AWS.Macie2.ListAllowLists",
-);
+export const ListAllowLists = Binding.Service<ListAllowLists>("AWS.Macie2.ListAllowLists");

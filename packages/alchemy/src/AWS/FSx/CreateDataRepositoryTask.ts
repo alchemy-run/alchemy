@@ -15,9 +15,8 @@ import type { FileSystem } from "./FileSystem.ts";
  * job completes. A task already executing surfaces the typed
  * `DataRepositoryTaskExecuting`. Provide the implementation with
  * `Effect.provide(AWS.FSx.CreateDataRepositoryTaskHttp)`.
- * @binding
- * @section Data Repository Tasks
- * @example Export results to the linked S3 repository
+ * ### Data Repository Tasks
+ * **Example:** Export results to the linked S3 repository
  * ```typescript
  * const createDataRepositoryTask =
  *   yield* AWS.FSx.CreateDataRepositoryTask(scratch);
@@ -29,6 +28,8 @@ import type { FileSystem } from "./FileSystem.ts";
  * });
  * yield* Effect.log(`task ${response.DataRepositoryTask?.TaskId} started`);
  * ```
+ *
+ * @binding
  */
 export interface CreateDataRepositoryTask extends Binding.Service<
   CreateDataRepositoryTask,
@@ -38,11 +39,9 @@ export interface CreateDataRepositoryTask extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<fsx.CreateDataRepositoryTaskRequest, "FileSystemId">,
-    ) => Effect.Effect<
-      fsx.CreateDataRepositoryTaskResponse,
-      fsx.CreateDataRepositoryTaskError
-    >
+    ) => Effect.Effect<fsx.CreateDataRepositoryTaskResponse, fsx.CreateDataRepositoryTaskError>
   >
 > {}
-export const CreateDataRepositoryTask =
-  Binding.Service<CreateDataRepositoryTask>("AWS.FSx.CreateDataRepositoryTask");
+export const CreateDataRepositoryTask = Binding.Service<CreateDataRepositoryTask>(
+  "AWS.FSx.CreateDataRepositoryTask",
+);

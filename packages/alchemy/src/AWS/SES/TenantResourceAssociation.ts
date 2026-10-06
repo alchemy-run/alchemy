@@ -41,9 +41,8 @@ export interface TenantResourceAssociation extends Resource<
  *
  * This is an existence-only link with no mutable properties: changing either
  * the tenant or the resource replaces the association.
- * @resource
- * @section Associating Resources
- * @example Associate an Email Identity with a Tenant
+ * ### Associating Resources
+ * **Example:** Associate an Email Identity with a Tenant
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -57,7 +56,7 @@ export interface TenantResourceAssociation extends Resource<
  * });
  * ```
  *
- * @example Associate a Configuration Set
+ * **Example:** Associate a Configuration Set
  * ```typescript
  * const configSet = yield* SES.ConfigurationSet("AcmeTracking", {});
  * yield* SES.TenantResourceAssociation("ConfigSetLink", {
@@ -66,7 +65,7 @@ export interface TenantResourceAssociation extends Resource<
  * });
  * ```
  *
- * @example Associate an Email Template
+ * **Example:** Associate an Email Template
  * ```typescript
  * const template = yield* SES.EmailTemplate("Welcome", {
  *   subject: "Welcome, {{name}}!",
@@ -78,7 +77,7 @@ export interface TenantResourceAssociation extends Resource<
  * });
  * ```
  *
- * @example Share One Identity Across Two Tenants
+ * **Example:** Share One Identity Across Two Tenants
  * ```typescript
  * // A resource can belong to any number of tenants.
  * const acme = yield* SES.Tenant("Acme", {});
@@ -93,6 +92,8 @@ export interface TenantResourceAssociation extends Resource<
  *   resourceArn: identity.identityArn,
  * });
  * ```
+ *
+ * @resource
  */
 export const TenantResourceAssociation = Resource<TenantResourceAssociation>(
   "AWS.SES.TenantResourceAssociation",
@@ -105,27 +106,18 @@ export const TenantResourceAssociationProvider = () =>
       // Every resource associated with the tenant, or undefined when the
       // tenant itself is gone.
       const listResources = Effect.fn(function* (tenantName: string) {
-        const pages = yield* sesv2.listTenantResources
-          .pages({ TenantName: tenantName })
-          .pipe(
-            Stream.runCollect,
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const pages = yield* sesv2.listTenantResources.pages({ TenantName: tenantName }).pipe(
+          Stream.runCollect,
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        );
         if (pages === undefined) return undefined;
         return Array.from(pages).flatMap((page) => page.TenantResources ?? []);
       });
 
-      const isAssociated = Effect.fn(function* (
-        tenantName: string,
-        resourceArn: string,
-      ) {
+      const isAssociated = Effect.fn(function* (tenantName: string, resourceArn: string) {
         // A missing tenant means the association cannot exist.
         const resources = yield* listResources(tenantName);
-        return (resources ?? []).some(
-          (resource) => resource.ResourceArn === resourceArn,
-        );
+        return (resources ?? []).some((resource) => resource.ResourceArn === resourceArn);
       });
 
       return TenantResourceAssociation.Provider.of({
@@ -148,23 +140,17 @@ export const TenantResourceAssociationProvider = () =>
         // every tenant and pages through its resources. listResources already
         // treats a vanished tenant as "no associations".
         list: Effect.fn(function* () {
-          const pages = yield* sesv2.listTenants
-            .pages({})
-            .pipe(Stream.runCollect);
+          const pages = yield* sesv2.listTenants.pages({}).pipe(Stream.runCollect);
           const tenantNames = Array.from(pages)
             .flatMap((page) => page.Tenants ?? [])
-            .flatMap((tenant) =>
-              tenant.TenantName ? [tenant.TenantName] : [],
-            );
+            .flatMap((tenant) => (tenant.TenantName ? [tenant.TenantName] : []));
           const nested = yield* Effect.forEach(
             tenantNames,
             (tenantName) =>
               listResources(tenantName).pipe(
                 Effect.map((resources) =>
                   (resources ?? []).flatMap((resource) =>
-                    resource.ResourceArn
-                      ? [{ tenantName, resourceArn: resource.ResourceArn }]
-                      : [],
+                    resource.ResourceArn ? [{ tenantName, resourceArn: resource.ResourceArn }] : [],
                   ),
                 ),
               ),
@@ -185,10 +171,7 @@ export const TenantResourceAssociationProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            news.tenantName !== olds.tenantName ||
-            news.resourceArn !== olds.resourceArn
-          ) {
+          if (news.tenantName !== olds.tenantName || news.resourceArn !== olds.resourceArn) {
             return { action: "replace" } as const;
           }
         }),
@@ -208,11 +191,7 @@ export const TenantResourceAssociationProvider = () =>
                 TenantName: tenantName,
                 ResourceArn: resourceArn,
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
           }
 
           return { tenantName, resourceArn };

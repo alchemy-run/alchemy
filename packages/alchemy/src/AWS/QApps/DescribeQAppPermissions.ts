@@ -16,9 +16,8 @@ export interface DescribeQAppPermissionsRequest extends Omit<
  *
  * Reads the principals and actions granted on the bound Q App. Provide the implementation with
  * `Effect.provide(AWS.QApps.DescribeQAppPermissionsHttp)`.
- * @binding
- * @section Permissions
- * @example Describe App Permissions
+ * ### Permissions
+ * **Example:** Describe App Permissions
  * ```typescript
  * // init — bind the operation to the Q App
  * const describeQAppPermissions = yield* AWS.QApps.DescribeQAppPermissions(app);
@@ -27,6 +26,8 @@ export interface DescribeQAppPermissionsRequest extends Omit<
  * const permissions = yield* describeQAppPermissions();
  * console.log(permissions.permissions?.length);
  * ```
+ *
+ * @binding
  */
 export interface DescribeQAppPermissions extends Binding.Service<
   DescribeQAppPermissions,
@@ -36,10 +37,7 @@ export interface DescribeQAppPermissions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeQAppPermissionsRequest,
-    ) => Effect.Effect<
-      qapps.DescribeQAppPermissionsOutput,
-      qapps.DescribeQAppPermissionsError
-    >
+    ) => Effect.Effect<qapps.DescribeQAppPermissionsOutput, qapps.DescribeQAppPermissionsError>
   >
 > {}
 

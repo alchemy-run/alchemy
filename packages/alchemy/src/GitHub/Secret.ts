@@ -71,12 +71,11 @@ export interface Secret extends Resource<
  * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
- * @resource
- * @section Repository Secrets
+ * ### Repository Secrets
  * Store secrets accessible to all GitHub Actions workflows in the
  * repository.
  *
- * @example Create a Repository Secret
+ * **Example:** Create a Repository Secret
  * ```typescript
  * yield* GitHub.Secret("aws-role", {
  *   owner: "my-org",
@@ -86,12 +85,12 @@ export interface Secret extends Resource<
  * });
  * ```
  *
- * @section Environment Secrets
+ * ### Environment Secrets
  * Scope a secret to a specific GitHub Actions environment (e.g.
  * `production`, `staging`). Environment secrets require environment
  * protection rules to be satisfied before workflows can access them.
  *
- * @example Create an Environment Secret
+ * **Example:** Create an Environment Secret
  * ```typescript
  * yield* GitHub.Secret("deploy-key", {
  *   owner: "my-org",
@@ -102,12 +101,12 @@ export interface Secret extends Resource<
  * });
  * ```
  *
- * @section Wiring with Other Resources
+ * ### Wiring with Other Resources
  * A common pattern is wiring the output of another resource — like an
  * IAM role ARN or a database URL — directly into a GitHub secret so
  * that CI workflows can use it.
  *
- * @example Store an IAM Role ARN for CI
+ * **Example:** Store an IAM Role ARN for CI
  * ```typescript
  * const role = yield* AWS.IAM.Role("ci-role", { ... });
  *
@@ -119,7 +118,7 @@ export interface Secret extends Resource<
  * });
  * ```
  *
- * @example Store Multiple Secrets
+ * **Example:** Store Multiple Secrets
  * ```typescript
  * yield* GitHub.Secret("db-url", {
  *   owner: "my-org",
@@ -137,18 +136,17 @@ export interface Secret extends Resource<
  *   value: Redacted.make(apiKey),
  * });
  * ```
+ *
+ * @resource
+ * @product Actions
  */
 export const Secret = Resource<Secret>("GitHub.Secret");
 
-async function encryptValue(
-  plaintext: string,
-  publicKey: string,
-): Promise<string> {
+async function encryptValue(plaintext: string, publicKey: string): Promise<string> {
   const mod = await import("libsodium-wrappers");
   // Bun/ESM interop: the actual sodium API lives on `.default` when the
   // CJS module is wrapped, but is the module itself under other loaders.
-  const sodium: typeof import("libsodium-wrappers") =
-    (mod as any).default ?? mod;
+  const sodium: typeof import("libsodium-wrappers") = (mod as any).default ?? mod;
   await sodium.ready;
   const binKey = sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL);
   const binMessage = sodium.from_string(plaintext);
@@ -171,8 +169,7 @@ export const SecretProvider = () =>
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         news.name !== olds.name ||
-        resolveEnvironmentName(news.environment) !==
-          resolveEnvironmentName(olds.environment) ||
+        resolveEnvironmentName(news.environment) !== resolveEnvironmentName(olds.environment) ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
         return { action: "replace" };
@@ -196,8 +193,7 @@ export const SecretProvider = () =>
       // orphaned secret from its old location before upserting the new one.
       if (
         olds !== undefined &&
-        resolveEnvironmentName(olds.environment) !==
-          resolveEnvironmentName(news.environment)
+        resolveEnvironmentName(olds.environment) !== resolveEnvironmentName(news.environment)
       ) {
         yield* deleteSecret(olds);
       }
@@ -237,9 +233,7 @@ const upsertSecret = Effect.fn(function* (props: SecretProps) {
     return data;
   });
 
-  const encrypted = yield* Effect.tryPromise(() =>
-    encryptValue(plaintext, publicKey.key),
-  );
+  const encrypted = yield* Effect.tryPromise(() => encryptValue(plaintext, publicKey.key));
 
   yield* Effect.tryPromise(async () => {
     if (environment !== undefined) {

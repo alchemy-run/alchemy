@@ -16,7 +16,7 @@ export default Alchemy.Stack(
         include: ["src/**", "public/**", "package.json", "astro.config.ts"],
       },
       env: {
-        GREETING: "Hello from Alchemy!",
+        GREETING: "Hello from Astro on Cloudflare!",
       },
     });
 

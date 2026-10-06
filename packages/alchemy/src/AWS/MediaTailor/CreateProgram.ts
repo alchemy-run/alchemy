@@ -13,9 +13,8 @@ import * as Binding from "../../Binding.ts";
  * account-level and grants `mediatailor:CreateProgram` on `*`. Provide the
  * implementation with `Effect.provide(AWS.MediaTailor.CreateProgramHttp)`.
  *
- * @binding
- * @section Channel Assembly
- * @example Append a VOD source to a channel
+ * ### Channel Assembly
+ * **Example:** Append a VOD source to a channel
  * ```typescript
  * const createProgram = yield* AWS.MediaTailor.CreateProgram();
  *
@@ -27,6 +26,8 @@ import * as Binding from "../../Binding.ts";
  *   ScheduleConfiguration: { Transition: { Type: "RELATIVE", RelativePosition: "AFTER_PROGRAM" } },
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateProgram extends Binding.Service<
   CreateProgram,
@@ -34,12 +35,7 @@ export interface CreateProgram extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.CreateProgramRequest,
-    ) => Effect.Effect<
-      mediatailor.CreateProgramResponse,
-      mediatailor.CreateProgramError
-    >
+    ) => Effect.Effect<mediatailor.CreateProgramResponse, mediatailor.CreateProgramError>
   >
 > {}
-export const CreateProgram = Binding.Service<CreateProgram>(
-  "AWS.MediaTailor.CreateProgram",
-);
+export const CreateProgram = Binding.Service<CreateProgram>("AWS.MediaTailor.CreateProgram");

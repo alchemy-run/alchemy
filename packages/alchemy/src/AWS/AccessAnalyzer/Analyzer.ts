@@ -9,12 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -90,9 +85,8 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
  * The `ACCOUNT` external-access analyzer is free and is the common case:
  * create one per account per Region to have Access Analyzer surface public
  * and cross-account grants as findings.
- * @resource
- * @section Creating an Analyzer
- * @example Account External-Access Analyzer
+ * ### Creating an Analyzer
+ * **Example:** Account External-Access Analyzer
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -101,7 +95,7 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
  * });
  * ```
  *
- * @example Analyzer with Tags
+ * **Example:** Analyzer with Tags
  * ```typescript
  * const analyzer = yield* AWS.AccessAnalyzer.Analyzer("AccountAnalyzer", {
  *   analyzerName: "prod-external-access",
@@ -110,7 +104,7 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
  * });
  * ```
  *
- * @example Unused-Access Analyzer with a Custom Tracking Period
+ * **Example:** Unused-Access Analyzer with a Custom Tracking Period
  * ```typescript
  * const analyzer = yield* AWS.AccessAnalyzer.Analyzer("UnusedAccess", {
  *   type: "ACCOUNT_UNUSED_ACCESS",
@@ -118,8 +112,8 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
  * });
  * ```
  *
- * @section Archiving Findings
- * @example Auto-archive Findings from a Trusted Account
+ * ### Archiving Findings
+ * **Example:** Auto-archive Findings from a Trusted Account
  * ```typescript
  * const analyzer = yield* AWS.AccessAnalyzer.Analyzer("AccountAnalyzer", {});
  *
@@ -131,6 +125,8 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Analyzer = Resource<Analyzer>("AWS.AccessAnalyzer.Analyzer");
 
@@ -142,18 +138,13 @@ export const AnalyzerProvider = () =>
         id: string,
         props: { analyzerName?: string | undefined },
       ) {
-        return (
-          props.analyzerName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.analyzerName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* aa.getAnalyzer({ analyzerName: name }).pipe(
           Effect.map((r) => r.analyzer),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -162,12 +153,8 @@ export const AnalyzerProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* aa.listAnalyzers
-              .pages({})
-              .pipe(Stream.runCollect);
-            const summaries = Array.from(pages).flatMap(
-              (page) => page.analyzers ?? [],
-            );
+            const pages = yield* aa.listAnalyzers.pages({}).pipe(Stream.runCollect);
+            const summaries = Array.from(pages).flatMap((page) => page.analyzers ?? []);
             return summaries.map((summary) => ({
               analyzerName: summary.name,
               analyzerArn: summary.arn,
@@ -177,8 +164,7 @@ export const AnalyzerProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.analyzerName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.analyzerName ?? (yield* createName(id, olds ?? {}));
           const analyzer = yield* observe(name);
           if (analyzer === undefined) return undefined;
           const attrs = {
@@ -209,8 +195,7 @@ export const AnalyzerProvider = () =>
           // physical name is stable across the replacement).
           if (
             news.unusedAccessAge !== undefined &&
-            toWireDays(olds.unusedAccessAge) !==
-              toWireDays(news.unusedAccessAge)
+            toWireDays(olds.unusedAccessAge) !== toWireDays(news.unusedAccessAge)
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
@@ -286,9 +271,7 @@ export const AnalyzerProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* aa
             .deleteAnalyzer({ analyzerName: output.analyzerName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           // Unused-access analyzers are account/Region singletons. The delete
           // API returns before the quota slot is necessarily reusable, so a
@@ -306,10 +289,7 @@ export const AnalyzerProvider = () =>
             ),
             Effect.retry({
               while: (error) => error._tag === "AnalyzerStillExists",
-              schedule: Schedule.max([
-                Schedule.spaced("2 seconds"),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
             }),
           );
         }),

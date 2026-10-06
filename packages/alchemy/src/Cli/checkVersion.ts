@@ -1,17 +1,23 @@
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-
-import { AlchemyContext } from "alchemy/AlchemyContext";
 import packageJson from "../../package.json" with { type: "json" };
+import {
+  ANSI_RESET,
+  ansiFg,
+  colorsEnabled,
+  glyphsFor,
+  theme,
+  unicodeEnabled,
+} from "./CliKit/index.ts";
 
-const NPM_DIST_TAGS_URL =
-  "https://registry.npmjs.org/-/package/alchemy/dist-tags";
+const NPM_DIST_TAGS_URL = "https://registry.npmjs.org/-/package/alchemy/dist-tags";
 
 const CACHE_FILE = "version-check.json";
 const CACHE_TTL_MILLIS = Duration.toMillis(Duration.days(1));
@@ -25,32 +31,68 @@ interface VersionCheckCache {
   distTags?: Record<string, string>;
 }
 
+const parseVersion = (v: string) => {
+  const [core = "", pre] = v.split("-", 2);
+  return {
+    core: core.split(".").map(Number),
+    pre: pre === undefined ? [] : pre.split(".").map((id) => (/^\d+$/.test(id) ? Number(id) : id)),
+  };
+};
+
+/**
+ * Semver precedence (semver.org §11): negative when a < b, positive when
+ * a > b. Enough of the spec for registry versions — numeric core, dotted
+ * prerelease identifiers, release > prerelease.
+ */
+const compareVersions = (a: string, b: string): number => {
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  for (let i = 0; i < 3; i++) {
+    const d = (pa.core[i] ?? 0) - (pb.core[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  // A release outranks any prerelease of the same core.
+  if (pa.pre.length === 0 || pb.pre.length === 0) {
+    return pb.pre.length - pa.pre.length;
+  }
+  for (let i = 0; i < Math.max(pa.pre.length, pb.pre.length); i++) {
+    const x = pa.pre[i];
+    const y = pb.pre[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (x === y) continue;
+    if (typeof x === "number" && typeof y === "number") return x - y;
+    // Numeric identifiers rank below alphanumeric ones.
+    if (typeof x === "number") return -1;
+    if (typeof y === "number") return 1;
+    return x < y ? -1 : 1;
+  }
+  return 0;
+};
+
 /**
  * Pick the dist-tag matching the current channel. For pre-release versions
- * like `2.0.0-beta.33`, npm's `latest` tag points at the most recent stable
- * release — not the newest beta — so we match the prerelease identifier
- * (`beta`, `next`, etc.), falling back through `next` → `latest`.
+ * like `2.0.0-beta.33`, we match the prerelease identifier (`beta`, `next`,
+ * etc.), falling back through `next` → `latest`. Because our releases can
+ * force prereleases onto `latest`, it may run ahead of the channel tag —
+ * in that case offer `latest` instead of the channel pick.
  */
-const pickDistTag = (
-  current: string,
-  distTags: Record<string, string>,
-): string | undefined => {
+const pickDistTag = (current: string, distTags: Record<string, string>): string | undefined => {
   const pre = current.split("-", 2)[1];
-  if (pre) {
-    const id = pre.split(".")[0];
-    if (id && distTags[id]) return distTags[id];
-    if (distTags.next) return distTags.next;
-  }
-  return distTags.latest;
+  if (!pre) return distTags.latest;
+  const id = pre.split(".")[0];
+  const channelPick = (id && distTags[id]) || distTags.next;
+  const { latest } = distTags;
+  if (channelPick === undefined) return latest;
+  if (latest === undefined) return channelPick;
+  return compareVersions(latest, channelPick) > 0 ? latest : channelPick;
 };
 
 const readCache = Effect.fn(
   function* (cachePath: string) {
     const fs = yield* FileSystem.FileSystem;
     const raw = yield* fs.readFileString(cachePath);
-    const parsed = yield* Effect.try(
-      () => JSON.parse(raw) as VersionCheckCache | null | undefined,
-    );
+    const parsed = yield* Effect.try(() => JSON.parse(raw) as VersionCheckCache | null | undefined);
     return typeof parsed?.checkedAt === "number" ? parsed : undefined;
   },
   Effect.catch(() => Effect.succeed(undefined)),
@@ -123,21 +165,26 @@ export const checkLatestVersion = Effect.gen(function* () {
 
   const current = packageJson.version;
   const latest = pickDistTag(current, distTags);
-  if (latest === undefined || latest === current) return;
+  // Strictly newer only: a dist-tag pointing at (or behind) the installed
+  // version — e.g. a stale `next` after a force-latest release — must not
+  // prompt a "downgrade".
+  if (latest === undefined || compareVersions(latest, current) <= 0) return;
 
   const installCmd =
-    typeof process !== "undefined" && (process as any).versions?.bun
+    typeof process !== "undefined" && process.versions.bun !== undefined
       ? `bun add alchemy@${latest}`
       : `pnpm add alchemy@${latest}`;
-  // Print via the Console service, not Effect.logWarning: TelemetryLive
-  // replaces the default stdout logger with an OTLP-only logger at this
-  // stage of the program, so log output would never reach the terminal.
-  const useColor = process.stderr.isTTY === true;
+  // Print via the Console service, not Effect.logWarning: this is a
+  // user-facing notice, not a log record, so it should reach the terminal
+  // regardless of the installed loggers or the configured log floor.
+  const useColor = colorsEnabled();
+  const glyphs = glyphsFor(unicodeEnabled());
   const message =
-    `alchemy ${latest} is available (you're on ${current}). ` +
-    `Run \`${installCmd}\` to upgrade.`;
-  yield* Console.warn(useColor ? `\x1b[33m${message}\x1b[0m` : message);
+    `alchemy ${latest} is available (you're on ${current}). ` + `Run \`${installCmd}\` to upgrade.`;
+  yield* Console.warn(
+    useColor ? `${ansiFg(theme.color.warning)}${glyphs.warning} ${message}${ANSI_RESET}` : message,
+  );
 }).pipe(Effect.catch(() => Effect.void));
 
 // Exported for tests.
-export const _internal = { pickDistTag };
+export const _internal = { pickDistTag, compareVersions };

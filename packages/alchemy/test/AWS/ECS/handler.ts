@@ -1,12 +1,12 @@
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import path from "pathe";
 import * as EC2 from "@/AWS/EC2";
 import * as ECS from "@/AWS/ECS";
 import * as Lambda from "@/AWS/Lambda";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -37,7 +37,7 @@ const TaskRef = ECS.Task as unknown as {
 export default EcsBindingsTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
     memorySize: 512,
   },
@@ -87,9 +87,7 @@ export default EcsBindingsTestFunction.make(
             ...(body.command
               ? {
                   overrides: {
-                    containerOverrides: [
-                      { name: containerName, command: body.command },
-                    ],
+                    containerOverrides: [{ name: containerName, command: body.command }],
                   },
                 }
               : {}),
@@ -143,9 +141,7 @@ export default EcsBindingsTestFunction.make(
           const desiredStatus = url.searchParams.get("status");
           const startedBy = url.searchParams.get("startedBy");
           const response = yield* listTasks({
-            ...(desiredStatus
-              ? { desiredStatus: desiredStatus as "RUNNING" | "STOPPED" }
-              : {}),
+            ...(desiredStatus ? { desiredStatus: desiredStatus as "RUNNING" | "STOPPED" } : {}),
             ...(startedBy ? { startedBy } : {}),
           });
           return yield* HttpServerResponse.json({
@@ -192,9 +188,8 @@ export default EcsBindingsTestFunction.make(
               protectedTasks: r.protectedTasks,
               failures: r.failures,
             })),
-            Effect.catchTag(
-              ["InvalidParameterException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ error: e._tag as string }),
+            Effect.catchTag(["InvalidParameterException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ error: e._tag as string }),
             ),
           );
           return yield* HttpServerResponse.json(response);
@@ -214,18 +209,14 @@ export default EcsBindingsTestFunction.make(
               protectedTasks: r.protectedTasks,
               failures: r.failures,
             })),
-            Effect.catchTag(
-              ["InvalidParameterException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ error: e._tag as string }),
+            Effect.catchTag(["InvalidParameterException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ error: e._tag as string }),
             ),
           );
           return yield* HttpServerResponse.json(response);
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

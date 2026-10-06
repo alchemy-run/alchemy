@@ -90,12 +90,7 @@ export interface ReportDefinitionProps {
    * and `OVERWRITE_REPORT` versioning, and cannot be combined with the other
    * artifacts.
    */
-  additionalArtifacts?: (
-    | "REDSHIFT"
-    | "QUICKSIGHT"
-    | "ATHENA"
-    | (string & {})
-  )[];
+  additionalArtifacts?: ("REDSHIFT" | "QUICKSIGHT" | "ATHENA" | (string & {}))[];
   /**
    * Whether AWS updates previously delivered reports when charges are applied
    * retroactively (refunds, credits, RI fees).
@@ -160,9 +155,8 @@ export interface ReportDefinition extends Resource<
  * Report definitions are free; you pay only for the S3 storage of delivered
  * reports.
  *
- * @resource
- * @section Creating a Report
- * @example Daily CSV report with resource IDs
+ * ### Creating a Report
+ * **Example:** Daily CSV report with resource IDs
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -195,7 +189,7 @@ export interface ReportDefinition extends Resource<
  * });
  * ```
  *
- * @example Athena-ready Parquet report
+ * **Example:** Athena-ready Parquet report
  * ```typescript
  * const report = yield* AWS.CostAndUsageReport.ReportDefinition("Athena", {
  *   timeUnit: "HOURLY",
@@ -208,6 +202,8 @@ export interface ReportDefinition extends Resource<
  *   s3Region: bucket.region,
  * });
  * ```
+ *
+ * @resource
  */
 export const ReportDefinition = Resource<ReportDefinition>(
   "AWS.CostAndUsageReport.ReportDefinition",
@@ -233,10 +229,7 @@ export const ReportDefinitionProvider = () =>
         id: string,
         props: { reportName?: string | undefined },
       ) {
-        return (
-          props.reportName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.reportName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const reportArn = (accountId: string, name: string) =>
@@ -245,9 +238,7 @@ export const ReportDefinitionProvider = () =>
       // There is no Get operation — observe by scanning the (small,
       // account-max ~10 entries) paginated list.
       const findReport = Effect.fn(function* (name: string) {
-        const pages = yield* pin(
-          cur.describeReportDefinitions.pages({}).pipe(Stream.runCollect),
-        );
+        const pages = yield* pin(cur.describeReportDefinitions.pages({}).pipe(Stream.runCollect));
         return Array.from(pages)
           .flatMap((page) => page.ReportDefinitions ?? [])
           .find((r) => r.ReportName === name);
@@ -289,20 +280,14 @@ export const ReportDefinitionProvider = () =>
         observed.S3Bucket !== desired.S3Bucket ||
         observed.S3Prefix !== desired.S3Prefix ||
         observed.S3Region !== desired.S3Region ||
-        !setEquals(
-          observed.AdditionalSchemaElements,
-          desired.AdditionalSchemaElements,
-        ) ||
+        !setEquals(observed.AdditionalSchemaElements, desired.AdditionalSchemaElements) ||
         !setEquals(observed.AdditionalArtifacts, desired.AdditionalArtifacts) ||
         (desired.RefreshClosedReports !== undefined &&
           observed.RefreshClosedReports !== desired.RefreshClosedReports) ||
         (desired.ReportVersioning !== undefined &&
           observed.ReportVersioning !== desired.ReportVersioning);
 
-      const toAttributes = (
-        accountId: string,
-        observed: cur.ReportDefinition,
-      ) => ({
+      const toAttributes = (accountId: string, observed: cur.ReportDefinition) => ({
         reportName: observed.ReportName,
         reportArn: reportArn(accountId, observed.ReportName),
         timeUnit: observed.TimeUnit,
@@ -313,10 +298,7 @@ export const ReportDefinitionProvider = () =>
         s3Region: observed.S3Region,
       });
 
-      const syncTags = Effect.fn(function* (
-        name: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (name: string, desiredTags: Record<string, string>) {
         // Diff against OBSERVED cloud tags — adoption may bring foreign tags.
         const observedTags = yield* readTags(name);
         const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -342,8 +324,7 @@ export const ReportDefinitionProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const name =
-            output?.reportName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.reportName ?? (yield* createName(id, olds ?? {}));
           const observed = yield* findReport(name);
           if (!observed) return undefined;
           const attrs = toAttributes(accountId, observed);
@@ -416,9 +397,7 @@ export const ReportDefinitionProvider = () =>
           // report are undocumented, so observe first and treat absent as done.
           const observed = yield* findReport(output.reportName);
           if (!observed) return;
-          yield* pin(
-            cur.deleteReportDefinition({ ReportName: output.reportName }),
-          );
+          yield* pin(cur.deleteReportDefinition({ ReportName: output.reportName }));
         }),
       });
     }),

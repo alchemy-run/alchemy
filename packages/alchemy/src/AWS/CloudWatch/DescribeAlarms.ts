@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { AlarmResource } from "./binding-common.ts";
 
-export interface DescribeAlarmsRequest extends Omit<
-  cloudwatch.DescribeAlarmsInput,
-  "AlarmNames"
-> {}
+export interface DescribeAlarmsRequest extends Omit<cloudwatch.DescribeAlarmsInput, "AlarmNames"> {}
 
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
@@ -18,9 +15,8 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
  *
  * Provide `CloudWatch.DescribeAlarmsHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Reading Alarm State
- * @example Read the State of a Bound Alarm
+ * ### Reading Alarm State
+ * **Example:** Read the State of a Bound Alarm
  * ```typescript
  * const alarm = yield* CloudWatch.Alarm("HighErrors", {
  *   MetricName: "Errors",
@@ -39,6 +35,8 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
  * const result = yield* describeAlarms();
  * const state = result.MetricAlarms?.[0]?.StateValue; // "OK" | "ALARM" | ...
  * ```
+ *
+ * @binding
  */
 export interface DescribeAlarms extends Binding.Service<
   DescribeAlarms,
@@ -46,12 +44,8 @@ export interface DescribeAlarms extends Binding.Service<
   (
     ...alarms: AlarmResources
   ) => Effect.Effect<
-    (
-      request?: DescribeAlarmsRequest,
-    ) => Effect.Effect<cloudwatch.DescribeAlarmsOutput, any>
+    (request?: DescribeAlarmsRequest) => Effect.Effect<cloudwatch.DescribeAlarmsOutput, any>
   >
 > {}
 
-export const DescribeAlarms = Binding.Service<DescribeAlarms>(
-  "AWS.CloudWatch.DescribeAlarms",
-);
+export const DescribeAlarms = Binding.Service<DescribeAlarms>("AWS.CloudWatch.DescribeAlarms");

@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  canonicalJson,
-  observeControlTowerTags,
-  syncControlTowerTags,
-} from "./internal.ts";
+import { canonicalJson, observeControlTowerTags, syncControlTowerTags } from "./internal.ts";
 
 export interface LandingZoneProps {
   /**
@@ -82,9 +78,8 @@ export interface LandingZone extends Resource<
  * managed from the Organizations management account. Creating, updating,
  * and decommissioning a landing zone are asynchronous operations that can
  * take an hour or more.
- * @resource
- * @section Creating a Landing Zone
- * @example Landing Zone from a manifest
+ * ### Creating a Landing Zone
+ * **Example:** Landing Zone from a manifest
  * ```typescript
  * import * as ControlTower from "alchemy/AWS/ControlTower";
  *
@@ -110,26 +105,24 @@ export interface LandingZone extends Resource<
  * });
  * ```
  *
- * @section Upgrading
- * @example Upgrade the landing zone version
+ * ### Upgrading
+ * **Example:** Upgrade the landing zone version
  * ```typescript
  * const landingZone = yield* ControlTower.LandingZone("LandingZone", {
  *   version: "3.3", // bump to upgrade in place
  *   manifest,
  * });
  * ```
+ *
+ * @resource
  */
-export const LandingZone = Resource<LandingZone>(
-  "AWS.ControlTower.LandingZone",
-);
+export const LandingZone = Resource<LandingZone>("AWS.ControlTower.LandingZone");
 
 /**
  * An asynchronous landing zone operation (CREATE / UPDATE / DELETE /
  * RESET) converged to the terminal `FAILED` status.
  */
-export class LandingZoneOperationFailed extends Data.TaggedError(
-  "LandingZoneOperationFailed",
-)<{
+export class LandingZoneOperationFailed extends Data.TaggedError("LandingZoneOperationFailed")<{
   readonly operationIdentifier: string;
   readonly status: string;
   readonly statusMessage: string | undefined;
@@ -139,9 +132,7 @@ export class LandingZoneOperationFailed extends Data.TaggedError(
  * Internal signal that a landing zone operation is still `IN_PROGRESS`,
  * consumed by {@link waitForLandingZoneOperation}'s bounded schedule.
  */
-class LandingZoneOperationPending extends Data.TaggedError(
-  "LandingZoneOperationPending",
-)<{
+class LandingZoneOperationPending extends Data.TaggedError("LandingZoneOperationPending")<{
   readonly operationIdentifier: string;
   readonly status: string | undefined;
 }> {}
@@ -150,21 +141,14 @@ class LandingZoneOperationPending extends Data.TaggedError(
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
-const retryWhileLandingZoneOperationPending = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+const retryWhileLandingZoneOperationPending = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "LandingZoneOperationPending",
     // Landing zone operations routinely take ~60 minutes; poll every 30s
     // up to 90 minutes (bounded).
-    schedule: Schedule.max([
-      Schedule.spaced("30 seconds"),
-      Schedule.recurs(180),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("30 seconds"), Schedule.recurs(180)]),
   });
 
 const waitForLandingZoneOperation = (operationIdentifier: string) =>
@@ -209,9 +193,7 @@ const findLandingZoneArn = controltower.listLandingZones.pages({}).pipe(
 const readLandingZone = (landingZoneIdentifier: string) =>
   controltower.getLandingZone({ landingZoneIdentifier }).pipe(
     Effect.map((r) => r.landingZone),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const toAttributes = (
@@ -256,8 +238,7 @@ export const LandingZoneProvider = () =>
           // 1. Observe — the landing zone is an org singleton; enumerate
           //    rather than trusting a cached identifier.
           let arn = output?.landingZoneArn ?? (yield* findLandingZoneArn);
-          let detail =
-            arn === undefined ? undefined : yield* readLandingZone(arn);
+          let detail = arn === undefined ? undefined : yield* readLandingZone(arn);
 
           // 2. Ensure — create if missing and wait for the asynchronous
           //    operation to converge.
@@ -270,9 +251,7 @@ export const LandingZoneProvider = () =>
               tags: { ...news.tags, ...internalTags },
             });
             arn = created.arn;
-            yield* session.note(
-              `landing zone operation ${created.operationIdentifier}`,
-            );
+            yield* session.note(`landing zone operation ${created.operationIdentifier}`);
             yield* waitForLandingZoneOperation(created.operationIdentifier);
             detail = yield* readLandingZone(arn);
           } else {
@@ -281,8 +260,7 @@ export const LandingZoneProvider = () =>
             //    skip the (very slow) update API on a no-op.
             const versionChanged = detail.version !== news.version;
             const manifestChanged =
-              canonicalJson(detail.manifest ?? {}) !==
-              canonicalJson(news.manifest);
+              canonicalJson(detail.manifest ?? {}) !== canonicalJson(news.manifest);
             const remediationChanged =
               news.remediationTypes !== undefined &&
               canonicalJson([...(detail.remediationTypes ?? [])].sort()) !==
@@ -294,9 +272,7 @@ export const LandingZoneProvider = () =>
                 manifest: news.manifest,
                 remediationTypes: news.remediationTypes,
               });
-              yield* session.note(
-                `landing zone operation ${updated.operationIdentifier}`,
-              );
+              yield* session.note(`landing zone operation ${updated.operationIdentifier}`);
               yield* waitForLandingZoneOperation(updated.operationIdentifier);
               detail = yield* readLandingZone(arn!);
             }
@@ -322,15 +298,9 @@ export const LandingZoneProvider = () =>
             .deleteLandingZone({
               landingZoneIdentifier: output.landingZoneArn,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (result !== undefined) {
-            yield* session.note(
-              `landing zone operation ${result.operationIdentifier}`,
-            );
+            yield* session.note(`landing zone operation ${result.operationIdentifier}`);
             yield* waitForLandingZoneOperation(result.operationIdentifier);
           }
         }),

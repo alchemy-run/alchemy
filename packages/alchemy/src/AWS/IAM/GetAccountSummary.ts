@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  * `iam:GetAccountSummary` on `*`. Provide the implementation with
  * `Effect.provide(AWS.IAM.GetAccountSummaryHttp)`.
  *
- * @binding
- * @section Account Auditing
- * @example Alarm When Nearing the Role Quota
+ * ### Account Auditing
+ * **Example:** Alarm When Nearing the Role Quota
  * ```typescript
  * // init
  * const getAccountSummary = yield* IAM.GetAccountSummary();
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  * const nearQuota =
  *   (SummaryMap?.Roles ?? 0) > 0.9 * (SummaryMap?.RolesQuota ?? Infinity);
  * ```
+ *
+ * @binding
  */
 export interface GetAccountSummary extends Binding.Service<
   GetAccountSummary,
@@ -31,12 +32,7 @@ export interface GetAccountSummary extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iam.GetAccountSummaryRequest,
-    ) => Effect.Effect<
-      iam.GetAccountSummaryResponse,
-      iam.GetAccountSummaryError
-    >
+    ) => Effect.Effect<iam.GetAccountSummaryResponse, iam.GetAccountSummaryError>
   >
 > {}
-export const GetAccountSummary = Binding.Service<GetAccountSummary>(
-  "AWS.IAM.GetAccountSummary",
-);
+export const GetAccountSummary = Binding.Service<GetAccountSummary>("AWS.IAM.GetAccountSummary");

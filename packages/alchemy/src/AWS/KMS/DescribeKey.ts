@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface DescribeKeyRequest extends Omit<
-  kms.DescribeKeyRequest,
-  "KeyId"
-> {}
+export interface DescribeKeyRequest extends Omit<kms.DescribeKeyRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:DescribeKey`.
@@ -17,15 +14,16 @@ export interface DescribeKeyRequest extends Omit<
  * `KeyId`. Useful at runtime to discover a key's state, spec, and supported
  * algorithms before choosing a cryptographic operation.
  *
- * @binding
- * @section Key Metadata
- * @example Inspect the Bound Key
+ * ### Key Metadata
+ * **Example:** Inspect the Bound Key
  * ```typescript
  * const describeKey = yield* AWS.KMS.DescribeKey(key);
  *
  * const { KeyMetadata } = yield* describeKey();
  * // KeyMetadata.KeyState, KeyMetadata.KeySpec, ...
  * ```
+ *
+ * @binding
  */
 export interface DescribeKey extends Binding.Service<
   DescribeKey,
@@ -33,9 +31,7 @@ export interface DescribeKey extends Binding.Service<
   (
     key: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request?: DescribeKeyRequest,
-    ) => Effect.Effect<kms.DescribeKeyResponse, kms.DescribeKeyError>
+    (request?: DescribeKeyRequest) => Effect.Effect<kms.DescribeKeyResponse, kms.DescribeKeyError>
   >
 > {}
 

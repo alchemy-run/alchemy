@@ -8,10 +8,7 @@ import type { Application } from "./Application.ts";
  * `applicationId` is injected from the bound {@link Application}; the
  * idempotency `clientToken` is auto-generated when omitted.
  */
-export type StartJobRunInput = Omit<
-  emr.StartJobRunRequest,
-  "applicationId" | "clientToken"
-> & {
+export type StartJobRunInput = Omit<emr.StartJobRunRequest, "applicationId" | "clientToken"> & {
   /**
    * Idempotency token deduplicating retried submissions.
    * @default a generated UUID per call
@@ -29,9 +26,8 @@ export type StartJobRunInput = Omit<
  * `iam:PassRole` (conditioned to `emr-serverless.amazonaws.com`) so the
  * function can hand the service the execution role. Provide the
  * implementation with `Effect.provide(AWS.EMRServerless.StartJobRunHttp)`.
- * @binding
- * @section Running Jobs
- * @example Submit A Spark Job
+ * ### Running Jobs
+ * **Example:** Submit A Spark Job
  * ```typescript
  * // init — bind the operation to the application
  * const startJobRun = yield* AWS.EMRServerless.StartJobRun(app);
@@ -49,6 +45,8 @@ export type StartJobRunInput = Omit<
  * });
  * yield* Effect.log(`started ${run.jobRunId}`);
  * ```
+ *
+ * @binding
  */
 export interface StartJobRun extends Binding.Service<
   StartJobRun,
@@ -56,11 +54,7 @@ export interface StartJobRun extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: StartJobRunInput,
-    ) => Effect.Effect<emr.StartJobRunResponse, emr.StartJobRunError>
+    (request: StartJobRunInput) => Effect.Effect<emr.StartJobRunResponse, emr.StartJobRunError>
   >
 > {}
-export const StartJobRun = Binding.Service<StartJobRun>(
-  "AWS.EMRServerless.StartJobRun",
-);
+export const StartJobRun = Binding.Service<StartJobRun>("AWS.EMRServerless.StartJobRun");

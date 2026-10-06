@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.EnableOrganizationAdminAccountHttp)`.
- * @binding
- * @section Organization Administration
- * @example Delegate an Administrator
+ * ### Organization Administration
+ * **Example:** Delegate an Administrator
  * ```typescript
  * // init
  * // init — account-level binding, no resource argument
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* enableOrganizationAdminAccount({ AdminAccountId: "111122223333" });
  * ```
+ *
+ * @binding
  */
 export interface EnableOrganizationAdminAccount extends Binding.Service<
   EnableOrganizationAdminAccount,
@@ -33,7 +34,6 @@ export interface EnableOrganizationAdminAccount extends Binding.Service<
     >
   >
 > {}
-export const EnableOrganizationAdminAccount =
-  Binding.Service<EnableOrganizationAdminAccount>(
-    "AWS.GuardDuty.EnableOrganizationAdminAccount",
-  );
+export const EnableOrganizationAdminAccount = Binding.Service<EnableOrganizationAdminAccount>(
+  "AWS.GuardDuty.EnableOrganizationAdminAccount",
+);

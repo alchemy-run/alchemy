@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.GetCodeSecurityScanHttp)`.
- * @binding
- * @section Code Security Scans
- * @example Poll a Code Security Scan
+ * ### Code Security Scans
+ * **Example:** Poll a Code Security Scan
  * ```typescript
  * // init
  * const getCodeSecurityScan = yield* AWS.Inspector2.GetCodeSecurityScan();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   scanId,
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetCodeSecurityScan extends Binding.Service<
   GetCodeSecurityScan,
@@ -29,10 +30,7 @@ export interface GetCodeSecurityScan extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetCodeSecurityScanRequest,
-    ) => Effect.Effect<
-      inspector2.GetCodeSecurityScanResponse,
-      inspector2.GetCodeSecurityScanError
-    >
+    ) => Effect.Effect<inspector2.GetCodeSecurityScanResponse, inspector2.GetCodeSecurityScanError>
   >
 > {}
 export const GetCodeSecurityScan = Binding.Service<GetCodeSecurityScan>(

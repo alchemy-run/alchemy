@@ -77,9 +77,7 @@ export interface BrokerEventSourceProps {
   enabled?: boolean;
 }
 
-type MessagesHandler<Req> = (
-  stream: Stream.Stream<MQMessage>,
-) => Effect.Effect<void, never, Req>;
+type MessagesHandler<Req> = (stream: Stream.Stream<MQMessage>) => Effect.Effect<void, never, Req>;
 
 /**
  * Subscribe an Effect handler to messages produced by an Amazon MQ
@@ -149,13 +147,14 @@ export function consumeBrokerMessages<B extends Broker, Req = never>(
  * layer (which registers the event-source mapping, IAM grants, and runtime
  * dispatch).
  *
- * @example
+ * **Example:** Example
  * ```typescript
  * // equivalent to consumeBrokerMessages(broker, props, process)
  * yield* BrokerEventSource.use((source) =>
  *   source(broker, props, process),
  * );
  * ```
+ *
  * @binding
  */
 export class BrokerEventSource extends Context.Service<
@@ -166,7 +165,5 @@ export class BrokerEventSource extends Context.Service<
 export type BrokerEventSourceService = <Req = never>(
   broker: Broker,
   props: BrokerEventSourceProps,
-  process: (
-    stream: Stream.Stream<MQMessage>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<MQMessage>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

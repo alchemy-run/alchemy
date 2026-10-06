@@ -88,9 +88,8 @@ export type RoomMessageReviewEventSourceService = <Req = never>(
  * Use the {@link onReviewMessage} helper rather than the service directly,
  * and provide `Lambda.RoomMessageReviewEventSource` on the hosting
  * function.
- * @binding
- * @section Reviewing Messages
- * @example Moderate a Room from a Lambda Function
+ * ### Reviewing Messages
+ * **Example:** Moderate a Room from a Lambda Function
  * ```typescript
  * export default ChatFunction.make(
  *   { main: import.meta.url },
@@ -111,6 +110,8 @@ export type RoomMessageReviewEventSourceService = <Req = never>(
  *   }).pipe(Effect.provide(Lambda.RoomMessageReviewEventSource)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface RoomMessageReviewEventSource extends Binding.Service<
   RoomMessageReviewEventSource,
@@ -118,10 +119,9 @@ export interface RoomMessageReviewEventSource extends Binding.Service<
   RoomMessageReviewEventSourceService
 > {}
 
-export const RoomMessageReviewEventSource =
-  Binding.Service<RoomMessageReviewEventSource>(
-    "AWS.IVSChat.RoomMessageReviewEventSource",
-  );
+export const RoomMessageReviewEventSource = Binding.Service<RoomMessageReviewEventSource>(
+  "AWS.IVSChat.RoomMessageReviewEventSource",
+);
 
 /**
  * Review (and optionally modify or deny) every message sent to the room
@@ -156,7 +156,5 @@ export function onReviewMessage<Req = never>(
   handler: RoomMessageReviewHandlerFn<Req>,
   props?: RoomMessageReviewProps,
 ): Effect.Effect<void, never, RoomMessageReviewEventSource> {
-  return RoomMessageReviewEventSource.use((source) =>
-    source(room, handler, props),
-  );
+  return RoomMessageReviewEventSource.use((source) => source(room, handler, props));
 }

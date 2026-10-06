@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.BatchGetCodeSnippetHttp)`.
- * @binding
- * @section Querying Findings
- * @example Get Code Snippets for Code Findings
+ * ### Querying Findings
+ * **Example:** Get Code Snippets for Code Findings
  * ```typescript
  * // init
  * const batchGetCodeSnippet = yield* AWS.Inspector2.BatchGetCodeSnippet();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { codeSnippetResults } = yield* batchGetCodeSnippet({ findingArns: [findingArn] });
  * ```
+ *
+ * @binding
  */
 export interface BatchGetCodeSnippet extends Binding.Service<
   BatchGetCodeSnippet,
@@ -27,10 +28,7 @@ export interface BatchGetCodeSnippet extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.BatchGetCodeSnippetRequest,
-    ) => Effect.Effect<
-      inspector2.BatchGetCodeSnippetResponse,
-      inspector2.BatchGetCodeSnippetError
-    >
+    ) => Effect.Effect<inspector2.BatchGetCodeSnippetResponse, inspector2.BatchGetCodeSnippetError>
   >
 > {}
 export const BatchGetCodeSnippet = Binding.Service<BatchGetCodeSnippet>(

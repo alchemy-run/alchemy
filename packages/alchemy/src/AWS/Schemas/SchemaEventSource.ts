@@ -75,8 +75,8 @@ export interface SchemaEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Schema Registry Events
- * @example React To New Schema Versions
+ * ### Consuming Schema Registry Events
+ * **Example:** React To New Schema Versions
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -108,15 +108,13 @@ export const consumeSchemaEvents = <StreamReq = never, Req = never>(
     props.id ?? "SchemasEvents",
     {
       source: ["aws.schemas"],
-      "detail-type": (
-        props.kinds ?? (["schema-created", "schema-version-created"] as const)
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (["schema-created", "schema-version-created"] as const)).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
       ...(props.registryNames !== undefined
         ? { detail: { RegistryName: [...props.registryNames] } }
         : {}),
-      ...(props.schemaArns !== undefined
-        ? { resources: [...props.schemaArns] }
-        : {}),
+      ...(props.schemaArns !== undefined ? { resources: [...props.schemaArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

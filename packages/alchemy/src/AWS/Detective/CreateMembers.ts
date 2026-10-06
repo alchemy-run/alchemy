@@ -12,9 +12,8 @@ import type { Graph } from "./Graph.ts";
  * {@link Graph}.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.CreateMembersHttp)`.
- * @binding
- * @section Administering Member Accounts
- * @example Invite A New Member Account
+ * ### Administering Member Accounts
+ * **Example:** Invite A New Member Account
  * ```typescript
  * // init
  * const createMembers = yield* AWS.Detective.CreateMembers(graph);
@@ -25,6 +24,8 @@ import type { Graph } from "./Graph.ts";
  *   DisableEmailNotification: true,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateMembers extends Binding.Service<
   CreateMembers,
@@ -34,12 +35,7 @@ export interface CreateMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<detective.CreateMembersRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.CreateMembersResponse,
-      detective.CreateMembersError
-    >
+    ) => Effect.Effect<detective.CreateMembersResponse, detective.CreateMembersError>
   >
 > {}
-export const CreateMembers = Binding.Service<CreateMembers>(
-  "AWS.Detective.CreateMembers",
-);
+export const CreateMembers = Binding.Service<CreateMembers>("AWS.Detective.CreateMembers");

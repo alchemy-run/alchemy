@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.CreateUserHttp)`.
  *
- * @binding
- * @section User Search
- * @example Create a User
+ * ### User Search
+ * **Example:** Create a User
  * ```typescript
  * // init
  * const createUser = yield* AWS.Rekognition.CreateUser();
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* createUser({ CollectionId: "tenant-42", UserId: userId });
  * ```
+ *
+ * @binding
  */
 export interface CreateUser extends Binding.Service<
   CreateUser,
@@ -28,12 +29,7 @@ export interface CreateUser extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.CreateUserRequest,
-    ) => Effect.Effect<
-      rekognition.CreateUserResponse,
-      rekognition.CreateUserError
-    >
+    ) => Effect.Effect<rekognition.CreateUserResponse, rekognition.CreateUserError>
   >
 > {}
-export const CreateUser = Binding.Service<CreateUser>(
-  "AWS.Rekognition.CreateUser",
-);
+export const CreateUser = Binding.Service<CreateUser>("AWS.Rekognition.CreateUser");

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface GetHealthEventRequest extends Omit<
-  im.GetHealthEventInput,
-  "MonitorName"
-> {}
+export interface GetHealthEventRequest extends Omit<im.GetHealthEventInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:GetHealthEvent` — read the full
@@ -16,9 +13,8 @@ export interface GetHealthEventRequest extends Omit<
  *
  * Provide `InternetMonitor.GetHealthEventHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Reading Health Events
- * @example Read a Health Event by Id
+ * ### Reading Health Events
+ * **Example:** Read a Health Event by Id
  * ```typescript
  * // init — grants internetmonitor:GetHealthEvent on the monitor
  * const getHealthEvent = yield* AWS.InternetMonitor.GetHealthEvent(monitor);
@@ -27,6 +23,8 @@ export interface GetHealthEventRequest extends Omit<
  * const event = yield* getHealthEvent({ EventId: eventId });
  * const locations = event.ImpactedLocations;
  * ```
+ *
+ * @binding
  */
 export interface GetHealthEvent extends Binding.Service<
   GetHealthEvent,
@@ -40,6 +38,4 @@ export interface GetHealthEvent extends Binding.Service<
   >
 > {}
 
-export const GetHealthEvent = Binding.Service<GetHealthEvent>(
-  "AWS.InternetMonitor.GetHealthEvent",
-);
+export const GetHealthEvent = Binding.Service<GetHealthEvent>("AWS.InternetMonitor.GetHealthEvent");

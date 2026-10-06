@@ -1,17 +1,32 @@
+import assert from "node:assert";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import assert from "node:assert";
 import type * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
-import {
-  bundleAnalyzerPlugin,
-  type BundleAnalyzerPluginOptions,
-} from "./BundleAnalyzerPlugin.ts";
+import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
+
+/**
+ * `resolve.conditionNames` for a bundle that runs on bun / node.
+ *
+ * Rolldown's DEFAULT conditions are import-kind specific: `import` for
+ * `import` statements and `require` for `require()` calls. An explicit
+ * `conditionNames` list is applied as one set to BOTH kinds, and rolldown
+ * adds only the current kind on top. Listing `"import"` here therefore
+ * made every `require()` also match a package's `"import"` export — and
+ * `exports` maps are matched in the PACKAGE's key order, so for `pg-pool`
+ * (`{ import, require }`) a `require("pg-pool")` received the ESM namespace
+ * and `pg` died with `TypeError: The superclass is not a constructor`.
+ *
+ * So: never put `import` or `require` in these lists. Only the runtime
+ * condition and the kind-agnostic ones; rolldown supplies the kind.
+ */
+export const BUN_CONDITION_NAMES: readonly string[] = ["bun", "module", "default"];
+export const NODE_CONDITION_NAMES: readonly string[] = ["node", "module", "default"];
 
 /**
  * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
@@ -60,11 +75,9 @@ export interface BundleExtraOptions {
  * rolldown input/output overrides plus the {@link BundleExtraOptions}
  * (pure-annotation packages via `pure`, bundle analyzer).
  *
- * Top-level calls in `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
- * and `@distilled.cloud/*` are annotated as pure by default so unused
- * code from those packages is tree-shaken out of the bundle; list
- * additional packages via `pure.packages`, or disable annotation with
- * `pure: false`.
+ * Unused code is tree-shaken. `effect`, alchemy, and `@distilled.cloud`
+ * are marked pure so unused parts prune more aggressively. List extra
+ * packages with `pure.packages`, or disable with `pure: false`.
  */
 export interface BundleConfig extends BundleExtraOptions {
   /**
@@ -95,13 +108,10 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Schema.TaggedError<BundleError>()(
-  "BundleError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect({ includeStack: true })),
-  },
-) {}
+export class BundleError extends Schema.TaggedError<BundleError>()("BundleError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect({ includeStack: true })),
+}) {}
 
 export type BundleWatchEvent =
   | BundleWatchEvent.Start
@@ -151,12 +161,11 @@ const ALCHEMY_DEFINE: Record<string, string> = {
  * bundle (`migrations.js` does `import m0000 from './0000_x.sql'`) work
  * without a wrangler-style rules config or a codegen step.
  */
-const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
-  {
-    ".sql": "text",
-    ".txt": "text",
-    ".html": "text",
-  };
+const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = {
+  ".sql": "text",
+  ".txt": "text",
+  ".html": "text",
+};
 
 /**
  * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define` (the
@@ -164,9 +173,7 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
  * keys win, so an extension can be remapped or disabled per bundle).
  */
-const withAlchemyDefine = (
-  inputOptions: rolldown.InputOptions,
-): rolldown.InputOptions => ({
+const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
   transform: {
     ...inputOptions.transform,
@@ -187,9 +194,7 @@ const withAlchemyDefine = (
  * removed from every bundle (define alone only folds the condition; removal
  * needs DCE). Callers that opt into full minification (e.g. Workers) keep it.
  */
-const withDceDefault = (
-  outputOptions?: rolldown.OutputOptions,
-): rolldown.OutputOptions => ({
+const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.OutputOptions => ({
   ...outputOptions,
   minify: outputOptions?.minify ?? "dce-only",
 });
@@ -305,12 +310,10 @@ export const watch = (
           return event;
         }
         return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
-          Effect.map(
-            (output): BundleWatchEvent.Success => ({
-              _tag: "Success",
-              output,
-            }),
-          ),
+          Effect.map((output): BundleWatchEvent.Success => ({
+            _tag: "Success",
+            output,
+          })),
           Effect.catch((error) =>
             Effect.succeed<BundleWatchEvent.Error>({
               _tag: "Error",
@@ -325,13 +328,18 @@ export const watch = (
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
 // oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
+/**
+ * Ids the `resolveId` hook looks at: the virtual entry ids themselves, plus
+ * bare package specifiers (not starting with `.`, `/` or `\0`) so an
+ * unresolvable import in a generated entry fails the build (below).
+ */
+// oxlint-disable-next-line no-control-regex
+const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {
   const path = yield* Path.Path;
 
-  const normalizeInput = (
-    input: rolldown.InputOption,
-  ): Record<string, string> => {
+  const normalizeInput = (input: rolldown.InputOption): Record<string, string> => {
     if (typeof input === "string") {
       return { [path.parse(input).name || "index"]: input };
     } else if (Array.isArray(input)) {
@@ -360,9 +368,35 @@ export const virtualEntryPlugin = Effect.gen(function* () {
         },
       },
       resolveId: {
-        filter: { id: ENTRY_REGEX },
-        handler(id) {
-          return entries.has(id) ? { id } : null;
+        filter: { id: ENTRY_OR_BARE_REGEX },
+        async handler(id, importer) {
+          if (ENTRY_REGEX.test(id)) {
+            return entries.has(id) ? { id } : null;
+          }
+          // A bare import made BY a generated entry. Rolldown only WARNS on
+          // an unresolved import and leaves it external, which for a
+          // generated entry means the deployed process dies at boot with
+          // `Cannot find module` — the class of bug the shim design
+          // (alchemy/Runtime/Bootstrap/*) exists to prevent. Make it a build
+          // error with the cause spelled out instead. Externals resolve to
+          // `{ external: true }`, not null, so they pass through.
+          if (importer === undefined || !ENTRY_REGEX.test(importer)) {
+            return null;
+          }
+          const resolved = await this.resolve(id, importer, {
+            skipSelf: true,
+          });
+          if (resolved === null) {
+            const entry = entries.get(importer);
+            this.error(
+              new Error(
+                `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +
+                  "A generated entry may only import `alchemy/*` (resolvable from any project that depends on alchemy) and the entry itself; " +
+                  "check that `alchemy` is installed in the project containing the entry.",
+              ),
+            );
+          }
+          return resolved;
         },
       },
       load: {
@@ -393,10 +427,7 @@ export function bundleOutputFromRolldownOutputBundle(
     );
   }
   return Effect.forEach(
-    files as [
-      rolldown.OutputChunk,
-      ...(rolldown.OutputChunk | rolldown.OutputAsset)[],
-    ],
+    files as [rolldown.OutputChunk, ...(rolldown.OutputChunk | rolldown.OutputAsset)[]],
     bundleFileFromOutputChunk,
   ).pipe(Effect.flatMap(bundleOutputFromFiles));
 }
@@ -409,14 +440,10 @@ export function bundleOutputFromRolldownOutputBundle(
  * `node_modules/<pkg>/...` by upstream resolver plugins such as
  * `@alchemy.run/cloudflare-runtime/rolldown`.
  */
-async function builtInPlugins(
-  extra?: BundleExtraOptions,
-): Promise<rolldown.RolldownPluginOption> {
+async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.RolldownPluginOption> {
   return [
     extra?.bundleAnalyzer
-      ? await bundleAnalyzerPlugin(
-          extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
-        )
+      ? await bundleAnalyzerPlugin(extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer)
       : undefined,
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),

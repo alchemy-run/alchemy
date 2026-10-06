@@ -38,18 +38,17 @@ export interface EventSourcesConfig extends Resource<
  * Alchemy did not create requires `--adopt`. Destroying the resource
  * restores the default (disabled).
  *
- * @section Enabling Event Sources
- * @example Consume CodeGuru Profiler Recommendations
+ * ### Enabling Event Sources
+ * **Example:** Consume CodeGuru Profiler Recommendations
  * ```typescript
  * const eventSources = yield* DevOpsGuru.EventSourcesConfig("EventSources", {
  *   amazonCodeGuruProfiler: true,
  * });
  * ```
+ *
  * @resource
  */
-export const EventSourcesConfig = Resource<EventSourcesConfig>(
-  "AWS.DevOpsGuru.EventSourcesConfig",
-);
+export const EventSourcesConfig = Resource<EventSourcesConfig>("AWS.DevOpsGuru.EventSourcesConfig");
 
 /**
  * Concurrent `UpdateEventSourcesConfig` calls conflict server-side — retry
@@ -76,18 +75,13 @@ export const EventSourcesConfigProvider = () =>
       // Observe the live configuration. An absent section or status means
       // the account default (disabled).
       const observe = Effect.gen(function* () {
-        const { EventSources } = yield* devopsguru.describeEventSourcesConfig(
-          {},
-        );
+        const { EventSources } = yield* devopsguru.describeEventSourcesConfig({});
         return {
-          amazonCodeGuruProfiler:
-            EventSources?.AmazonCodeGuruProfiler?.Status === "ENABLED",
+          amazonCodeGuruProfiler: EventSources?.AmazonCodeGuruProfiler?.Status === "ENABLED",
         };
       });
 
-      const setProfiler = Effect.fn(function* (
-        status: devopsguru.EventSourceOptInStatus,
-      ) {
+      const setProfiler = Effect.fn(function* (status: devopsguru.EventSourceOptInStatus) {
         yield* retryUpdateConflict(
           devopsguru.updateEventSourcesConfig({
             EventSources: { AmazonCodeGuruProfiler: { Status: status } },
@@ -99,9 +93,7 @@ export const EventSourcesConfigProvider = () =>
         // Account/region singleton — surfaced only when non-default.
         list: () =>
           observe.pipe(
-            Effect.map((observed) =>
-              observed.amazonCodeGuruProfiler ? [observed] : [],
-            ),
+            Effect.map((observed) => (observed.amazonCodeGuruProfiler ? [observed] : [])),
           ),
 
         read: Effect.fn(function* ({ output }) {
@@ -127,9 +119,7 @@ export const EventSourcesConfigProvider = () =>
 
           // 3. RETURN fresh attributes.
           const final = yield* observe;
-          yield* session.note(
-            `amazonCodeGuruProfiler: ${final.amazonCodeGuruProfiler}`,
-          );
+          yield* session.note(`amazonCodeGuruProfiler: ${final.amazonCodeGuruProfiler}`);
           return final;
         }),
 

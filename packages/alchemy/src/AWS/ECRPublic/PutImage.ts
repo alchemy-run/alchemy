@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /** Request for {@link PutImage} — `repositoryName` is injected. */
-export interface PutImageRequest extends Omit<
-  ecrpublic.PutImageRequest,
-  "repositoryName"
-> {}
+export interface PutImageRequest extends Omit<ecrpublic.PutImageRequest, "repositoryName"> {}
 
 /**
  * Runtime binding for `ecr-public:PutImage`.
@@ -18,9 +15,8 @@ export interface PutImageRequest extends Omit<
  * {@link UploadLayerPart} → {@link CompleteLayerUpload}). Provide the
  * implementation with `Effect.provide(AWS.ECRPublic.PutImageHttp)`.
  *
- * @binding
- * @section Pushing Images
- * @example Put An Image Manifest
+ * ### Pushing Images
+ * **Example:** Put An Image Manifest
  * ```typescript
  * // init
  * const putImage = yield* AWS.ECRPublic.PutImage(repository);
@@ -32,6 +28,8 @@ export interface PutImageRequest extends Omit<
  *   imageTag: "latest",
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutImage extends Binding.Service<
   PutImage,
@@ -39,9 +37,7 @@ export interface PutImage extends Binding.Service<
   <R extends PublicRepository>(
     repository: R,
   ) => Effect.Effect<
-    (
-      request: PutImageRequest,
-    ) => Effect.Effect<ecrpublic.PutImageResponse, ecrpublic.PutImageError>
+    (request: PutImageRequest) => Effect.Effect<ecrpublic.PutImageResponse, ecrpublic.PutImageError>
   >
 > {}
 

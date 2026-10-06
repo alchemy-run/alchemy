@@ -12,12 +12,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryWhileConflict,
-  retryWhileThrottled,
-  syncIvsTags,
-  toTagRecord,
-} from "./internal.ts";
+import { retryWhileConflict, retryWhileThrottled, syncIvsTags, toTagRecord } from "./internal.ts";
 
 export interface RecordingDestinationConfiguration {
   /**
@@ -148,9 +143,8 @@ export interface RecordingConfiguration extends Resource<
  * `recordingConfigurationArn` prop; every broadcast on that channel is
  * then archived to the configured bucket. Recording configurations are
  * immutable — any settings change replaces the resource.
- * @resource
- * @section Recording Broadcasts
- * @example Record a Channel to S3
+ * ### Recording Broadcasts
+ * **Example:** Record a Channel to S3
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  * import * as IVS from "alchemy/AWS/IVS";
@@ -164,7 +158,7 @@ export interface RecordingConfiguration extends Resource<
  * });
  * ```
  *
- * @example Merge Reconnects and Record Thumbnails
+ * **Example:** Merge Reconnects and Record Thumbnails
  * ```typescript
  * const recording = yield* IVS.RecordingConfiguration("Recording", {
  *   destinationConfiguration: { s3: { bucketName: archive.bucketName } },
@@ -175,6 +169,8 @@ export interface RecordingConfiguration extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const RecordingConfiguration = Resource<RecordingConfiguration>(
   "AWS.IVS.RecordingConfiguration",
@@ -193,10 +189,7 @@ export const RecordingConfigurationProvider = () =>
   Provider.effect(
     RecordingConfiguration,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { recordingConfigurationName?: string | undefined },
-      ) =>
+      const toName = (id: string, props: { recordingConfigurationName?: string | undefined }) =>
         props.recordingConfigurationName
           ? Effect.succeed(props.recordingConfigurationName)
           : createPhysicalName({ id, maxLength: 128 });
@@ -216,9 +209,7 @@ export const RecordingConfigurationProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getRecordingConfiguration({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
         return response?.recordingConfiguration;
       });
@@ -231,9 +222,7 @@ export const RecordingConfigurationProvider = () =>
       const findByName = Effect.fn(function* (name: string) {
         const summaries = yield* ivs.listRecordingConfigurations.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.recordingConfigurations),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.recordingConfigurations)),
           retryWhileThrottled,
         );
         const match = summaries.find((s) => s.name === name);
@@ -279,9 +268,7 @@ export const RecordingConfigurationProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (config === undefined) return undefined;
           const attrs = toAttrs(config);
-          return (yield* hasAlchemyTags(id, toTagRecord(config.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(config.tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -296,15 +283,11 @@ export const RecordingConfigurationProvider = () =>
               toWireSeconds(news.recordingReconnectWindow) ||
             JSON.stringify({
               ...olds.thumbnailConfiguration,
-              targetInterval: toWireSeconds(
-                olds.thumbnailConfiguration?.targetInterval,
-              ),
+              targetInterval: toWireSeconds(olds.thumbnailConfiguration?.targetInterval),
             }) !==
               JSON.stringify({
                 ...news.thumbnailConfiguration,
-                targetInterval: toWireSeconds(
-                  news.thumbnailConfiguration?.targetInterval,
-                ),
+                targetInterval: toWireSeconds(news.thumbnailConfiguration?.targetInterval),
               }) ||
             JSON.stringify(olds.renditionConfiguration) !==
               JSON.stringify(news.renditionConfiguration);
@@ -329,17 +312,13 @@ export const RecordingConfigurationProvider = () =>
               .createRecordingConfiguration({
                 name,
                 destinationConfiguration: news.destinationConfiguration,
-                recordingReconnectWindowSeconds: toWireSeconds(
-                  news.recordingReconnectWindow,
-                ),
+                recordingReconnectWindowSeconds: toWireSeconds(news.recordingReconnectWindow),
                 thumbnailConfiguration:
                   thumbnail === undefined
                     ? undefined
                     : {
                         recordingMode: thumbnail.recordingMode,
-                        targetIntervalSeconds: toWireSeconds(
-                          thumbnail.targetInterval,
-                        ),
+                        targetIntervalSeconds: toWireSeconds(thumbnail.targetInterval),
                         resolution: thumbnail.resolution,
                         storage: thumbnail.storage,
                       },
@@ -352,8 +331,7 @@ export const RecordingConfigurationProvider = () =>
           if (observed === undefined) {
             return yield* Effect.fail(
               new IvsRecordingConfigurationFailed({
-                message:
-                  "IVS CreateRecordingConfiguration returned no configuration",
+                message: "IVS CreateRecordingConfiguration returned no configuration",
               }),
             );
           }
@@ -390,9 +368,7 @@ export const RecordingConfigurationProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) => page.recordingConfigurations),
             ),
-            Effect.map((summaries) =>
-              summaries.map((summary) => toAttrs(summary)),
-            ),
+            Effect.map((summaries) => summaries.map((summary) => toAttrs(summary))),
           ),
       };
     }),

@@ -7,9 +7,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * Runtime binding for `finspace:CreateKxChangeset` — ingests data into a kdb database in the bound environment by creating a changeset from staged S3 objects — the Managed kdb data-ingestion primitive.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.CreateKxChangesetHttp)`.
- * @binding
- * @section Ingesting Data
- * @example Load Ticks from S3
+ * ### Ingesting Data
+ * **Example:** Load Ticks from S3
  * ```typescript
  * const createChangeset = yield* AWS.FinSpace.CreateKxChangeset(kdb);
  *
@@ -21,6 +20,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  *   clientToken: crypto.randomUUID(),
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateKxChangeset extends Binding.Service<
   CreateKxChangeset,
@@ -30,10 +31,7 @@ export interface CreateKxChangeset extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.CreateKxChangesetRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.CreateKxChangesetResponse,
-      SVC.CreateKxChangesetError
-    >
+    ) => Effect.Effect<SVC.CreateKxChangesetResponse, SVC.CreateKxChangesetError>
   >
 > {}
 export const CreateKxChangeset = Binding.Service<CreateKxChangeset>(

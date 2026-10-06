@@ -76,9 +76,8 @@ export interface Policy extends Resource<
  * A static Cedar policy in a Verified Permissions policy store. Static
  * policies contain a complete Cedar statement and are evaluated for every
  * matching authorization request.
- * @resource
- * @section Creating Policies
- * @example Permit a Specific Principal
+ * ### Creating Policies
+ * **Example:** Permit a Specific Principal
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -95,8 +94,8 @@ export interface Policy extends Resource<
  * });
  * ```
  *
- * @section Template-Linked Policies
- * @example Instantiate a Policy Template for a Principal
+ * ### Template-Linked Policies
+ * **Example:** Instantiate a Policy Template for a Principal
  * ```typescript
  * const template = yield* AWS.VerifiedPermissions.PolicyTemplate("ViewPhoto", {
  *   policyStoreId: store.policyStoreId,
@@ -113,6 +112,8 @@ export interface Policy extends Resource<
  *   principal: { entityType: "PhotoApp::User", entityId: "alice" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Policy = Resource<Policy>("AWS.VerifiedPermissions.Policy");
 
@@ -151,17 +152,10 @@ export const PolicyProvider = () =>
   Provider.effect(
     Policy,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        policyStoreId: string,
-        policyId: string,
-      ) {
+      const observe = Effect.fn(function* (policyStoreId: string, policyId: string) {
         return yield* avp
           .getPolicy({ policyStoreId, policyId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Policy.Provider.of({
@@ -190,8 +184,7 @@ export const PolicyProvider = () =>
           // supports static definitions, and a template-linked policy's
           // template/principal/resource are fixed at creation
           if (
-            (olds.templateId === undefined) !==
-              (news.templateId === undefined) ||
+            (olds.templateId === undefined) !== (news.templateId === undefined) ||
             (news.templateId !== undefined &&
               (olds.templateId !== news.templateId ||
                 olds.principal?.entityType !== news.principal?.entityType ||
@@ -221,10 +214,7 @@ export const PolicyProvider = () =>
               definition,
             });
             policyId = created.policyId;
-          } else if (
-            "static" in definition &&
-            definition.static !== undefined
-          ) {
+          } else if ("static" in definition && definition.static !== undefined) {
             const updated = yield* avp.updatePolicy({
               policyStoreId: news.policyStoreId,
               policyId: existing.policyId,
@@ -247,9 +237,7 @@ export const PolicyProvider = () =>
               policyStoreId: output.policyStoreId,
               policyId: output.policyId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

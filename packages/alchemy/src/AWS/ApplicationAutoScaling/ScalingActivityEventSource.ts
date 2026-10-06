@@ -1,10 +1,7 @@
 import type * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import {
-  consumeBusEvents,
-  type EventRecord,
-} from "../EventBridge/EventSource.ts";
+import { consumeBusEvents, type EventRecord } from "../EventBridge/EventSource.ts";
 import type { ScalableTarget } from "./ScalableTarget.ts";
 
 /**
@@ -88,8 +85,8 @@ export interface ScalingActivityEventSourceProps {
  * account; inspect `event.detail.resourceId` / `event.detail.serviceNamespace`
  * in the handler if multiple targets share the Function.
  *
- * @section Reacting to Scaling Activity
- * @example Alert When a Target Is Pinned at Max Capacity
+ * ### Reacting to Scaling Activity
+ * **Example:** Alert When a Target Is Pinned at Max Capacity
  * ```typescript
  * yield* consumeScalingActivityEvents(target, {}, (events) =>
  *   Stream.runForEach(events, (event) =>

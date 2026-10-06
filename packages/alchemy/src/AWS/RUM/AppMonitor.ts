@@ -2,6 +2,7 @@ import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as rum from "@distilled.cloud/aws/rum";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -132,9 +133,8 @@ export interface AppMonitor extends Resource<
  * An Amazon CloudWatch RUM app monitor that collects client-side telemetry
  * (page load times, JavaScript errors, user behavior) from your web
  * application.
- * @resource
- * @section Creating App Monitors
- * @example Monitor a single domain
+ * ### Creating App Monitors
+ * **Example:** Monitor a single domain
  * ```typescript
  * import * as RUM from "alchemy/AWS/RUM";
  *
@@ -143,7 +143,7 @@ export interface AppMonitor extends Resource<
  * });
  * ```
  *
- * @example Sample all sessions and collect every telemetry type
+ * **Example:** Sample all sessions and collect every telemetry type
  * ```typescript
  * const monitor = yield* RUM.AppMonitor("SiteMonitor", {
  *   domain: "*.example.com",
@@ -155,8 +155,8 @@ export interface AppMonitor extends Resource<
  * });
  * ```
  *
- * @section Log Retention and Custom Events
- * @example Copy telemetry to CloudWatch Logs and accept custom events
+ * ### Log Retention and Custom Events
+ * **Example:** Copy telemetry to CloudWatch Logs and accept custom events
  * ```typescript
  * const monitor = yield* RUM.AppMonitor("SiteMonitor", {
  *   domainList: ["example.com", "app.example.com"],
@@ -164,6 +164,8 @@ export interface AppMonitor extends Resource<
  *   customEvents: "ENABLED",
  * });
  * ```
+ *
+ * @resource
  */
 export const AppMonitor = Resource<AppMonitor>("AWS.RUM.AppMonitor");
 
@@ -171,13 +173,11 @@ export const AppMonitor = Resource<AppMonitor>("AWS.RUM.AppMonitor");
  * Raised when an `AppMonitor` is configured with both or neither of
  * `domain` / `domainList` — the API requires exactly one.
  */
-export class RumAppMonitorInvalidDomains extends Data.TaggedError(
-  "RumAppMonitorInvalidDomains",
-)<{ message: string }> {}
+export class RumAppMonitorInvalidDomains extends Data.TaggedError("RumAppMonitorInvalidDomains")<{
+  message: string;
+}> {}
 
-const validateDomains = (
-  props: Pick<AppMonitorProps, "domain" | "domainList">,
-) => {
+const validateDomains = (props: Pick<AppMonitorProps, "domain" | "domainList">) => {
   const hasDomain = props.domain !== undefined;
   const hasDomainList = (props.domainList?.length ?? 0) > 0;
   if (hasDomain === hasDomainList) {
@@ -192,18 +192,13 @@ const validateDomains = (
   return Effect.void;
 };
 
-const sameStringList = (
-  a: readonly string[] | undefined,
-  b: readonly string[] | undefined,
-) => {
+const sameStringList = (a: readonly string[] | undefined, b: readonly string[] | undefined) => {
   const left = [...(a ?? [])].sort();
   const right = [...(b ?? [])].sort();
   return left.length === right.length && left.every((v, i) => v === right[i]);
 };
 
-const desiredConfiguration = (
-  props: AppMonitorProps,
-): rum.AppMonitorConfiguration | undefined => {
+const desiredConfiguration = (props: AppMonitorProps): rum.AppMonitorConfiguration | undefined => {
   const c = props.appMonitorConfiguration;
   if (c === undefined) return undefined;
   return {
@@ -227,8 +222,7 @@ const configurationInSync = (
   if (desired === undefined) return true;
   const o = observed ?? {};
   return (
-    (desired.IdentityPoolId === undefined ||
-      o.IdentityPoolId === desired.IdentityPoolId) &&
+    (desired.IdentityPoolId === undefined || o.IdentityPoolId === desired.IdentityPoolId) &&
     (desired.ExcludedPages === undefined ||
       sameStringList(o.ExcludedPages, desired.ExcludedPages)) &&
     (desired.IncludedPages === undefined ||
@@ -237,14 +231,10 @@ const configurationInSync = (
       sameStringList(o.FavoritePages, desired.FavoritePages)) &&
     (desired.SessionSampleRate === undefined ||
       o.SessionSampleRate === desired.SessionSampleRate) &&
-    (desired.GuestRoleArn === undefined ||
-      o.GuestRoleArn === desired.GuestRoleArn) &&
-    (desired.AllowCookies === undefined ||
-      (o.AllowCookies ?? false) === desired.AllowCookies) &&
-    (desired.Telemetries === undefined ||
-      sameStringList(o.Telemetries, desired.Telemetries)) &&
-    (desired.EnableXRay === undefined ||
-      (o.EnableXRay ?? false) === desired.EnableXRay)
+    (desired.GuestRoleArn === undefined || o.GuestRoleArn === desired.GuestRoleArn) &&
+    (desired.AllowCookies === undefined || (o.AllowCookies ?? false) === desired.AllowCookies) &&
+    (desired.Telemetries === undefined || sameStringList(o.Telemetries, desired.Telemetries)) &&
+    (desired.EnableXRay === undefined || (o.EnableXRay ?? false) === desired.EnableXRay)
   );
 };
 
@@ -259,18 +249,13 @@ export const AppMonitorProvider = () =>
         id: string,
         props: Pick<AppMonitorProps, "appMonitorName">,
       ) {
-        return (
-          props.appMonitorName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.appMonitorName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const observeMonitor = (name: string) =>
         rum.getAppMonitor({ Name: name }).pipe(
           Effect.map((r) => r.AppMonitor),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       return AppMonitor.Provider.of({
@@ -278,20 +263,14 @@ export const AppMonitorProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const summaries = yield* rum.listAppMonitors
-              .items({})
-              .pipe(Stream.runCollect);
+            const summaries = yield* rum.listAppMonitors.items({}).pipe(Stream.runCollect);
             return Array.from(summaries).flatMap((monitor) =>
               monitor.Name !== undefined && monitor.Id !== undefined
                 ? [
                     {
                       appMonitorName: monitor.Name,
                       appMonitorId: monitor.Id,
-                      appMonitorArn: appMonitorArn(
-                        region,
-                        accountId,
-                        monitor.Name,
-                      ),
+                      appMonitorArn: appMonitorArn(region, accountId, monitor.Name),
                     },
                   ]
                 : [],
@@ -299,8 +278,7 @@ export const AppMonitorProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.appMonitorName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.appMonitorName ?? (yield* createName(id, olds ?? {}));
           const found = yield* observeMonitor(name);
           if (found?.Id === undefined) return undefined;
           const attrs = {
@@ -332,7 +310,7 @@ export const AppMonitorProvider = () =>
           const arn = appMonitorArn(region, accountId, name);
           const internalTags = yield* createInternalTags(id);
           const desiredTags: Record<string, string> = {
-            ...(news.tags ?? {}),
+            ...news.tags,
             ...internalTags,
           };
           const desiredConfig = desiredConfiguration(news);
@@ -345,7 +323,10 @@ export const AppMonitorProvider = () =>
 
           // 2. ENSURE — create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
-          //    re-observe.
+          //    re-observe. CreateAppMonitor is eventually consistent — an
+          //    immediate GetAppMonitor can still miss it, and persisting an
+          //    undefined appMonitorId poisons every downstream binding env —
+          //    so poll (bounded) until the monitor is observable.
           if (live === undefined) {
             yield* rum
               .createAppMonitor({
@@ -361,7 +342,13 @@ export const AppMonitorProvider = () =>
                 Effect.asVoid,
                 Effect.catchTag("ConflictException", () => Effect.void),
               );
-            live = yield* observeMonitor(name);
+            live = yield* observeMonitor(name).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (monitor) => monitor !== undefined,
+                times: 15,
+              }),
+            );
           }
 
           // 3. SYNC — diff the OBSERVED domain(s), configuration, log
@@ -370,11 +357,9 @@ export const AppMonitorProvider = () =>
           const inSync =
             live !== undefined &&
             (news.domain === undefined || live.Domain === news.domain) &&
-            (news.domainList === undefined ||
-              sameStringList(live.DomainList, news.domainList)) &&
+            (news.domainList === undefined || sameStringList(live.DomainList, news.domainList)) &&
             configurationInSync(live.AppMonitorConfiguration, desiredConfig) &&
-            (live.DataStorage?.CwLog?.CwLogEnabled ?? false) ===
-              desiredCwLogEnabled &&
+            (live.DataStorage?.CwLog?.CwLogEnabled ?? false) === desiredCwLogEnabled &&
             (live.CustomEvents?.Status ?? "DISABLED") === desiredCustomEvents;
           if (!inSync) {
             yield* rum.updateAppMonitor({
@@ -441,12 +426,7 @@ export const AppMonitorProvider = () =>
             (logGroupName) =>
               logs
                 .deleteLogGroup({ logGroupName })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
       });

@@ -1,7 +1,6 @@
 import * as intel from "@distilled.cloud/cloudflare/intel";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -53,11 +52,8 @@ export type IndicatorFeedPermission = Resource<
  * Cloudflare exposes no API to list the grantees of a feed from the
  * provider side (the permissions "view" endpoint lists feeds the *calling*
  * account can consume), so `read` reports the last known state.
- * @resource
- * @product Intel
- * @category Observability & Analytics
- * @section Granting Access
- * @example Grant a consumer account access to a feed
+ * ### Granting Access
+ * **Example:** Grant a consumer account access to a feed
  * ```typescript
  * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
@@ -70,16 +66,17 @@ export type IndicatorFeedPermission = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/security-center/indicator-feeds/
+ *
+ * @resource
+ * @product Intel
+ * @category Observability & Analytics
  */
-export const IndicatorFeedPermission =
-  Resource<IndicatorFeedPermission>(TypeId);
+export const IndicatorFeedPermission = Resource<IndicatorFeedPermission>(TypeId);
 
 /**
  * Returns true if the given value is an IndicatorFeedPermission resource.
  */
-export const isIndicatorFeedPermission = (
-  value: unknown,
-): value is IndicatorFeedPermission =>
+export const isIndicatorFeedPermission = (value: unknown): value is IndicatorFeedPermission =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IndicatorFeedPermissionProvider = () =>
@@ -102,10 +99,7 @@ export const IndicatorFeedPermissionProvider = () =>
       if (typeof olds?.feedId === "number" && olds.feedId !== news.feedId) {
         return { action: "replace" } as const;
       }
-      if (
-        typeof olds?.accountTag === "string" &&
-        olds.accountTag !== news.accountTag
-      ) {
+      if (typeof olds?.accountTag === "string" && olds.accountTag !== news.accountTag) {
         return { action: "replace" } as const;
       }
       return undefined;

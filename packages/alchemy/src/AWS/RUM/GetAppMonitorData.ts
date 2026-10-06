@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { AppMonitor } from "./AppMonitor.ts";
 
-export interface GetAppMonitorDataRequest extends Omit<
-  rum.GetAppMonitorDataRequest,
-  "Name"
-> {}
+export interface GetAppMonitorDataRequest extends Omit<rum.GetAppMonitorDataRequest, "Name"> {}
 
 /**
  * Runtime binding for `rum:GetAppMonitorData` — retrieve the raw performance
@@ -16,9 +13,8 @@ export interface GetAppMonitorDataRequest extends Omit<
  *
  * Provide `RUM.GetAppMonitorDataHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Reading RUM Telemetry
- * @example Read the Trailing Hour of Events
+ * ### Reading RUM Telemetry
+ * **Example:** Read the Trailing Hour of Events
  * ```typescript
  * // init — grants rum:GetAppMonitorData on the monitor
  * const getAppMonitorData = yield* AWS.RUM.GetAppMonitorData(monitor);
@@ -29,6 +25,8 @@ export interface GetAppMonitorDataRequest extends Omit<
  *   TimeRange: { After: now - 3_600_000, Before: now },
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetAppMonitorData extends Binding.Service<
   GetAppMonitorData,
@@ -38,13 +36,8 @@ export interface GetAppMonitorData extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAppMonitorDataRequest,
-    ) => Effect.Effect<
-      rum.GetAppMonitorDataResponse,
-      rum.GetAppMonitorDataError
-    >
+    ) => Effect.Effect<rum.GetAppMonitorDataResponse, rum.GetAppMonitorDataError>
   >
 > {}
 
-export const GetAppMonitorData = Binding.Service<GetAppMonitorData>(
-  "AWS.RUM.GetAppMonitorData",
-);
+export const GetAppMonitorData = Binding.Service<GetAppMonitorData>("AWS.RUM.GetAppMonitorData");

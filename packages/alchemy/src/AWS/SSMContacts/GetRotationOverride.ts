@@ -11,9 +11,8 @@ import type { Rotation } from "./Rotation.ts";
  * `RotationId`.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.GetRotationOverrideHttp)`.
- * @binding
- * @section Managing On-Call Rotations
- * @example Inspect an Override
+ * ### Managing On-Call Rotations
+ * **Example:** Inspect an Override
  * ```typescript
  * const getRotationOverride = yield* AWS.SSMContacts.GetRotationOverride(rotation);
  *
@@ -21,6 +20,8 @@ import type { Rotation } from "./Rotation.ts";
  *   RotationOverrideId: overrideId,
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetRotationOverride extends Binding.Service<
   GetRotationOverride,
@@ -30,10 +31,7 @@ export interface GetRotationOverride extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.GetRotationOverrideRequest, "RotationId">,
-    ) => Effect.Effect<
-      ssm.GetRotationOverrideResult,
-      ssm.GetRotationOverrideError
-    >
+    ) => Effect.Effect<ssm.GetRotationOverrideResult, ssm.GetRotationOverrideError>
   >
 > {}
 export const GetRotationOverride = Binding.Service<GetRotationOverride>(

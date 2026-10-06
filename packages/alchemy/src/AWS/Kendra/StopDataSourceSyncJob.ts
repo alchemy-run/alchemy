@@ -11,14 +11,15 @@ import type { DataSource } from "./DataSource.ts";
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.StopDataSourceSyncJobHttp)`.
  *
- * @binding
- * @section Syncing Data Sources
- * @example Stop a Running Sync
+ * ### Syncing Data Sources
+ * **Example:** Stop a Running Sync
  * ```typescript
  * const stopSync = yield* AWS.Kendra.StopDataSourceSyncJob(source);
  *
  * yield* stopSync();
  * ```
+ *
+ * @binding
  */
 export interface StopDataSourceSyncJob extends Binding.Service<
   StopDataSourceSyncJob,
@@ -26,10 +27,7 @@ export interface StopDataSourceSyncJob extends Binding.Service<
   (
     dataSource: DataSource,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      kendra.StopDataSourceSyncJobResponse,
-      kendra.StopDataSourceSyncJobError
-    >
+    () => Effect.Effect<kendra.StopDataSourceSyncJobResponse, kendra.StopDataSourceSyncJobError>
   >
 > {}
 export const StopDataSourceSyncJob = Binding.Service<StopDataSourceSyncJob>(

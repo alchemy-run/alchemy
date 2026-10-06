@@ -112,13 +112,7 @@ export type DatasetAttributes = {
   modifiedAt: string;
 };
 
-export type Dataset = Resource<
-  TypeId,
-  DatasetProps,
-  DatasetAttributes,
-  never,
-  Providers
->;
+export type Dataset = Resource<TypeId, DatasetProps, DatasetAttributes, never, Providers>;
 
 /**
  * A saved log filter ("dataset") on a Cloudflare.AI. Gateway.
@@ -127,11 +121,8 @@ export type Dataset = Resource<
  * provider, model, success, cost, tokens, etc.) and serve as the input to AI
  * Gateway evaluations. Name, enablement, and filters are all mutable in
  * place; only moving the dataset to a different gateway forces a replacement.
- * @resource
- * @product AI Gateway
- * @category AI
- * @section Creating a Dataset
- * @example Capture successful requests
+ * ### Creating a Dataset
+ * **Example:** Capture successful requests
  * ```typescript
  * const gateway = yield* Cloudflare.AI.Gateway("Gateway");
  *
@@ -141,7 +132,7 @@ export type Dataset = Resource<
  * });
  * ```
  *
- * @example Capture logs for a specific model
+ * **Example:** Capture logs for a specific model
  * ```typescript
  * const dataset = yield* Cloudflare.AI.Dataset("LlamaLogs", {
  *   gatewayId: gateway.gatewayId,
@@ -153,8 +144,8 @@ export type Dataset = Resource<
  * });
  * ```
  *
- * @section Updating a Dataset
- * @example Disable collection without deleting
+ * ### Updating a Dataset
+ * **Example:** Disable collection without deleting
  * ```typescript
  * const dataset = yield* Cloudflare.AI.Dataset("SuccessLogs", {
  *   gatewayId: gateway.gatewayId,
@@ -164,6 +155,10 @@ export type Dataset = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ai-gateway/evaluations/set-up-evaluations/
+ *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  */
 export const Dataset = Resource<Dataset>(TypeId, {
   aliases: ["Cloudflare.AiGateway.Dataset"],
@@ -199,8 +194,7 @@ export const DatasetProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const gatewayId =
-        output?.gatewayId ?? (olds?.gatewayId as string | undefined);
+      const gatewayId = output?.gatewayId ?? (olds?.gatewayId as string | undefined);
       if (gatewayId === undefined) return undefined;
 
       if (output?.datasetId) {
@@ -227,11 +221,7 @@ export const DatasetProvider = () =>
       // Observe — the datasetId cached on `output` is a hint, not a
       // guarantee: a missing dataset falls through and we recreate.
       let observed = output?.datasetId
-        ? yield* getDataset(
-            output.accountId ?? accountId,
-            gatewayId,
-            output.datasetId,
-          )
+        ? yield* getDataset(output.accountId ?? accountId, gatewayId, output.datasetId)
         : undefined;
 
       if (!observed) {
@@ -293,32 +283,24 @@ export const DatasetProvider = () =>
       // Datasets are scoped under a gateway and there is no account-wide
       // dataset list, so fan out: enumerate every account gateway, then
       // exhaustively list each gateway's datasets.
-      const gateways = yield* aiGateway.listAiGateways
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.result ?? []),
-          ),
-        );
+      const gateways = yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
+      );
       const rows = yield* Effect.forEach(
         gateways,
         (gateway) =>
-          aiGateway.listDatasets
-            .pages({ accountId, gatewayId: gateway.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((d) => toAttributes(d, accountId)),
-                ),
-              ),
-              // A gateway removed between enumeration and its dataset list
-              // is gone — skip it rather than failing the whole listing.
-              Effect.catchTag("GatewayNotFound", () =>
-                Effect.succeed([] as DatasetAttributes[]),
+          aiGateway.listDatasets.pages({ accountId, gatewayId: gateway.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((d) => toAttributes(d, accountId)),
               ),
             ),
+            // A gateway removed between enumeration and its dataset list
+            // is gone — skip it rather than failing the whole listing.
+            Effect.catchTag("GatewayNotFound", () => Effect.succeed([] as DatasetAttributes[])),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -341,18 +323,16 @@ const getDataset = (accountId: string, gatewayId: string, id: string) =>
  * dataset is gone too.
  */
 const findByName = (accountId: string, gatewayId: string, name: string) =>
-  aiGateway.listDatasets
-    .items({ accountId, gatewayId, name, perPage: 50 })
-    .pipe(
-      Stream.filter((d) => d.name === name),
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk)
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-          .at(0),
-      ),
-      Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
-    );
+  aiGateway.listDatasets.items({ accountId, gatewayId, name, perPage: 50 }).pipe(
+    Stream.filter((d) => d.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .at(0),
+    ),
+    Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+  );
 
 const createDatasetName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link GetResourceDashboard} runtime callable. The
  * `applicationId` is injected from the bound {@link Application}.
  */
-export type GetResourceDashboardInput = Omit<
-  emr.GetResourceDashboardRequest,
-  "applicationId"
->;
+export type GetResourceDashboardInput = Omit<emr.GetResourceDashboardRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:GetResourceDashboard`.
@@ -18,9 +15,8 @@ export type GetResourceDashboardInput = Omit<
  * Creates a pre-signed dashboard URL for a specific resource (e.g. a
  * worker) of the bound {@link Application}. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.GetResourceDashboardHttp)`.
- * @binding
- * @section Dashboards
- * @example Link To A Resource Dashboard
+ * ### Dashboards
+ * **Example:** Link To A Resource Dashboard
  * ```typescript
  * // init
  * const getResourceDashboard =
@@ -29,6 +25,8 @@ export type GetResourceDashboardInput = Omit<
  * // runtime
  * const { url } = yield* getResourceDashboard({ resourceId, resourceType });
  * ```
+ *
+ * @binding
  */
 export interface GetResourceDashboard extends Binding.Service<
   GetResourceDashboard,
@@ -38,10 +36,7 @@ export interface GetResourceDashboard extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetResourceDashboardInput,
-    ) => Effect.Effect<
-      emr.GetResourceDashboardResponse,
-      emr.GetResourceDashboardError
-    >
+    ) => Effect.Effect<emr.GetResourceDashboardResponse, emr.GetResourceDashboardError>
   >
 > {}
 export const GetResourceDashboard = Binding.Service<GetResourceDashboard>(

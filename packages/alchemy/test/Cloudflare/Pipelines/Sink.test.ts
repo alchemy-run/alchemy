@@ -1,21 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import crypto from "node:crypto";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import crypto from "node:crypto";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out auth blips.
@@ -70,7 +67,9 @@ test.provider(
       const deployed = yield* retryAuthBlip(
         stack.deploy(
           Effect.gen(function* () {
-            const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
+            const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {
+              forceDestroy: true,
+            });
             return yield* Cloudflare.Pipelines.Sink("ListSink", {
               type: "r2",
               config: {
@@ -98,5 +97,13 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

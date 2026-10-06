@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface BatchRemoveRoleRequest extends Omit<
-  repostspace.BatchRemoveRoleInput,
-  "spaceId"
-> {}
+export interface BatchRemoveRoleRequest extends Omit<repostspace.BatchRemoveRoleInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `BatchRemoveRole` operation (IAM action
@@ -17,9 +14,8 @@ export interface BatchRemoveRoleRequest extends Omit<
  * output's `errors` list rather than failing the whole call.
  * Provide the implementation with
  * `Effect.provide(AWS.RePostSpace.BatchRemoveRoleHttp)`.
- * @binding
- * @section Managing Roles
- * @example Remove the EXPERT role from users
+ * ### Managing Roles
+ * **Example:** Remove the EXPERT role from users
  * ```typescript
  * const batchRemoveRole = yield* AWS.RePostSpace.BatchRemoveRole(space);
  *
@@ -29,6 +25,8 @@ export interface BatchRemoveRoleRequest extends Omit<
  * });
  * console.log(result.removedAccessorIds, result.errors);
  * ```
+ *
+ * @binding
  */
 export interface BatchRemoveRole extends Binding.Service<
   BatchRemoveRole,
@@ -38,12 +36,7 @@ export interface BatchRemoveRole extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchRemoveRoleRequest,
-    ) => Effect.Effect<
-      repostspace.BatchRemoveRoleOutput,
-      repostspace.BatchRemoveRoleError
-    >
+    ) => Effect.Effect<repostspace.BatchRemoveRoleOutput, repostspace.BatchRemoveRoleError>
   >
 > {}
-export const BatchRemoveRole = Binding.Service<BatchRemoveRole>(
-  "AWS.RePostSpace.BatchRemoveRole",
-);
+export const BatchRemoveRole = Binding.Service<BatchRemoveRole>("AWS.RePostSpace.BatchRemoveRole");

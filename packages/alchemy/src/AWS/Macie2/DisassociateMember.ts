@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.DisassociateMemberHttp)`.
- * @binding
- * @section Organization & Members
- * @example Disassociate a Member
+ * ### Organization & Members
+ * **Example:** Disassociate a Member
  * ```typescript
  * // init — account-level binding, no resource argument
  * const disassociateMember = yield* AWS.Macie2.DisassociateMember();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* disassociateMember({ id: accountId });
  * ```
+ *
+ * @binding
  */
 export interface DisassociateMember extends Binding.Service<
   DisassociateMember,
@@ -26,10 +27,7 @@ export interface DisassociateMember extends Binding.Service<
   () => Effect.Effect<
     (
       request: macie2.DisassociateMemberRequest,
-    ) => Effect.Effect<
-      macie2.DisassociateMemberResponse,
-      macie2.DisassociateMemberError
-    >
+    ) => Effect.Effect<macie2.DisassociateMemberResponse, macie2.DisassociateMemberError>
   >
 > {}
 export const DisassociateMember = Binding.Service<DisassociateMember>(

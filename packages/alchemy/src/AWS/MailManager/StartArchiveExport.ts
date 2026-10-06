@@ -11,9 +11,8 @@ import type { Archive } from "./Archive.ts";
  * injected from the binding. The function also needs `s3:PutObject` on
  * the destination. Provide the implementation with
  * `Effect.provide(AWS.MailManager.StartArchiveExportHttp)`.
- * @binding
- * @section Exporting from the Archive
- * @example Export a Day of Mail to S3
+ * ### Exporting from the Archive
+ * **Example:** Export a Day of Mail to S3
  * ```typescript
  * const startExport = yield* MailManager.StartArchiveExport(archive);
  *
@@ -26,6 +25,8 @@ import type { Archive } from "./Archive.ts";
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartArchiveExport extends Binding.Service<
   StartArchiveExport,
@@ -35,10 +36,7 @@ export interface StartArchiveExport extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.StartArchiveExportRequest, "ArchiveId">,
-    ) => Effect.Effect<
-      mm.StartArchiveExportResponse,
-      mm.StartArchiveExportError
-    >
+    ) => Effect.Effect<mm.StartArchiveExportResponse, mm.StartArchiveExportError>
   >
 > {}
 export const StartArchiveExport = Binding.Service<StartArchiveExport>(

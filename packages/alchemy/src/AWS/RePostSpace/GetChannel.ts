@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface GetChannelRequest extends Omit<
-  repostspace.GetChannelInput,
-  "spaceId"
-> {}
+export interface GetChannelRequest extends Omit<repostspace.GetChannelInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `GetChannel` operation (IAM action
@@ -16,15 +13,16 @@ export interface GetChannelRequest extends Omit<
  * status, and per-accessor channel roles.
  * Provide the implementation with
  * `Effect.provide(AWS.RePostSpace.GetChannelHttp)`.
- * @binding
- * @section Managing Channels
- * @example Read a channel
+ * ### Managing Channels
+ * **Example:** Read a channel
  * ```typescript
  * const getChannel = yield* AWS.RePostSpace.GetChannel(space);
  *
  * const channel = yield* getChannel({ channelId });
  * console.log(channel.channelName, channel.channelStatus);
  * ```
+ *
+ * @binding
  */
 export interface GetChannel extends Binding.Service<
   GetChannel,
@@ -34,12 +32,7 @@ export interface GetChannel extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetChannelRequest,
-    ) => Effect.Effect<
-      repostspace.GetChannelOutput,
-      repostspace.GetChannelError
-    >
+    ) => Effect.Effect<repostspace.GetChannelOutput, repostspace.GetChannelError>
   >
 > {}
-export const GetChannel = Binding.Service<GetChannel>(
-  "AWS.RePostSpace.GetChannel",
-);
+export const GetChannel = Binding.Service<GetChannel>("AWS.RePostSpace.GetChannel");

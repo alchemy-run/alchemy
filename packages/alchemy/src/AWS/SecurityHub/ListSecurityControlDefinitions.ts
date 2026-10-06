@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListSecurityControlDefinitionsHttp)`.
- * @binding
- * @section Standards & Controls
- * @example List Control Definitions
+ * ### Standards & Controls
+ * **Example:** List Control Definitions
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listSecurityControlDefinitions = yield* AWS.SecurityHub.ListSecurityControlDefinitions();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { SecurityControlDefinitions } = yield* listSecurityControlDefinitions();
  * ```
+ *
+ * @binding
  */
 export interface ListSecurityControlDefinitions extends Binding.Service<
   ListSecurityControlDefinitions,
@@ -32,7 +33,6 @@ export interface ListSecurityControlDefinitions extends Binding.Service<
     >
   >
 > {}
-export const ListSecurityControlDefinitions =
-  Binding.Service<ListSecurityControlDefinitions>(
-    "AWS.SecurityHub.ListSecurityControlDefinitions",
-  );
+export const ListSecurityControlDefinitions = Binding.Service<ListSecurityControlDefinitions>(
+  "AWS.SecurityHub.ListSecurityControlDefinitions",
+);

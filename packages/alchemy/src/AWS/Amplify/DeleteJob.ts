@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface DeleteJobRequest extends Omit<
-  amplify.DeleteJobRequest,
-  "appId"
-> {}
+export interface DeleteJobRequest extends Omit<amplify.DeleteJobRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:DeleteJob`.
@@ -15,9 +12,8 @@ export interface DeleteJobRequest extends Omit<
  * deletes a build job from a branch's history — e.g. a maintenance function
  * pruning old build records. Provide the implementation with
  * `Effect.provide(AWS.Amplify.DeleteJobHttp)`.
- * @binding
- * @section Controlling Jobs
- * @example Prune an Old Build Record
+ * ### Controlling Jobs
+ * **Example:** Prune an Old Build Record
  * ```typescript
  * // init — bind the operation to the app
  * const deleteJob = yield* AWS.Amplify.DeleteJob(app);
@@ -25,6 +21,8 @@ export interface DeleteJobRequest extends Omit<
  * // runtime — remove the job from the branch's history
  * yield* deleteJob({ branchName: "main", jobId: "42" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteJob extends Binding.Service<
   DeleteJob,
@@ -32,9 +30,7 @@ export interface DeleteJob extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: DeleteJobRequest,
-    ) => Effect.Effect<amplify.DeleteJobResult, amplify.DeleteJobError>
+    (request: DeleteJobRequest) => Effect.Effect<amplify.DeleteJobResult, amplify.DeleteJobError>
   >
 > {}
 

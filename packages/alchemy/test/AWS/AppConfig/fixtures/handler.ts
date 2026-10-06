@@ -1,13 +1,13 @@
-import * as AppConfig from "@/AWS/AppConfig";
-import * as Lambda from "@/AWS/Lambda";
-import * as Output from "@/Output";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AppConfig from "@/AWS/AppConfig";
+import * as Lambda from "@/AWS/Lambda";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -20,7 +20,7 @@ export class AppConfigTestFunction extends Lambda.Function<Lambda.Function>()(
 export default AppConfigTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // Starting a configuration session + fetching config fans out two SDK
     // calls; AWS's 3s default intermittently times out on a cold start.
     timeout: Duration.seconds(30),
@@ -64,28 +64,12 @@ export default AppConfigTestFunction.make(
     });
 
     const getConfig = yield* AppConfig.GetConfiguration(app, env, profile);
-    const createVersion = yield* AppConfig.CreateHostedConfigurationVersion(
-      app,
-      profile,
-    );
-    const startDeployment = yield* AppConfig.StartDeployment(
-      app,
-      env,
-      profile,
-      strategy,
-    );
-    const startSlowDeployment = yield* AppConfig.StartDeployment(
-      app,
-      env,
-      profile,
-      slowStrategy,
-    );
+    const createVersion = yield* AppConfig.CreateHostedConfigurationVersion(app, profile);
+    const startDeployment = yield* AppConfig.StartDeployment(app, env, profile, strategy);
+    const startSlowDeployment = yield* AppConfig.StartDeployment(app, env, profile, slowStrategy);
     const getDeployment = yield* AppConfig.GetDeployment(app, env);
     const stopDeployment = yield* AppConfig.StopDeployment(app, env);
-    const validateConfiguration = yield* AppConfig.ValidateConfiguration(
-      app,
-      profile,
-    );
+    const validateConfiguration = yield* AppConfig.ValidateConfiguration(app, profile);
 
     return {
       fetch: Effect.gen(function* () {
@@ -118,9 +102,7 @@ export default AppConfigTestFunction.make(
             version: string;
             slow?: boolean;
           };
-          const started = yield* (
-            body.slow ? startSlowDeployment : startDeployment
-          )({
+          const started = yield* (body.slow ? startSlowDeployment : startDeployment)({
             ConfigurationVersion: body.version,
           });
           return yield* HttpServerResponse.json({
@@ -130,9 +112,7 @@ export default AppConfigTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/deployment") {
-          const number = Number(
-            new URL(request.originalUrl).searchParams.get("number"),
-          );
+          const number = Number(new URL(request.originalUrl).searchParams.get("number"));
           const deployment = yield* getDeployment({
             DeploymentNumber: number,
           });

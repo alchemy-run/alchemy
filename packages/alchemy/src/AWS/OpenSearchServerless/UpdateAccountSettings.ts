@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * path (e.g. a budget alarm handler capping search capacity). Provide the
  * implementation with
  * `Effect.provide(AWS.OpenSearchServerless.UpdateAccountSettingsHttp)`.
- * @binding
- * @section Account Settings
- * @example Cap the account's search capacity
+ * ### Account Settings
+ * **Example:** Cap the account's search capacity
  * ```typescript
  * const updateAccountSettings = yield* AWS.OpenSearchServerless.UpdateAccountSettings();
  *
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   capacityLimits: { maxSearchCapacityInOCU: 4 },
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateAccountSettings extends Binding.Service<
   UpdateAccountSettings,
@@ -28,10 +29,7 @@ export interface UpdateAccountSettings extends Binding.Service<
   () => Effect.Effect<
     (
       request: aoss.UpdateAccountSettingsRequest,
-    ) => Effect.Effect<
-      aoss.UpdateAccountSettingsResponse,
-      aoss.UpdateAccountSettingsError
-    >
+    ) => Effect.Effect<aoss.UpdateAccountSettingsResponse, aoss.UpdateAccountSettingsError>
   >
 > {}
 export const UpdateAccountSettings = Binding.Service<UpdateAccountSettings>(

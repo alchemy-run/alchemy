@@ -42,14 +42,7 @@ export interface PipelineActionConfig {
   /** Unique name of the action within its stage. */
   name: string;
   /** Action category. */
-  category:
-    | "Source"
-    | "Build"
-    | "Deploy"
-    | "Test"
-    | "Invoke"
-    | "Approval"
-    | "Compute";
+  category: "Source" | "Build" | "Deploy" | "Test" | "Invoke" | "Approval" | "Compute";
   /** Who owns the action provider. */
   owner: "AWS" | "ThirdParty" | "Custom";
   /**
@@ -150,9 +143,8 @@ export interface Pipeline extends Resource<
  * Defining and updating the pipeline is instant. Pipelines that use a git
  * source require a CodeConnections connection whose OAuth handshake is
  * completed manually — use an S3 source to avoid the handshake.
- * @resource
- * @section Creating a Pipeline
- * @example S3-Source → CodeBuild Pipeline
+ * ### Creating a Pipeline
+ * **Example:** S3-Source → CodeBuild Pipeline
  * ```typescript
  * const pipeline = yield* CodePipeline.Pipeline("Release", {
  *   roleArn: role.roleArn,
@@ -187,6 +179,8 @@ export interface Pipeline extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const Pipeline = Resource<Pipeline>("AWS.CodePipeline.Pipeline");
 
@@ -203,17 +197,13 @@ const toTagRecord = (
       .map((tag) => [tag.key, tag.value]),
   );
 
-const toWireArtifactStore = (
-  store: PipelineArtifactStore,
-): codepipeline.ArtifactStore => ({
+const toWireArtifactStore = (store: PipelineArtifactStore): codepipeline.ArtifactStore => ({
   type: store.type ?? "S3",
   location: store.location,
   encryptionKey: store.encryptionKey,
 });
 
-const toWireStages = (
-  stages: PipelineStageConfig[],
-): codepipeline.StageDeclaration[] =>
+const toWireStages = (stages: PipelineStageConfig[]): codepipeline.StageDeclaration[] =>
   stages.map((stage) => ({
     name: stage.name,
     actions: stage.actions.map((action) => ({
@@ -253,11 +243,7 @@ const toWireDeclaration = (
  * Retry (bounded) through IAM propagation. The explicit return annotation
  * keeps the retry's conditional type out of declaration emit (PATTERNS §7).
  */
-const retryIamPropagation = <
-  A,
-  E extends { readonly _tag: string; readonly message?: string },
-  R,
->(
+const retryIamPropagation = <A, E extends { readonly _tag: string; readonly message?: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   effect.pipe(
@@ -271,10 +257,7 @@ const retryIamPropagation = <
             message.includes("unable to assume"))
         );
       },
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -291,24 +274,14 @@ export const PipelineProvider = () =>
       const getPipeline = Effect.fn(function* (name: string) {
         return yield* codepipeline
           .getPipeline({ name })
-          .pipe(
-            Effect.catchTag("PipelineNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("PipelineNotFoundException", () => Effect.succeed(undefined)));
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const observed = yield* codepipeline
           .listTagsForResource({ resourceArn: arn })
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        const { removed, upsert } = diffTags(
-          toTagRecord(observed?.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(toTagRecord(observed?.tags), desiredTags);
         if (upsert.length > 0) {
           yield* codepipeline.tagResource({
             resourceArn: arn,
@@ -328,9 +301,7 @@ export const PipelineProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -373,15 +344,11 @@ export const PipelineProvider = () =>
                   value,
                 })),
               }),
-            ).pipe(
-              Effect.catchTag("PipelineNameInUseException", () => Effect.void),
-            );
+            ).pipe(Effect.catchTag("PipelineNameInUseException", () => Effect.void));
             observed = yield* getPipeline(name);
           } else {
             // 3. Sync — updatePipeline is a full upsert of the declaration.
-            yield* retryIamPropagation(
-              codepipeline.updatePipeline({ pipeline: declaration }),
-            );
+            yield* retryIamPropagation(codepipeline.updatePipeline({ pipeline: declaration }));
             observed = yield* getPipeline(name);
           }
 

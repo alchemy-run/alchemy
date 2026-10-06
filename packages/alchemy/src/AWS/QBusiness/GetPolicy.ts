@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `GetPolicy` request with `applicationId` injected from the bound application.
  */
-export interface GetPolicyRequest extends Omit<
-  qbusiness.GetPolicyRequest,
-  "applicationId"
-> {}
+export interface GetPolicyRequest extends Omit<qbusiness.GetPolicyRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `GetPolicy` operation (IAM action
@@ -20,14 +17,15 @@ export interface GetPolicyRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.GetPolicyHttp)`.
  *
- * @binding
- * @section Cross-Account Permissions
- * @example Read the Application Policy
+ * ### Cross-Account Permissions
+ * **Example:** Read the Application Policy
  * ```typescript
  * const getPolicy = yield* AWS.QBusiness.GetPolicy(app);
  *
  * const { policy } = yield* getPolicy();
  * ```
+ *
+ * @binding
  */
 export interface GetPolicy extends Binding.Service<
   GetPolicy,

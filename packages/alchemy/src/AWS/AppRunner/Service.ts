@@ -1,4 +1,5 @@
 import * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
@@ -13,11 +14,7 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -30,23 +27,14 @@ import {
   type ServerHost,
 } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "../../Tags.ts";
 import { toSeconds } from "../../Util/Duration.ts";
 import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readAppRunnerTags,
-  syncAppRunnerTags,
-  toWireTags,
-} from "./internal.ts";
+import { readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
 /**
  * Container image source for an App Runner service.
@@ -232,12 +220,10 @@ export interface ServiceProps extends PlatformProps {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for the Effect-native entrypoint: rolldown
-   * `input`/`output` overrides plus pure-annotation options (`pure`).
-   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
-   * `@distilled.cloud/*` are annotated as pure by default so unused code
-   * from those packages is tree-shaken; list additional packages via
-   * `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for the Effect-native entrypoint. Unused
+   * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
+   * marked pure so unused parts prune more aggressively. List extra
+   * packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
   /**
@@ -296,6 +282,22 @@ export interface ServiceProps extends PlatformProps {
    * @default AWS-owned key
    */
   kmsKeyArn?: string;
+  /**
+   * Keep the CloudWatch log groups App Runner auto-creates for the service
+   * (`/aws/apprunner/{serviceName}/{serviceId}/application` and
+   * `.../service`) when the service is deleted.
+   *
+   * By default they are deleted along with the service — App Runner itself
+   * leaves them behind, so every deploy+destroy cycle would otherwise
+   * strand a pair. Set this when the logs must outlive the service (an
+   * incident post-mortem, a compliance retention window). The kept groups
+   * are inert: their names embed the service id, so no future service ever
+   * writes to them, and nothing but a manual delete (or
+   * `alchemy unsafe nuke`) removes them.
+   *
+   * @default false
+   */
+  retainLogGroups?: boolean;
   /**
    * User-defined tags for the service.
    */
@@ -371,11 +373,7 @@ export interface Service extends Resource<
   Providers
 > {}
 
-export type ServiceServices =
-  | Credentials
-  | Region
-  | ServerHost
-  | AWSEnvironment;
+export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
 
 export type ServiceShape = Main<ServiceServices>;
 
@@ -396,9 +394,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * to a managed ECR repository, and deploys, provisioning the instance and
  * ECR access roles automatically. Capability bindings (e.g. DynamoDB
  * `GetItem`) attach IAM policy statements to the managed instance role.
- * @resource
- * @section Creating a Service
- * @example Public ECR Image
+ * ### Creating a Service
+ * **Example:** Public ECR Image
  * ```typescript
  * const service = yield* AppRunner.Service("Hello", {
  *   imageRepository: {
@@ -411,7 +408,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * // service.serviceUrl -> "xxxxxxxx.us-west-2.awsapprunner.com"
  * ```
  *
- * @example Private ECR Image with Access Role
+ * **Example:** Private ECR Image with Access Role
  * ```typescript
  * const service = yield* AppRunner.Service("Api", {
  *   imageRepository: {
@@ -425,8 +422,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Effect-Native Services
- * @example Inline Effect HTTP Program
+ * ### Effect-Native Services
+ * **Example:** Inline Effect HTTP Program
  * ```typescript
  * export default class Api extends AppRunner.Service<Api>()(
  *   "Api",
@@ -446,17 +443,14 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ) {}
  * ```
  *
- * @section Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * ### Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * @example Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -466,18 +460,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * @example Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -485,8 +468,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * @section Scaling and Networking
- * @example Custom Auto Scaling and VPC Egress
+ * ### Scaling and Networking
+ * **Example:** Custom Auto Scaling and VPC Egress
  * ```typescript
  * const service = yield* AppRunner.Service("Api", {
  *   imageRepository: {
@@ -501,21 +484,17 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("AWS.AppRunner.Service", {
-  createRuntimeContext: createHostRuntimeContext("AWS.AppRunner.Service") as (
-    id: string,
-  ) => ServiceRuntimeContext,
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("AWS.AppRunner.Service", {
+    createRuntimeContext: createHostRuntimeContext("AWS.AppRunner.Service") as (
+      id: string,
+    ) => ServiceRuntimeContext,
+  });
 
-class AppRunnerServiceNotSettled extends Data.TaggedError(
-  "AppRunnerServiceNotSettled",
-)<{
+class AppRunnerServiceNotSettled extends Data.TaggedError("AppRunnerServiceNotSettled")<{
   readonly serviceArn: string;
   readonly status: string;
 }> {}
@@ -552,17 +531,11 @@ const normalizeMemory = (memory: string): string =>
   })[memory] ?? memory;
 
 /** Unwrap distilled's sensitive-string decoding to a plain value. */
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined || typeof value === "string"
-    ? value
-    : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined || typeof value === "string" ? value : Redacted.value(value);
 
 const plainRecord = (
-  record:
-    | { [key: string]: string | Redacted.Redacted<string> | undefined }
-    | undefined,
+  record: { [key: string]: string | Redacted.Redacted<string> | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(record ?? {}).flatMap(([key, value]) => {
@@ -571,16 +544,10 @@ const plainRecord = (
     }),
   );
 
-const sameRecord = (
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean => {
+const sameRecord = (a: Record<string, string>, b: Record<string, string>): boolean => {
   const aKeys = Object.keys(a).sort();
   const bKeys = Object.keys(b).sort();
-  return (
-    aKeys.length === bKeys.length &&
-    aKeys.every((k, i) => k === bKeys[i] && a[k] === b[k])
-  );
+  return aKeys.length === bKeys.length && aKeys.every((k, i) => k === bKeys[i] && a[k] === b[k]);
 };
 
 /** Props with the source resolved (either given or built from `main`). */
@@ -588,19 +555,15 @@ interface ResolvedServiceProps extends ServiceProps {
   imageRepository: ServiceImageRepository;
 }
 
-const toWireSource = (
-  props: ResolvedServiceProps,
-): apprunner.SourceConfiguration => ({
+const toWireSource = (props: ResolvedServiceProps): apprunner.SourceConfiguration => ({
   ImageRepository: {
     ImageIdentifier: props.imageRepository.imageIdentifier,
     ImageRepositoryType: props.imageRepository.imageRepositoryType,
     ImageConfiguration: {
       Port: props.imageRepository.port,
       StartCommand: props.imageRepository.startCommand,
-      RuntimeEnvironmentVariables:
-        props.imageRepository.runtimeEnvironmentVariables,
-      RuntimeEnvironmentSecrets:
-        props.imageRepository.runtimeEnvironmentSecrets,
+      RuntimeEnvironmentVariables: props.imageRepository.runtimeEnvironmentVariables,
+      RuntimeEnvironmentSecrets: props.imageRepository.runtimeEnvironmentSecrets,
     },
   },
   AutoDeploymentsEnabled: props.autoDeploymentsEnabled,
@@ -641,8 +604,7 @@ const toWireNetwork = (
     ? undefined
     : {
         EgressConfiguration:
-          network.egressType !== undefined ||
-          network.vpcConnectorArn !== undefined
+          network.egressType !== undefined || network.vpcConnectorArn !== undefined
             ? {
                 EgressType: network.egressType,
                 VpcConnectorArn: network.vpcConnectorArn,
@@ -662,8 +624,7 @@ const toWireObservability = (
     ? undefined
     : {
         ObservabilityEnabled: observability.observabilityEnabled,
-        ObservabilityConfigurationArn:
-          observability.observabilityConfigurationArn,
+        ObservabilityConfigurationArn: observability.observabilityConfigurationArn,
       };
 
 /**
@@ -683,8 +644,7 @@ const sourceDrifted = (
     image?.ImageIdentifier !== desired.imageIdentifier ||
     image?.ImageRepositoryType !== desired.imageRepositoryType ||
     (desired.port !== undefined && config?.Port !== desired.port) ||
-    (desired.startCommand !== undefined &&
-      plain(config?.StartCommand) !== desired.startCommand) ||
+    (desired.startCommand !== undefined && plain(config?.StartCommand) !== desired.startCommand) ||
     (desired.runtimeEnvironmentVariables !== undefined &&
       !sameRecord(
         plainRecord(config?.RuntimeEnvironmentVariables),
@@ -698,8 +658,7 @@ const sourceDrifted = (
     (news.autoDeploymentsEnabled !== undefined &&
       observed?.AutoDeploymentsEnabled !== news.autoDeploymentsEnabled) ||
     (news.accessRoleArn !== undefined &&
-      observed?.AuthenticationConfiguration?.AccessRoleArn !==
-        news.accessRoleArn)
+      observed?.AuthenticationConfiguration?.AccessRoleArn !== news.accessRoleArn)
   );
 };
 
@@ -708,11 +667,9 @@ const instanceDrifted = (
   observed: apprunner.InstanceConfiguration | undefined,
 ): boolean =>
   desired !== undefined &&
-  ((desired.cpu !== undefined &&
-    normalizeCpu(observed?.Cpu ?? "") !== normalizeCpu(desired.cpu)) ||
+  ((desired.cpu !== undefined && normalizeCpu(observed?.Cpu ?? "") !== normalizeCpu(desired.cpu)) ||
     (desired.memory !== undefined &&
-      normalizeMemory(observed?.Memory ?? "") !==
-        normalizeMemory(desired.memory)) ||
+      normalizeMemory(observed?.Memory ?? "") !== normalizeMemory(desired.memory)) ||
     (desired.instanceRoleArn !== undefined &&
       observed?.InstanceRoleArn !== desired.instanceRoleArn));
 
@@ -721,13 +678,10 @@ const healthCheckDrifted = (
   observed: apprunner.HealthCheckConfiguration | undefined,
 ): boolean =>
   desired !== undefined &&
-  ((desired.protocol !== undefined &&
-    observed?.Protocol !== desired.protocol) ||
+  ((desired.protocol !== undefined && observed?.Protocol !== desired.protocol) ||
     (desired.path !== undefined && observed?.Path !== desired.path) ||
-    (desired.interval !== undefined &&
-      observed?.Interval !== toSeconds(desired.interval)) ||
-    (desired.timeout !== undefined &&
-      observed?.Timeout !== toSeconds(desired.timeout)) ||
+    (desired.interval !== undefined && observed?.Interval !== toSeconds(desired.interval)) ||
+    (desired.timeout !== undefined && observed?.Timeout !== toSeconds(desired.timeout)) ||
     (desired.healthyThreshold !== undefined &&
       observed?.HealthyThreshold !== desired.healthyThreshold) ||
     (desired.unhealthyThreshold !== undefined &&
@@ -741,13 +695,10 @@ const networkDrifted = (
   ((desired.egressType !== undefined &&
     observed?.EgressConfiguration?.EgressType !== desired.egressType) ||
     (desired.vpcConnectorArn !== undefined &&
-      observed?.EgressConfiguration?.VpcConnectorArn !==
-        desired.vpcConnectorArn) ||
+      observed?.EgressConfiguration?.VpcConnectorArn !== desired.vpcConnectorArn) ||
     (desired.isPubliclyAccessible !== undefined &&
-      observed?.IngressConfiguration?.IsPubliclyAccessible !==
-        desired.isPubliclyAccessible) ||
-    (desired.ipAddressType !== undefined &&
-      observed?.IpAddressType !== desired.ipAddressType));
+      observed?.IngressConfiguration?.IsPubliclyAccessible !== desired.isPubliclyAccessible) ||
+    (desired.ipAddressType !== undefined && observed?.IpAddressType !== desired.ipAddressType));
 
 const observabilityDrifted = (
   desired: ServiceObservabilityProps | undefined,
@@ -784,6 +735,83 @@ const emptyPlatformAttributes: PlatformAttributes = {
   accessRoleName: undefined,
   codeHash: undefined,
 };
+
+/**
+ * The two CloudWatch log groups App Runner auto-creates for a service:
+ * `.../application` (the container's stdout/stderr) and `.../service`
+ * (App Runner's own deployment and health-check events).
+ *
+ * Both names embed the AWS-generated service id, so a pair belongs to
+ * exactly one service instance — it can never be shared with, or reused
+ * by, another service.
+ */
+const logGroupNamesFor = (serviceName: string, serviceId: string) => [
+  `/aws/apprunner/${serviceName}/${serviceId}/application`,
+  `/aws/apprunner/${serviceName}/${serviceId}/service`,
+];
+
+/**
+ * Delete one of a service's auto-created log groups, idempotently.
+ *
+ * `deleteService` does NOT remove them, so without this every
+ * deploy+destroy cycle strands a pair (matching how the Lambda and ECS
+ * providers reap `/aws/lambda/{name}` and their task log group).
+ *
+ * App Runner can flush a final batch of events after the service itself
+ * is gone, silently re-creating a just-deleted group, so the delete is
+ * followed by a bounded observe→delete convergence loop. A group that
+ * never reappears — the common case — costs a single extra describe.
+ * Reaping is auxiliary to an already-completed service deletion, so a
+ * group that survives the budget warns rather than failing the destroy.
+ */
+const reapLogGroup = Effect.fn(function* (logGroupName: string) {
+  const deleteGroup = logs.deleteLogGroup({ logGroupName }).pipe(
+    Effect.retry({
+      while: (error) =>
+        error._tag === "OperationAbortedException" || error._tag === "ServiceUnavailableException",
+      schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(6)]),
+    }),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.timeoutOrElse({
+      duration: "30 seconds",
+      orElse: () => Effect.logWarning(`Timed out deleting App Runner log group ${logGroupName}`),
+    }),
+  );
+
+  // A describe that cannot complete in time is not deletion proof —
+  // assume the group is still present and let the bounded loop converge.
+  const observeGroup = logs.describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 }).pipe(
+    Effect.map((response) =>
+      (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
+    ),
+    Effect.timeoutOrElse({
+      duration: "15 seconds",
+      orElse: () =>
+        Effect.logWarning(
+          `Timed out observing App Runner log group ${logGroupName} — assuming still present`,
+        ).pipe(Effect.as(true)),
+    }),
+  );
+
+  yield* deleteGroup;
+
+  // Re-reaps at t=0s/5s/…/30s, each attempt idempotent.
+  const stillPresent = yield* Effect.gen(function* () {
+    const present = yield* observeGroup;
+    if (present) yield* deleteGroup;
+    return present;
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (present) => !present,
+      times: 6,
+    }),
+  );
+
+  if (stillPresent) {
+    yield* Effect.logWarning(`App Runner log group ${logGroupName} kept reappearing after delete`);
+  }
+});
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -852,9 +880,7 @@ export const ServiceProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(
-                      `Role '${roleName}' already exists and is not managed by alchemy`,
-                    ),
+                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
                 ),
               ),
             ),
@@ -915,9 +941,8 @@ export const ServiceProvider = () =>
         bindings: ResourceBinding<Service["Binding"]>[];
       }) {
         const activeBindings = bindings.filter(
-          (
-            binding: ResourceBinding<Service["Binding"]> & { action?: string },
-          ) => binding.action !== "delete",
+          (binding: ResourceBinding<Service["Binding"]> & { action?: string }) =>
+            binding.action !== "delete",
         );
 
         const env = activeBindings
@@ -972,11 +997,10 @@ export const ServiceProvider = () =>
               external: [
                 "bun",
                 "bun:*",
-                ...((props.build?.input?.external as string[] | undefined) ??
-                  []),
+                ...((props.build?.input?.external as string[] | undefined) ?? []),
               ],
               resolve: {
-                conditionNames: ["bun", "import", "module", "default"],
+                conditionNames: [...Bundle.BUN_CONDITION_NAMES],
                 ...props.build?.input?.resolve,
               },
               plugins: [props.build?.input?.plugins, plugins],
@@ -998,68 +1022,10 @@ export const ServiceProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/AppRunner";
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT (App Runner injects PORT
-// for the configured service port), so a returned { fetch } handler is
-// actually served and host.run loops stay alive.
-const program = handler.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("App Runner service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("App Runner service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `,
               ),
             );
@@ -1095,16 +1061,11 @@ await Effect.runPromise(program).catch((err) => {
         port: number;
       }) {
         const realMain = yield* resolveMainPath(props.main!);
-        const contextDir = yield* getStableContextDir(
-          realMain,
-          dotAlchemy,
-          `${id}-image`,
-        );
+        const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
         const imageUri = `${repositoryUri}:${hash}`;
 
         const generatedDockerfile = (() => {
-          const base =
-            props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
+          const base = props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
           return [
             `FROM ${base}`,
             `WORKDIR /app`,
@@ -1144,15 +1105,9 @@ await Effect.runPromise(program).catch((err) => {
       const readService = Effect.fn(function* (arn: string) {
         const response = yield* apprunner
           .describeService({ ServiceArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const service = response?.Service;
-        return service === undefined || statusIs(service.Status, "DELETED")
-          ? undefined
-          : service;
+        return service === undefined || statusIs(service.Status, "DELETED") ? undefined : service;
       });
 
       /** Find a live service by name (list has no name filter). */
@@ -1179,8 +1134,7 @@ await Effect.runPromise(program).catch((err) => {
       const waitForSettled = Effect.fn(function* (arn: string) {
         return yield* readService(arn).pipe(
           Effect.flatMap((service) =>
-            service !== undefined &&
-            statusIs(service.Status, "OPERATION_IN_PROGRESS")
+            service !== undefined && statusIs(service.Status, "OPERATION_IN_PROGRESS")
               ? Effect.fail(
                   new AppRunnerServiceNotSettled({
                     serviceArn: arn,
@@ -1191,10 +1145,7 @@ await Effect.runPromise(program).catch((err) => {
           ),
           Effect.retry({
             while: (e) => e instanceof AppRunnerServiceNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -1208,9 +1159,7 @@ await Effect.runPromise(program).catch((err) => {
             if (service === undefined) return Effect.void;
             if (statusIs(service.Status, "DELETE_FAILED")) {
               return Effect.fail(
-                new Error(
-                  `App Runner service '${arn}' failed to delete (status: DELETE_FAILED)`,
-                ),
+                new Error(`App Runner service '${arn}' failed to delete (status: DELETE_FAILED)`),
               );
             }
             return Effect.fail(
@@ -1222,10 +1171,7 @@ await Effect.runPromise(program).catch((err) => {
           }),
           Effect.retry({
             while: (e) => e instanceof AppRunnerServiceNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -1273,15 +1219,11 @@ await Effect.runPromise(program).catch((err) => {
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // The encryption key is create-only.
-          if (
-            (news?.kmsKeyArn ?? undefined) !== (olds?.kmsKeyArn ?? undefined)
-          ) {
+          if ((news?.kmsKeyArn ?? undefined) !== (olds?.kmsKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -1296,13 +1238,7 @@ await Effect.runPromise(program).catch((err) => {
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
           const name = output?.serviceName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -1321,17 +1257,14 @@ await Effect.runPromise(program).catch((err) => {
           let platformAttributes = emptyPlatformAttributes;
           if (news.main !== undefined) {
             const instanceRoleName =
-              output?.instanceRoleName ??
-              (yield* createRoleName(id, "instance-role"));
+              output?.instanceRoleName ?? (yield* createRoleName(id, "instance-role"));
             const accessRoleName =
-              output?.accessRoleName ??
-              (yield* createRoleName(id, "access-role"));
+              output?.accessRoleName ?? (yield* createRoleName(id, "access-role"));
             const policyName = yield* createPhysicalName({
               id: `${id}-policy`,
               maxLength: 128,
             });
-            const repositoryName =
-              output?.repositoryName ?? (yield* createRepositoryName(id));
+            const repositoryName = output?.repositoryName ?? (yield* createRepositoryName(id));
 
             // Ensure roles + repository. Each helper is idempotent (creates
             // on miss, adopts on race) so the same sequence runs on initial
@@ -1447,9 +1380,7 @@ await Effect.runPromise(program).catch((err) => {
 
           // 1. Observe — cloud state is authoritative; output is only an
           // identifier cache.
-          let observed = output?.serviceArn
-            ? yield* readService(output.serviceArn)
-            : undefined;
+          let observed = output?.serviceArn ? yield* readService(output.serviceArn) : undefined;
           if (observed === undefined) {
             observed = yield* findByName(name);
           }
@@ -1463,20 +1394,11 @@ await Effect.runPromise(program).catch((err) => {
               .createService({
                 ServiceName: name,
                 SourceConfiguration: toWireSource(desired),
-                InstanceConfiguration: toWireInstance(
-                  desired.instanceConfiguration,
-                ),
-                HealthCheckConfiguration: toWireHealthCheck(
-                  desired.healthCheckConfiguration,
-                ),
-                NetworkConfiguration: toWireNetwork(
-                  desired.networkConfiguration,
-                ),
-                AutoScalingConfigurationArn:
-                  desired.autoScalingConfigurationArn,
-                ObservabilityConfiguration: toWireObservability(
-                  desired.observabilityConfiguration,
-                ),
+                InstanceConfiguration: toWireInstance(desired.instanceConfiguration),
+                HealthCheckConfiguration: toWireHealthCheck(desired.healthCheckConfiguration),
+                NetworkConfiguration: toWireNetwork(desired.networkConfiguration),
+                AutoScalingConfigurationArn: desired.autoScalingConfigurationArn,
+                ObservabilityConfiguration: toWireObservability(desired.observabilityConfiguration),
                 EncryptionConfiguration: desired.kmsKeyArn
                   ? { KmsKey: desired.kmsKeyArn }
                   : undefined,
@@ -1485,10 +1407,7 @@ await Effect.runPromise(program).catch((err) => {
               .pipe(
                 Effect.retry({
                   while: (e): boolean => e._tag === "InvalidRequestException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("5 seconds"),
-                    Schedule.recurs(12),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
                 }),
               );
             observed = created.Service;
@@ -1499,9 +1418,7 @@ await Effect.runPromise(program).catch((err) => {
           const settled = yield* waitForSettled(observed.ServiceArn);
           if (settled === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `App Runner service '${name}' disappeared while reconciling`,
-              ),
+              new Error(`App Runner service '${name}' disappeared while reconciling`),
             );
           }
           observed = settled;
@@ -1521,35 +1438,16 @@ await Effect.runPromise(program).catch((err) => {
           if (sourceDrifted(desired, observed.SourceConfiguration)) {
             update.SourceConfiguration = toWireSource(desired);
           }
-          if (
-            instanceDrifted(
-              desired.instanceConfiguration,
-              observed.InstanceConfiguration,
-            )
-          ) {
-            update.InstanceConfiguration = toWireInstance(
-              desired.instanceConfiguration,
-            );
+          if (instanceDrifted(desired.instanceConfiguration, observed.InstanceConfiguration)) {
+            update.InstanceConfiguration = toWireInstance(desired.instanceConfiguration);
           }
           if (
-            healthCheckDrifted(
-              desired.healthCheckConfiguration,
-              observed.HealthCheckConfiguration,
-            )
+            healthCheckDrifted(desired.healthCheckConfiguration, observed.HealthCheckConfiguration)
           ) {
-            update.HealthCheckConfiguration = toWireHealthCheck(
-              desired.healthCheckConfiguration,
-            );
+            update.HealthCheckConfiguration = toWireHealthCheck(desired.healthCheckConfiguration);
           }
-          if (
-            networkDrifted(
-              desired.networkConfiguration,
-              observed.NetworkConfiguration,
-            )
-          ) {
-            update.NetworkConfiguration = toWireNetwork(
-              desired.networkConfiguration,
-            );
+          if (networkDrifted(desired.networkConfiguration, observed.NetworkConfiguration)) {
+            update.NetworkConfiguration = toWireNetwork(desired.networkConfiguration);
           }
           if (
             observabilityDrifted(
@@ -1563,12 +1461,10 @@ await Effect.runPromise(program).catch((err) => {
           }
           if (
             desired.autoScalingConfigurationArn !== undefined &&
-            observed.AutoScalingConfigurationSummary
-              ?.AutoScalingConfigurationArn !==
+            observed.AutoScalingConfigurationSummary?.AutoScalingConfigurationArn !==
               desired.autoScalingConfigurationArn
           ) {
-            update.AutoScalingConfigurationArn =
-              desired.autoScalingConfigurationArn;
+            update.AutoScalingConfigurationArn = desired.autoScalingConfigurationArn;
           }
 
           if (Object.keys(update).length > 0) {
@@ -1579,9 +1475,7 @@ await Effect.runPromise(program).catch((err) => {
             const updated = yield* waitForSettled(observed.ServiceArn);
             if (updated === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `App Runner service '${name}' disappeared while updating`,
-                ),
+                new Error(`App Runner service '${name}' disappeared while updating`),
               );
             }
             observed = updated;
@@ -1595,18 +1489,16 @@ await Effect.runPromise(program).catch((err) => {
           return toAttrs(observed, platformAttributes);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output, force }) {
           // A service mid-operation rejects deletion with
           // InvalidStateException — wait (bounded) for it to settle first.
           const observed = yield* waitForSettled(output.serviceArn);
           if (observed !== undefined) {
-            yield* apprunner
-              .deleteService({ ServiceArn: output.serviceArn })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-                // Already deleting — deletion is in progress.
-                Effect.catchTag("InvalidStateException", () => Effect.void),
-              );
+            yield* apprunner.deleteService({ ServiceArn: output.serviceArn }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              // Already deleting — deletion is in progress.
+              Effect.catchTag("InvalidStateException", () => Effect.void),
+            );
             yield* waitUntilGone(output.serviceArn);
           }
 
@@ -1618,17 +1510,9 @@ await Effect.runPromise(program).catch((err) => {
                 repositoryName: output.repositoryName,
                 force: true,
               })
-              .pipe(
-                Effect.catchTag(
-                  "RepositoryNotFoundException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
           }
-          for (const roleName of [
-            output.instanceRoleName,
-            output.accessRoleName,
-          ]) {
+          for (const roleName of [output.instanceRoleName, output.accessRoleName]) {
             if (roleName === undefined) continue;
             yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
               Stream.mapEffect((policyName) =>
@@ -1637,9 +1521,7 @@ await Effect.runPromise(program).catch((err) => {
                     RoleName: roleName,
                     PolicyName: policyName,
                   })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
+                  .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
               ),
               Stream.runDrain,
               // The role may already be gone (delete re-run / race) —
@@ -1647,30 +1529,36 @@ await Effect.runPromise(program).catch((err) => {
               // idempotent.
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
-            yield* iam.listAttachedRolePolicies
-              .items({ RoleName: roleName })
-              .pipe(
-                Stream.mapEffect((policy) =>
-                  iam
-                    .detachRolePolicy({
-                      RoleName: roleName,
-                      PolicyArn: policy.PolicyArn!,
-                    })
-                    .pipe(
-                      Effect.catchTag(
-                        "NoSuchEntityException",
-                        () => Effect.void,
-                      ),
-                    ),
-                ),
-                Stream.runDrain,
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+            yield* iam.listAttachedRolePolicies.items({ RoleName: roleName }).pipe(
+              Stream.mapEffect((policy) =>
+                iam
+                  .detachRolePolicy({
+                    RoleName: roleName,
+                    PolicyArn: policy.PolicyArn!,
+                  })
+                  .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+              ),
+              Stream.runDrain,
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            );
             yield* iam
               .deleteRole({ RoleName: roleName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+          }
+
+          // Last, because the reap can sit through App Runner's final log
+          // flush: an interruption during that window must not strand the
+          // repository or the roles, which cost money and block re-creates.
+          //
+          // `retainLogGroups` keeps them; account-wide teardown (`force`)
+          // overrides that opt-out, since nuke's contract is to leave
+          // nothing behind. Nuke also enumerates from the cloud, so `olds`
+          // carries Attributes rather than Props there and the flag reads
+          // as unset anyway.
+          if (!olds.retainLogGroups || force) {
+            for (const logGroupName of logGroupNamesFor(output.serviceName, output.serviceId)) {
+              yield* reapLogGroup(logGroupName);
+            }
           }
         }),
 

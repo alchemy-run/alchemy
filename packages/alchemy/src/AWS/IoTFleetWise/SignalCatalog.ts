@@ -65,9 +65,8 @@ export interface SignalCatalog extends Resource<
  * provider follows the ambient region when supported and pins `us-east-1`
  * otherwise. Access to the service is allowlist-gated by AWS — accounts
  * without access receive `AccessDeniedException` on every operation.
- * @resource
- * @section Creating a Signal Catalog
- * @example Catalog with a Branch and a Sensor
+ * ### Creating a Signal Catalog
+ * **Example:** Catalog with a Branch and a Sensor
  * ```typescript
  * const catalog = yield* SignalCatalog("Signals", {
  *   nodes: [
@@ -83,7 +82,7 @@ export interface SignalCatalog extends Resource<
  * });
  * ```
  *
- * @example Catalog with Attributes
+ * **Example:** Catalog with Attributes
  * ```typescript
  * const catalog = yield* SignalCatalog("Signals", {
  *   description: "vehicle signals",
@@ -99,10 +98,10 @@ export interface SignalCatalog extends Resource<
  *   tags: { team: "telemetry" },
  * });
  * ```
+ *
+ * @resource
  */
-export const SignalCatalog = Resource<SignalCatalog>(
-  "AWS.IoTFleetWise.SignalCatalog",
-);
+export const SignalCatalog = Resource<SignalCatalog>("AWS.IoTFleetWise.SignalCatalog");
 
 const nodeFqn = (node: iotfleetwise.Node): string =>
   node.branch?.fullyQualifiedName ??
@@ -125,9 +124,7 @@ export const SignalCatalogProvider = () =>
       const readCatalog = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getSignalCatalog({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -150,8 +147,7 @@ export const SignalCatalogProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.signalCatalogName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.signalCatalogName ?? (yield* toName(id, olds ?? {}));
           const found = yield* readCatalog(name);
           if (found === undefined) return undefined;
           const attrs = {
@@ -197,25 +193,16 @@ export const SignalCatalogProvider = () =>
           // 3. Sync nodes + description — diff OBSERVED nodes against the
           //    desired tree keyed by fullyQualifiedName.
           const observedNodes = yield* readNodes(name);
-          const observedByFqn = new Map(
-            observedNodes.map((node) => [nodeFqn(node), node]),
-          );
-          const desiredByFqn = new Map(
-            desiredNodes.map((node) => [nodeFqn(node), node]),
-          );
-          const nodesToAdd = desiredNodes.filter(
-            (node) => !observedByFqn.has(nodeFqn(node)),
-          );
+          const observedByFqn = new Map(observedNodes.map((node) => [nodeFqn(node), node]));
+          const desiredByFqn = new Map(desiredNodes.map((node) => [nodeFqn(node), node]));
+          const nodesToAdd = desiredNodes.filter((node) => !observedByFqn.has(nodeFqn(node)));
           const nodesToUpdate = desiredNodes.filter((node) => {
             const current = observedByFqn.get(nodeFqn(node));
             return current !== undefined && !stableEquals(current, node);
           });
-          const nodesToRemove = observedNodes
-            .map(nodeFqn)
-            .filter((fqn) => !desiredByFqn.has(fqn));
+          const nodesToRemove = observedNodes.map(nodeFqn).filter((fqn) => !desiredByFqn.has(fqn));
           const descriptionChanged =
-            news.description !== undefined &&
-            news.description !== observed.description;
+            news.description !== undefined && news.description !== observed.description;
           if (
             nodesToAdd.length > 0 ||
             nodesToUpdate.length > 0 ||
@@ -227,10 +214,8 @@ export const SignalCatalogProvider = () =>
                 name,
                 description: descriptionChanged ? news.description : undefined,
                 nodesToAdd: nodesToAdd.length > 0 ? nodesToAdd : undefined,
-                nodesToUpdate:
-                  nodesToUpdate.length > 0 ? nodesToUpdate : undefined,
-                nodesToRemove:
-                  nodesToRemove.length > 0 ? nodesToRemove : undefined,
+                nodesToUpdate: nodesToUpdate.length > 0 ? nodesToUpdate : undefined,
+                nodesToRemove: nodesToRemove.length > 0 ? nodesToRemove : undefined,
               })
               .pipe(inFleetWiseRegion);
           }
@@ -249,13 +234,11 @@ export const SignalCatalogProvider = () =>
           // Idempotent: FleetWise deletes return success for missing
           // resources. Model manifests still detaching surface as
           // ConflictException — retry through the window (bounded).
-          yield* iotfleetwise
-            .deleteSignalCatalog({ name: output.signalCatalogName })
-            .pipe(
-              inFleetWiseRegion,
-              retryWhileConflict,
-              Effect.catchTag("ConflictException", () => Effect.void),
-            );
+          yield* iotfleetwise.deleteSignalCatalog({ name: output.signalCatalogName }).pipe(
+            inFleetWiseRegion,
+            retryWhileConflict,
+            Effect.catchTag("ConflictException", () => Effect.void),
+          );
         }),
 
         list: () =>

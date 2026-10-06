@@ -63,8 +63,8 @@ export interface ReplicationEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Replication Events
- * @example Alert On Task Failures
+ * ### Consuming Replication Events
+ * **Example:** Alert On Task Failures
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -95,9 +95,9 @@ export const consumeReplicationEvents = <StreamReq = never, Req = never>(
     props.id ?? "DmsReplicationEvents",
     {
       source: ["aws.dms"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as DmsReplicationEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as DmsReplicationEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
     },
     { description: props.description, state: props.state },
     process,

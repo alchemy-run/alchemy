@@ -11,9 +11,8 @@ import type { Pipeline } from "./Pipeline.ts";
  * pipeline outside working hours. The pipeline name is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.OSIS.StopPipelineHttp)`.
- * @binding
- * @section Controlling a Pipeline
- * @example Pause Ingestion
+ * ### Controlling a Pipeline
+ * **Example:** Pause Ingestion
  * ```typescript
  * // init — bind the operation to the pipeline
  * const stopPipeline = yield* AWS.OSIS.StopPipeline(pipeline);
@@ -22,16 +21,14 @@ import type { Pipeline } from "./Pipeline.ts";
  * const { Pipeline } = yield* stopPipeline();
  * // Pipeline?.Status === "STOPPING"
  * ```
+ *
+ * @binding
  */
 export interface StopPipeline extends Binding.Service<
   StopPipeline,
   "AWS.OSIS.StopPipeline",
   (
     pipeline: Pipeline,
-  ) => Effect.Effect<
-    () => Effect.Effect<osis.StopPipelineResponse, osis.StopPipelineError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<osis.StopPipelineResponse, osis.StopPipelineError>>
 > {}
-export const StopPipeline = Binding.Service<StopPipeline>(
-  "AWS.OSIS.StopPipeline",
-);
+export const StopPipeline = Binding.Service<StopPipeline>("AWS.OSIS.StopPipeline");

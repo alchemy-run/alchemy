@@ -39,9 +39,8 @@ export interface ListenerCertificate extends Resource<
  * listener (e.g. one certificate per tenant domain). When the full certificate
  * list is known up front, prefer the listener's `certificates` prop, which
  * declaratively syncs the whole set.
- * @resource
- * @section Attaching Certificates
- * @example Additional SNI certificate
+ * ### Attaching Certificates
+ * **Example:** Additional SNI certificate
  * ```typescript
  * const listener = yield* Listener("https", {
  *   loadBalancerArn: lb.loadBalancerArn,
@@ -55,10 +54,10 @@ export interface ListenerCertificate extends Resource<
  *   certificateArn: tenantCertArn,
  * });
  * ```
+ *
+ * @resource
  */
-export const ListenerCertificate = Resource<ListenerCertificate>(
-  "AWS.ELBv2.ListenerCertificate",
-);
+export const ListenerCertificate = Resource<ListenerCertificate>("AWS.ELBv2.ListenerCertificate");
 
 export const ListenerCertificateProvider = () =>
   Provider.succeed(ListenerCertificate, {
@@ -66,10 +65,7 @@ export const ListenerCertificateProvider = () =>
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
       // Existence-only resource — both identity props force replacement.
-      if (
-        olds.listenerArn !== news.listenerArn ||
-        olds.certificateArn !== news.certificateArn
-      ) {
+      if (olds.listenerArn !== news.listenerArn || olds.certificateArn !== news.certificateArn) {
         return { action: "replace" } as const;
       }
     }),
@@ -80,14 +76,10 @@ export const ListenerCertificateProvider = () =>
       const attached = yield* elbv2.describeListenerCertificates
         .items({ ListenerArn: output.listenerArn })
         .pipe(
-          Stream.filter(
-            (c) => !c.IsDefault && c.CertificateArn === output.certificateArn,
-          ),
+          Stream.filter((c) => !c.IsDefault && c.CertificateArn === output.certificateArn),
           Stream.runHead,
           Effect.map(Option.isSome),
-          Effect.catchTag("ListenerNotFoundException", () =>
-            Effect.succeed(false),
-          ),
+          Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(false)),
         );
       return attached ? output : undefined;
     }),
@@ -95,58 +87,46 @@ export const ListenerCertificateProvider = () =>
     // Enumerate every load balancer, then every listener, then every
     // non-default certificate.
     list: Effect.fn(function* () {
-      const loadBalancerArns = yield* elbv2.describeLoadBalancers
-        .pages({})
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.LoadBalancers ?? []).flatMap((lb) =>
-                lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
-              ),
+      const loadBalancerArns = yield* elbv2.describeLoadBalancers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.LoadBalancers ?? []).flatMap((lb) =>
+              lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
             ),
           ),
-        );
+        ),
+      );
       const listenerArns = yield* Effect.forEach(
         loadBalancerArns,
         (loadBalancerArn) =>
-          elbv2.describeListeners
-            .pages({ LoadBalancerArn: loadBalancerArn })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.Listeners ?? []).flatMap((l) =>
-                    l.ListenerArn ? [l.ListenerArn as ListenerArn] : [],
-                  ),
+          elbv2.describeListeners.pages({ LoadBalancerArn: loadBalancerArn }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.Listeners ?? []).flatMap((l) =>
+                  l.ListenerArn ? [l.ListenerArn as ListenerArn] : [],
                 ),
               ),
-              Effect.catchTag("LoadBalancerNotFoundException", () =>
-                Effect.succeed([]),
-              ),
-              Effect.catchTag("ListenerNotFoundException", () =>
-                Effect.succeed([]),
-              ),
             ),
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed([])),
+            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
       const rows = yield* Effect.forEach(
         listenerArns.flat(),
         (listenerArn) =>
-          elbv2.describeListenerCertificates
-            .items({ ListenerArn: listenerArn })
-            .pipe(
-              Stream.filter((c) => !c.IsDefault && c.CertificateArn != null),
-              Stream.map((c) => ({
-                listenerArn,
-                certificateArn: c.CertificateArn!,
-              })),
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag("ListenerNotFoundException", () =>
-                Effect.succeed([]),
-              ),
-            ),
+          elbv2.describeListenerCertificates.items({ ListenerArn: listenerArn }).pipe(
+            Stream.filter((c) => !c.IsDefault && c.CertificateArn != null),
+            Stream.map((c) => ({
+              listenerArn,
+              certificateArn: c.CertificateArn!,
+            })),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
       const result: ListenerCertificate["Attributes"][] = rows.flat();
@@ -159,9 +139,7 @@ export const ListenerCertificateProvider = () =>
       const attached = yield* elbv2.describeListenerCertificates
         .items({ ListenerArn: listenerArn })
         .pipe(
-          Stream.filter(
-            (c) => !c.IsDefault && c.CertificateArn === news.certificateArn,
-          ),
+          Stream.filter((c) => !c.IsDefault && c.CertificateArn === news.certificateArn),
           Stream.runHead,
           Effect.map(Option.isSome),
         );

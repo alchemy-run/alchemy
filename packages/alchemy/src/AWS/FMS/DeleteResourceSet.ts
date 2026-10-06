@@ -5,17 +5,15 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DeleteResourceSet}.
  */
-export interface DeleteResourceSetRequest
-  extends fms.DeleteResourceSetRequest {}
+export interface DeleteResourceSetRequest extends fms.DeleteResourceSetRequest {}
 
 /**
  * Runtime binding for `fms:DeleteResourceSet`.
  *
  * Permanently deletes the specified Firewall Manager resource set. Provide the
  * implementation with `Effect.provide(AWS.FMS.DeleteResourceSetHttp)`.
- * @binding
- * @section Resource Sets
- * @example Delete a Resource Set
+ * ### Resource Sets
+ * **Example:** Delete a Resource Set
  * ```typescript
  * // init — account-level binding takes no resource
  * const deleteResourceSet = yield* AWS.FMS.DeleteResourceSet();
@@ -23,6 +21,8 @@ export interface DeleteResourceSetRequest
  * // runtime
  * yield* deleteResourceSet({ Identifier: resourceSetId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteResourceSet extends Binding.Service<
   DeleteResourceSet,
@@ -30,13 +30,8 @@ export interface DeleteResourceSet extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteResourceSetRequest,
-    ) => Effect.Effect<
-      fms.DeleteResourceSetResponse,
-      fms.DeleteResourceSetError
-    >
+    ) => Effect.Effect<fms.DeleteResourceSetResponse, fms.DeleteResourceSetError>
   >
 > {}
 
-export const DeleteResourceSet = Binding.Service<DeleteResourceSet>(
-  "AWS.FMS.DeleteResourceSet",
-);
+export const DeleteResourceSet = Binding.Service<DeleteResourceSet>("AWS.FMS.DeleteResourceSet");

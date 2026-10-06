@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link ListJobRunAttempts} runtime callable. The
  * `applicationId` is injected from the bound {@link Application}.
  */
-export type ListJobRunAttemptsInput = Omit<
-  emr.ListJobRunAttemptsRequest,
-  "applicationId"
->;
+export type ListJobRunAttemptsInput = Omit<emr.ListJobRunAttemptsRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:ListJobRunAttempts`.
@@ -19,9 +16,8 @@ export type ListJobRunAttemptsInput = Omit<
  * {@link Application} — how many times the retry policy re-ran the job and
  * how each attempt ended. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.ListJobRunAttemptsHttp)`.
- * @binding
- * @section Running Jobs
- * @example Inspect A Job's Attempts
+ * ### Running Jobs
+ * **Example:** Inspect A Job's Attempts
  * ```typescript
  * // init
  * const listJobRunAttempts = yield* AWS.EMRServerless.ListJobRunAttempts(app);
@@ -29,6 +25,8 @@ export type ListJobRunAttemptsInput = Omit<
  * // runtime
  * const { jobRunAttempts } = yield* listJobRunAttempts({ jobRunId });
  * ```
+ *
+ * @binding
  */
 export interface ListJobRunAttempts extends Binding.Service<
   ListJobRunAttempts,
@@ -38,10 +36,7 @@ export interface ListJobRunAttempts extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListJobRunAttemptsInput,
-    ) => Effect.Effect<
-      emr.ListJobRunAttemptsResponse,
-      emr.ListJobRunAttemptsError
-    >
+    ) => Effect.Effect<emr.ListJobRunAttemptsResponse, emr.ListJobRunAttemptsError>
   >
 > {}
 export const ListJobRunAttempts = Binding.Service<ListJobRunAttempts>(

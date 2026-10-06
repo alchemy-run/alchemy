@@ -103,22 +103,21 @@ export interface FHIRDatastore extends Resource<
  * Data stores take roughly 15-30 minutes to provision (`CREATING` →
  * `ACTIVE`) and are billed while they exist; deletion is also asynchronous
  * (`DELETING` → gone). Destroy data stores you are not using.
- * @resource
- * @section Creating a Data Store
- * @example Basic FHIR R4 Data Store
+ * ### Creating a Data Store
+ * **Example:** Basic FHIR R4 Data Store
  * ```typescript
  * const datastore = yield* FHIRDatastore("Records", {});
  * ```
  *
- * @example Data Store Preloaded with Synthetic Data
+ * **Example:** Data Store Preloaded with Synthetic Data
  * ```typescript
  * const datastore = yield* FHIRDatastore("Sandbox", {
  *   preloadDataType: "SYNTHEA",
  * });
  * ```
  *
- * @section Encryption
- * @example Data Store Encrypted with a Customer-Managed KMS Key
+ * ### Encryption
+ * **Example:** Data Store Encrypted with a Customer-Managed KMS Key
  * ```typescript
  * const key = yield* KMS.Key("RecordsKey", {
  *   description: "healthlake data store key",
@@ -127,10 +126,10 @@ export interface FHIRDatastore extends Resource<
  *   kmsKeyId: key.keyArn,
  * });
  * ```
+ *
+ * @resource
  */
-export const FHIRDatastore = Resource<FHIRDatastore>(
-  "AWS.HealthLake.FHIRDatastore",
-);
+export const FHIRDatastore = Resource<FHIRDatastore>("AWS.HealthLake.FHIRDatastore");
 
 const DEFAULT_FHIR_VERSION: healthlake.FHIRVersion = "R4";
 
@@ -183,17 +182,11 @@ export const FHIRDatastoreProvider = () =>
       const readDatastore = Effect.fn(function* (datastoreId: string) {
         const response = yield* healthlake
           .describeFHIRDatastore({ DatastoreId: datastoreId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.DatastoreProperties;
       });
 
-      const isGoneOrGoing = (
-        properties: healthlake.DatastoreProperties | undefined,
-      ) =>
+      const isGoneOrGoing = (properties: healthlake.DatastoreProperties | undefined) =>
         properties === undefined ||
         properties.DatastoreStatus === "DELETED" ||
         properties.DatastoreStatus === "DELETING";
@@ -223,10 +216,7 @@ export const FHIRDatastoreProvider = () =>
       const waitForActive = Effect.fn(function* (datastoreId: string) {
         const properties = yield* readDatastore(datastoreId).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("30 seconds"),
-              Schedule.recurs(70),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(70)]),
             until: (p) =>
               p === undefined ||
               p.DatastoreStatus === "ACTIVE" ||
@@ -235,10 +225,7 @@ export const FHIRDatastoreProvider = () =>
               p.DatastoreStatus === "DELETED",
           }),
         );
-        if (
-          properties === undefined ||
-          properties.DatastoreStatus !== "ACTIVE"
-        ) {
+        if (properties === undefined || properties.DatastoreStatus !== "ACTIVE") {
           const cause = properties?.ErrorCause?.ErrorMessage;
           return yield* Effect.fail(
             new Error(
@@ -256,14 +243,10 @@ export const FHIRDatastoreProvider = () =>
       const waitUntilSettled = Effect.fn(function* (datastoreId: string) {
         return yield* readDatastore(datastoreId).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("30 seconds"),
-              Schedule.recurs(70),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(70)]),
             until: (p) =>
               p === undefined ||
-              (p.DatastoreStatus !== "CREATING" &&
-                p.DatastoreStatus !== "UPDATING"),
+              (p.DatastoreStatus !== "CREATING" && p.DatastoreStatus !== "UPDATING"),
           }),
         );
       });
@@ -273,17 +256,11 @@ export const FHIRDatastoreProvider = () =>
       const waitUntilGone = Effect.fn(function* (datastoreId: string) {
         const properties = yield* readDatastore(datastoreId).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("30 seconds"),
-              Schedule.recurs(70),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(70)]),
             until: (p) => p === undefined || p.DatastoreStatus === "DELETED",
           }),
         );
-        if (
-          properties !== undefined &&
-          properties.DatastoreStatus !== "DELETED"
-        ) {
+        if (properties !== undefined && properties.DatastoreStatus !== "DELETED") {
           return yield* Effect.fail(
             new Error(
               `HealthLake data store '${datastoreId}' still exists after deletion (status: ${properties.DatastoreStatus})`,
@@ -292,9 +269,7 @@ export const FHIRDatastoreProvider = () =>
         }
       });
 
-      const toAttrs = Effect.fn(function* (
-        properties: healthlake.DatastoreProperties,
-      ) {
+      const toAttrs = Effect.fn(function* (properties: healthlake.DatastoreProperties) {
         return {
           datastoreId: properties.DatastoreId,
           datastoreArn: properties.DatastoreArn,
@@ -307,12 +282,7 @@ export const FHIRDatastoreProvider = () =>
       });
 
       return {
-        stables: [
-          "datastoreId",
-          "datastoreArn",
-          "datastoreEndpoint",
-          "datastoreTypeVersion",
-        ],
+        stables: ["datastoreId", "datastoreArn", "datastoreEndpoint", "datastoreTypeVersion"],
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -343,9 +313,7 @@ export const FHIRDatastoreProvider = () =>
           }
           if (properties === undefined) return undefined;
           const attrs = yield* toAttrs(properties);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -356,9 +324,7 @@ export const FHIRDatastoreProvider = () =>
 
           // 1. Observe — cloud state is authoritative; output is only an
           //    id cache. A deleted/deleting instance is treated as missing.
-          let observed = output?.datastoreId
-            ? yield* readDatastore(output.datastoreId)
-            : undefined;
+          let observed = output?.datastoreId ? yield* readDatastore(output.datastoreId) : undefined;
           if (isGoneOrGoing(observed)) {
             observed = yield* findByName(name);
           }
@@ -368,8 +334,7 @@ export const FHIRDatastoreProvider = () =>
           if (observed === undefined) {
             const created = yield* healthlake.createFHIRDatastore({
               DatastoreName: name,
-              DatastoreTypeVersion:
-                props.datastoreTypeVersion ?? DEFAULT_FHIR_VERSION,
+              DatastoreTypeVersion: props.datastoreTypeVersion ?? DEFAULT_FHIR_VERSION,
               SseConfiguration: props.kmsKeyId
                 ? {
                     KmsEncryptionConfig: {
@@ -381,9 +346,7 @@ export const FHIRDatastoreProvider = () =>
               PreloadDataConfig: props.preloadDataType
                 ? { PreloadDataType: props.preloadDataType }
                 : undefined,
-              IdentityProviderConfiguration: toIdpConfig(
-                props.identityProviderConfiguration,
-              ),
+              IdentityProviderConfiguration: toIdpConfig(props.identityProviderConfiguration),
               Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                 Key,
                 Value,
@@ -449,20 +412,13 @@ export const FHIRDatastoreProvider = () =>
             return;
           }
           if (settled.DatastoreStatus !== "DELETING") {
-            yield* healthlake
-              .deleteFHIRDatastore({ DatastoreId: datastoreId })
-              .pipe(
-                Effect.retry({
-                  while: (e) => e._tag === "ConflictException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("15 seconds"),
-                    Schedule.recurs(10),
-                  ]),
-                }),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+            yield* healthlake.deleteFHIRDatastore({ DatastoreId: datastoreId }).pipe(
+              Effect.retry({
+                while: (e) => e._tag === "ConflictException",
+                schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(10)]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            );
           }
           // Deletion is asynchronous — wait until the data store is gone so
           // dependent resources (e.g. the KMS key) can be deleted next.

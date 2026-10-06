@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -90,17 +89,14 @@ export type Certificate = Resource<
  * To make Gateway actually intercept with this certificate, reference its
  * `certificateId` from the Gateway configuration's `certificate` setting
  * (see `Cloudflare.Gateway.Configuration`).
- * @resource
- * @product Gateway
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Certificate
- * @example Activated certificate (default)
+ * ### Creating a Certificate
+ * **Example:** Activated certificate (default)
  * ```typescript
  * const cert = yield* Cloudflare.Gateway.Certificate("InspectionCa", {});
  * // cert.bindingStatus === "available" once deployed to the edge
  * ```
  *
- * @example Short-lived, kept inactive
+ * **Example:** Short-lived, kept inactive
  * ```typescript
  * const cert = yield* Cloudflare.Gateway.Certificate("StagedCa", {
  *   validityPeriodDays: 365,
@@ -108,8 +104,8 @@ export type Certificate = Resource<
  * });
  * ```
  *
- * @section Using the certificate for TLS interception
- * @example Wire into the Gateway configuration
+ * ### Using the certificate for TLS interception
+ * **Example:** Wire into the Gateway configuration
  * ```typescript
  * const cert = yield* Cloudflare.Gateway.Certificate("InspectionCa", {});
  * yield* Cloudflare.Gateway.Configuration("Gateway", {
@@ -121,6 +117,10 @@ export type Certificate = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/user-side-certificates/
+ *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  */
 export const Certificate = Resource<Certificate>(TypeId);
 
@@ -225,10 +225,7 @@ export const CertificateProvider = () =>
           accountId,
           certificateId,
         });
-      } else if (
-        !wantActive &&
-        (status === "available" || status === "pending_deployment")
-      ) {
+      } else if (!wantActive && (status === "available" || status === "pending_deployment")) {
         yield* zeroTrust.deactivateGatewayCertificate({
           accountId,
           certificateId,
@@ -252,9 +249,7 @@ export const CertificateProvider = () =>
       if (status === "available" || status === "pending_deployment") {
         yield* zeroTrust
           .deactivateGatewayCertificate({ accountId, certificateId })
-          .pipe(
-            Effect.catchTag("GatewayCertificateNotFound", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("GatewayCertificateNotFound", () => Effect.void));
         yield* waitForStatus(accountId, certificateId, "inactive");
       }
       yield* zeroTrust
@@ -276,9 +271,7 @@ type ObservedCertificate =
 const getCertificate = (accountId: string, certificateId: string) =>
   zeroTrust.getGatewayCertificate({ accountId, certificateId }).pipe(
     Effect.map((c): zeroTrust.GetGatewayCertificateResponse | undefined => c),
-    Effect.catchTag("GatewayCertificateNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GatewayCertificateNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -299,10 +292,7 @@ const waitForStatus = (
     }),
   );
 
-const toAttributes = (
-  cert: ObservedCertificate,
-  accountId: string,
-): CertificateAttributes => ({
+const toAttributes = (cert: ObservedCertificate, accountId: string): CertificateAttributes => ({
   certificateId: cert.id ?? "",
   accountId,
   bindingStatus: cert.bindingStatus ?? undefined,

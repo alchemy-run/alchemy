@@ -2,7 +2,6 @@ import * as ddos from "@distilled.cloud/cloudflare/ddos-protection";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -119,11 +118,8 @@ export type SynProtectionRule = Resource<
  * `read` scans for an existing rule with the same scope + name and reports
  * it as `Unowned`, so the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
- * @resource
- * @product DDoS Protection
- * @category Network
- * @section Creating a rule
- * @example Global SYN protection in monitoring mode
+ * ### Creating a rule
+ * **Example:** Global SYN protection in monitoring mode
  * ```typescript
  * const rule = yield* Cloudflare.DdosProtection.SynProtectionRule("GlobalSyn", {
  *   scope: "global",
@@ -133,7 +129,7 @@ export type SynProtectionRule = Resource<
  * });
  * ```
  *
- * @example Data-center scoped rule with retransmit mitigation
+ * **Example:** Data-center scoped rule with retransmit mitigation
  * ```typescript
  * yield* Cloudflare.DdosProtection.SynProtectionRule("SjcSyn", {
  *   scope: "datacenter",
@@ -146,15 +142,17 @@ export type SynProtectionRule = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
+ *
+ * @resource
+ * @product DDoS Protection
+ * @category Network
  */
 export const SynProtectionRule = Resource<SynProtectionRule>(TypeId);
 
 /**
  * Returns true if the given value is a SynProtectionRule resource.
  */
-export const isSynProtectionRule = (
-  value: unknown,
-): value is SynProtectionRule =>
+export const isSynProtectionRule = (value: unknown): value is SynProtectionRule =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SynProtectionRuleProvider = () =>
@@ -167,20 +165,18 @@ export const SynProtectionRuleProvider = () =>
     // an empty enumeration rather than an error.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* ddos.listAdvancedTcpProtectionSynProtectionRules
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
-            ),
+      return yield* ddos.listAdvancedTcpProtectionSynProtectionRules.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
           ),
-          Effect.catchTags({
-            AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
-            Forbidden: () => Effect.succeed([]),
-          }),
-        );
+        ),
+        Effect.catchTags({
+          AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
+          Forbidden: () => Effect.succeed([]),
+        }),
+      );
     }),
 
     diff: Effect.fn(function* ({ olds, news }) {
@@ -211,11 +207,7 @@ export const SynProtectionRuleProvider = () =>
       // the engine refuses to take over unless `adopt` is set.
       const identity = output ?? olds;
       if (identity?.scope) {
-        const observed = yield* findByScopeAndName(
-          acct,
-          identity.scope,
-          ruleName(identity),
-        );
+        const observed = yield* findByScopeAndName(acct, identity.scope, ruleName(identity));
         if (observed) return Unowned(toAttributes(observed, acct));
       }
       return undefined;
@@ -228,9 +220,7 @@ export const SynProtectionRuleProvider = () =>
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the scope + name
       //    scan and then to create.
-      let observed = output?.ruleId
-        ? yield* getRule(accountId, output.ruleId)
-        : undefined;
+      let observed = output?.ruleId ? yield* getRule(accountId, output.ruleId) : undefined;
 
       // 2. Fall back to scanning for the scope + name match (ownership was
       //    already gated by `read` reporting existing rules as Unowned).
@@ -257,8 +247,7 @@ export const SynProtectionRuleProvider = () =>
         observed.mode !== news.mode ||
         observed.burstSensitivity !== news.burstSensitivity ||
         observed.rateSensitivity !== news.rateSensitivity ||
-        (news.mitigationType !== undefined &&
-          observed.mitigationType !== news.mitigationType);
+        (news.mitigationType !== undefined && observed.mitigationType !== news.mitigationType);
       if (dirty) {
         observed = yield* ddos.patchAdvancedTcpProtectionSynProtectionRuleItem({
           accountId,
@@ -285,24 +274,18 @@ export const SynProtectionRuleProvider = () =>
 
 type ObservedRule = ddos.GetAdvancedTcpProtectionSynProtectionRuleItemResponse;
 
-const ruleName = (props: {
-  scope: SynProtectionRuleScope | string;
-  name?: string;
-}) => props.name ?? "global";
+const ruleName = (props: { scope: SynProtectionRuleScope | string; name?: string }) =>
+  props.name ?? "global";
 
 /**
  * Read a rule by id, mapping "gone" (`SynProtectionRuleNotFound`, HTTP 404)
  * to `undefined`.
  */
 const getRule = (accountId: string, ruleId: string) =>
-  ddos
-    .getAdvancedTcpProtectionSynProtectionRuleItem({ accountId, ruleId })
-    .pipe(
-      Effect.map((rule): ObservedRule | undefined => rule),
-      Effect.catchTag("SynProtectionRuleNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  ddos.getAdvancedTcpProtectionSynProtectionRuleItem({ accountId, ruleId }).pipe(
+    Effect.map((rule): ObservedRule | undefined => rule),
+    Effect.catchTag("SynProtectionRuleNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find a rule by its scope + name identity. If several rules carry the same
@@ -319,10 +302,7 @@ const findByScopeAndName = (accountId: string, scope: string, name: string) =>
     ),
   );
 
-const toAttributes = (
-  rule: ObservedRule,
-  accountId: string,
-): SynProtectionRuleAttributes => ({
+const toAttributes = (rule: ObservedRule, accountId: string): SynProtectionRuleAttributes => ({
   ruleId: rule.id,
   accountId,
   // Distilled widens generated string enums to plain strings.

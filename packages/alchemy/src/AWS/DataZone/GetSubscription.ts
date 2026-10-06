@@ -14,9 +14,8 @@ export interface GetSubscriptionRequest extends Omit<
  * Reads a subscription in the bound domain. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.GetSubscriptionHttp)`.
- * @binding
- * @section Subscription Workflows
- * @example Read a Subscription
+ * ### Subscription Workflows
+ * **Example:** Read a Subscription
  * ```typescript
  * // init — bind the operation to the domain
  * const getSubscription = yield* AWS.DataZone.GetSubscription(domain);
@@ -24,6 +23,8 @@ export interface GetSubscriptionRequest extends Omit<
  * // runtime
  * const sub = yield* getSubscription({ identifier: subscriptionId });
  * ```
+ *
+ * @binding
  */
 export interface GetSubscription extends Binding.Service<
   GetSubscription,
@@ -33,12 +34,7 @@ export interface GetSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetSubscriptionRequest,
-    ) => Effect.Effect<
-      datazone.GetSubscriptionOutput,
-      datazone.GetSubscriptionError
-    >
+    ) => Effect.Effect<datazone.GetSubscriptionOutput, datazone.GetSubscriptionError>
   >
 > {}
-export const GetSubscription = Binding.Service<GetSubscription>(
-  "AWS.DataZone.GetSubscription",
-);
+export const GetSubscription = Binding.Service<GetSubscription>("AWS.DataZone.GetSubscription");

@@ -78,15 +78,16 @@ export interface TopicRule extends Resource<
  * published to MQTT topics and routes matching messages to one or more
  * actions (invoke a Lambda, enqueue to SQS, republish, etc.).
  *
- * @resource
- * @section Creating a Rule
- * @example Route Messages to a Lambda
+ * ### Creating a Rule
+ * **Example:** Route Messages to a Lambda
  * ```typescript
  * const rule = yield* TopicRule("ingest", {
  *   sql: "SELECT * FROM 'sensors/+/telemetry'",
  *   actions: [{ lambda: { functionArn: yield* fn.functionArn } }],
  * });
  * ```
+ *
+ * @resource
  */
 export const TopicRule = Resource<TopicRule>("AWS.IoT.TopicRule");
 
@@ -94,15 +95,10 @@ export const TopicRuleProvider = () =>
   Provider.effect(
     TopicRule,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: TopicRuleProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: TopicRuleProps) {
         return (
           props.ruleName ??
-          sanitizeRuleName(
-            yield* createPhysicalName({ id, delimiter: "_", maxLength: 128 }),
-          )
+          sanitizeRuleName(yield* createPhysicalName({ id, delimiter: "_", maxLength: 128 }))
         );
       });
 
@@ -136,18 +132,12 @@ export const TopicRuleProvider = () =>
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const ruleName =
-            output?.ruleName ?? (yield* createName(id, olds ?? {}));
+          const ruleName = output?.ruleName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(
-              Effect.catchTag("TopicRuleNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
           if (!found) return undefined;
-          const ruleArn =
-            found.ruleArn ?? ruleArnOf(accountId, region, ruleName);
+          const ruleArn = found.ruleArn ?? ruleArnOf(accountId, region, ruleName);
           const attrs = { ruleName, ruleArn };
           const tags = yield* readIotTags(ruleArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -168,11 +158,7 @@ export const TopicRuleProvider = () =>
           // OBSERVE
           const live = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(
-              Effect.catchTag("TopicRuleNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
 
           // ENSURE / SYNC — createTopicRule for a new rule, replaceTopicRule
           // (a full upsert of the payload) for an existing one.

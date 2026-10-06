@@ -12,9 +12,8 @@ export interface DeletePolicyRequest extends fms.DeletePolicyRequest {}
  *
  * Permanently deletes the specified Firewall Manager policy, optionally cleaning up the resources it created in member accounts. Provide the
  * implementation with `Effect.provide(AWS.FMS.DeletePolicyHttp)`.
- * @binding
- * @section Managing Policies
- * @example Delete a Policy
+ * ### Managing Policies
+ * **Example:** Delete a Policy
  * ```typescript
  * // init — account-level binding takes no resource
  * const deletePolicy = yield* AWS.FMS.DeletePolicy();
@@ -22,17 +21,15 @@ export interface DeletePolicyRequest extends fms.DeletePolicyRequest {}
  * // runtime
  * yield* deletePolicy({ PolicyId: policyId, DeleteAllPolicyResources: true });
  * ```
+ *
+ * @binding
  */
 export interface DeletePolicy extends Binding.Service<
   DeletePolicy,
   "AWS.FMS.DeletePolicy",
   () => Effect.Effect<
-    (
-      request: DeletePolicyRequest,
-    ) => Effect.Effect<fms.DeletePolicyResponse, fms.DeletePolicyError>
+    (request: DeletePolicyRequest) => Effect.Effect<fms.DeletePolicyResponse, fms.DeletePolicyError>
   >
 > {}
 
-export const DeletePolicy = Binding.Service<DeletePolicy>(
-  "AWS.FMS.DeletePolicy",
-);
+export const DeletePolicy = Binding.Service<DeletePolicy>("AWS.FMS.DeletePolicy");

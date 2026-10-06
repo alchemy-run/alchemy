@@ -91,9 +91,8 @@ export interface ScalingPolicy extends Resource<
  * A target-tracking scaling policy for an Auto Scaling Group. EC2 Auto
  * Scaling creates and manages the CloudWatch alarms that keep the tracked
  * metric at `targetValue` by adjusting the group's desired capacity.
- * @resource
- * @section Creating a Scaling Policy
- * @example Track average CPU utilization
+ * ### Creating a Scaling Policy
+ * **Example:** Track average CPU utilization
  * ```typescript
  * import { AutoScalingGroup, ScalingPolicy } from "alchemy/AWS/AutoScaling";
  *
@@ -111,7 +110,7 @@ export interface ScalingPolicy extends Resource<
  * });
  * ```
  *
- * @example Scale on ALB requests per target without scale-in
+ * **Example:** Scale on ALB requests per target without scale-in
  * ```typescript
  * const policy = yield* ScalingPolicy("RequestPolicy", {
  *   autoScalingGroup: group,
@@ -121,10 +120,10 @@ export interface ScalingPolicy extends Resource<
  *   estimatedInstanceWarmup: "3 minutes",
  * });
  * ```
+ *
+ * @resource
  */
-export const ScalingPolicy = Resource<ScalingPolicy>(
-  "AWS.AutoScaling.ScalingPolicy",
-);
+export const ScalingPolicy = Resource<ScalingPolicy>("AWS.AutoScaling.ScalingPolicy");
 
 export const ScalingPolicyProvider = () =>
   Provider.effect(
@@ -150,8 +149,7 @@ export const ScalingPolicyProvider = () =>
           ? input
           : typeof (input as { autoScalingGroupName?: unknown } | undefined)
                 ?.autoScalingGroupName === "string"
-            ? (input as unknown as { autoScalingGroupName: string })
-                .autoScalingGroupName
+            ? (input as unknown as { autoScalingGroupName: string }).autoScalingGroupName
             : undefined;
 
       // `describePolicies` searches account-wide when no AutoScalingGroupName
@@ -171,9 +169,7 @@ export const ScalingPolicyProvider = () =>
           })
           .pipe(Effect.map((result) => result.ScalingPolicies?.[0]));
 
-      const toAttributes = (
-        policy: autoscaling.ScalingPolicy,
-      ): ScalingPolicy["Attributes"] => ({
+      const toAttributes = (policy: autoscaling.ScalingPolicy): ScalingPolicy["Attributes"] => ({
         policyArn: policy.PolicyARN!,
         policyName: policy.PolicyName!,
         autoScalingGroupName: policy.AutoScalingGroupName!,
@@ -183,8 +179,8 @@ export const ScalingPolicyProvider = () =>
           policy.StepAdjustments?.[0]?.MetricIntervalLowerBound ??
           0,
         predefinedMetricType:
-          policy.TargetTrackingConfiguration?.PredefinedMetricSpecification
-            ?.PredefinedMetricType ?? "",
+          policy.TargetTrackingConfiguration?.PredefinedMetricSpecification?.PredefinedMetricType ??
+          "",
         alarms: (policy.Alarms ?? [])
           .map((alarm) => alarm.AlarmName)
           .filter((alarm): alarm is string => Boolean(alarm)),
@@ -199,9 +195,7 @@ export const ScalingPolicyProvider = () =>
           autoscaling.describePolicies.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.ScalingPolicies ?? []).map(toAttributes),
-              ),
+              Array.from(chunk).flatMap((page) => (page.ScalingPolicies ?? []).map(toAttributes)),
             ),
           ),
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
@@ -233,10 +227,8 @@ export const ScalingPolicyProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const autoScalingGroupName =
-            output?.autoScalingGroupName ??
-            toAutoScalingGroupName(olds?.autoScalingGroup);
-          const policyName =
-            output?.policyName ?? (yield* toName(id, olds ?? {}));
+            output?.autoScalingGroupName ?? toAutoScalingGroupName(olds?.autoScalingGroup);
+          const policyName = output?.policyName ?? (yield* toName(id, olds ?? {}));
           const policy = yield* describePolicy({
             autoScalingGroupName,
             policyName,
@@ -245,8 +237,7 @@ export const ScalingPolicyProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const autoScalingGroupName =
-            output?.autoScalingGroupName ??
-            toAutoScalingGroupName(news.autoScalingGroup);
+            output?.autoScalingGroupName ?? toAutoScalingGroupName(news.autoScalingGroup);
           const policyName = output?.policyName ?? (yield* toName(id, news));
 
           // Ensure + Sync — `putScalingPolicy` is the single
@@ -279,9 +270,7 @@ export const ScalingPolicyProvider = () =>
               policy
                 ? Effect.succeed(policy)
                 : Effect.fail(
-                    new Error(
-                      `Scaling policy '${policyName}' was not readable after reconcile`,
-                    ),
+                    new Error(`Scaling policy '${policyName}' was not readable after reconcile`),
                   ),
             ),
           );

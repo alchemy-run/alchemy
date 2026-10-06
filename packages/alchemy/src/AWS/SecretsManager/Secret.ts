@@ -10,14 +10,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
-export interface GenerateSecretStringProps
-  extends secretsmanager.GetRandomPasswordRequest {
+export interface GenerateSecretStringProps extends secretsmanager.GetRandomPasswordRequest {
   /**
    * JSON template merged with the generated password.
    * @default "{}"
@@ -109,9 +105,8 @@ export interface Secret extends Resource<
  * `Secret` owns the lifecycle of the secret metadata and current value. It can
  * store a caller-provided value or generate a password-backed JSON payload for
  * downstream resources such as Aurora clusters and RDS proxies.
- * @resource
- * @section Creating Secrets
- * @example Static Secret String
+ * ### Creating Secrets
+ * **Example:** Static Secret String
  * ```typescript
  * const secret = yield* Secret("DbSecret", {
  *   secretString: Redacted.make(JSON.stringify({
@@ -121,7 +116,7 @@ export interface Secret extends Resource<
  * });
  * ```
  *
- * @example Generated Password Secret
+ * **Example:** Generated Password Secret
  * ```typescript
  * const secret = yield* Secret("DbSecret", {
  *   generateSecretString: {
@@ -132,8 +127,8 @@ export interface Secret extends Resource<
  * });
  * ```
  *
- * @section Resource Policies
- * @example Typed Resource Policy
+ * ### Resource Policies
+ * **Example:** Typed Resource Policy
  * ```typescript
  * const secret = yield* Secret("SharedSecret", {
  *   secretString: Redacted.make("shared-value"),
@@ -150,6 +145,8 @@ export interface Secret extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Secret = Resource<Secret>("AWS.SecretsManager.Secret");
 
@@ -207,9 +204,7 @@ export const SecretProvider = () =>
     Secret,
     Effect.gen(function* () {
       const toSecretName = (id: string, props: SecretProps) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 512 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 512 });
 
       const createValue = Effect.fn(function* (props: SecretProps) {
         if (props.secretBinary !== undefined) {
@@ -232,10 +227,7 @@ export const SecretProvider = () =>
               ? password.RandomPassword
               : Redacted.value(password.RandomPassword)
             : "";
-          const template = JSON.parse(secretStringTemplate) as Record<
-            string,
-            unknown
-          >;
+          const template = JSON.parse(secretStringTemplate) as Record<string, unknown>;
           return {
             SecretString: JSON.stringify({
               ...template,
@@ -252,11 +244,7 @@ export const SecretProvider = () =>
           .describeSecret({
             SecretId: secretId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         // A secret with `DeletedDate` set is scheduled for deletion (our
         // delete uses `ForceDeleteWithoutRecovery`, which still completes
         // asynchronously). It cannot be updated, so treat it as missing —
@@ -278,10 +266,7 @@ export const SecretProvider = () =>
           ),
           {
             while: (error) => error._tag === "SecretNotVisible",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
           },
         );
 
@@ -292,17 +277,10 @@ export const SecretProvider = () =>
         Effect.retry(
           secretsmanager
             .describeSecret({ SecretId: secretId })
-            .pipe(
-              Effect.flatMap(() =>
-                Effect.fail(new SecretStillExists({ secretId })),
-              ),
-            ),
+            .pipe(Effect.flatMap(() => Effect.fail(new SecretStillExists({ secretId })))),
           {
             while: (error) => error._tag === "SecretStillExists",
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           },
         ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
@@ -310,16 +288,12 @@ export const SecretProvider = () =>
         stables: ["secretArn", "secretName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toSecretName(id, olds ?? {})) !==
-            (yield* toSecretName(id, news ?? {}))
-          ) {
+          if ((yield* toSecretName(id, olds ?? {})) !== (yield* toSecretName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const secretName =
-            output?.secretName ?? (yield* toSecretName(id, olds ?? {}));
+          const secretName = output?.secretName ?? (yield* toSecretName(id, olds ?? {}));
           const described = yield* readSecret(output?.secretArn ?? secretName);
           if (!described?.ARN || !described.Name) {
             return undefined;
@@ -335,8 +309,7 @@ export const SecretProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const secretName =
-            output?.secretName ?? (yield* toSecretName(id, news));
+          const secretName = output?.secretName ?? (yield* toSecretName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const hasNewValue =
@@ -373,17 +346,13 @@ export const SecretProvider = () =>
                   })),
                   ...(yield* createValue(news)),
                 })
-                .pipe(
-                  Effect.catchTag("ResourceExistsException", () => Effect.void),
-                ),
+                .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void)),
             );
             observed = yield* readSecretAfterCreate(secretName);
           }
 
           if (!observed?.ARN || !observed.Name) {
-            return yield* Effect.fail(
-              new Error(`Failed to describe Secret '${secretName}'`),
-            );
+            return yield* Effect.fail(new Error(`Failed to describe Secret '${secretName}'`));
           }
 
           const secretArn = observed.ARN;
@@ -434,16 +403,13 @@ export const SecretProvider = () =>
             .getResourcePolicy({ SecretId: secretArn })
             .pipe(
               Effect.map((response) => response.ResourcePolicy),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
 
           if (desiredPolicy !== undefined) {
             if (
               observedPolicy === undefined ||
-              normalizePolicyDocument(observedPolicy) !==
-                normalizePolicyDocument(desiredPolicy)
+              normalizePolicyDocument(observedPolicy) !== normalizePolicyDocument(desiredPolicy)
             ) {
               yield* secretsmanager.putResourcePolicy({
                 SecretId: secretArn,
@@ -453,18 +419,14 @@ export const SecretProvider = () =>
           } else if (observedPolicy !== undefined) {
             yield* secretsmanager
               .deleteResourcePolicy({ SecretId: secretArn })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
           yield* session.note(secretArn);
           return {
             secretArn,
             secretName: observed.Name,
-            versionId: hasNewValue
-              ? (updated.VersionId ?? output?.versionId)
-              : output?.versionId,
+            versionId: hasNewValue ? (updated.VersionId ?? output?.versionId) : output?.versionId,
             description: news.description,
             kmsKeyId: news.kmsKeyId,
             tags: desiredTags,
@@ -479,9 +441,7 @@ export const SecretProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.catchTag("InvalidRequestException", (error) =>
-                isDeletionInProgress(error.message)
-                  ? Effect.void
-                  : Effect.fail(error),
+                isDeletionInProgress(error.message) ? Effect.void : Effect.fail(error),
               ),
             );
           yield* waitForSecretAbsence(output.secretArn);

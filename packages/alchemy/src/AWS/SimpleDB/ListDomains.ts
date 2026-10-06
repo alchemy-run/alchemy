@@ -12,9 +12,8 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
  * SimpleDB domain-sharding pattern where an application spreads items across
  * many domains and discovers them at runtime. Provide the implementation
  * with `Effect.provide(AWS.SimpleDB.ListDomainsHttp)`.
- * @binding
- * @section Domain Introspection
- * @example List Domain Names
+ * ### Domain Introspection
+ * **Example:** List Domain Names
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listDomains = yield* AWS.SimpleDB.ListDomains();
@@ -23,6 +22,8 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
  * const page = yield* listDomains({ MaxNumberOfDomains: 100 });
  * // page.DomainNames: ["users-shard-0", "users-shard-1", ...]
  * ```
+ *
+ * @binding
  */
 export interface ListDomains extends Binding.Service<
   ListDomains,
@@ -30,13 +31,7 @@ export interface ListDomains extends Binding.Service<
   () => Effect.Effect<
     (
       request?: sdb.ListDomainsRequest,
-    ) => Effect.Effect<
-      sdb.ListDomainsResponse,
-      sdb.ListDomainsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<sdb.ListDomainsResponse, sdb.ListDomainsError, RuntimeContext>
   >
 > {}
-export const ListDomains = Binding.Service<ListDomains>(
-  "AWS.SimpleDB.ListDomains",
-);
+export const ListDomains = Binding.Service<ListDomains>("AWS.SimpleDB.ListDomains");

@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListEnabledProductsForImportHttp)`.
- * @binding
- * @section Product Integrations
- * @example List Enabled Products
+ * ### Product Integrations
+ * **Example:** List Enabled Products
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listEnabledProductsForImport = yield* AWS.SecurityHub.ListEnabledProductsForImport();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { ProductSubscriptions } = yield* listEnabledProductsForImport();
  * ```
+ *
+ * @binding
  */
 export interface ListEnabledProductsForImport extends Binding.Service<
   ListEnabledProductsForImport,
@@ -32,7 +33,6 @@ export interface ListEnabledProductsForImport extends Binding.Service<
     >
   >
 > {}
-export const ListEnabledProductsForImport =
-  Binding.Service<ListEnabledProductsForImport>(
-    "AWS.SecurityHub.ListEnabledProductsForImport",
-  );
+export const ListEnabledProductsForImport = Binding.Service<ListEnabledProductsForImport>(
+  "AWS.SecurityHub.ListEnabledProductsForImport",
+);

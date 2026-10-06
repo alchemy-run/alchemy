@@ -11,9 +11,8 @@ import type { Graph } from "./Graph.ts";
  * ARN is injected from the bound {@link Graph}.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.DeleteMembersHttp)`.
- * @binding
- * @section Administering Member Accounts
- * @example Remove A Member Account
+ * ### Administering Member Accounts
+ * **Example:** Remove A Member Account
  * ```typescript
  * // init
  * const deleteMembers = yield* AWS.Detective.DeleteMembers(graph);
@@ -21,6 +20,8 @@ import type { Graph } from "./Graph.ts";
  * // runtime
  * yield* deleteMembers({ AccountIds: ["111122223333"] });
  * ```
+ *
+ * @binding
  */
 export interface DeleteMembers extends Binding.Service<
   DeleteMembers,
@@ -30,12 +31,7 @@ export interface DeleteMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<detective.DeleteMembersRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.DeleteMembersResponse,
-      detective.DeleteMembersError
-    >
+    ) => Effect.Effect<detective.DeleteMembersResponse, detective.DeleteMembersError>
   >
 > {}
-export const DeleteMembers = Binding.Service<DeleteMembers>(
-  "AWS.Detective.DeleteMembers",
-);
+export const DeleteMembers = Binding.Service<DeleteMembers>("AWS.Detective.DeleteMembers");

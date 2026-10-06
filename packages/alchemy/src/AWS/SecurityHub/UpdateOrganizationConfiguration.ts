@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.UpdateOrganizationConfigurationHttp)`.
- * @binding
- * @section Members & Organization
- * @example Auto-Enable New Accounts
+ * ### Members & Organization
+ * **Example:** Auto-Enable New Accounts
  * ```typescript
  * // init — account-level binding, no resource argument
  * const updateOrganizationConfiguration = yield* AWS.SecurityHub.UpdateOrganizationConfiguration();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* updateOrganizationConfiguration({ AutoEnable: true });
  * ```
+ *
+ * @binding
  */
 export interface UpdateOrganizationConfiguration extends Binding.Service<
   UpdateOrganizationConfiguration,
@@ -32,7 +33,6 @@ export interface UpdateOrganizationConfiguration extends Binding.Service<
     >
   >
 > {}
-export const UpdateOrganizationConfiguration =
-  Binding.Service<UpdateOrganizationConfiguration>(
-    "AWS.SecurityHub.UpdateOrganizationConfiguration",
-  );
+export const UpdateOrganizationConfiguration = Binding.Service<UpdateOrganizationConfiguration>(
+  "AWS.SecurityHub.UpdateOrganizationConfiguration",
+);

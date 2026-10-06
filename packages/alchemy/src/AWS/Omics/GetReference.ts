@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { ReferenceStore } from "./ReferenceStore.ts";
 
-export interface GetReferenceRequest extends Omit<
-  omics.GetReferenceRequest,
-  "referenceStoreId"
-> {}
+export interface GetReferenceRequest extends Omit<omics.GetReferenceRequest, "referenceStoreId"> {}
 
 /**
  * Runtime binding for `omics:GetReference`.
@@ -15,15 +12,16 @@ export interface GetReferenceRequest extends Omit<
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.GetReferenceHttp)`.
- * @binding
- * @section References
- * @example Bind GetReference to a ReferenceStore
+ * ### References
+ * **Example:** Bind GetReference to a ReferenceStore
  * ```typescript
  * // init
  * const getReference = yield* AWS.Omics.GetReference(store);
  * // runtime
  * const result = yield* getReference({});
  * ```
+ *
+ * @binding
  */
 export interface GetReference extends Binding.Service<
   GetReference,
@@ -37,6 +35,4 @@ export interface GetReference extends Binding.Service<
   >
 > {}
 
-export const GetReference = Binding.Service<GetReference>(
-  "AWS.Omics.GetReference",
-);
+export const GetReference = Binding.Service<GetReference>("AWS.Omics.GetReference");

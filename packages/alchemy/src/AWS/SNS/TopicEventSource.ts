@@ -23,9 +23,8 @@ export interface TopicEventSourceProps {
  * The contract is a `Binding.Service`; the Lambda implementation layer is
  * `Lambda.TopicEventSource`. Consume it through the
  * {@link consumeTopicNotifications} helper.
- * @binding
- * @section Consuming a Topic
- * @example Consume Notifications in a Lambda Function
+ * ### Consuming a Topic
+ * **Example:** Consume Notifications in a Lambda Function
  * ```typescript
  * export default WorkerFunction.make(
  *   { main: import.meta.url },
@@ -41,15 +40,15 @@ export interface TopicEventSourceProps {
  *   }).pipe(Effect.provide(Lambda.TopicEventSource)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface TopicEventSource extends Binding.Service<
   TopicEventSource,
   "AWS.SNS.TopicEventSource",
   TopicEventSourceService
 > {}
-export const TopicEventSource = Binding.Service<TopicEventSource>(
-  "AWS.SNS.TopicEventSource",
-);
+export const TopicEventSource = Binding.Service<TopicEventSource>("AWS.SNS.TopicEventSource");
 
 export type TopicEventSourceService = <StreamReq = never, Req = never>(
   topic: Topic,
@@ -84,32 +83,18 @@ type TopicEventSourceHandler<Req, StreamReq> = (
  * );
  * ```
  */
-export function consumeTopicNotifications<
-  T extends Topic,
-  Req = never,
-  StreamReq = never,
->(
+export function consumeTopicNotifications<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopicNotifications<
-  T extends Topic,
-  Req = never,
-  StreamReq = never,
->(
+export function consumeTopicNotifications<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
   props: TopicEventSourceProps,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopicNotifications<
-  T extends Topic,
-  Req = never,
-  StreamReq = never,
->(
+export function consumeTopicNotifications<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
-  propsOrProcess:
-    | TopicEventSourceProps
-    | TopicEventSourceHandler<Req, StreamReq>,
+  propsOrProcess: TopicEventSourceProps | TopicEventSourceHandler<Req, StreamReq>,
   maybeProcess?: TopicEventSourceHandler<Req, StreamReq>,
 ) {
   const [props, process] =

@@ -64,9 +64,8 @@ export interface BotLocale extends Resource<
  * slot types live under a locale; a locale must exist before either can be
  * created.
  *
- * @resource
- * @section Creating a Locale
- * @example US English Locale
+ * ### Creating a Locale
+ * **Example:** US English Locale
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -76,7 +75,7 @@ export interface BotLocale extends Resource<
  * });
  * ```
  *
- * @example Locale with Voice and Threshold
+ * **Example:** Locale with Voice and Threshold
  * ```typescript
  * const locale = yield* AWS.LexV2.BotLocale("En", {
  *   botId: bot.botId,
@@ -85,22 +84,18 @@ export interface BotLocale extends Resource<
  *   voiceSettings: { voiceId: "Ivy", engine: "neural" },
  * });
  * ```
+ *
+ * @resource
  */
 export const BotLocale = Resource<BotLocale>("AWS.LexV2.BotLocale");
 
 const describeLocale = Effect.fn(function* (botId: string, localeId: string) {
   return yield* lexm
     .describeBotLocale({ botId, botVersion: "DRAFT", localeId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
-const attributesOf = (
-  locale: lexm.DescribeBotLocaleResponse,
-): BotLocale["Attributes"] => ({
+const attributesOf = (locale: lexm.DescribeBotLocaleResponse): BotLocale["Attributes"] => ({
   botId: locale.botId!,
   botVersion: "DRAFT",
   localeId: locale.localeId!,
@@ -158,8 +153,7 @@ export const BotLocaleProvider = () =>
           // 3. SYNC — apply the delta when a declared prop drifted.
           if (
             observed.nluIntentConfidenceThreshold !== desiredThreshold ||
-            (observed.description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (observed.description ?? undefined) !== (news.description ?? undefined) ||
             (observed.voiceSettings?.voiceId ?? undefined) !==
               (news.voiceSettings?.voiceId ?? undefined)
           ) {
@@ -189,9 +183,7 @@ export const BotLocaleProvider = () =>
               botVersion: "DRAFT",
               localeId: output.localeId,
             }),
-          ).pipe(
-            Effect.catchTag("PreconditionFailedException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("PreconditionFailedException", () => Effect.void));
         }),
       };
     }),

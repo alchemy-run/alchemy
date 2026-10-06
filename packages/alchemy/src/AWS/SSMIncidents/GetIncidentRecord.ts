@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * runtime, so the deploy-time grant is account-level (`Resource: "*"`).
  * Provide the implementation with
  * `Effect.provide(AWS.SSMIncidents.GetIncidentRecordHttp)`.
- * @binding
- * @section Reading Incident Records
- * @example Read An Incident
+ * ### Reading Incident Records
+ * **Example:** Read An Incident
  * ```typescript
  * // init
  * const getIncidentRecord = yield* AWS.SSMIncidents.GetIncidentRecord();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { incidentRecord } = yield* getIncidentRecord({ arn: incidentRecordArn });
  * ```
+ *
+ * @binding
  */
 export interface GetIncidentRecord extends Binding.Service<
   GetIncidentRecord,
@@ -27,10 +28,7 @@ export interface GetIncidentRecord extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.GetIncidentRecordInput,
-    ) => Effect.Effect<
-      incidents.GetIncidentRecordOutput,
-      incidents.GetIncidentRecordError
-    >
+    ) => Effect.Effect<incidents.GetIncidentRecordOutput, incidents.GetIncidentRecordError>
   >
 > {}
 export const GetIncidentRecord = Binding.Service<GetIncidentRecord>(

@@ -14,12 +14,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import { toWireHours } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -30,8 +25,7 @@ export type StreamRecord = lambda.KinesisStreamRecord;
 export type StreamEvent = lambda.KinesisStreamEvent;
 
 export type StreamName = string;
-export type StreamArn =
-  `arn:aws:kinesis:${RegionID}:${AccountID}:stream/${StreamName}`;
+export type StreamArn = `arn:aws:kinesis:${RegionID}:${AccountID}:stream/${StreamName}`;
 
 export type StreamStatus = "CREATING" | "DELETING" | "ACTIVE" | "UPDATING";
 
@@ -184,16 +178,15 @@ export interface Stream extends Resource<
  * including retention, encryption, monitoring, warm throughput, record size, tags,
  * and stream resource policy. A stream name is auto-generated from the app,
  * stage, and logical ID unless you provide one explicitly.
- * @resource
- * @section Creating Streams
- * @example On-Demand Stream
+ * ### Creating Streams
+ * **Example:** On-Demand Stream
  * ```typescript
  * import * as Kinesis from "alchemy/AWS/Kinesis";
  *
  * const stream = yield* Kinesis.Stream("OrdersStream");
  * ```
  *
- * @example Provisioned Stream
+ * **Example:** Provisioned Stream
  * ```typescript
  * const stream = yield* Kinesis.Stream("AnalyticsStream", {
  *   streamMode: "PROVISIONED",
@@ -202,7 +195,7 @@ export interface Stream extends Resource<
  * });
  * ```
  *
- * @example Encrypted Stream
+ * **Example:** Encrypted Stream
  * ```typescript
  * const stream = yield* Kinesis.Stream("SecureStream", {
  *   encryption: true,
@@ -210,11 +203,11 @@ export interface Stream extends Resource<
  * });
  * ```
  *
- * @section Runtime Producers
+ * ### Runtime Producers
  * Bind producer operations in the init phase and use them in runtime
  * handlers.
  *
- * @example Put a record from a handler
+ * **Example:** Put a record from a handler
  * ```typescript
  * // init
  * const putRecord = yield* AWS.Kinesis.PutRecord(stream);
@@ -231,11 +224,11 @@ export interface Stream extends Resource<
  * };
  * ```
  *
- * @section Event Sources
+ * ### Event Sources
  * Process records from a Kinesis stream using a Lambda event source
  * mapping.
  *
- * @example Process stream records
+ * **Example:** Process stream records
  * ```typescript
  * // init
  * yield* Kinesis.consumeStreamRecords(
@@ -247,6 +240,8 @@ export interface Stream extends Resource<
  *   }),
  * );
  * ```
+ *
+ * @resource
  */
 export const Stream = Resource<Stream>("AWS.Kinesis.Stream");
 
@@ -286,20 +281,13 @@ const getStreamMode = (props: StreamProps): kinesis.StreamModeDetails => ({
 
 const assertProvisionedProps = (props: StreamProps) =>
   props.streamMode === "PROVISIONED" && props.shardCount === undefined
-    ? Effect.fail(
-        new Error(`streamMode "PROVISIONED" requires shardCount to be set`),
-      )
+    ? Effect.fail(new Error(`streamMode "PROVISIONED" requires shardCount to be set`))
     : Effect.void;
 
-const toTagRecord = (
-  tags: Array<{ Key: string; Value?: string }> | undefined,
-) =>
+const toTagRecord = (tags: Array<{ Key: string; Value?: string }> | undefined) =>
   Object.fromEntries(
     (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          typeof tag.Value === "string",
-      )
+      .filter((tag): tag is { Key: string; Value: string } => typeof tag.Value === "string")
       .map((tag) => [tag.Key, tag.Value]),
   );
 
@@ -317,9 +305,7 @@ const toShardLevelMetrics = (
   monitoring: kinesis.EnhancedMetrics[] | undefined,
 ): ShardLevelMetric[] =>
   [
-    ...new Set(
-      (monitoring ?? []).flatMap((metric) => metric.ShardLevelMetrics ?? []),
-    ),
+    ...new Set((monitoring ?? []).flatMap((metric) => metric.ShardLevelMetrics ?? [])),
   ] as ShardLevelMetric[];
 
 const toAttrs = ({
@@ -335,12 +321,9 @@ const toAttrs = ({
   streamArn: summary.StreamARN as StreamArn,
   streamId: summary.StreamId,
   streamStatus: summary.StreamStatus as StreamStatus,
-  streamMode: (summary.StreamModeDetails?.StreamMode ??
-    defaultStreamMode) as StreamMode,
-  retentionPeriodHours:
-    summary.RetentionPeriodHours ?? defaultRetentionPeriodHours,
-  encryptionType: (summary.EncryptionType ??
-    defaultEncryptionType) as EncryptionType,
+  streamMode: (summary.StreamModeDetails?.StreamMode ?? defaultStreamMode) as StreamMode,
+  retentionPeriodHours: summary.RetentionPeriodHours ?? defaultRetentionPeriodHours,
+  encryptionType: (summary.EncryptionType ?? defaultEncryptionType) as EncryptionType,
   kmsKeyId: summary.KeyId,
   openShardCount: summary.OpenShardCount,
   consumerCount: summary.ConsumerCount,
@@ -363,11 +346,7 @@ const readStream = Effect.fn(function* ({
       StreamName: streamName,
       StreamARN: streamArn,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
   if (!response) {
     return undefined;
@@ -382,11 +361,7 @@ const readStream = Effect.fn(function* ({
     .listTagsForResource({
       ResourceARN: summary.StreamARN,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!tagsResponse) {
     return undefined;
   }
@@ -394,11 +369,7 @@ const readStream = Effect.fn(function* ({
     .getResourcePolicy({
       ResourceARN: summary.StreamARN,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
   return toAttrs({
     summary,
@@ -421,8 +392,7 @@ const waitForStreamActive = (streamName: string) =>
     return StreamDescriptionSummary;
   }).pipe(
     Effect.retry({
-      while: (e: { _tag: string }) =>
-        e._tag === "StreamNotActive" || e._tag === "ParseError",
+      while: (e: { _tag: string }) => e._tag === "StreamNotActive" || e._tag === "ParseError",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
     }),
   );
@@ -435,8 +405,7 @@ const waitForStreamDeleted = (streamName: string) =>
     return yield* Effect.fail({ _tag: "StreamStillExists" as const });
   }).pipe(
     Effect.retry({
-      while: (e: { _tag: string }) =>
-        e._tag === "StreamStillExists" || e._tag === "ParseError",
+      while: (e: { _tag: string }) => e._tag === "StreamStillExists" || e._tag === "ParseError",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -459,9 +428,7 @@ export const StreamProvider = () =>
           Effect.gen(function* () {
             const streamNames = yield* kinesis.listStreams.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.StreamNames ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.StreamNames ?? [])),
             );
 
             const hydrated = yield* Effect.forEach(
@@ -470,21 +437,16 @@ export const StreamProvider = () =>
               { concurrency: 10 },
             );
 
-            return hydrated.filter(
-              (attrs): attrs is Stream["Attributes"] => attrs !== undefined,
-            );
+            return hydrated.filter((attrs): attrs is Stream["Attributes"] => attrs !== undefined);
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const streamName =
-            output?.streamName ?? (yield* createStreamName(id, olds ?? {}));
+          const streamName = output?.streamName ?? (yield* createStreamName(id, olds ?? {}));
           const state = yield* readStream({
             streamName,
             streamArn: output?.streamArn,
           });
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return;
@@ -498,10 +460,8 @@ export const StreamProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           yield* assertProvisionedProps(news);
 
-          const streamName =
-            output?.streamName ?? (yield* createStreamName(id, news));
-          const streamArn =
-            `arn:aws:kinesis:${region}:${accountId}:stream/${streamName}` as const;
+          const streamName = output?.streamName ?? (yield* createStreamName(id, news));
+          const streamArn = `arn:aws:kinesis:${region}:${accountId}:stream/${streamName}` as const;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -520,10 +480,7 @@ export const StreamProvider = () =>
             yield* kinesis
               .createStream({
                 StreamName: streamName,
-                ShardCount:
-                  news.streamMode === "PROVISIONED"
-                    ? news.shardCount
-                    : undefined,
+                ShardCount: news.streamMode === "PROVISIONED" ? news.shardCount : undefined,
                 StreamModeDetails: getStreamMode(news),
                 Tags: desiredTags,
                 WarmThroughputMiBps: news.warmThroughputMiBps,
@@ -542,9 +499,7 @@ export const StreamProvider = () =>
 
             state = yield* readStream({ streamName, streamArn });
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created stream ${streamName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created stream ${streamName}`));
             }
           }
 
@@ -555,17 +510,13 @@ export const StreamProvider = () =>
               StreamARN: streamArn,
               StreamModeDetails: getStreamMode(news),
               WarmThroughputMiBps:
-                desiredMode === "ON_DEMAND"
-                  ? news.warmThroughputMiBps
-                  : undefined,
+                desiredMode === "ON_DEMAND" ? news.warmThroughputMiBps : undefined,
             });
             yield* waitForStreamActive(streamName);
             yield* session.note(`Updated stream mode to ${desiredMode}`);
             state = yield* readStream({ streamName, streamArn });
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to re-read stream ${streamName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to re-read stream ${streamName}`));
             }
           }
 
@@ -585,8 +536,7 @@ export const StreamProvider = () =>
           }
 
           // Sync retention period — observed ↔ desired.
-          const desiredRetention =
-            toWireHours(news.retentionPeriod) ?? defaultRetentionPeriodHours;
+          const desiredRetention = toWireHours(news.retentionPeriod) ?? defaultRetentionPeriodHours;
           if (state.retentionPeriodHours !== desiredRetention) {
             if (desiredRetention > state.retentionPeriodHours) {
               yield* kinesis.increaseStreamRetentionPeriod({
@@ -600,9 +550,7 @@ export const StreamProvider = () =>
               });
             }
             yield* waitForStreamActive(streamName);
-            yield* session.note(
-              `Updated retention period to ${desiredRetention} hours`,
-            );
+            yield* session.note(`Updated retention period to ${desiredRetention} hours`);
           }
 
           // Sync encryption — observed ↔ desired.
@@ -656,9 +604,7 @@ export const StreamProvider = () =>
               ShardLevelMetrics: metricsToDisable,
             });
             yield* waitForStreamActive(streamName);
-            yield* session.note(
-              `Disabled metrics: ${metricsToDisable.join(", ")}`,
-            );
+            yield* session.note(`Disabled metrics: ${metricsToDisable.join(", ")}`);
           }
 
           if (metricsToEnable.length > 0) {
@@ -667,9 +613,7 @@ export const StreamProvider = () =>
               ShardLevelMetrics: metricsToEnable,
             });
             yield* waitForStreamActive(streamName);
-            yield* session.note(
-              `Enabled metrics: ${metricsToEnable.join(", ")}`,
-            );
+            yield* session.note(`Enabled metrics: ${metricsToEnable.join(", ")}`);
           }
 
           // Sync warm throughput — only meaningful in ON_DEMAND mode.
@@ -683,9 +627,7 @@ export const StreamProvider = () =>
               WarmThroughputMiBps: news.warmThroughputMiBps,
             });
             yield* waitForStreamActive(streamName);
-            yield* session.note(
-              `Updated warm throughput to ${news.warmThroughputMiBps} MiBps`,
-            );
+            yield* session.note(`Updated warm throughput to ${news.warmThroughputMiBps} MiBps`);
           }
 
           // Sync max record size — observed ↔ desired.
@@ -698,9 +640,7 @@ export const StreamProvider = () =>
               MaxRecordSizeInKiB: news.maxRecordSizeInKiB,
             });
             yield* waitForStreamActive(streamName);
-            yield* session.note(
-              `Updated max record size to ${news.maxRecordSizeInKiB} KiB`,
-            );
+            yield* session.note(`Updated max record size to ${news.maxRecordSizeInKiB} KiB`);
           }
 
           // Sync tags — diff observed cloud tags against desired. Adoption
@@ -742,12 +682,7 @@ export const StreamProvider = () =>
                 .deleteResourcePolicy({
                   ResourceARN: streamArn,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             }
           }
 
@@ -757,9 +692,7 @@ export const StreamProvider = () =>
           // actually in the cloud after all sync steps.
           const final = yield* readStream({ streamName, streamArn });
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled stream ${streamName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled stream ${streamName}`));
           }
           return final;
         }),
@@ -769,9 +702,7 @@ export const StreamProvider = () =>
               StreamName: output.streamName,
               EnforceConsumerDeletion: true,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           yield* waitForStreamDeleted(output.streamName);
         }),

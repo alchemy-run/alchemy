@@ -1,7 +1,6 @@
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -68,11 +67,8 @@ export type SmartTieredCache = Resource<
  *
  * Only one `SmartTieredCache` resource per zone makes sense — two instances
  * managing the same zone would fight over the singleton.
- * @resource
- * @product Cache
- * @category Performance & Reliability
- * @section Managing Smart Tiered Cache
- * @example Enable Smart Tiered Cache on a zone
+ * ### Managing Smart Tiered Cache
+ * **Example:** Enable Smart Tiered Cache on a zone
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
@@ -81,7 +77,7 @@ export type SmartTieredCache = Resource<
  * });
  * ```
  *
- * @example Explicitly disable Smart Tiered Cache
+ * **Example:** Explicitly disable Smart Tiered Cache
  * ```typescript
  * yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
  *   zoneId: zone.zoneId,
@@ -90,6 +86,10 @@ export type SmartTieredCache = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/
+ *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  */
 export const SmartTieredCache = Resource<SmartTieredCache>(TypeId);
 
@@ -116,9 +116,7 @@ export const SmartTieredCacheProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           cache.getSmartTieredCache({ zoneId }).pipe(
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, observed.value),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, observed.value)),
             // Smart Tiered Cache is an Enterprise feature. When enumerating
             // every zone in the account, zones that aren't entitled reject the
             // read — as `InvalidRoute`, or as a persistent `Forbidden`/
@@ -131,22 +129,15 @@ export const SmartTieredCacheProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is SmartTieredCacheAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SmartTieredCacheAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as SmartTieredCacheProps;
       const n = news as SmartTieredCacheProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -164,8 +155,7 @@ export const SmartTieredCacheProvider = () =>
       // default — there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialValue` restored on destroy.
-      const initialValue =
-        output !== undefined ? output.initialValue : observed.value;
+      const initialValue = output !== undefined ? output.initialValue : observed.value;
       return toAttributes(zoneId, observed, initialValue);
     }),
 
@@ -180,8 +170,7 @@ export const SmartTieredCacheProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialValue =
-        output !== undefined ? output.initialValue : observed.value;
+      const initialValue = output !== undefined ? output.initialValue : observed.value;
 
       // 3. Sync — patch only when the observed value differs.
       const desired = desiredValue(news);
@@ -213,9 +202,7 @@ export const SmartTieredCacheProvider = () =>
 
 const toAttributes = (
   zoneId: string,
-  setting:
-    | cache.GetSmartTieredCacheResponse
-    | cache.PatchSmartTieredCacheResponse,
+  setting: cache.GetSmartTieredCacheResponse | cache.PatchSmartTieredCacheResponse,
   initialValue: string,
 ): SmartTieredCacheAttributes => ({
   zoneId,

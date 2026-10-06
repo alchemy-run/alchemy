@@ -70,9 +70,8 @@ export interface LocationS3 extends Resource<
  * Reconcile is idempotent across state loss — the location is re-discovered
  * by its deterministic `s3://…` URI.
  *
- * @resource
- * @section Creating S3 Locations
- * @example Bucket root
+ * ### Creating S3 Locations
+ * **Example:** Bucket root
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -82,7 +81,7 @@ export interface LocationS3 extends Resource<
  * });
  * ```
  *
- * @example Prefix + storage class
+ * **Example:** Prefix + storage class
  * ```typescript
  * const dest = yield* AWS.DataSync.LocationS3("Dest", {
  *   s3BucketArn: bucket.bucketArn,
@@ -91,6 +90,8 @@ export interface LocationS3 extends Resource<
  *   s3StorageClass: "STANDARD_IA",
  * });
  * ```
+ *
+ * @resource
  */
 export const LocationS3 = Resource<LocationS3>("AWS.DataSync.LocationS3");
 
@@ -110,11 +111,7 @@ export const LocationS3Provider = () =>
       const describe = Effect.fn(function* (locationArn: string) {
         return yield* datasync
           .describeLocationS3({ LocationArn: locationArn })
-          .pipe(
-            Effect.catchTag("LocationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("LocationNotFound", () => Effect.succeed(undefined)));
       });
 
       return LocationS3.Provider.of({
@@ -135,9 +132,7 @@ export const LocationS3Provider = () =>
           ),
 
         read: Effect.fn(function* ({ olds, output }) {
-          const arn =
-            output?.locationArn ??
-            (yield* findLocationArnByUri(expectedUriOf(olds)));
+          const arn = output?.locationArn ?? (yield* findLocationArnByUri(expectedUriOf(olds)));
           if (arn === undefined) return undefined;
           const loc = yield* describe(arn);
           if (loc === undefined) return undefined;
@@ -153,8 +148,7 @@ export const LocationS3Provider = () =>
             news.s3BucketArn !== olds.s3BucketArn ||
             news.bucketAccessRoleArn !== olds.bucketAccessRoleArn ||
             (news.subdirectory ?? "/") !== (olds.subdirectory ?? "/") ||
-            (news.s3StorageClass ?? "STANDARD") !==
-              (olds.s3StorageClass ?? "STANDARD");
+            (news.s3StorageClass ?? "STANDARD") !== (olds.s3StorageClass ?? "STANDARD");
           if (replaced) return { action: "replace" } as const;
         }),
 
@@ -163,9 +157,7 @@ export const LocationS3Provider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — output cache, else re-discover by deterministic URI.
-          let arn =
-            output?.locationArn ??
-            (yield* findLocationArnByUri(expectedUriOf(news)));
+          let arn = output?.locationArn ?? (yield* findLocationArnByUri(expectedUriOf(news)));
           let loc = arn ? yield* describe(arn) : undefined;
 
           // 2. ENSURE — create if missing.

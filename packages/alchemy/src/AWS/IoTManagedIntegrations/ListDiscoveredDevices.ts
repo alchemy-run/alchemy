@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListDiscoveredDevices}.
  */
-export interface ListDiscoveredDevicesRequest
-  extends mi.ListDiscoveredDevicesRequest {}
+export interface ListDiscoveredDevicesRequest extends mi.ListDiscoveredDevicesRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:ListDiscoveredDevices`
@@ -16,14 +15,15 @@ export interface ListDiscoveredDevicesRequest
  * id assigned to each already-onboarded device. Provide the implementation
  * with `Effect.provide(AWS.IoTManagedIntegrations.ListDiscoveredDevicesHttp)`.
  *
- * @binding
- * @section Discovering Devices
- * @example List Devices Found by a Scan
+ * ### Discovering Devices
+ * **Example:** List Devices Found by a Scan
  * ```typescript
  * const listDiscovered = yield* IoTManagedIntegrations.ListDiscoveredDevices();
  *
  * const { Items } = yield* listDiscovered({ Identifier: discoveryId });
  * ```
+ *
+ * @binding
  */
 export interface ListDiscoveredDevices extends Binding.Service<
   ListDiscoveredDevices,
@@ -31,10 +31,7 @@ export interface ListDiscoveredDevices extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListDiscoveredDevicesRequest,
-    ) => Effect.Effect<
-      mi.ListDiscoveredDevicesResponse,
-      mi.ListDiscoveredDevicesError
-    >
+    ) => Effect.Effect<mi.ListDiscoveredDevicesResponse, mi.ListDiscoveredDevicesError>
   >
 > {}
 export const ListDiscoveredDevices = Binding.Service<ListDiscoveredDevices>(

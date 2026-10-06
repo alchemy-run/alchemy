@@ -15,7 +15,7 @@ import type { Secret } from "./Secret.ts";
  * Context tag, its type, and the callable —
  * `yield* Cloudflare.SecretsStore.ReadSecret(ApiKey)`.
  *
- * @example Reading a secret at runtime
+ * **Example:** Reading a secret at runtime
  * ```typescript
  * const apiKey = yield* Cloudflare.SecretsStore.ReadSecret(ApiKey);
  * const value = yield* apiKey;
@@ -31,9 +31,7 @@ export interface ReadSecret extends Binding.Service<
   (secret: Secret) => Effect.Effect<ReadSecretClient>
 > {}
 
-export const ReadSecret = Binding.Service<ReadSecret>(
-  "Cloudflare.SecretsStore.ReadSecret",
-);
+export const ReadSecret = Binding.Service<ReadSecret>("Cloudflare.SecretsStore.ReadSecret");
 
 export class SecretError extends Data.TaggedError("SecretError")<{
   message: string;

@@ -2,6 +2,6 @@
 // build (SvelteKit's generated types only exist after `svelte-kit sync`).
 export const load = ({ platform }: { platform?: App.Platform }) => {
   return {
-    greeting: platform?.env?.GREETING ?? "Hello (no platform.env)",
+    greeting: platform?.env?.GREETING ?? "Hello!",
   };
 };

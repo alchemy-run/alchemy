@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -92,13 +91,7 @@ export type SiteAttributes = {
   created: string | undefined;
 };
 
-export type Site = Resource<
-  TypeId,
-  SiteProps,
-  SiteAttributes,
-  never,
-  Providers
->;
+export type Site = Resource<TypeId, SiteProps, SiteAttributes, never, Providers>;
 
 /**
  * A Cloudflare Web Analytics (RUM) site.
@@ -111,11 +104,8 @@ export type Site = Resource<
  * `zoneTag` identity models (or changing `zoneTag`) triggers a replacement.
  *
  * Web Analytics is available on free accounts.
- * @resource
- * @product RUM
- * @category Observability & Analytics
- * @section Measuring a hostname
- * @example Gray-clouded site (manual snippet embed)
+ * ### Measuring a hostname
+ * **Example:** Gray-clouded site (manual snippet embed)
  * ```typescript
  * const site = yield* Cloudflare.Rum.Site("Analytics", {
  *   host: "example.com",
@@ -125,8 +115,8 @@ export type Site = Resource<
  * const snippet = site.snippet;
  * ```
  *
- * @section Measuring a zone
- * @example Orange-clouded site with automatic snippet injection
+ * ### Measuring a zone
+ * **Example:** Orange-clouded site with automatic snippet injection
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
  *
@@ -136,7 +126,7 @@ export type Site = Resource<
  * });
  * ```
  *
- * @example Skip injection for EU visitors
+ * **Example:** Skip injection for EU visitors
  * ```typescript
  * yield* Cloudflare.Rum.Site("ZoneAnalytics", {
  *   zoneTag: zone.zoneId,
@@ -146,6 +136,10 @@ export type Site = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/web-analytics/
+ *
+ * @resource
+ * @product RUM
+ * @category Observability & Analytics
  */
 export const Site = Resource<Site>(TypeId);
 
@@ -199,8 +193,7 @@ export const SiteProvider = () =>
       // over unless `adopt` is set.
       const host = output?.host ?? olds?.host;
       const zoneTag =
-        output?.zoneTag ??
-        (typeof olds?.zoneTag === "string" ? olds.zoneTag : undefined);
+        output?.zoneTag ?? (typeof olds?.zoneTag === "string" ? olds.zoneTag : undefined);
       if (host !== undefined || zoneTag !== undefined) {
         const match = yield* findSite(acct, host, zoneTag);
         if (match) return Unowned(toAttributes(match, acct));
@@ -318,11 +311,7 @@ const getSite = (accountId: string, siteTag: string) =>
  * (orange-clouded). Cloudflare allows several sites for the same target, so
  * pick the oldest for determinism.
  */
-const findSite = (
-  accountId: string,
-  host: string | undefined,
-  zoneTag: string | undefined,
-) =>
+const findSite = (accountId: string, host: string | undefined, zoneTag: string | undefined) =>
   rum.listSiteInfos.items({ accountId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
@@ -335,19 +324,14 @@ const findSite = (
               // probe must only match true zone sites — otherwise an
               // unrelated host site satisfies the probe and the engine
               // refuses adoption with OwnedBySomeoneElse.
-              zoneTag !== undefined &&
-              !site.host &&
-              site.ruleset?.zoneTag === zoneTag,
+              zoneTag !== undefined && !site.host && site.ruleset?.zoneTag === zoneTag,
         )
         .sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""))
         .at(0),
     ),
   );
 
-const toAttributes = (
-  site: ObservedSite,
-  accountId: string,
-): SiteAttributes => ({
+const toAttributes = (site: ObservedSite, accountId: string): SiteAttributes => ({
   siteTag: site.siteTag ?? "",
   siteToken: site.siteToken ?? "",
   snippet: site.snippet ?? undefined,

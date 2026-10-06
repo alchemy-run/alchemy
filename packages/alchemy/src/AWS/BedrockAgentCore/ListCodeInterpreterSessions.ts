@@ -15,9 +15,8 @@ export interface ListCodeInterpreterSessionsRequest extends Omit<
  * AgentCore data-plane API against it. Provide `AgentCore.ListCodeInterpreterSessionsHttp`
  * on the Function effect to implement the binding.
  *
- * @binding
- * @section Inspecting Sessions
- * @example List Sessions
+ * ### Inspecting Sessions
+ * **Example:** List Sessions
  * ```typescript
  * // init
  * const listCodeInterpreterSessions = yield* AgentCore.ListCodeInterpreterSessions(codeInterpreter);
@@ -30,6 +29,8 @@ export interface ListCodeInterpreterSessionsRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface ListCodeInterpreterSessions extends Binding.Service<
   ListCodeInterpreterSessions,
@@ -45,7 +46,6 @@ export interface ListCodeInterpreterSessions extends Binding.Service<
     >
   >
 > {}
-export const ListCodeInterpreterSessions =
-  Binding.Service<ListCodeInterpreterSessions>(
-    "AWS.BedrockAgentCore.ListCodeInterpreterSessions",
-  );
+export const ListCodeInterpreterSessions = Binding.Service<ListCodeInterpreterSessions>(
+  "AWS.BedrockAgentCore.ListCodeInterpreterSessions",
+);

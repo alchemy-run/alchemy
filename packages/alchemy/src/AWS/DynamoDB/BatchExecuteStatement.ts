@@ -5,28 +5,20 @@ import type { Table } from "./Table.ts";
 
 export type BatchExecuteStatementTables = [Table, ...Table[]];
 
-export const sortBatchExecuteStatementTables = (
-  tables: BatchExecuteStatementTables,
-) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
+export const sortBatchExecuteStatementTables = (tables: BatchExecuteStatementTables) =>
+  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()].sort((a, b) =>
     a.LogicalId.localeCompare(b.LogicalId),
   ) as BatchExecuteStatementTables;
 
-export interface BatchExecuteStatementRequest
-  extends DynamoDB.BatchExecuteStatementInput {}
+export interface BatchExecuteStatementRequest extends DynamoDB.BatchExecuteStatementInput {}
 
 /**
  * Runtime binding for DynamoDB PartiQL `BatchExecuteStatement`.
  *
  * The request is passed through unchanged, but IAM is scoped to the explicitly
  * bound tables and their indexes.
- * @binding
- * @section PartiQL
- * @example Execute a Batch of Statements
+ * ### PartiQL
+ * **Example:** Execute a Batch of Statements
  * ```typescript
  * const batchExecuteStatement = yield* AWS.DynamoDB.BatchExecuteStatement(
  *   sourceTable,
@@ -42,6 +34,8 @@ export interface BatchExecuteStatementRequest
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface BatchExecuteStatement extends Binding.Service<
   BatchExecuteStatement,
@@ -51,10 +45,7 @@ export interface BatchExecuteStatement extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchExecuteStatementRequest,
-    ) => Effect.Effect<
-      DynamoDB.BatchExecuteStatementOutput,
-      DynamoDB.BatchExecuteStatementError
-    >
+    ) => Effect.Effect<DynamoDB.BatchExecuteStatementOutput, DynamoDB.BatchExecuteStatementError>
   >
 > {}
 

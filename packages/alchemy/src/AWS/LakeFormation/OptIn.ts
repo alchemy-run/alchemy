@@ -6,10 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { retryWhileInvalidPrincipal } from "./internal.ts";
-import {
-  type LakeFormationResourceSpec,
-  toWireResource,
-} from "./ResourceSpec.ts";
+import { type LakeFormationResourceSpec, toWireResource } from "./ResourceSpec.ts";
 
 export interface OptInProps {
   /**
@@ -42,9 +39,8 @@ export interface OptIn extends Resource<
  * principal on one Data Catalog resource while the account is in hybrid
  * access mode (where IAM/S3 policies otherwise govern access).
  *
- * @resource
- * @section Opting Into Lake Formation Enforcement
- * @example Enforce Lake Formation for a Role on a Database
+ * ### Opting Into Lake Formation Enforcement
+ * **Example:** Enforce Lake Formation for a Role on a Database
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -53,6 +49,8 @@ export interface OptIn extends Resource<
  *   resource: { database: { name: database.databaseName } },
  * });
  * ```
+ *
+ * @resource
  */
 export const OptIn = Resource<OptIn>("AWS.LakeFormation.OptIn");
 
@@ -60,10 +58,7 @@ export const OptInProvider = () =>
   Provider.effect(
     OptIn,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        principal: string,
-        resource: lf.Resource,
-      ) {
+      const observe = Effect.fn(function* (principal: string, resource: lf.Resource) {
         const pages = yield* lf.listLakeFormationOptIns
           .pages({
             Principal: { DataLakePrincipalIdentifier: principal },
@@ -74,16 +69,13 @@ export const OptInProvider = () =>
             // a deleted resource (e.g. the Glue database is already gone)
             // means the opt-in no longer exists either; a deleted/not-yet-
             // propagated IAM principal likewise has no visible opt-ins
-            Effect.catchTag(
-              ["EntityNotFoundException", "InvalidLakeFormationPrincipal"],
-              () => Effect.succeed([]),
+            Effect.catchTag(["EntityNotFoundException", "InvalidLakeFormationPrincipal"], () =>
+              Effect.succeed([]),
             ),
           );
         return Array.from(pages)
           .flatMap((page) => page.LakeFormationOptInsInfoList ?? [])
-          .find(
-            (info) => info.Principal?.DataLakePrincipalIdentifier === principal,
-          );
+          .find((info) => info.Principal?.DataLakePrincipalIdentifier === principal);
       });
 
       return OptIn.Provider.of({
@@ -91,9 +83,7 @@ export const OptInProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* lf.listLakeFormationOptIns
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lf.listLakeFormationOptIns.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.LakeFormationOptInsInfoList ?? [])
               .filter(
@@ -110,8 +100,7 @@ export const OptInProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           const principal = output?.principal ?? olds?.principal;
           const resource =
-            output?.resource ??
-            (olds !== undefined ? toWireResource(olds.resource) : undefined);
+            output?.resource ?? (olds !== undefined ? toWireResource(olds.resource) : undefined);
           if (principal === undefined || resource === undefined) {
             return undefined;
           }

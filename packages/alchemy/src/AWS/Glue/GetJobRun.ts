@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface GetJobRunRequest extends Omit<
-  glue.GetJobRunRequest,
-  "JobName"
-> {}
+export interface GetJobRunRequest extends Omit<glue.GetJobRunRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:GetJobRun`.
@@ -16,9 +13,8 @@ export interface GetJobRunRequest extends Omit<
  * and error message — so a function can poll a run it started to a terminal
  * state. The job name is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Glue.GetJobRunHttp)`.
- * @binding
- * @section Running Jobs
- * @example Poll a Run to a Terminal State
+ * ### Running Jobs
+ * **Example:** Poll a Run to a Terminal State
  * ```typescript
  * // init
  * const getJobRun = yield* AWS.Glue.GetJobRun(job);
@@ -29,6 +25,8 @@ export interface GetJobRunRequest extends Omit<
  *   yield* Effect.logError(JobRun.ErrorMessage ?? "run failed");
  * }
  * ```
+ *
+ * @binding
  */
 export interface GetJobRun extends Binding.Service<
   GetJobRun,
@@ -36,9 +34,7 @@ export interface GetJobRun extends Binding.Service<
   (
     job: Job,
   ) => Effect.Effect<
-    (
-      request: GetJobRunRequest,
-    ) => Effect.Effect<glue.GetJobRunResponse, glue.GetJobRunError>
+    (request: GetJobRunRequest) => Effect.Effect<glue.GetJobRunResponse, glue.GetJobRunError>
   >
 > {}
 

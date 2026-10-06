@@ -21,15 +21,16 @@ export interface ListMultipartUploadsRequest extends Omit<
  * storage.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.ListMultipartUploadsHttp)`.
- * @binding
- * @section Uploading Archives
- * @example List in-progress uploads
+ * ### Uploading Archives
+ * **Example:** List in-progress uploads
  * ```typescript
  * const listMultipartUploads =
  *   yield* AWS.Glacier.ListMultipartUploads(vault);
  *
  * const { UploadsList } = yield* listMultipartUploads();
  * ```
+ *
+ * @binding
  */
 export interface ListMultipartUploads extends Binding.Service<
   ListMultipartUploads,
@@ -39,10 +40,7 @@ export interface ListMultipartUploads extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListMultipartUploadsRequest,
-    ) => Effect.Effect<
-      glacier.ListMultipartUploadsOutput,
-      glacier.ListMultipartUploadsError
-    >
+    ) => Effect.Effect<glacier.ListMultipartUploadsOutput, glacier.ListMultipartUploadsError>
   >
 > {}
 export const ListMultipartUploads = Binding.Service<ListMultipartUploads>(

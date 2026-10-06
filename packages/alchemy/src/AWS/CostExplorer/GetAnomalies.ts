@@ -7,10 +7,7 @@ import type { AnomalyMonitor } from "./AnomalyMonitor.ts";
  * Request for {@link GetAnomalies} — the bound monitor's ARN is
  * injected automatically.
  */
-export interface GetAnomaliesRequest extends Omit<
-  ce.GetAnomaliesRequest,
-  "MonitorArn"
-> {}
+export interface GetAnomaliesRequest extends Omit<ce.GetAnomaliesRequest, "MonitorArn"> {}
 
 /**
  * Runtime binding for `ce:GetAnomalies`.
@@ -18,9 +15,8 @@ export interface GetAnomaliesRequest extends Omit<
  * Retrieve the cost anomalies a monitor detected during a date
  * interval (available for up to 90 days). Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.GetAnomaliesHttp)`.
- * @binding
- * @section Anomaly Detection at Runtime
- * @example List a Monitor's Anomalies
+ * ### Anomaly Detection at Runtime
+ * **Example:** List a Monitor's Anomalies
  * ```typescript
  * // init — bind the operation to the monitor
  * const getAnomalies = yield* AWS.CostExplorer.GetAnomalies(monitor);
@@ -31,6 +27,8 @@ export interface GetAnomaliesRequest extends Omit<
  * });
  * const anomalies = result.Anomalies;
  * ```
+ *
+ * @binding
  */
 export interface GetAnomalies extends Binding.Service<
   GetAnomalies,
@@ -38,12 +36,8 @@ export interface GetAnomalies extends Binding.Service<
   (
     monitor: AnomalyMonitor,
   ) => Effect.Effect<
-    (
-      request: GetAnomaliesRequest,
-    ) => Effect.Effect<ce.GetAnomaliesResponse, ce.GetAnomaliesError>
+    (request: GetAnomaliesRequest) => Effect.Effect<ce.GetAnomaliesResponse, ce.GetAnomaliesError>
   >
 > {}
 
-export const GetAnomalies = Binding.Service<GetAnomalies>(
-  "AWS.CostExplorer.GetAnomalies",
-);
+export const GetAnomalies = Binding.Service<GetAnomalies>("AWS.CostExplorer.GetAnomalies");

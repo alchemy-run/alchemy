@@ -10,21 +10,20 @@ import * as Binding from "../../Binding.ts";
  * connect to for Managed integrations traffic. Provide the implementation
  * with `Effect.provide(AWS.IoTManagedIntegrations.GetCustomEndpointHttp)`.
  *
- * @binding
- * @section Connectivity
- * @example Resolve the Custom Endpoint
+ * ### Connectivity
+ * **Example:** Resolve the Custom Endpoint
  * ```typescript
  * const getCustomEndpoint = yield* IoTManagedIntegrations.GetCustomEndpoint();
  *
  * const { EndpointAddress } = yield* getCustomEndpoint();
  * ```
+ *
+ * @binding
  */
 export interface GetCustomEndpoint extends Binding.Service<
   GetCustomEndpoint,
   "AWS.IoTManagedIntegrations.GetCustomEndpoint",
-  () => Effect.Effect<
-    () => Effect.Effect<mi.GetCustomEndpointResponse, mi.GetCustomEndpointError>
-  >
+  () => Effect.Effect<() => Effect.Effect<mi.GetCustomEndpointResponse, mi.GetCustomEndpointError>>
 > {}
 export const GetCustomEndpoint = Binding.Service<GetCustomEndpoint>(
   "AWS.IoTManagedIntegrations.GetCustomEndpoint",

@@ -32,9 +32,8 @@ export interface InvokeEndpointAsyncRequest extends Omit<
  * The binding takes one or more endpoint names and grants the function
  * `sagemaker:InvokeEndpointAsync` scoped to exactly those endpoint ARNs.
  *
- * @binding
- * @section Invoking an Async Endpoint
- * @example Enqueue an Async Inference Request
+ * ### Invoking an Async Endpoint
+ * **Example:** Enqueue an Async Inference Request
  * ```typescript
  * // init
  * const invokeAsync = yield* AWS.SageMakerRuntime.InvokeEndpointAsync(
@@ -48,6 +47,8 @@ export interface InvokeEndpointAsyncRequest extends Omit<
  * });
  * // result.OutputLocation — poll S3 for the written inference result
  * ```
+ *
+ * @binding
  */
 export interface InvokeEndpointAsync extends Binding.Service<
   InvokeEndpointAsync,
@@ -58,10 +59,7 @@ export interface InvokeEndpointAsync extends Binding.Service<
   ) => Effect.Effect<
     (
       request: InvokeEndpointAsyncRequest,
-    ) => Effect.Effect<
-      sagemaker.InvokeEndpointAsyncOutput,
-      sagemaker.InvokeEndpointAsyncError
-    >
+    ) => Effect.Effect<sagemaker.InvokeEndpointAsyncOutput, sagemaker.InvokeEndpointAsyncError>
   >
 > {}
 export const InvokeEndpointAsync = Binding.Service<InvokeEndpointAsync>(

@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -28,12 +27,101 @@ export type PolicyRule = zeroTrust.CreateAccessPolicyRequest["include"][number];
  * raw wire shape there — so these props use the SDK's own unions rather
  * than reusing {@link PolicyRule}.
  */
-export type PolicyExcludeRule = NonNullable<
-  zeroTrust.CreateAccessPolicyRequest["exclude"]
->[number];
-export type PolicyRequireRule = NonNullable<
-  zeroTrust.CreateAccessPolicyRequest["require"]
->[number];
+export type PolicyExcludeRule = NonNullable<zeroTrust.CreateAccessPolicyRequest["exclude"]>[number];
+export type PolicyRequireRule = NonNullable<zeroTrust.CreateAccessPolicyRequest["require"]>[number];
+
+/**
+ * Scalar shorthand for rule kinds with a single parameter (and bare names
+ * for the parameter-less kinds) — expanded to Cloudflare's wire shape by
+ * the providers, so both spellings are equivalent:
+ *
+ * ```ts
+ * include: [{ emailDomain: "example.com" }]   // { emailDomain: { domain: "example.com" } }
+ * include: [{ email: "sam@example.com" }]     // { email: { email: "sam@example.com" } }
+ * include: ["everyone"]                       // { everyone: {} }
+ * require: [{ geo: "US" }]                    // { geo: { countryCode: "US" } }
+ * ```
+ *
+ * Multi-parameter kinds (`gsuite`, `okta`, `saml`, `oidc`, `azureAD`,
+ * `githubOrganization`, `externalEvaluation`, `authContext`) keep their
+ * wire shape — there is no scalar to collapse them to.
+ */
+export type PolicyRuleShorthand =
+  | "everyone"
+  | "certificate"
+  | "anyValidServiceToken"
+  | { email: string }
+  | { emailDomain: string }
+  | { emailList: string }
+  | { ip: string }
+  | { ipList: string }
+  | { group: string }
+  | { loginMethod: string }
+  | { serviceToken: string }
+  | { geo: string }
+  | { authMethod: string }
+  | { devicePosture: string }
+  | { commonName: string }
+  | { linkedAppToken: string }
+  | { userRiskScore: string }
+  | { cloudflareAccountMember: string };
+
+/** A rule in either spelling: Cloudflare's wire shape or the scalar shorthand. */
+export type PolicyRuleInput = PolicyRule | PolicyRuleShorthand;
+export type PolicyExcludeRuleInput = PolicyExcludeRule | PolicyRuleShorthand;
+export type PolicyRequireRuleInput = PolicyRequireRule | PolicyRuleShorthand;
+
+/** Rule kind → its single parameter's (camelCase) member name. */
+const SCALAR_RULE_PARAMS: Record<string, string> = {
+  email: "email",
+  emailDomain: "domain",
+  emailList: "id",
+  ip: "ip",
+  ipList: "id",
+  group: "id",
+  loginMethod: "id",
+  serviceToken: "tokenId",
+  geo: "countryCode",
+  authMethod: "authMethod",
+  devicePosture: "integrationUid",
+  commonName: "commonName",
+  linkedAppToken: "appUid",
+  userRiskScore: "userRiskScore",
+  cloudflareAccountMember: "accountId",
+};
+
+/**
+ * Expand the scalar shorthand to Cloudflare's wire shape; wire-shaped rules
+ * pass through untouched.
+ */
+export const normalizePolicyRule = <Rule>(rule: Rule | PolicyRuleShorthand): Rule => {
+  if (typeof rule === "string") {
+    // "everyone" -> { everyone: {} }
+    return { [rule]: {} } as Rule;
+  }
+  const keys = Object.keys(rule as object);
+  if (keys.length === 1) {
+    const kind = keys[0];
+    const value = (rule as Record<string, unknown>)[kind];
+    const param = SCALAR_RULE_PARAMS[kind];
+    if (param !== undefined && (value === null || typeof value !== "object")) {
+      return { [kind]: { [param]: value } } as Rule;
+    }
+  }
+  return rule as Rule;
+};
+
+export function normalizePolicyRules<Rule>(
+  rules: ReadonlyArray<Rule | PolicyRuleShorthand>,
+): Rule[];
+export function normalizePolicyRules<Rule>(
+  rules: ReadonlyArray<Rule | PolicyRuleShorthand> | undefined,
+): Rule[] | undefined;
+export function normalizePolicyRules<Rule>(
+  rules: ReadonlyArray<Rule | PolicyRuleShorthand> | undefined,
+): Rule[] | undefined {
+  return rules === undefined ? undefined : rules.map((r) => normalizePolicyRule(r));
+}
 
 /**
  * Decision Cloudflare Access takes when a request matches this policy.
@@ -70,17 +158,17 @@ export type PolicyProps = {
    * Rules combined with logical OR. A request must satisfy at least one
    * include rule for the policy to match. Required and must be non-empty.
    */
-  include: Policy.RuleGroup[];
+  include: PolicyRuleInput[];
   /**
    * Rules combined with logical NOT. A request matching any exclude rule is
    * rejected by the policy even if it satisfied an include rule.
    */
-  exclude?: PolicyExcludeRule[];
+  exclude?: PolicyExcludeRuleInput[];
   /**
    * Rules combined with logical AND. A request must satisfy every require
    * rule in addition to an include rule.
    */
-  require?: PolicyRequireRule[];
+  require?: PolicyRequireRuleInput[];
   /**
    * Duration of issued session tokens. Format: `300ms`, `2h45m`, etc. When
    * unset, applications using this policy fall back to their own configured
@@ -117,7 +205,7 @@ export declare namespace Policy {
    * gsuite, githubOrganization, okta, azureAD, saml, oidc, deviceCheck via
    * `devicePosture`, externalEvaluation, etc.).
    */
-  export type RuleGroup = PolicyRule;
+  export type RuleGroup = PolicyRuleInput;
 }
 
 export type Policy = Resource<
@@ -145,11 +233,8 @@ export type Policy = Resource<
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
  * inline policies attached directly to an `Application` — a reusable
  * policy can be referenced by multiple applications by id.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Policy
- * @example Allow a single email domain
+ * ### Creating a Policy
+ * **Example:** Allow a single email domain
  * ```typescript
  * const policy = yield* Cloudflare.Access.Policy("AllowExampleDomain", {
  *   decision: "allow",
@@ -157,7 +242,7 @@ export type Policy = Resource<
  * });
  * ```
  *
- * @example Allow everyone but require purpose justification
+ * **Example:** Allow everyone but require purpose justification
  * ```typescript
  * const policy = yield* Cloudflare.Access.Policy("OpenWithJustification", {
  *   decision: "allow",
@@ -167,8 +252,8 @@ export type Policy = Resource<
  * });
  * ```
  *
- * @section Combining rule groups
- * @example Include + exclude + require
+ * ### Combining rule groups
+ * **Example:** Include + exclude + require
  * ```typescript
  * const policy = yield* Cloudflare.Access.Policy("EngineersExceptInterns", {
  *   decision: "allow",
@@ -177,6 +262,10 @@ export type Policy = Resource<
  *   require: [{ geo: { countryCode: "US" } }],
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const Policy = Resource<Policy>("Cloudflare.Access.Policy", {
   aliases: ["Cloudflare.AccessPolicy"],
@@ -223,9 +312,8 @@ export const PolicyProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catch(
-              (): Effect.Effect<ObservedPolicy | undefined> =>
-                Effect.succeed(undefined),
+            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
+              Effect.succeed(undefined),
             ),
           );
       }
@@ -242,9 +330,9 @@ export const PolicyProvider = () =>
             accountId: acct,
             name,
             decision: news.decision,
-            include: news.include,
-            exclude: news.exclude,
-            require: news.require,
+            include: normalizePolicyRules(news.include),
+            exclude: normalizePolicyRules(news.exclude),
+            require: normalizePolicyRules(news.require),
             sessionDuration: news.sessionDuration,
             approvalRequired: news.approvalRequired,
             purposeJustificationRequired: news.purposeJustificationRequired,
@@ -270,9 +358,9 @@ export const PolicyProvider = () =>
           policyId: prior.id!,
           name,
           decision: news.decision,
-          include: news.include,
-          exclude: news.exclude,
-          require: news.require,
+          include: normalizePolicyRules(news.include),
+          exclude: normalizePolicyRules(news.exclude),
+          require: normalizePolicyRules(news.require),
           sessionDuration: news.sessionDuration,
           approvalRequired: news.approvalRequired,
           purposeJustificationRequired: news.purposeJustificationRequired,
@@ -287,9 +375,7 @@ export const PolicyProvider = () =>
       }
 
       if (!ensured.id) {
-        return yield* Effect.fail(
-          new Error("Policy: ensured policy missing id"),
-        );
+        return yield* Effect.fail(new Error("Policy: ensured policy missing id"));
       }
       return {
         policyId: ensured.id,
@@ -346,9 +432,8 @@ export const PolicyProvider = () =>
             policyId: output.policyId,
           })
           .pipe(
-            Effect.catch(
-              (): Effect.Effect<ObservedPolicy | undefined> =>
-                Effect.succeed(undefined),
+            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
+              Effect.succeed(undefined),
             ),
           );
         if (direct && direct.id) {

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface GetListingRequest extends Omit<
-  datazone.GetListingInput,
-  "domainIdentifier"
-> {}
+export interface GetListingRequest extends Omit<datazone.GetListingInput, "domainIdentifier"> {}
 
 /**
  * Runtime binding for `datazone:GetListing`.
@@ -14,9 +11,8 @@ export interface GetListingRequest extends Omit<
  * Reads a published listing in the bound domain by id. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.GetListingHttp)`.
- * @binding
- * @section Searching the Catalog
- * @example Read a Listing
+ * ### Searching the Catalog
+ * **Example:** Read a Listing
  * ```typescript
  * // init — bind the operation to the domain
  * const getListing = yield* AWS.DataZone.GetListing(domain);
@@ -24,6 +20,8 @@ export interface GetListingRequest extends Omit<
  * // runtime
  * const listing = yield* getListing({ identifier: listingId });
  * ```
+ *
+ * @binding
  */
 export interface GetListing extends Binding.Service<
   GetListing,
@@ -36,6 +34,4 @@ export interface GetListing extends Binding.Service<
     ) => Effect.Effect<datazone.GetListingOutput, datazone.GetListingError>
   >
 > {}
-export const GetListing = Binding.Service<GetListing>(
-  "AWS.DataZone.GetListing",
-);
+export const GetListing = Binding.Service<GetListing>("AWS.DataZone.GetListing");

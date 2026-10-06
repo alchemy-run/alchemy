@@ -1,7 +1,6 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -111,11 +110,8 @@ export type DeviceSettings = Resource<
  * fields in place. The pre-management snapshot is captured on first touch
  * and restored on destroy (capture-and-restore), returning the account to
  * the state Alchemy found it in.
- * @resource
- * @product Devices
- * @category Cloudflare One (Zero Trust)
- * @section Managing device settings
- * @example Enable the Gateway proxy
+ * ### Managing device settings
+ * **Example:** Enable the Gateway proxy
  * ```typescript
  * yield* Cloudflare.Devices.DeviceSettings("Devices", {
  *   gatewayProxyEnabled: true,
@@ -123,7 +119,7 @@ export type DeviceSettings = Resource<
  * });
  * ```
  *
- * @example Allow one-hour WARP override codes
+ * **Example:** Allow one-hour WARP override codes
  * ```typescript
  * yield* Cloudflare.Devices.DeviceSettings("Devices", {
  *   disableForTime: 3600,
@@ -131,6 +127,10 @@ export type DeviceSettings = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/warp/
+ *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  */
 export const DeviceSettings = Resource<DeviceSettings>(TypeId);
 
@@ -237,16 +237,13 @@ const observeSettings = (accountId: string) =>
       const snapshot: DeviceSettingsSnapshot = {};
       if (s.disableForTime != null) snapshot.disableForTime = s.disableForTime;
       if (s.externalEmergencySignalEnabled != null) {
-        snapshot.externalEmergencySignalEnabled =
-          s.externalEmergencySignalEnabled;
+        snapshot.externalEmergencySignalEnabled = s.externalEmergencySignalEnabled;
       }
       if (s.externalEmergencySignalFingerprint != null) {
-        snapshot.externalEmergencySignalFingerprint =
-          s.externalEmergencySignalFingerprint;
+        snapshot.externalEmergencySignalFingerprint = s.externalEmergencySignalFingerprint;
       }
       if (s.externalEmergencySignalInterval != null) {
-        snapshot.externalEmergencySignalInterval =
-          s.externalEmergencySignalInterval;
+        snapshot.externalEmergencySignalInterval = s.externalEmergencySignalInterval;
       }
       if (s.externalEmergencySignalUrl != null) {
         snapshot.externalEmergencySignalUrl = s.externalEmergencySignalUrl;
@@ -258,8 +255,7 @@ const observeSettings = (accountId: string) =>
         snapshot.gatewayUdpProxyEnabled = s.gatewayUdpProxyEnabled;
       }
       if (s.rootCertificateInstallationEnabled != null) {
-        snapshot.rootCertificateInstallationEnabled =
-          s.rootCertificateInstallationEnabled;
+        snapshot.rootCertificateInstallationEnabled = s.rootCertificateInstallationEnabled;
       }
       if (s.useZtVirtualIp != null) snapshot.useZtVirtualIp = s.useZtVirtualIp;
       return snapshot;
@@ -276,7 +272,5 @@ const toAttributes = (
   initialSettings,
 });
 
-const sameSnapshot = (
-  a: DeviceSettingsSnapshot,
-  b: DeviceSettingsSnapshot,
-): boolean => SETTING_KEYS.every((key) => a[key] === b[key]);
+const sameSnapshot = (a: DeviceSettingsSnapshot, b: DeviceSettingsSnapshot): boolean =>
+  SETTING_KEYS.every((key) => a[key] === b[key]);

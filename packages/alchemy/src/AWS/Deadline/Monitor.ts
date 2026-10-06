@@ -96,9 +96,8 @@ export interface Monitor extends Resource<
  * administrators view farms, queues, and jobs, authenticated through IAM
  * Identity Center.
  *
- * @resource
- * @section Creating Monitors
- * @example Basic Monitor
+ * ### Creating Monitors
+ * **Example:** Basic Monitor
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -109,7 +108,7 @@ export interface Monitor extends Resource<
  * });
  * ```
  *
- * @example Export the Monitor URL
+ * **Example:** Export the Monitor URL
  * ```typescript
  * // The monitor's web console URL is available as an output attribute —
  * // return it from the stack so users know where to sign in.
@@ -120,13 +119,12 @@ export interface Monitor extends Resource<
  * });
  * return { monitorUrl: monitor.url };
  * ```
+ *
+ * @resource
  */
 export const Monitor = Resource<Monitor>("AWS.Deadline.Monitor");
 
-const createMonitorName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createMonitorName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -136,17 +134,10 @@ interface MonitorState {
   described: deadline.GetMonitorResponse;
 }
 
-const readMonitorById = Effect.fn(function* (
-  monitorId: string,
-  arnOf: (path: string) => string,
-) {
+const readMonitorById = Effect.fn(function* (monitorId: string, arnOf: (path: string) => string) {
   const described = yield* deadline
     .getMonitor({ monitorId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   const monitorArn = arnOf(`monitor/${described.monitorId}`);
   const state: MonitorState = {
@@ -223,17 +214,13 @@ export const MonitorProvider = () =>
           if (!isResolved(news)) return;
           if (olds === undefined) return;
           // The Identity Center instance is fixed at creation.
-          if (
-            olds.identityCenterInstanceArn !== news.identityCenterInstanceArn
-          ) {
+          if (olds.identityCenterInstanceArn !== news.identityCenterInstanceArn) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(
-              new Error("AWS.Deadline.Monitor requires props"),
-            );
+            return yield* Effect.fail(new Error("AWS.Deadline.Monitor requires props"));
           }
           const arnOf = yield* deadlineArnOf;
           const displayName = yield* createMonitorName(id, news);
@@ -257,14 +244,10 @@ export const MonitorProvider = () =>
                 tags: desiredTags,
               }),
             );
-            yield* session.note(
-              `Created monitor ${displayName} (${created.monitorId})`,
-            );
+            yield* session.note(`Created monitor ${displayName} (${created.monitorId})`);
             state = yield* readMonitorById(created.monitorId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created monitor ${displayName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created monitor ${displayName}`));
             }
           }
 
@@ -299,9 +282,7 @@ export const MonitorProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* deadline
             .deleteMonitor({ monitorId: output.monitorId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

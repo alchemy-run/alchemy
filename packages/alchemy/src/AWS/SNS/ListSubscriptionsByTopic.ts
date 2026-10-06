@@ -17,9 +17,8 @@ export interface ListSubscriptionsByTopicRequest extends Omit<
  * `sns:ListSubscriptionsByTopic` on the topic. Provide the
  * `ListSubscriptionsByTopicHttp` layer on the Function to implement the
  * binding.
- * @binding
- * @section Listing a Topic's Subscriptions
- * @example List Subscriptions of a Topic
+ * ### Listing a Topic's Subscriptions
+ * **Example:** List Subscriptions of a Topic
  * ```typescript
  * // init (provide SNS.ListSubscriptionsByTopicHttp on the Function)
  * const listSubscriptionsByTopic = yield* SNS.ListSubscriptionsByTopic(topic);
@@ -28,6 +27,8 @@ export interface ListSubscriptionsByTopicRequest extends Omit<
  * const response = yield* listSubscriptionsByTopic();
  * const endpoints = (response.Subscriptions ?? []).map((s) => s.Endpoint);
  * ```
+ *
+ * @binding
  */
 export interface ListSubscriptionsByTopic extends Binding.Service<
   ListSubscriptionsByTopic,
@@ -37,11 +38,9 @@ export interface ListSubscriptionsByTopic extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListSubscriptionsByTopicRequest,
-    ) => Effect.Effect<
-      sns.ListSubscriptionsByTopicResponse,
-      sns.ListSubscriptionsByTopicError
-    >
+    ) => Effect.Effect<sns.ListSubscriptionsByTopicResponse, sns.ListSubscriptionsByTopicError>
   >
 > {}
-export const ListSubscriptionsByTopic =
-  Binding.Service<ListSubscriptionsByTopic>("AWS.SNS.ListSubscriptionsByTopic");
+export const ListSubscriptionsByTopic = Binding.Service<ListSubscriptionsByTopic>(
+  "AWS.SNS.ListSubscriptionsByTopic",
+);

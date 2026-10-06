@@ -2,7 +2,6 @@ import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -75,11 +74,8 @@ export type RegionalTieredCache = Resource<
  *
  * Only one `RegionalTieredCache` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
- * @resource
- * @product Cache
- * @category Performance & Reliability
- * @section Managing Regional Tiered Cache
- * @example Enable Regional Tiered Cache on an Enterprise zone
+ * ### Managing Regional Tiered Cache
+ * **Example:** Enable Regional Tiered Cache on an Enterprise zone
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
@@ -88,7 +84,7 @@ export type RegionalTieredCache = Resource<
  * });
  * ```
  *
- * @example Explicitly disable Regional Tiered Cache
+ * **Example:** Explicitly disable Regional Tiered Cache
  * ```typescript
  * yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
  *   zoneId: zone.zoneId,
@@ -97,15 +93,17 @@ export type RegionalTieredCache = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/#regional-tiered-cache
+ *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  */
 export const RegionalTieredCache = Resource<RegionalTieredCache>(TypeId);
 
 /**
  * Returns true if the given value is a RegionalTieredCache resource.
  */
-export const isRegionalTieredCache = (
-  value: unknown,
-): value is RegionalTieredCache =>
+export const isRegionalTieredCache = (value: unknown): value is RegionalTieredCache =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
@@ -115,10 +113,7 @@ const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
 // `Unauthorized`/`Forbidden`. Retry with exponential backoff capped at 5s,
 // bounded to ~8 attempts so a persistently-failing call still fails fast.
 const transientAuthRetrySchedule = Schedule.max([
-  Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("5 seconds"),
-  ]),
+  Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
   Schedule.recurs(8),
 ]);
 
@@ -146,33 +141,22 @@ export const RegionalTieredCacheProvider = () =>
               while: (e) => e._tag === "Unauthorized" || e._tag === "Forbidden",
               schedule: transientAuthRetrySchedule,
             }),
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, observed.value),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, observed.value)),
             // Zone deleted out-of-band or plan-gated: skip it.
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-            Effect.catchTag("SettingUnavailableForPlan", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is RegionalTieredCacheAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is RegionalTieredCacheAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as RegionalTieredCacheProps;
       const n = news as RegionalTieredCacheProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -190,8 +174,7 @@ export const RegionalTieredCacheProvider = () =>
       // default — there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialValue` restored on destroy.
-      const initialValue =
-        output !== undefined ? output.initialValue : observed.value;
+      const initialValue = output !== undefined ? output.initialValue : observed.value;
       return toAttributes(zoneId, observed, initialValue);
     }),
 
@@ -208,8 +191,7 @@ export const RegionalTieredCacheProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialValue =
-        output !== undefined ? output.initialValue : observed.value;
+      const initialValue = output !== undefined ? output.initialValue : observed.value;
 
       // 3. Sync — patch only when the observed value differs.
       const desired = desiredValue(news);
@@ -229,9 +211,7 @@ export const RegionalTieredCacheProvider = () =>
       // so the setting no longer exists for the zone), nothing to restore.
       const observed = yield* cache.getRegionalTieredCache({ zoneId }).pipe(
         Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-        Effect.catchTag("SettingUnavailableForPlan", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
@@ -245,9 +225,7 @@ export const RegionalTieredCacheProvider = () =>
 
 const toAttributes = (
   zoneId: string,
-  setting:
-    | cache.GetRegionalTieredCacheResponse
-    | cache.PatchRegionalTieredCacheResponse,
+  setting: cache.GetRegionalTieredCacheResponse | cache.PatchRegionalTieredCacheResponse,
   initialValue: string,
 ): RegionalTieredCacheAttributes => ({
   zoneId,

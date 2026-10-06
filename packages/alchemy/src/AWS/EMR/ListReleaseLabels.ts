@@ -4,15 +4,16 @@ import * as Binding from "../../Binding.ts";
 
 /**
  * Runtime binding for `elasticmapreduce:ListReleaseLabels` — lists the EMR release labels available in the region, newest first.
- * @binding
- * @section Release Catalog
- * @example Find the Latest Release
+ * ### Release Catalog
+ * **Example:** Find the Latest Release
  * ```typescript
  * const listReleaseLabels = yield* AWS.EMR.ListReleaseLabels();
  *
  * const { ReleaseLabels } = yield* listReleaseLabels();
  * const latest = ReleaseLabels?.[0];
  * ```
+ *
+ * @binding
  */
 export interface ListReleaseLabels extends Binding.Service<
   ListReleaseLabels,
@@ -23,6 +24,4 @@ export interface ListReleaseLabels extends Binding.Service<
     ) => Effect.Effect<SVC.ListReleaseLabelsOutput, SVC.ListReleaseLabelsError>
   >
 > {}
-export const ListReleaseLabels = Binding.Service<ListReleaseLabels>(
-  "AWS.EMR.ListReleaseLabels",
-);
+export const ListReleaseLabels = Binding.Service<ListReleaseLabels>("AWS.EMR.ListReleaseLabels");

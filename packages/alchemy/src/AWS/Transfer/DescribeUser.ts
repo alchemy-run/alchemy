@@ -11,9 +11,8 @@ import type { User } from "./User.ts";
  * their `SshPublicKeyId`s, which {@link DeleteSshPublicKey} needs). The
  * `ServerId` and `UserName` are injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Transfer.DescribeUserHttp)`.
- * @binding
- * @section Managing Users at Runtime
- * @example Read the User's SSH Keys
+ * ### Managing Users at Runtime
+ * **Example:** Read the User's SSH Keys
  * ```typescript
  * // init — bind the operation to the user
  * const describeUser = yield* AWS.Transfer.DescribeUser(user);
@@ -22,6 +21,8 @@ import type { User } from "./User.ts";
  * const { User } = yield* describeUser();
  * const keyIds = (User.SshPublicKeys ?? []).map((k) => k.SshPublicKeyId);
  * ```
+ *
+ * @binding
  */
 export interface DescribeUser extends Binding.Service<
   DescribeUser,
@@ -31,12 +32,7 @@ export interface DescribeUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<transfer.DescribeUserRequest, "ServerId" | "UserName">,
-    ) => Effect.Effect<
-      transfer.DescribeUserResponse,
-      transfer.DescribeUserError
-    >
+    ) => Effect.Effect<transfer.DescribeUserResponse, transfer.DescribeUserError>
   >
 > {}
-export const DescribeUser = Binding.Service<DescribeUser>(
-  "AWS.Transfer.DescribeUser",
-);
+export const DescribeUser = Binding.Service<DescribeUser>("AWS.Transfer.DescribeUser");

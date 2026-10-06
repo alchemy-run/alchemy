@@ -2,8 +2,7 @@ import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetDomainDetailRequest
-  extends route53domains.GetDomainDetailRequest {}
+export interface GetDomainDetailRequest extends route53domains.GetDomainDetailRequest {}
 
 /**
  * Runtime binding for `route53domains:GetDomainDetail` — return detailed
@@ -21,9 +20,8 @@ export interface GetDomainDetailRequest
  * implementation with
  * `Effect.provide(AWS.Route53Domains.GetDomainDetailHttp)`.
  *
- * @binding
- * @section Reading Domain Details
- * @example Get the Nameservers of an Owned Domain
+ * ### Reading Domain Details
+ * **Example:** Get the Nameservers of an Owned Domain
  * ```typescript
  * // init
  * const getDomainDetail = yield* AWS.Route53Domains.GetDomainDetail();
@@ -33,12 +31,14 @@ export interface GetDomainDetailRequest
  * const nameservers = (detail.Nameservers ?? []).map((ns) => ns.Name);
  * ```
  *
- * @example Handle a Domain That Is Not in the Account
+ * **Example:** Handle a Domain That Is Not in the Account
  * ```typescript
  * const detail = yield* getDomainDetail({ DomainName: "example.com" }).pipe(
  *   Effect.catchTag("DomainNotFound", () => Effect.succeed(undefined)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetDomainDetail extends Binding.Service<
   GetDomainDetail,
@@ -46,10 +46,7 @@ export interface GetDomainDetail extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetDomainDetailRequest,
-    ) => Effect.Effect<
-      route53domains.GetDomainDetailResponse,
-      route53domains.GetDomainDetailError
-    >
+    ) => Effect.Effect<route53domains.GetDomainDetailResponse, route53domains.GetDomainDetailError>
   >
 > {}
 export const GetDomainDetail = Binding.Service<GetDomainDetail>(

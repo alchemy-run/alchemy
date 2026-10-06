@@ -35,9 +35,7 @@ const bindPipelinePolicy = Effect.fn(function* (
             Action: [...actions],
             Resource: [
               Output.interpolate`${pipeline.pipelineArn}`,
-              ...(subScoped
-                ? [Output.interpolate`${pipeline.pipelineArn}/*`]
-                : []),
+              ...(subScoped ? [Output.interpolate`${pipeline.pipelineArn}/*`] : []),
             ],
           },
         ],
@@ -52,12 +50,7 @@ const bindPipelinePolicy = Effect.fn(function* (
  * callable injects the bound {@link Pipeline}'s name and the deploy-time
  * half grants `actions` on the pipeline ARN.
  */
-export const makeCodePipelineNameHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeCodePipelineNameHttpBinding = <I extends { name?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.CodePipeline.GetPipelineState`. */
   tag: string;
   /** The distilled operation; `name` is injected from the pipeline. */
@@ -110,12 +103,7 @@ export const makeCodePipelinePipelineNameHttpBinding = <
 
     return Effect.fn(function* <P extends Pipeline>(pipeline: P) {
       const PipelineName = yield* pipeline.pipelineName;
-      yield* bindPipelinePolicy(
-        options.tag,
-        pipeline,
-        options.actions,
-        options.subScoped,
-      );
+      yield* bindPipelinePolicy(options.tag, pipeline, options.actions, options.subScoped);
       return Effect.fn(`${options.tag}(${pipeline.LogicalId})`)(function* (
         request?: Omit<I, "pipelineName">,
       ) {

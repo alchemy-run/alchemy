@@ -5,17 +5,15 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetProtectionStatus}.
  */
-export interface GetProtectionStatusRequest
-  extends fms.GetProtectionStatusRequest {}
+export interface GetProtectionStatusRequest extends fms.GetProtectionStatusRequest {}
 
 /**
  * Runtime binding for `fms:GetProtectionStatus`.
  *
  * Returns policy-level attack summary information for Shield Advanced policies — DDoS attacks detected during the specified time period. Provide the
  * implementation with `Effect.provide(AWS.FMS.GetProtectionStatusHttp)`.
- * @binding
- * @section Compliance and Protection Status
- * @example Read a Shield Policy's Protection Status
+ * ### Compliance and Protection Status
+ * **Example:** Read a Shield Policy's Protection Status
  * ```typescript
  * // init — account-level binding takes no resource
  * const getProtectionStatus = yield* AWS.FMS.GetProtectionStatus();
@@ -24,6 +22,8 @@ export interface GetProtectionStatusRequest
  * const result = yield* getProtectionStatus({ PolicyId: policyId });
  * console.log(result.ServiceType, result.Data);
  * ```
+ *
+ * @binding
  */
 export interface GetProtectionStatus extends Binding.Service<
   GetProtectionStatus,
@@ -31,10 +31,7 @@ export interface GetProtectionStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetProtectionStatusRequest,
-    ) => Effect.Effect<
-      fms.GetProtectionStatusResponse,
-      fms.GetProtectionStatusError
-    >
+    ) => Effect.Effect<fms.GetProtectionStatusResponse, fms.GetProtectionStatusError>
   >
 > {}
 

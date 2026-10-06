@@ -1,7 +1,6 @@
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -75,24 +74,21 @@ export type DispatchNamespace = Resource<
  *
  * Note: Workers for Platforms is a paid add-on. On accounts without the
  * subscription, namespace creation fails with an entitlement error.
- * @resource
- * @product Workers for Platforms
- * @category Workers & Compute
- * @section Creating a Dispatch Namespace
- * @example Namespace with a generated name
+ * ### Creating a Dispatch Namespace
+ * **Example:** Namespace with a generated name
  * ```typescript
  * const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Customers", {});
  * ```
  *
- * @example Namespace with an explicit name
+ * **Example:** Namespace with an explicit name
  * ```typescript
  * const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Customers", {
  *   name: "my-platform-customers",
  * });
  * ```
  *
- * @section Uploading user Workers
- * @example Upload a customer Worker into the namespace
+ * ### Uploading user Workers
+ * **Example:** Upload a customer Worker into the namespace
  * A {@link Cloudflare.Worker} deploys into the namespace as a "user worker"
  * (rather than as a routable account-level script) when its `namespace` prop is
  * set. Reference the namespace by its `name` output so it deploys first.
@@ -105,8 +101,8 @@ export type DispatchNamespace = Resource<
  * });
  * ```
  *
- * @section Dispatching from a platform Worker
- * @example Effect-native binding via `Get`
+ * ### Dispatching from a platform Worker
+ * **Example:** Effect-native binding via `Get`
  * `Cloudflare.WorkersForPlatforms.Get(namespace)` binds the namespace and
  * returns an Effect-native client; `get(name)` resolves a user Worker by script
  * name. Provide {@link GetBinding} on the Worker's runtime layer.
@@ -122,7 +118,7 @@ export type DispatchNamespace = Resource<
  * };
  * ```
  *
- * @example Async binding via `env` + `InferEnv`
+ * **Example:** Async binding via `env` + `InferEnv`
  * Passing the namespace on a Worker's `env` binds it as a native
  * `dispatch_namespace` binding; `Cloudflare.InferEnv` types `env.DISPATCH` as
  * the runtime `DispatchNamespace`, so the async handler calls `.get(name)`
@@ -143,15 +139,18 @@ export type DispatchNamespace = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
+ *
+ * @resource
+ * @product Workers for Platforms
+ * @category Workers & Compute
  */
 export const DispatchNamespace = Resource<DispatchNamespace>(TypeId);
 
 /**
  * Returns true if the given value is a DispatchNamespace resource.
  */
-export const isDispatchNamespace = (
-  value: unknown,
-): value is DispatchNamespace => isResourceOfType(value, TypeId);
+export const isDispatchNamespace = (value: unknown): value is DispatchNamespace =>
+  isResourceOfType(value, TypeId);
 
 export const DispatchNamespaceProvider = () =>
   Provider.succeed(DispatchNamespace, {
@@ -178,9 +177,7 @@ export const DispatchNamespaceProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((ns) =>
-              toAttributes(ns, accountId, ns.namespaceName ?? ""),
-            ),
+            (page.result ?? []).map((ns) => toAttributes(ns, accountId, ns.namespaceName ?? "")),
           ),
         ),
       );
@@ -191,24 +188,18 @@ export const DispatchNamespaceProvider = () =>
       // The name is the identity — a cold read (lost state) lands on the
       // same deterministic name as reconcile would.
       const name =
-        output?.name ??
-        olds?.name ??
-        (yield* createPhysicalName({ id, lowercase: true }));
+        output?.name ?? olds?.name ?? (yield* createPhysicalName({ id, lowercase: true }));
       const observed = yield* getNamespace(acct, name);
       return observed ? toAttributes(observed, acct, name) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name =
-        news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
+      const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
       // Observe — namespaces are looked up by name; `output` is only a
       // cache of the same identity. A missing namespace falls through to
       // the ensure step.
-      const observed = yield* getNamespace(
-        output?.accountId ?? accountId,
-        name,
-      );
+      const observed = yield* getNamespace(output?.accountId ?? accountId, name);
       if (observed) {
         // Existence-only resource — nothing mutable to sync.
         return toAttributes(observed, output?.accountId ?? accountId, name);
@@ -242,11 +233,7 @@ export const DispatchNamespaceProvider = () =>
 const getNamespace = (accountId: string, name: string) =>
   wfp
     .getDispatchNamespace({ accountId, dispatchNamespace: name })
-    .pipe(
-      Effect.catchTag("DispatchNamespaceNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("DispatchNamespaceNotFound", () => Effect.succeed(undefined)));
 
 const toAttributes = (
   ns: wfp.GetDispatchNamespaceResponse | wfp.CreateDispatchNamespaceResponse,

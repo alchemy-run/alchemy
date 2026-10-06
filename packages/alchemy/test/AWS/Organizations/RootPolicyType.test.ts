@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Root, RootPolicyType } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,25 +13,28 @@ const { test } = Test.make({ providers: AWS.providers() });
 // (rootId, policyType). It runs read-only: outside an org management account
 // `listRoots` rejects with a typed error that degrades to [], so the assertion
 // holds without deploying anything.
-test.provider("list enumerates root policy types", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(RootPolicyType);
-    const all = yield* provider.list();
+test.provider(
+  "list enumerates root policy types",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(RootPolicyType);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
+      expect(Array.isArray(all)).toBe(true);
 
-    for (const item of all) {
-      expect(typeof item.rootId).toBe("string");
-      expect(item.rootId.length).toBeGreaterThan(0);
-      expect(typeof item.policyType).toBe("string");
-      if (item.rootArn !== undefined) {
-        expect(typeof item.rootArn).toBe("string");
+      for (const item of all) {
+        expect(typeof item.rootId).toBe("string");
+        expect(item.rootId.length).toBeGreaterThan(0);
+        expect(typeof item.policyType).toBe("string");
+        if (item.rootArn !== undefined) {
+          expect(typeof item.rootArn).toBe("string");
+        }
+        if (item.status !== undefined) {
+          expect(typeof item.status).toBe("string");
+        }
       }
-      if (item.status !== undefined) {
-        expect(typeof item.status).toBe("string");
-      }
-    }
-  }),
+    }),
+  { tags: ["provider:aws", "provider:aws:organizations", "live"] },
 );
 
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
@@ -79,23 +82,18 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       // is list-and-find; the crash this fix guards is the `olds!` deref on
       // a row with no props at all).
       const state = yield* yield* State;
-      const stage = "test"; // scratch stacks default to the "test" stage
+      const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.Organizations.RootPolicyType",
+          isResourceState(r.row) && r.row.resourceType === "AWS.Organizations.RootPolicyType",
       );
       if (!wedged) {
         return yield* Effect.die(
-          new Error(
-            "no AWS.Organizations.RootPolicyType state row found after deploy",
-          ),
+          new Error("no AWS.Organizations.RootPolicyType state row found after deploy"),
         );
       }
       yield* state.set({
@@ -120,5 +118,8 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
 
       yield* stack.destroy();
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:organizations", "live"],
+    timeout: 240_000,
+  },
 );

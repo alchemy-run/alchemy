@@ -124,9 +124,8 @@ export interface Directory extends Resource<
  * Zones. Provisioning is SLOW: Simple AD takes roughly 10 minutes and
  * Microsoft AD 20-40 minutes, and directories bill hourly while they exist.
  * Destroy directories you are not using.
- * @resource
- * @section Creating a Directory
- * @example Simple AD Directory
+ * ### Creating a Directory
+ * **Example:** Simple AD Directory
  * ```typescript
  * const directory = yield* Directory("Corp", {
  *   name: "corp.example.com",
@@ -137,7 +136,7 @@ export interface Directory extends Resource<
  * });
  * ```
  *
- * @example Managed Microsoft AD Directory
+ * **Example:** Managed Microsoft AD Directory
  * ```typescript
  * const directory = yield* Directory("Corp", {
  *   type: "MicrosoftAD",
@@ -150,13 +149,15 @@ export interface Directory extends Resource<
  * });
  * ```
  *
- * @section Using the Directory
- * @example Read the DNS Addresses
+ * ### Using the Directory
+ * **Example:** Read the DNS Addresses
  * ```typescript
  * const directory = yield* Directory("Corp", { ... });
  * // the directory-provided DNS servers, one per Availability Zone
  * const dns = directory.dnsIpAddrs;
  * ```
+ *
+ * @resource
  */
 export const Directory = Resource<Directory>("AWS.DirectoryService.Directory");
 
@@ -172,9 +173,7 @@ class DirectoryNotReady extends Data.TaggedError("DirectoryNotReady")<{
   readonly stage: string | undefined;
 }> {}
 
-class DirectoryProvisioningFailed extends Data.TaggedError(
-  "DirectoryProvisioningFailed",
-)<{
+class DirectoryProvisioningFailed extends Data.TaggedError("DirectoryProvisioningFailed")<{
   readonly directoryId: string;
   readonly stage: string | undefined;
   readonly reason: string | undefined;
@@ -188,10 +187,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "DirectoryNotReady",
-    schedule: Schedule.max([
-      Schedule.fixed("30 seconds"),
-      Schedule.recurs(100),
-    ]),
+    schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(100)]),
   });
 
 export const DirectoryProvider = () =>
@@ -201,11 +197,7 @@ export const DirectoryProvider = () =>
       const getById = Effect.fn(function* (directoryId: string) {
         const response = yield* ds
           .describeDirectories({ DirectoryIds: [directoryId] })
-          .pipe(
-            Effect.catchTag("EntityDoesNotExistException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
         return response?.DirectoryDescriptions?.[0];
       });
 
@@ -225,12 +217,8 @@ export const DirectoryProvider = () =>
         directoryId: string | undefined,
         name: string | undefined,
       ) {
-        const found = directoryId
-          ? yield* getById(directoryId)
-          : yield* findByName(name);
-        return found !== undefined && !isTerminalStage(found.Stage)
-          ? found
-          : undefined;
+        const found = directoryId ? yield* getById(directoryId) : yield* findByName(name);
+        return found !== undefined && !isTerminalStage(found.Stage) ? found : undefined;
       });
 
       const waitForActive = (directoryId: string) =>
@@ -282,9 +270,7 @@ export const DirectoryProvider = () =>
       const toAttrs = Effect.fn(function* (directory: ds.DirectoryDescription) {
         if (!directory.DirectoryId || !directory.Name) {
           return yield* Effect.fail(
-            new Error(
-              `directory '${directory.DirectoryId}' is missing its id or name`,
-            ),
+            new Error(`directory '${directory.DirectoryId}' is missing its id or name`),
           );
         }
         const { accountId, region } = yield* AWSEnvironment.current;
@@ -302,9 +288,7 @@ export const DirectoryProvider = () =>
           securityGroupId: directory.VpcSettings?.SecurityGroupId,
           vpcId: directory.VpcSettings?.VpcId,
           subnetIds: [...(directory.VpcSettings?.SubnetIds ?? [])],
-          availabilityZones: [
-            ...(directory.VpcSettings?.AvailabilityZones ?? []),
-          ],
+          availabilityZones: [...(directory.VpcSettings?.AvailabilityZones ?? [])],
           tags: yield* readDirectoryTags(directory.DirectoryId),
         };
       });
@@ -331,10 +315,7 @@ export const DirectoryProvider = () =>
           if (n.description !== o.description) {
             return { action: "replace" } as const;
           }
-          if (
-            type(n) === "SimpleAD" &&
-            (n.size ?? DEFAULT_SIZE) !== (o.size ?? DEFAULT_SIZE)
-          ) {
+          if (type(n) === "SimpleAD" && (n.size ?? DEFAULT_SIZE) !== (o.size ?? DEFAULT_SIZE)) {
             return { action: "replace" } as const;
           }
           if (
@@ -353,9 +334,7 @@ export const DirectoryProvider = () =>
           const directory = yield* observe(output?.directoryId, olds?.name);
           if (directory === undefined) return undefined;
           const attrs = yield* toAttrs(directory);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -403,9 +382,7 @@ export const DirectoryProvider = () =>
                   });
             if (created.DirectoryId === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `Create${type} for '${props.name}' returned no DirectoryId`,
-                ),
+                new Error(`Create${type} for '${props.name}' returned no DirectoryId`),
               );
             }
             directoryId = created.DirectoryId;
@@ -452,9 +429,7 @@ export const DirectoryProvider = () =>
           }
           yield* ds
             .deleteDirectory({ DirectoryId: directoryId })
-            .pipe(
-              Effect.catchTag("EntityDoesNotExistException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.void));
         }),
 
         list: () =>

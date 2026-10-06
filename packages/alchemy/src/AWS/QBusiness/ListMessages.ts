@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `ListMessages` request with `applicationId` injected from the bound application.
  */
-export interface ListMessagesRequest extends Omit<
-  qbusiness.ListMessagesRequest,
-  "applicationId"
-> {}
+export interface ListMessagesRequest extends Omit<qbusiness.ListMessagesRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `ListMessages` operation (IAM action
@@ -19,14 +16,15 @@ export interface ListMessagesRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.ListMessagesHttp)`.
  *
- * @binding
- * @section Conversations
- * @example List a Conversation's Messages
+ * ### Conversations
+ * **Example:** List a Conversation's Messages
  * ```typescript
  * const listMessages = yield* AWS.QBusiness.ListMessages(app);
  *
  * const { messages } = yield* listMessages({ conversationId });
  * ```
+ *
+ * @binding
  */
 export interface ListMessages extends Binding.Service<
   ListMessages,
@@ -36,12 +34,7 @@ export interface ListMessages extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListMessagesRequest,
-    ) => Effect.Effect<
-      qbusiness.ListMessagesResponse,
-      qbusiness.ListMessagesError
-    >
+    ) => Effect.Effect<qbusiness.ListMessagesResponse, qbusiness.ListMessagesError>
   >
 > {}
-export const ListMessages = Binding.Service<ListMessages>(
-  "AWS.QBusiness.ListMessages",
-);
+export const ListMessages = Binding.Service<ListMessages>("AWS.QBusiness.ListMessages");

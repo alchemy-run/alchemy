@@ -2,7 +2,6 @@ import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -59,18 +58,15 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * (with a warning) — the app itself remains on the account until Cloudflare
  * ships a delete API. Because of this, an existing app with the same name is
  * adopted rather than duplicated.
- * @resource
- * @product Realtime Kit
- * @category Media
- * @section Creating an App
- * @example Basic app
+ * ### Creating an App
+ * **Example:** Basic app
  * ```typescript
  * const app = yield* Cloudflare.RealtimeKit.App("Meetings", {
  *   name: "my-meetings-app",
  * });
  * ```
  *
- * @example Child resources
+ * **Example:** Child resources
  * ```typescript
  * const app = yield* Cloudflare.RealtimeKit.App("Meetings", {});
  *
@@ -82,6 +78,10 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * ```
  *
  * @see https://developers.cloudflare.com/realtime/realtimekit/
+ *
+ * @resource
+ * @product Realtime Kit
+ * @category Media
  */
 export const App = Resource<App>(TypeId);
 
@@ -199,9 +199,7 @@ const listAllApps = (accountId: string) =>
       pageNo: 1,
       perPage: LIST_PER_PAGE,
     });
-    const apps = (first.data ?? []).filter(
-      (a): a is NonNullable<typeof a> => a !== null,
-    );
+    const apps = (first.data ?? []).filter((a): a is NonNullable<typeof a> => a !== null);
     const total = first.paging?.totalCount ?? apps.length;
     const pages = Math.ceil(total / LIST_PER_PAGE);
     if (pages <= 1) return apps;
@@ -212,9 +210,7 @@ const listAllApps = (accountId: string) =>
           .getApp({ accountId, pageNo, perPage: LIST_PER_PAGE })
           .pipe(
             Effect.map((res) =>
-              (res.data ?? []).filter(
-                (a): a is NonNullable<typeof a> => a !== null,
-              ),
+              (res.data ?? []).filter((a): a is NonNullable<typeof a> => a !== null),
             ),
           ),
       { concurrency: 10 },
@@ -227,9 +223,7 @@ const listAllApps = (accountId: string) =>
  * has neither an update endpoint (to rename in place) nor a delete endpoint
  * (to model the change as a replacement).
  */
-export class AppRenameNotSupported extends Data.TaggedError(
-  "AppRenameNotSupported",
-)<{
+export class AppRenameNotSupported extends Data.TaggedError("AppRenameNotSupported")<{
   readonly appId: string;
   readonly currentName: string;
   readonly desiredName: string;

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CreateLicense}.
  */
-export interface CreateLicenseRequest
-  extends licensemanager.CreateLicenseRequest {}
+export interface CreateLicenseRequest extends licensemanager.CreateLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:CreateLicense` — issue a
@@ -18,9 +17,8 @@ export interface CreateLicenseRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.CreateLicenseHttp)`.
- * @binding
- * @section Issuing Licenses
- * @example Issue a License on Purchase
+ * ### Issuing Licenses
+ * **Example:** Issue a License on Purchase
  * ```typescript
  * // init — account-level binding takes no resource
  * const createLicense = yield* AWS.LicenseManager.CreateLicense();
@@ -43,6 +41,8 @@ export interface CreateLicenseRequest
  *   ClientToken: crypto.randomUUID(),
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateLicense extends Binding.Service<
   CreateLicense,
@@ -50,12 +50,7 @@ export interface CreateLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.CreateLicenseResponse,
-      licensemanager.CreateLicenseError
-    >
+    ) => Effect.Effect<licensemanager.CreateLicenseResponse, licensemanager.CreateLicenseError>
   >
 > {}
-export const CreateLicense = Binding.Service<CreateLicense>(
-  "AWS.LicenseManager.CreateLicense",
-);
+export const CreateLicense = Binding.Service<CreateLicense>("AWS.LicenseManager.CreateLicense");

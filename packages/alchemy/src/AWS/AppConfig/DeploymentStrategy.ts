@@ -11,11 +11,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireMinutes } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  deploymentStrategyArn,
-  readAppConfigTags,
-  syncAppConfigTags,
-} from "./internal.ts";
+import { deploymentStrategyArn, readAppConfigTags, syncAppConfigTags } from "./internal.ts";
 
 export interface DeploymentStrategyProps {
   /**
@@ -81,9 +77,8 @@ export interface DeploymentStrategy extends Resource<
  * rolls out to an environment: the total duration, the per-interval growth,
  * and the final bake time during which alarms can trigger a rollback.
  *
- * @resource
- * @section Creating a Deployment Strategy
- * @example All-At-Once (instant, no bake)
+ * ### Creating a Deployment Strategy
+ * **Example:** All-At-Once (instant, no bake)
  * ```typescript
  * const strategy = yield* AppConfig.DeploymentStrategy("Fast", {
  *   deploymentDuration: 0,
@@ -93,7 +88,7 @@ export interface DeploymentStrategy extends Resource<
  * });
  * ```
  *
- * @example Linear rollout over 10 minutes
+ * **Example:** Linear rollout over 10 minutes
  * ```typescript
  * const strategy = yield* AppConfig.DeploymentStrategy("Linear", {
  *   deploymentDuration: "10 minutes",
@@ -102,10 +97,10 @@ export interface DeploymentStrategy extends Resource<
  *   finalBakeTime: "5 minutes",
  * });
  * ```
+ *
+ * @resource
  */
-export const DeploymentStrategy = Resource<DeploymentStrategy>(
-  "AWS.AppConfig.DeploymentStrategy",
-);
+export const DeploymentStrategy = Resource<DeploymentStrategy>("AWS.AppConfig.DeploymentStrategy");
 
 export const DeploymentStrategyProvider = () =>
   Provider.effect(
@@ -119,37 +114,23 @@ export const DeploymentStrategyProvider = () =>
       const readStrategy = Effect.fn(function* (deploymentStrategyId: string) {
         return yield* appconfig
           .getDeploymentStrategy({ DeploymentStrategyId: deploymentStrategyId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const strategies = yield* appconfig.listDeploymentStrategies
-          .pages({})
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Items ?? []),
-            ),
-          );
+        const strategies = yield* appconfig.listDeploymentStrategies.pages({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+        );
         return strategies.find((s) => s.Name === name);
       });
 
       return {
-        stables: [
-          "deploymentStrategyId",
-          "deploymentStrategyName",
-          "deploymentStrategyArn",
-        ],
+        stables: ["deploymentStrategyId", "deploymentStrategyName", "deploymentStrategyArn"],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // ReplicateTo is create-only.
@@ -176,8 +157,7 @@ export const DeploymentStrategyProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.deploymentStrategyName ?? (yield* toName(id, news));
+          const name = output?.deploymentStrategyName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -194,9 +174,7 @@ export const DeploymentStrategyProvider = () =>
             observed = yield* appconfig.createDeploymentStrategy({
               Name: name,
               Description: news.description,
-              DeploymentDurationInMinutes: toWireMinutes(
-                news.deploymentDuration,
-              )!,
+              DeploymentDurationInMinutes: toWireMinutes(news.deploymentDuration)!,
               FinalBakeTimeInMinutes: toWireMinutes(news.finalBakeTime),
               GrowthFactor: news.growthFactor,
               GrowthType: news.growthType,
@@ -208,9 +186,7 @@ export const DeploymentStrategyProvider = () =>
             observed = yield* appconfig.updateDeploymentStrategy({
               DeploymentStrategyId: observed.Id,
               Description: news.description,
-              DeploymentDurationInMinutes: toWireMinutes(
-                news.deploymentDuration,
-              ),
+              DeploymentDurationInMinutes: toWireMinutes(news.deploymentDuration),
               FinalBakeTimeInMinutes: toWireMinutes(news.finalBakeTime),
               GrowthFactor: news.growthFactor,
               GrowthType: news.growthType,
@@ -235,22 +211,16 @@ export const DeploymentStrategyProvider = () =>
             .deleteDeploymentStrategy({
               DeploymentStrategyId: output.deploymentStrategyId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const strategies = yield* appconfig.listDeploymentStrategies
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Items ?? []),
-                ),
-              );
+            const strategies = yield* appconfig.listDeploymentStrategies.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+            );
             return strategies.flatMap((s) =>
               s.Id !== undefined &&
               s.Name !== undefined &&
@@ -263,11 +233,7 @@ export const DeploymentStrategyProvider = () =>
                     {
                       deploymentStrategyId: s.Id,
                       deploymentStrategyName: s.Name,
-                      deploymentStrategyArn: deploymentStrategyArn(
-                        region,
-                        accountId,
-                        s.Id,
-                      ),
+                      deploymentStrategyArn: deploymentStrategyArn(region, accountId, s.Id),
                     },
                   ]
                 : [],

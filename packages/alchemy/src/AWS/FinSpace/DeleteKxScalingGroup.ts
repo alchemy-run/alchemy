@@ -7,9 +7,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * Runtime binding for `finspace:DeleteKxScalingGroup` — deletes a scaling group from the bound environment. The group must have no clusters placed on it.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.DeleteKxScalingGroupHttp)`.
- * @binding
- * @section Managing Scaling Groups
- * @example Delete a Scaling Group
+ * ### Managing Scaling Groups
+ * **Example:** Delete a Scaling Group
  * ```typescript
  * const deleteScalingGroup = yield* AWS.FinSpace.DeleteKxScalingGroup(kdb);
  *
@@ -18,6 +17,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  *   clientToken: crypto.randomUUID(),
  * });
  * ```
+ *
+ * @binding
  */
 export interface DeleteKxScalingGroup extends Binding.Service<
   DeleteKxScalingGroup,
@@ -27,10 +28,7 @@ export interface DeleteKxScalingGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.DeleteKxScalingGroupRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.DeleteKxScalingGroupResponse,
-      SVC.DeleteKxScalingGroupError
-    >
+    ) => Effect.Effect<SVC.DeleteKxScalingGroupResponse, SVC.DeleteKxScalingGroupError>
   >
 > {}
 export const DeleteKxScalingGroup = Binding.Service<DeleteKxScalingGroup>(

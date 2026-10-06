@@ -22,19 +22,13 @@ export interface TableStreamsClient {
    */
   listStreams: (
     request?: ListTableStreamsRequest,
-  ) => Effect.Effect<
-    keyspacesstreams.ListStreamsOutput,
-    keyspacesstreams.ListStreamsError
-  >;
+  ) => Effect.Effect<keyspacesstreams.ListStreamsOutput, keyspacesstreams.ListStreamsError>;
   /**
    * Describe a stream: status, view type, retention, and shard composition.
    */
   getStream: (
     request: keyspacesstreams.GetStreamInput,
-  ) => Effect.Effect<
-    keyspacesstreams.GetStreamOutput,
-    keyspacesstreams.GetStreamError
-  >;
+  ) => Effect.Effect<keyspacesstreams.GetStreamOutput, keyspacesstreams.GetStreamError>;
   /**
    * Obtain an iterator positioned in a shard (`TRIM_HORIZON`, `LATEST`,
    * `AT_SEQUENCE_NUMBER`, or `AFTER_SEQUENCE_NUMBER`).
@@ -50,10 +44,7 @@ export interface TableStreamsClient {
    */
   getRecords: (
     request: keyspacesstreams.GetRecordsInput,
-  ) => Effect.Effect<
-    keyspacesstreams.GetRecordsOutput,
-    keyspacesstreams.GetRecordsError
-  >;
+  ) => Effect.Effect<keyspacesstreams.GetRecordsOutput, keyspacesstreams.GetRecordsError>;
 }
 
 /**
@@ -63,9 +54,8 @@ export interface TableStreamsClient {
  *
  * Bind this to a `Table` whose `cdcSpecification` is enabled to get a typed
  * client for traversing the table's change-data-capture stream.
- * @binding
- * @section Reading Change Data
- * @example Traverse the Latest Stream
+ * ### Reading Change Data
+ * **Example:** Traverse the Latest Stream
  * ```typescript
  * const streams = yield* AWS.Keyspaces.TableStreams(table);
  *
@@ -83,12 +73,12 @@ export interface TableStreamsClient {
  *   shardIterator: shardIterator!,
  * });
  * ```
+ *
+ * @binding
  */
 export interface TableStreams extends Binding.Service<
   TableStreams,
   "AWS.Keyspaces.TableStreams",
   <T extends Table>(table: T) => Effect.Effect<TableStreamsClient>
 > {}
-export const TableStreams = Binding.Service<TableStreams>(
-  "AWS.Keyspaces.TableStreams",
-);
+export const TableStreams = Binding.Service<TableStreams>("AWS.Keyspaces.TableStreams");

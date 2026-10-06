@@ -12,9 +12,8 @@ import type { DataSet } from "./DataSet.ts";
  * Poll the refresh with
  * {@link DescribeIngestion | AWS.QuickSight.DescribeIngestion}. Provide the
  * implementation with `Effect.provide(AWS.QuickSight.CreateIngestionHttp)`.
- * @binding
- * @section Refreshing SPICE Data
- * @example Trigger A Full Refresh
+ * ### Refreshing SPICE Data
+ * **Example:** Trigger A Full Refresh
  * ```typescript
  * // init — bind the operation to the dataset
  * const createIngestion = yield* AWS.QuickSight.CreateIngestion(dataSet);
@@ -25,6 +24,8 @@ import type { DataSet } from "./DataSet.ts";
  *   IngestionType: "FULL_REFRESH",
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateIngestion extends Binding.Service<
   CreateIngestion,
@@ -33,16 +34,8 @@ export interface CreateIngestion extends Binding.Service<
     dataSet: DataSet,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.CreateIngestionRequest,
-        "AwsAccountId" | "DataSetId"
-      >,
-    ) => Effect.Effect<
-      quicksight.CreateIngestionResponse,
-      quicksight.CreateIngestionError
-    >
+      request: Omit<quicksight.CreateIngestionRequest, "AwsAccountId" | "DataSetId">,
+    ) => Effect.Effect<quicksight.CreateIngestionResponse, quicksight.CreateIngestionError>
   >
 > {}
-export const CreateIngestion = Binding.Service<CreateIngestion>(
-  "AWS.QuickSight.CreateIngestion",
-);
+export const CreateIngestion = Binding.Service<CreateIngestion>("AWS.QuickSight.CreateIngestion");

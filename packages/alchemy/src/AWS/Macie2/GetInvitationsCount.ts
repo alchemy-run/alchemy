@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetInvitationsCountHttp)`.
- * @binding
- * @section Administrator & Invitations
- * @example Count Pending Invitations
+ * ### Administrator & Invitations
+ * **Example:** Count Pending Invitations
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getInvitationsCount = yield* AWS.Macie2.GetInvitationsCount();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { invitationsCount } = yield* getInvitationsCount();
  * ```
+ *
+ * @binding
  */
 export interface GetInvitationsCount extends Binding.Service<
   GetInvitationsCount,
@@ -26,10 +27,7 @@ export interface GetInvitationsCount extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetInvitationsCountRequest,
-    ) => Effect.Effect<
-      macie2.GetInvitationsCountResponse,
-      macie2.GetInvitationsCountError
-    >
+    ) => Effect.Effect<macie2.GetInvitationsCountResponse, macie2.GetInvitationsCountError>
   >
 > {}
 export const GetInvitationsCount = Binding.Service<GetInvitationsCount>(

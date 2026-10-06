@@ -13,9 +13,8 @@ import * as Binding from "../../Binding.ts";
  * implementation with
  * `Effect.provide(AWS.IAM.GetServiceLastAccessedDetailsHttp)`.
  *
- * @binding
- * @section Access Advisor
- * @example Read a Completed Access Report
+ * ### Access Advisor
+ * **Example:** Read a Completed Access Report
  * ```typescript
  * // init
  * const getServiceLastAccessedDetails =
@@ -29,6 +28,8 @@ import * as Binding from "../../Binding.ts";
  *   );
  * }
  * ```
+ *
+ * @binding
  */
 export interface GetServiceLastAccessedDetails extends Binding.Service<
   GetServiceLastAccessedDetails,
@@ -42,7 +43,6 @@ export interface GetServiceLastAccessedDetails extends Binding.Service<
     >
   >
 > {}
-export const GetServiceLastAccessedDetails =
-  Binding.Service<GetServiceLastAccessedDetails>(
-    "AWS.IAM.GetServiceLastAccessedDetails",
-  );
+export const GetServiceLastAccessedDetails = Binding.Service<GetServiceLastAccessedDetails>(
+  "AWS.IAM.GetServiceLastAccessedDetails",
+);

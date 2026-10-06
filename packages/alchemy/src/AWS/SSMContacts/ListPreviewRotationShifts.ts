@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * and recurrence settings directly, so it is account-scoped.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ListPreviewRotationShiftsHttp)`.
- * @binding
- * @section Managing On-Call Rotations
- * @example Preview a Rotation Schedule
+ * ### Managing On-Call Rotations
+ * **Example:** Preview a Rotation Schedule
  * ```typescript
  * const listPreviewRotationShifts =
  *   yield* AWS.SSMContacts.ListPreviewRotationShifts();
@@ -28,6 +27,8 @@ import * as Binding from "../../Binding.ts";
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListPreviewRotationShifts extends Binding.Service<
   ListPreviewRotationShifts,
@@ -35,13 +36,9 @@ export interface ListPreviewRotationShifts extends Binding.Service<
   () => Effect.Effect<
     (
       request: ssm.ListPreviewRotationShiftsRequest,
-    ) => Effect.Effect<
-      ssm.ListPreviewRotationShiftsResult,
-      ssm.ListPreviewRotationShiftsError
-    >
+    ) => Effect.Effect<ssm.ListPreviewRotationShiftsResult, ssm.ListPreviewRotationShiftsError>
   >
 > {}
-export const ListPreviewRotationShifts =
-  Binding.Service<ListPreviewRotationShifts>(
-    "AWS.SSMContacts.ListPreviewRotationShifts",
-  );
+export const ListPreviewRotationShifts = Binding.Service<ListPreviewRotationShifts>(
+  "AWS.SSMContacts.ListPreviewRotationShifts",
+);

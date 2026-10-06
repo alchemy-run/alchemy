@@ -21,9 +21,7 @@ export type FlowLogArn<ID extends FlowLogId = FlowLogId> =
  * Raised when `createFlowLogs`/`deleteFlowLogs` report an item in the
  * `Unsuccessful` array (these APIs never throw for per-resource failures).
  */
-export class FlowLogOperationFailed extends Data.TaggedError(
-  "FlowLogOperationFailed",
-)<{
+export class FlowLogOperationFailed extends Data.TaggedError("FlowLogOperationFailed")<{
   readonly code: string;
   readonly message: string;
 }> {}
@@ -136,9 +134,8 @@ export interface FlowLog extends Resource<
  * `deliverLogsPermissionArn` — an IAM role that EC2's `vpc-flow-logs` service
  * principal can assume to write to the group.
  *
- * @resource
- * @section Creating a Flow Log
- * @example VPC Flow Log to CloudWatch Logs
+ * ### Creating a Flow Log
+ * **Example:** VPC Flow Log to CloudWatch Logs
  * ```typescript
  * const logGroup = yield* AWS.Logs.LogGroup("FlowLogs", {});
  *
@@ -177,7 +174,7 @@ export interface FlowLog extends Resource<
  * Captures all traffic for the VPC and delivers it to the CloudWatch Logs
  * group via the delivery role.
  *
- * @example S3 Flow Log for Rejected Traffic
+ * **Example:** S3 Flow Log for Rejected Traffic
  * ```typescript
  * const flowLog = yield* AWS.EC2.FlowLog("RejectedTraffic", {
  *   resourceType: "Subnet",
@@ -189,6 +186,8 @@ export interface FlowLog extends Resource<
  * ```
  * Delivers only rejected-traffic records for a subnet directly to an S3 bucket
  * (no IAM role required for S3 delivery).
+ *
+ * @resource
  */
 export const FlowLog = Resource<FlowLog>("AWS.EC2.FlowLog");
 
@@ -196,10 +195,7 @@ export const FlowLogProvider = () =>
   Provider.effect(
     FlowLog,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -210,9 +206,7 @@ export const FlowLogProvider = () =>
       const describeFlowLog = (flowLogId: string) =>
         ec2.describeFlowLogs({ FlowLogIds: [flowLogId] }).pipe(
           Effect.map((r) => r.FlowLogs?.[0]),
-          Effect.catchTag("InvalidFlowLogId.NotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("InvalidFlowLogId.NotFound", () => Effect.succeed(undefined)),
         );
 
       const toAttrs = (fl: ec2.FlowLog) =>
@@ -222,12 +216,8 @@ export const FlowLogProvider = () =>
             flowLogArn:
               `arn:aws:ec2:${env.region}:${env.accountId}:vpc-flow-log/${fl.FlowLogId}` as FlowLogArn,
             resourceId: fl.ResourceId!,
-            trafficType: (fl.TrafficType ?? "ALL") as
-              | "ACCEPT"
-              | "REJECT"
-              | "ALL",
-            logDestinationType: (fl.LogDestinationType ??
-              "cloud-watch-logs") as
+            trafficType: (fl.TrafficType ?? "ALL") as "ACCEPT" | "REJECT" | "ALL",
+            logDestinationType: (fl.LogDestinationType ?? "cloud-watch-logs") as
               | "cloud-watch-logs"
               | "s3"
               | "kinesis-data-firehose",
@@ -245,21 +235,14 @@ export const FlowLogProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.FlowLogs ?? [])
-                    .filter(
-                      (fl): fl is ec2.FlowLog & { FlowLogId: string } =>
-                        fl.FlowLogId != null,
-                    )
+                    .filter((fl): fl is ec2.FlowLog & { FlowLogId: string } => fl.FlowLogId != null)
                     .map((fl) => ({
                       flowLogId: fl.FlowLogId as FlowLogId,
                       flowLogArn:
                         `arn:aws:ec2:${env.region}:${env.accountId}:vpc-flow-log/${fl.FlowLogId}` as FlowLogArn,
                       resourceId: fl.ResourceId!,
-                      trafficType: (fl.TrafficType ?? "ALL") as
-                        | "ACCEPT"
-                        | "REJECT"
-                        | "ALL",
-                      logDestinationType: (fl.LogDestinationType ??
-                        "cloud-watch-logs") as
+                      trafficType: (fl.TrafficType ?? "ALL") as "ACCEPT" | "REJECT" | "ALL",
+                      logDestinationType: (fl.LogDestinationType ?? "cloud-watch-logs") as
                         | "cloud-watch-logs"
                         | "s3"
                         | "kinesis-data-firehose",
@@ -290,8 +273,7 @@ export const FlowLogProvider = () =>
             news.logGroupName !== olds.logGroupName ||
             news.logDestination !== olds.logDestination ||
             news.deliverLogsPermissionArn !== olds.deliverLogsPermissionArn ||
-            (news.maxAggregationInterval ?? 600) !==
-              (olds.maxAggregationInterval ?? 600) ||
+            (news.maxAggregationInterval ?? 600) !== (olds.maxAggregationInterval ?? 600) ||
             news.logFormat !== olds.logFormat
           ) {
             return { action: "replace" };
@@ -321,8 +303,7 @@ export const FlowLogProvider = () =>
                 ResourceType: news.resourceType,
                 ResourceIds: [news.resourceId],
                 TrafficType: news.trafficType ?? "ALL",
-                LogDestinationType:
-                  news.logDestinationType ?? "cloud-watch-logs",
+                LogDestinationType: news.logDestinationType ?? "cloud-watch-logs",
                 LogGroupName: news.logGroupName,
                 DeliverLogsPermissionArn: news.deliverLogsPermissionArn,
                 LogDestination: news.logDestination,
@@ -342,20 +323,15 @@ export const FlowLogProvider = () =>
                     ? Effect.fail(
                         new FlowLogOperationFailed({
                           code: failure.Error?.Code ?? "Unknown",
-                          message:
-                            failure.Error?.Message ?? "createFlowLogs failed",
+                          message: failure.Error?.Message ?? "createFlowLogs failed",
                         }),
                       )
                     : Effect.succeed(r);
                 }),
                 Effect.retry({
                   while: (e) =>
-                    e._tag === "FlowLogOperationFailed" &&
-                    e.code !== "FlowLogAlreadyExists",
-                  schedule: Schedule.max([
-                    Schedule.fixed(3000),
-                    Schedule.recurs(15),
-                  ]),
+                    e._tag === "FlowLogOperationFailed" && e.code !== "FlowLogAlreadyExists",
+                  schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(15)]),
                 }),
               );
             const flowLogId = result.FlowLogIds![0]!;
@@ -367,8 +343,7 @@ export const FlowLogProvider = () =>
                 FlowLogId: flowLogId,
                 ResourceId: news.resourceId,
                 TrafficType: news.trafficType ?? "ALL",
-                LogDestinationType:
-                  news.logDestinationType ?? "cloud-watch-logs",
+                LogDestinationType: news.logDestinationType ?? "cloud-watch-logs",
               } as ec2.FlowLog);
             }
           }
@@ -387,9 +362,10 @@ export const FlowLogProvider = () =>
               .pipe(
                 Effect.map(
                   (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                    Object.fromEntries(r.Tags?.map((t) => [t.Key!, t.Value!]) ?? []) as Record<
+                      string,
+                      string
+                    >,
                 ),
               )) ?? {};
           const { removed, upsert } = diffTags(currentTags, desiredTags);

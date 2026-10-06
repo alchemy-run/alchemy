@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CreateGrantVersion}.
  */
-export interface CreateGrantVersionRequest
-  extends licensemanager.CreateGrantVersionRequest {}
+export interface CreateGrantVersionRequest extends licensemanager.CreateGrantVersionRequest {}
 
 /**
  * Runtime binding for `license-manager:CreateGrantVersion` — publish a new
@@ -16,9 +15,8 @@ export interface CreateGrantVersionRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.CreateGrantVersionHttp)`.
- * @binding
- * @section Managing Grants
- * @example Activate an Accepted Grant
+ * ### Managing Grants
+ * **Example:** Activate an Accepted Grant
  * ```typescript
  * // init
  * const createGrantVersion = yield* AWS.LicenseManager.CreateGrantVersion();
@@ -30,6 +28,8 @@ export interface CreateGrantVersionRequest
  *   ClientToken: crypto.randomUUID(),
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateGrantVersion extends Binding.Service<
   CreateGrantVersion,

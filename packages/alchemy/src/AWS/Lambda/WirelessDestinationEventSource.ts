@@ -18,9 +18,7 @@ import { Permission as LambdaPermission } from "./Permission.ts";
  * delivers to a destination's rule: the base64 `PayloadData` plus the
  * sending device's id.
  */
-export const isWirelessUplinkMessage = (
-  event: any,
-): event is WirelessUplinkMessage =>
+export const isWirelessUplinkMessage = (event: any): event is WirelessUplinkMessage =>
   event != null &&
   typeof event === "object" &&
   typeof event.WirelessDeviceId === "string" &&
@@ -35,9 +33,8 @@ export const isWirelessUplinkMessage = (
  * `expressionType: "RuleName"`) with a Lambda action targeting this
  * function, and grants `iot.amazonaws.com` permission to invoke it; at
  * runtime it dispatches uplink invocations to the registered handler.
- * @binding
- * @section Consuming wireless uplinks
- * @example Consume LoRaWAN uplinks
+ * ### Consuming wireless uplinks
+ * **Example:** Consume LoRaWAN uplinks
  * ```typescript
  * yield* IoTWireless.consumeUplinks(destination, (uplinks) =>
  *   uplinks.pipe(
@@ -46,6 +43,8 @@ export const isWirelessUplinkMessage = (
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export const WirelessDestinationEventSource = Layer.effect(
   IoTWirelessDestinationEventSource,
@@ -77,15 +76,12 @@ export const WirelessDestinationEventSource = Layer.effect(
               actions: [{ lambda: { functionArn: host.functionArn } }],
             });
 
-            yield* Permission(
-              `AWS.IoTWireless.UplinkInvoke(${destination.LogicalId})`,
-              {
-                action: "lambda:InvokeFunction",
-                functionName: host.functionName,
-                principal: "iot.amazonaws.com",
-                sourceArn: rule.ruleArn,
-              },
-            );
+            yield* Permission(`AWS.IoTWireless.UplinkInvoke(${destination.LogicalId})`, {
+              action: "lambda:InvokeFunction",
+              functionName: host.functionName,
+              principal: "iot.amazonaws.com",
+              sourceArn: rule.ruleArn,
+            });
           }),
         );
       }

@@ -10,15 +10,16 @@ import type { Rotation } from "./Rotation.ts";
  * regular schedule. The rotation's ARN is injected as `RotationId`.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.DeleteRotationOverrideHttp)`.
- * @binding
- * @section Managing On-Call Rotations
- * @example Remove an Override
+ * ### Managing On-Call Rotations
+ * **Example:** Remove an Override
  * ```typescript
  * const deleteRotationOverride =
  *   yield* AWS.SSMContacts.DeleteRotationOverride(rotation);
  *
  * yield* deleteRotationOverride({ RotationOverrideId: overrideId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteRotationOverride extends Binding.Service<
   DeleteRotationOverride,
@@ -28,10 +29,7 @@ export interface DeleteRotationOverride extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.DeleteRotationOverrideRequest, "RotationId">,
-    ) => Effect.Effect<
-      ssm.DeleteRotationOverrideResult,
-      ssm.DeleteRotationOverrideError
-    >
+    ) => Effect.Effect<ssm.DeleteRotationOverrideResult, ssm.DeleteRotationOverrideError>
   >
 > {}
 export const DeleteRotationOverride = Binding.Service<DeleteRotationOverride>(

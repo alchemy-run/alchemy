@@ -10,9 +10,8 @@ import type { Cluster } from "./Cluster.ts";
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeAddon` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeAddonHttp)`.
- * @binding
- * @section Inspecting Add-ons
- * @example Check an Add-on's Version and Health
+ * ### Inspecting Add-ons
+ * **Example:** Check an Add-on's Version and Health
  * ```typescript
  * // init
  * const describeAddon = yield* AWS.EKS.DescribeAddon(cluster);
@@ -20,6 +19,8 @@ import type { Cluster } from "./Cluster.ts";
  * // runtime
  * const { addon } = yield* describeAddon({ addonName: "vpc-cni" });
  * ```
+ *
+ * @binding
  */
 export interface DescribeAddon extends Binding.Service<
   DescribeAddon,
@@ -32,6 +33,4 @@ export interface DescribeAddon extends Binding.Service<
     ) => Effect.Effect<eks.DescribeAddonResponse, eks.DescribeAddonError>
   >
 > {}
-export const DescribeAddon = Binding.Service<DescribeAddon>(
-  "AWS.EKS.DescribeAddon",
-);
+export const DescribeAddon = Binding.Service<DescribeAddon>("AWS.EKS.DescribeAddon");

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface GetJobRunsRequest extends Omit<
-  glue.GetJobRunsRequest,
-  "JobName"
-> {}
+export interface GetJobRunsRequest extends Omit<glue.GetJobRunsRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:GetJobRuns`.
@@ -15,9 +12,8 @@ export interface GetJobRunsRequest extends Omit<
  * `NextToken`), so a function can report run history or find in-flight runs.
  * The job name is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.GetJobRunsHttp)`.
- * @binding
- * @section Running Jobs
- * @example List Recent Runs
+ * ### Running Jobs
+ * **Example:** List Recent Runs
  * ```typescript
  * // init
  * const getJobRuns = yield* AWS.Glue.GetJobRuns(job);
@@ -28,6 +24,8 @@ export interface GetJobRunsRequest extends Omit<
  *   (run) => run.JobRunState === "RUNNING",
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetJobRuns extends Binding.Service<
   GetJobRuns,
@@ -35,9 +33,7 @@ export interface GetJobRuns extends Binding.Service<
   (
     job: Job,
   ) => Effect.Effect<
-    (
-      request?: GetJobRunsRequest,
-    ) => Effect.Effect<glue.GetJobRunsResponse, glue.GetJobRunsError>
+    (request?: GetJobRunsRequest) => Effect.Effect<glue.GetJobRunsResponse, glue.GetJobRunsError>
   >
 > {}
 

@@ -1,7 +1,6 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -68,13 +67,7 @@ export type LoggingAttributes = LoggingSnapshot & {
   initialSettings: LoggingSnapshot;
 };
 
-export type Logging = Resource<
-  TypeId,
-  LoggingProps,
-  LoggingAttributes,
-  never,
-  Providers
->;
+export type Logging = Resource<TypeId, LoggingProps, LoggingAttributes, never, Providers>;
 
 /**
  * Manages the **singleton** Cloudflare Zero Trust **Gateway logging
@@ -85,11 +78,8 @@ export type Logging = Resource<
  * declare (merging them over the observed state before the PUT, since the
  * API is PUT-only). The pre-management snapshot is captured on first touch
  * and restored on destroy (capture-and-restore).
- * @resource
- * @product Gateway
- * @category Cloudflare One (Zero Trust)
- * @section Managing logging settings
- * @example Log everything, keep PII
+ * ### Managing logging settings
+ * **Example:** Log everything, keep PII
  * ```typescript
  * yield* Cloudflare.Gateway.Logging("Logging", {
  *   redactPii: false,
@@ -101,7 +91,7 @@ export type Logging = Resource<
  * });
  * ```
  *
- * @example Only log blocked DNS queries, redacting PII
+ * **Example:** Only log blocked DNS queries, redacting PII
  * ```typescript
  * yield* Cloudflare.Gateway.Logging("Logging", {
  *   redactPii: true,
@@ -112,6 +102,10 @@ export type Logging = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/logs/gateway-logs/
+ *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  */
 export const Logging = Resource<Logging>(TypeId);
 
@@ -211,9 +205,7 @@ const observeLogging = (accountId: string) =>
 const putLogging = (accountId: string, snapshot: LoggingSnapshot) =>
   zeroTrust.putGatewayLogging({
     accountId,
-    ...(snapshot.redactPii !== undefined
-      ? { redactPii: snapshot.redactPii }
-      : {}),
+    ...(snapshot.redactPii !== undefined ? { redactPii: snapshot.redactPii } : {}),
     settingsByRuleType: {
       ...(snapshot.dns !== undefined ? { dns: snapshot.dns } : {}),
       ...(snapshot.http !== undefined ? { http: snapshot.http } : {}),
@@ -227,10 +219,7 @@ const RULE_TYPES = ["dns", "http", "l4"] as const;
  * Overlay the declared (non-undefined) fields onto the observed snapshot,
  * merging per-rule-type blocks field-by-field.
  */
-const mergeSnapshot = (
-  observed: LoggingSnapshot,
-  declared: LoggingSnapshot,
-): LoggingSnapshot => {
+const mergeSnapshot = (observed: LoggingSnapshot, declared: LoggingSnapshot): LoggingSnapshot => {
   const merged: LoggingSnapshot =
     observed.redactPii !== undefined ? { redactPii: observed.redactPii } : {};
   if (declared.redactPii !== undefined) merged.redactPii = declared.redactPii;

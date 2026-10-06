@@ -19,14 +19,15 @@ export interface UpdateSubscriptionRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.UpdateSubscriptionHttp)`.
  *
- * @binding
- * @section Subscriptions
- * @example Change a Subscription Tier
+ * ### Subscriptions
+ * **Example:** Change a Subscription Tier
  * ```typescript
  * const updateSubscription = yield* AWS.QBusiness.UpdateSubscription(app);
  *
  * yield* updateSubscription({ subscriptionId, type: "Q_LITE" });
  * ```
+ *
+ * @binding
  */
 export interface UpdateSubscription extends Binding.Service<
   UpdateSubscription,
@@ -36,10 +37,7 @@ export interface UpdateSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateSubscriptionRequest,
-    ) => Effect.Effect<
-      qbusiness.UpdateSubscriptionResponse,
-      qbusiness.UpdateSubscriptionError
-    >
+    ) => Effect.Effect<qbusiness.UpdateSubscriptionResponse, qbusiness.UpdateSubscriptionError>
   >
 > {}
 export const UpdateSubscription = Binding.Service<UpdateSubscription>(

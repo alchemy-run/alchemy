@@ -6,8 +6,8 @@ import * as S from "effect/Schema";
 
 export const sql = AI.Parameter("sql", S.String)`The SQL query to execute.`;
 
-export class Sql extends AI.Tool<Sql>()("sql")`
-Execute a ${sql} query on the database and return the result.` {}
+export class Sql extends (AI.Tool<Sql>()("sql")`
+Execute a ${sql} query on the database and return the result.`) {}
 
 export const SqlDurableObjectLive = Layer.effect(
   Sql,
@@ -19,9 +19,7 @@ export const SqlDurableObjectLive = Layer.effect(
       yield* object.storage.sql.exec("CREATE TABLE IF NOT EXIST ...");
 
       return ({ sql }) =>
-        object.storage.sql
-          .exec(sql)
-          .pipe(Effect.flatMap((result) => result.toArray()));
+        object.storage.sql.exec(sql).pipe(Effect.flatMap((result) => result.toArray()));
     });
   }),
 );

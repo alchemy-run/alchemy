@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { FeatureGroup } from "./FeatureGroup.ts";
 
-export interface PutRecordRequest extends Omit<
-  featurestore.PutRecordRequest,
-  "FeatureGroupName"
-> {}
+export interface PutRecordRequest extends Omit<featurestore.PutRecordRequest, "FeatureGroupName"> {}
 
 /**
  * Runtime binding for `sagemaker:PutRecord` — write a record to a
@@ -16,9 +13,8 @@ export interface PutRecordRequest extends Omit<
  * callable that automatically injects the feature group name. Every feature
  * value is passed as a string (`ValueAsString`) — the feature group's schema
  * declares the actual types.
- * @binding
- * @section Writing Records
- * @example Put a Record
+ * ### Writing Records
+ * **Example:** Put a Record
  * ```typescript
  * // init
  * const putRecord = yield* AWS.SageMaker.PutRecord(featureGroup);
@@ -32,6 +28,8 @@ export interface PutRecordRequest extends Omit<
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutRecord extends Binding.Service<
   PutRecord,
@@ -41,10 +39,7 @@ export interface PutRecord extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutRecordRequest,
-    ) => Effect.Effect<
-      featurestore.PutRecordResponse,
-      featurestore.PutRecordError
-    >
+    ) => Effect.Effect<featurestore.PutRecordResponse, featurestore.PutRecordError>
   >
 > {}
 export const PutRecord = Binding.Service<PutRecord>("AWS.SageMaker.PutRecord");

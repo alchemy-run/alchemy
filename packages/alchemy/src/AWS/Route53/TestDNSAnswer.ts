@@ -7,10 +7,7 @@ import type { HostedZone } from "./HostedZone.ts";
  * `TestDNSAnswer` request with `HostedZoneId` injected from the bound
  * {@link HostedZone}.
  */
-export interface TestDNSAnswerRequest extends Omit<
-  route53.TestDNSAnswerRequest,
-  "HostedZoneId"
-> {}
+export interface TestDNSAnswerRequest extends Omit<route53.TestDNSAnswerRequest, "HostedZoneId"> {}
 
 /**
  * Runtime binding for the `TestDNSAnswer` operation (IAM action
@@ -23,9 +20,8 @@ export interface TestDNSAnswerRequest extends Omit<
  * {@link ChangeResourceRecordSets} without waiting for public DNS. Public
  * zones only. Provide the implementation with
  * `Effect.provide(AWS.Route53.TestDNSAnswerHttp)`.
- * @binding
- * @section Inspecting Zones
- * @example Verify a record answers
+ * ### Inspecting Zones
+ * **Example:** Verify a record answers
  * ```typescript
  * const testDnsAnswer = yield* AWS.Route53.TestDNSAnswer(zone);
  *
@@ -35,6 +31,8 @@ export interface TestDNSAnswerRequest extends Omit<
  * });
  * // answer.ResponseCode -> "NOERROR", answer.RecordData -> the values
  * ```
+ *
+ * @binding
  */
 export interface TestDNSAnswer extends Binding.Service<
   TestDNSAnswer,
@@ -44,12 +42,7 @@ export interface TestDNSAnswer extends Binding.Service<
   ) => Effect.Effect<
     (
       request: TestDNSAnswerRequest,
-    ) => Effect.Effect<
-      route53.TestDNSAnswerResponse,
-      route53.TestDNSAnswerError
-    >
+    ) => Effect.Effect<route53.TestDNSAnswerResponse, route53.TestDNSAnswerError>
   >
 > {}
-export const TestDNSAnswer = Binding.Service<TestDNSAnswer>(
-  "AWS.Route53.TestDNSAnswer",
-);
+export const TestDNSAnswer = Binding.Service<TestDNSAnswer>("AWS.Route53.TestDNSAnswer");

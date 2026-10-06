@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.AcceptInvitationHttp)`.
- * @binding
- * @section Administrator & Invitations
- * @example Accept an Administrator's Invitation
+ * ### Administrator & Invitations
+ * **Example:** Accept an Administrator's Invitation
  * ```typescript
  * // init — account-level binding, no resource argument
  * const acceptInvitation = yield* AWS.Macie2.AcceptInvitation();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* acceptInvitation({ administratorAccountId, invitationId });
  * ```
+ *
+ * @binding
  */
 export interface AcceptInvitation extends Binding.Service<
   AcceptInvitation,
@@ -26,12 +27,7 @@ export interface AcceptInvitation extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.AcceptInvitationRequest,
-    ) => Effect.Effect<
-      macie2.AcceptInvitationResponse,
-      macie2.AcceptInvitationError
-    >
+    ) => Effect.Effect<macie2.AcceptInvitationResponse, macie2.AcceptInvitationError>
   >
 > {}
-export const AcceptInvitation = Binding.Service<AcceptInvitation>(
-  "AWS.Macie2.AcceptInvitation",
-);
+export const AcceptInvitation = Binding.Service<AcceptInvitation>("AWS.Macie2.AcceptInvitation");

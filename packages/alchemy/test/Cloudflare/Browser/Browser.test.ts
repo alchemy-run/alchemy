@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -23,18 +23,13 @@ const readJson = (url: string) =>
       res.status === 200
         ? res.json
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
   ).pipe(
     Effect.retry({
       while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(20)]),
     }),
   );
 
@@ -53,7 +48,10 @@ test(
     expect(body.mode).toBe("async");
     expect(body.title).toBe("Example Domain");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -68,7 +66,10 @@ test(
     expect(body.title).toBe("Example Domain");
     expect(body.contentLength).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -81,7 +82,10 @@ test(
 
     expect(body.markdownLength).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -94,7 +98,10 @@ test(
 
     expect(body.linkCount).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -102,12 +109,15 @@ test(
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
     const body = (yield* readJson(`${effectWorkerUrl}/scrape`)) as {
-      heading: string | null;
+      text: string | null;
     };
 
-    expect(body.heading).toBe("Example Domain");
+    expect(body.text).toBe("Learn more");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -122,7 +132,10 @@ test(
     expect(body.title).toBe("Example Domain");
     expect(body.screenshotLength).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -135,7 +148,10 @@ test(
 
     expect(body.bytes).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -148,7 +164,10 @@ test(
 
     expect(body.bytes).toBeGreaterThan(0);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -161,7 +180,10 @@ test(
 
     expect(body.success).toBe(true);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -174,7 +196,10 @@ test(
 
     expect(body.title).toBe("Example Domain");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -187,5 +212,8 @@ test(
 
     expect(body.title).toBe("Example Domain");
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

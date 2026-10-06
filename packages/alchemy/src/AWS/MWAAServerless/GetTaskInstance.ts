@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link GetTaskInstance} runtime callable. The
  * `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type GetTaskInstanceInput = Omit<
-  mwaa.GetTaskInstanceRequest,
-  "WorkflowArn"
->;
+export type GetTaskInstanceInput = Omit<mwaa.GetTaskInstanceRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:GetTaskInstance`.
@@ -19,9 +16,8 @@ export type GetTaskInstanceInput = Omit<
  * {@link Workflow} — its status, attempt number, timings, error message,
  * log stream, and XCom values. Provide the implementation with
  * `Effect.provide(AWS.MWAAServerless.GetTaskInstanceHttp)`.
- * @binding
- * @section Observing Tasks
- * @example Read A Task Instance
+ * ### Observing Tasks
+ * **Example:** Read A Task Instance
  * ```typescript
  * // init — bind the operation to the workflow
  * const getTaskInstance = yield* AWS.MWAAServerless.GetTaskInstance(workflow);
@@ -33,6 +29,8 @@ export type GetTaskInstanceInput = Omit<
  * });
  * yield* Effect.log(`task ${task.TaskId}: ${task.Status}`);
  * ```
+ *
+ * @binding
  */
 export interface GetTaskInstance extends Binding.Service<
   GetTaskInstance,

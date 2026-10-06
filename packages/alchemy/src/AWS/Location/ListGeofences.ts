@@ -19,15 +19,16 @@ export interface ListGeofencesRequest extends Omit<
  * `geo:ListGeofences`), scoped to one {@link GeofenceCollection}. Provide the implementation with
  * `Effect.provide(AWS.Location.ListGeofencesHttp)`.
  *
- * @binding
- * @section Reading Geofences
- * @example List Geofences
+ * ### Reading Geofences
+ * **Example:** List Geofences
  * ```typescript
  * const listGeofences = yield* Location.ListGeofences(collection);
  *
  * const page = yield* listGeofences();
  * // page.Entries → [{ GeofenceId, Geometry, Status }, …]
  * ```
+ *
+ * @binding
  */
 export interface ListGeofences extends Binding.Service<
   ListGeofences,
@@ -37,12 +38,7 @@ export interface ListGeofences extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListGeofencesRequest,
-    ) => Effect.Effect<
-      location.ListGeofencesResponse,
-      location.ListGeofencesError
-    >
+    ) => Effect.Effect<location.ListGeofencesResponse, location.ListGeofencesError>
   >
 > {}
-export const ListGeofences = Binding.Service<ListGeofences>(
-  "AWS.Location.ListGeofences",
-);
+export const ListGeofences = Binding.Service<ListGeofences>("AWS.Location.ListGeofences");

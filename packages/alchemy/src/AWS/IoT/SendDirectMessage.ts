@@ -2,8 +2,7 @@ import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface SendDirectMessageRequest
-  extends iotdata.SendDirectMessageRequest {}
+export interface SendDirectMessageRequest extends iotdata.SendDirectMessageRequest {}
 
 /**
  * Runtime binding for the IoT data-plane `SendDirectMessage` operation (IAM
@@ -14,9 +13,8 @@ export interface SendDirectMessageRequest
  * a callable that delivers a message directly to a connected client without
  * publishing through a topic. Provide the implementation with
  * `Effect.provide(AWS.IoT.SendDirectMessageHttp)`.
- * @binding
- * @section MQTT Connections
- * @example Send a Command to a Device
+ * ### MQTT Connections
+ * **Example:** Send a Command to a Device
  * ```typescript
  * const sendDirectMessage = yield* AWS.IoT.SendDirectMessage("sensor-*");
  *
@@ -26,6 +24,8 @@ export interface SendDirectMessageRequest
  *   payload: JSON.stringify({ at: "now" }),
  * });
  * ```
+ *
+ * @binding
  */
 export interface SendDirectMessage extends Binding.Service<
   SendDirectMessage,
@@ -35,13 +35,8 @@ export interface SendDirectMessage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendDirectMessageRequest,
-    ) => Effect.Effect<
-      iotdata.SendDirectMessageResponse,
-      iotdata.SendDirectMessageError
-    >
+    ) => Effect.Effect<iotdata.SendDirectMessageResponse, iotdata.SendDirectMessageError>
   >
 > {}
 
-export const SendDirectMessage = Binding.Service<SendDirectMessage>(
-  "AWS.IoT.SendDirectMessage",
-);
+export const SendDirectMessage = Binding.Service<SendDirectMessage>("AWS.IoT.SendDirectMessage");

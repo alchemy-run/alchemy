@@ -17,9 +17,8 @@ export interface DescribePackageRequest extends Omit<
  *
  * Reads a package's description, including its origin configuration, from the bound repository. Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.DescribePackageHttp)`.
- * @binding
- * @section Inspecting Packages
- * @example Describe a Package
+ * ### Inspecting Packages
+ * **Example:** Describe a Package
  * ```typescript
  * const describePackage = yield* AWS.CodeArtifact.DescribePackage(repo);
  *
@@ -30,6 +29,8 @@ export interface DescribePackageRequest extends Omit<
  * });
  * console.log(res.package?.originConfiguration);
  * ```
+ *
+ * @binding
  */
 export interface DescribePackage extends Binding.Service<
   DescribePackage,
@@ -39,13 +40,8 @@ export interface DescribePackage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribePackageRequest,
-    ) => Effect.Effect<
-      codeartifact.DescribePackageResult,
-      codeartifact.DescribePackageError
-    >
+    ) => Effect.Effect<codeartifact.DescribePackageResult, codeartifact.DescribePackageError>
   >
 > {}
 
-export const DescribePackage = Binding.Service<DescribePackage>(
-  "AWS.CodeArtifact.DescribePackage",
-);
+export const DescribePackage = Binding.Service<DescribePackage>("AWS.CodeArtifact.DescribePackage");

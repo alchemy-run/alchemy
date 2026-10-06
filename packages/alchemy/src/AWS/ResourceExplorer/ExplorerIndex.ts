@@ -61,20 +61,20 @@ export interface Index extends Resource<
  * The first index created in an account also creates the
  * `AWSServiceRoleForResourceExplorer` service-linked role.
  *
- * @section Turning on Resource Explorer
- * @example Local index
+ * ### Turning on Resource Explorer
+ * **Example:** Local index
  * ```typescript
  * const index = yield* AWS.ResourceExplorer.Index("Index", {});
  * ```
  *
- * @example Aggregator index for cross-region search
+ * **Example:** Aggregator index for cross-region search
  * ```typescript
  * const index = yield* AWS.ResourceExplorer.Index("Index", {
  *   type: "AGGREGATOR",
  * });
  * ```
  *
- * @section Searching
+ * ### Searching
  * Search always goes through a view — see `AWS.ResourceExplorer.View` and
  * the `AWS.ResourceExplorer.Search` binding.
  */
@@ -177,16 +177,11 @@ export const IndexProvider = () =>
           //    a race with a peer create and a previous index still
           //    DELETING; retry bounded, then fall through to observation.
           if (live === undefined) {
-            yield* retryWhileConflict(
-              re2.createIndex({ Tags: desiredTags }),
-            ).pipe(
+            yield* retryWhileConflict(re2.createIndex({ Tags: desiredTags })).pipe(
               Effect.catchTag("ConflictException", () => Effect.void),
               Effect.asVoid,
             );
-            live = yield* repeatUntil(
-              re2.getIndex({}),
-              (r) => r.State === "ACTIVE",
-            );
+            live = yield* repeatUntil(re2.getIndex({}), (r) => r.State === "ACTIVE");
           }
 
           // 3. SYNC TYPE — LOCAL <-> AGGREGATOR is an in-place update.
@@ -194,13 +189,8 @@ export const IndexProvider = () =>
           //    settle back to ACTIVE; if they take longer, return the
           //    observed UPDATING state and converge on the next deploy.
           if ((live.Type ?? "LOCAL") !== desiredType) {
-            yield* retryWhileConflict(
-              re2.updateIndexType({ Arn: live.Arn!, Type: desiredType }),
-            );
-            live = yield* repeatUntil(
-              re2.getIndex({}),
-              (r) => r.State === "ACTIVE",
-            );
+            yield* retryWhileConflict(re2.updateIndexType({ Arn: live.Arn!, Type: desiredType }));
+            live = yield* repeatUntil(re2.getIndex({}), (r) => r.State === "ACTIVE");
           }
 
           // 4. SYNC TAGS — diff against OBSERVED cloud tags so adoption

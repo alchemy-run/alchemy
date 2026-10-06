@@ -9,9 +9,8 @@ import type { EventDataStore } from "./EventDataStore.ts";
  * Reads one page of a finished CloudTrail Lake query's result rows — use
  * `NextToken`/`MaxQueryResults` to paginate large results. Provide the
  * implementation with `Effect.provide(AWS.CloudTrail.GetQueryResultsHttp)`.
- * @binding
- * @section Querying CloudTrail Lake
- * @example Read Query Results
+ * ### Querying CloudTrail Lake
+ * **Example:** Read Query Results
  * ```typescript
  * // init — bind the operation to the event data store
  * const getQueryResults = yield* AWS.CloudTrail.GetQueryResults(store);
@@ -20,6 +19,8 @@ import type { EventDataStore } from "./EventDataStore.ts";
  * const page = yield* getQueryResults({ QueryId: queryId });
  * console.log(page.QueryResultRows?.length);
  * ```
+ *
+ * @binding
  */
 export interface GetQueryResults extends Binding.Service<
   GetQueryResults,
@@ -29,12 +30,7 @@ export interface GetQueryResults extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<cloudtrail.GetQueryResultsRequest, "EventDataStore">,
-    ) => Effect.Effect<
-      cloudtrail.GetQueryResultsResponse,
-      cloudtrail.GetQueryResultsError
-    >
+    ) => Effect.Effect<cloudtrail.GetQueryResultsResponse, cloudtrail.GetQueryResultsError>
   >
 > {}
-export const GetQueryResults = Binding.Service<GetQueryResults>(
-  "AWS.CloudTrail.GetQueryResults",
-);
+export const GetQueryResults = Binding.Service<GetQueryResults>("AWS.CloudTrail.GetQueryResults");

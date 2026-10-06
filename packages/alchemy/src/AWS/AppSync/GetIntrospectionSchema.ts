@@ -14,15 +14,16 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
  * `AppSync.GetIntrospectionSchemaHttp` on the hosting function's Effect to
  * implement the binding.
  *
- * @binding
- * @section Reading the Schema
- * @example Fetch the API's SDL at runtime
+ * ### Reading the Schema
+ * **Example:** Fetch the API's SDL at runtime
  * ```typescript
  * const getSchema = yield* AppSync.GetIntrospectionSchema(api);
  *
  * const response = yield* getSchema({ format: "SDL" });
  * const sdl = yield* Stream.mkString(Stream.decodeText(response.schema!));
  * ```
+ *
+ * @binding
  */
 export interface GetIntrospectionSchema extends Binding.Service<
   GetIntrospectionSchema,
@@ -32,10 +33,7 @@ export interface GetIntrospectionSchema extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<appsync.GetIntrospectionSchemaRequest, "apiId">,
-    ) => Effect.Effect<
-      appsync.GetIntrospectionSchemaResponse,
-      appsync.GetIntrospectionSchemaError
-    >
+    ) => Effect.Effect<appsync.GetIntrospectionSchemaResponse, appsync.GetIntrospectionSchemaError>
   >
 > {}
 export const GetIntrospectionSchema = Binding.Service<GetIntrospectionSchema>(

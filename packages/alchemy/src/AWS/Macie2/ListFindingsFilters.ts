@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListFindingsFiltersHttp)`.
- * @binding
- * @section Custom Data Identifiers & Lists
- * @example List Findings Filters
+ * ### Custom Data Identifiers & Lists
+ * **Example:** List Findings Filters
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listFindingsFilters = yield* AWS.Macie2.ListFindingsFilters();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { findingsFilterListItems } = yield* listFindingsFilters();
  * ```
+ *
+ * @binding
  */
 export interface ListFindingsFilters extends Binding.Service<
   ListFindingsFilters,
@@ -26,10 +27,7 @@ export interface ListFindingsFilters extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.ListFindingsFiltersRequest,
-    ) => Effect.Effect<
-      macie2.ListFindingsFiltersResponse,
-      macie2.ListFindingsFiltersError
-    >
+    ) => Effect.Effect<macie2.ListFindingsFiltersResponse, macie2.ListFindingsFiltersError>
   >
 > {}
 export const ListFindingsFilters = Binding.Service<ListFindingsFilters>(

@@ -20,9 +20,8 @@ export interface StopIngestionJobRequest extends Omit<
  * The binding grants the function `bedrock:StopIngestionJob` scoped to the
  * data source's parent knowledge base.
  *
- * @binding
- * @section Syncing a Data Source
- * @example Stop a Running Ingestion Job
+ * ### Syncing a Data Source
+ * **Example:** Stop a Running Ingestion Job
  * ```typescript
  * // init
  * const stopIngestionJob = yield* Bedrock.StopIngestionJob(dataSource);
@@ -32,6 +31,8 @@ export interface StopIngestionJobRequest extends Omit<
  *   ingestionJobId: jobId,
  * });
  * ```
+ *
+ * @binding
  */
 export interface StopIngestionJob extends Binding.Service<
   StopIngestionJob,
@@ -41,12 +42,7 @@ export interface StopIngestionJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StopIngestionJobRequest,
-    ) => Effect.Effect<
-      bedrock.StopIngestionJobResponse,
-      bedrock.StopIngestionJobError
-    >
+    ) => Effect.Effect<bedrock.StopIngestionJobResponse, bedrock.StopIngestionJobError>
   >
 > {}
-export const StopIngestionJob = Binding.Service<StopIngestionJob>(
-  "AWS.Bedrock.StopIngestionJob",
-);
+export const StopIngestionJob = Binding.Service<StopIngestionJob>("AWS.Bedrock.StopIngestionJob");

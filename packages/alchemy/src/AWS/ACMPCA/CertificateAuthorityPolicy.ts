@@ -5,10 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CertificateAuthorityPolicyProps {
@@ -48,9 +45,8 @@ export interface CertificateAuthorityPolicy extends Resource<
  * policy Amazon Web Services Resource Access Manager (RAM) manages when a
  * CA is shared; attach it directly for fine-grained control.
  *
- * @resource
- * @section Attaching a CA Policy
- * @example Allow Another Account to Issue Certificates
+ * ### Attaching a CA Policy
+ * **Example:** Allow Another Account to Issue Certificates
  * ```typescript
  * import * as ACMPCA from "alchemy/AWS/ACMPCA";
  *
@@ -76,6 +72,8 @@ export interface CertificateAuthorityPolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const CertificateAuthorityPolicy = Resource<CertificateAuthorityPolicy>(
   "AWS.ACMPCA.CertificateAuthorityPolicy",
@@ -91,9 +89,8 @@ export const CertificateAuthorityPolicyProvider = () =>
       const observe = (certificateAuthorityArn: string) =>
         acmpca.getPolicy({ ResourceArn: certificateAuthorityArn }).pipe(
           Effect.map((response) => response.Policy),
-          Effect.catchTag(
-            ["ResourceNotFoundException", "InvalidStateException"],
-            () => Effect.succeed(undefined),
+          Effect.catchTag(["ResourceNotFoundException", "InvalidStateException"], () =>
+            Effect.succeed(undefined),
           ),
         );
 
@@ -124,9 +121,7 @@ export const CertificateAuthorityPolicyProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk)
-                  .filter(
-                    (ca) => ca.Arn !== undefined && ca.Status !== "DELETED",
-                  )
+                  .filter((ca) => ca.Arn !== undefined && ca.Status !== "DELETED")
                   .map((ca) => ca.Arn!),
               ),
             );
@@ -135,9 +130,7 @@ export const CertificateAuthorityPolicyProvider = () =>
               (arn) =>
                 observe(arn).pipe(
                   Effect.map((policy) =>
-                    policy === undefined
-                      ? []
-                      : [{ certificateAuthorityArn: arn, policy }],
+                    policy === undefined ? [] : [{ certificateAuthorityArn: arn, policy }],
                   ),
                 ),
               { concurrency: 5 },
@@ -155,8 +148,7 @@ export const CertificateAuthorityPolicyProvider = () =>
           const observed = yield* observe(certificateAuthorityArn);
           if (
             observed === undefined ||
-            normalizePolicyDocument(observed) !==
-              normalizePolicyDocument(desired)
+            normalizePolicyDocument(observed) !== normalizePolicyDocument(desired)
           ) {
             yield* acmpca.putPolicy({
               ResourceArn: certificateAuthorityArn,
@@ -168,17 +160,15 @@ export const CertificateAuthorityPolicyProvider = () =>
           return { certificateAuthorityArn, policy: desired };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* acmpca
-            .deletePolicy({ ResourceArn: output.certificateAuthorityArn })
-            .pipe(
-              // CA already gone, no policy attached, or CA in a state
-              // (DELETED) where the policy is no longer addressable — the
-              // policy is gone with it.
-              Effect.catchTag(
-                ["ResourceNotFoundException", "InvalidStateException"],
-                () => Effect.void,
-              ),
-            );
+          yield* acmpca.deletePolicy({ ResourceArn: output.certificateAuthorityArn }).pipe(
+            // CA already gone, no policy attached, or CA in a state
+            // (DELETED) where the policy is no longer addressable — the
+            // policy is gone with it.
+            Effect.catchTag(
+              ["ResourceNotFoundException", "InvalidStateException"],
+              () => Effect.void,
+            ),
+          );
         }),
       };
     }),

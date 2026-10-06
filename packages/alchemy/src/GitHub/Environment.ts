@@ -62,9 +62,7 @@ export interface EnvironmentProps {
    * branches with branch protection rules, or `customBranchPolicies` to a
    * list of branch name patterns (e.g. `["main", "release/*"]`).
    */
-  deploymentBranchPolicy?:
-    | { protectedBranches: true }
-    | { customBranchPolicies: string[] };
+  deploymentBranchPolicy?: { protectedBranches: true } | { customBranchPolicies: string[] };
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -130,9 +128,8 @@ export interface Environment extends Resource<
  * Authentication is resolved via the `GitHubCredentials` service supplied
  * by `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token
  * needs `repo` scope.
- * @resource
- * @section Creating an Environment
- * @example Basic Environment
+ * ### Creating an Environment
+ * **Example:** Basic Environment
  * ```typescript
  * const production = yield* GitHub.Environment("production", {
  *   owner: "my-org",
@@ -141,7 +138,7 @@ export interface Environment extends Resource<
  * });
  * ```
  *
- * @example Environment with Protection Rules
+ * **Example:** Environment with Protection Rules
  * ```typescript
  * yield* GitHub.Environment("production", {
  *   owner: "my-org",
@@ -156,8 +153,8 @@ export interface Environment extends Resource<
  * });
  * ```
  *
- * @section Deployment Branch Policies
- * @example Restrict to Protected Branches
+ * ### Deployment Branch Policies
+ * **Example:** Restrict to Protected Branches
  * ```typescript
  * yield* GitHub.Environment("production", {
  *   owner: "my-org",
@@ -167,7 +164,7 @@ export interface Environment extends Resource<
  * });
  * ```
  *
- * @example Restrict to Branch Name Patterns
+ * **Example:** Restrict to Branch Name Patterns
  * ```typescript
  * yield* GitHub.Environment("production", {
  *   owner: "my-org",
@@ -179,8 +176,8 @@ export interface Environment extends Resource<
  * });
  * ```
  *
- * @section Environment Secrets and Variables
- * @example Scope Secrets and Variables to the Environment
+ * ### Environment Secrets and Variables
+ * **Example:** Scope Secrets and Variables to the Environment
  * ```typescript
  * const env = yield* GitHub.Environment("production", {
  *   owner: "my-org",
@@ -204,6 +201,9 @@ export interface Environment extends Resource<
  *   value: "us-east-1",
  * });
  * ```
+ *
+ * @resource
+ * @product Actions
  */
 export const Environment = Resource<Environment>("GitHub.Environment");
 
@@ -216,11 +216,7 @@ export const resolveEnvironmentName = (
   environment: string | Environment | undefined,
 ): string | undefined => {
   const ref = environment as unknown as string | { name: string } | undefined;
-  return ref === undefined
-    ? undefined
-    : typeof ref === "string"
-      ? ref
-      : ref.name;
+  return ref === undefined ? undefined : typeof ref === "string" ? ref : ref.name;
 };
 
 export const EnvironmentProvider = () =>
@@ -282,8 +278,7 @@ export const EnvironmentProvider = () =>
             environment_name: news.name,
             wait_timer: news.waitTimer ?? 0,
             prevent_self_review: news.preventSelfReview ?? false,
-            reviewers:
-              reviewers === null || reviewers.length === 0 ? null : reviewers,
+            reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers,
             deployment_branch_policy:
               news.deploymentBranchPolicy === undefined
                 ? null
@@ -316,9 +311,7 @@ export const EnvironmentProvider = () =>
                 per_page: 100,
               },
             );
-            const observedNames = new Set(
-              observed.map((policy) => policy.name),
-            );
+            const observedNames = new Set(observed.map((policy) => policy.name));
             for (const name of desired) {
               if (!observedNames.has(name)) {
                 await octokit.rest.repos.createDeploymentBranchPolicy({

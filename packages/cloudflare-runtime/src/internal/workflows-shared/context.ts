@@ -1,16 +1,32 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
+// Alchemy modifications: uses Array<T> syntax for non-tuple array types to match the repository convention.
 import { RpcTarget } from "cloudflare:workers";
+import type {
+  WorkflowBackoff,
+  WorkflowDelayDuration,
+  WorkflowDelayFunction,
+  WorkflowSleepDuration,
+  WorkflowStepConfig,
+  WorkflowStepEvent,
+  WorkflowStepSensitivity,
+  WorkflowTimeoutDuration,
+} from "cloudflare:workers";
 import { ms } from "itty-time";
-import {
-  INSTANCE_METADATA,
-  InstanceEvent,
-  InstanceStatus,
-} from "./instance.ts";
+import type { Engine } from "./engine.ts";
+import { INSTANCE_METADATA, InstanceEvent, InstanceStatus } from "./instance.ts";
+import type { InstanceMetadata } from "./instance.ts";
 import { computeHash } from "./lib/cache.ts";
+import {
+  DEFAULT_RETRY_DELAY_MS,
+  DELAY_FUNCTION_TIMEOUT_MS,
+  invokeDelayFunction,
+  raceAgainstAbort,
+} from "./lib/delay.ts";
 import {
   ABORT_REASONS,
   InvalidStepReadableStreamError,
+  NonRetryableDelayError,
   OversizedStreamChunkError,
   PreservedNonRetryableError,
   shouldPreserveNonRetryableError,
@@ -20,12 +36,10 @@ import {
   WorkflowInternalError,
   WorkflowTimeoutError,
 } from "./lib/errors.ts";
-import { calcRetryDuration } from "./lib/retries.ts";
-import {
-  parseRollbackOptions,
-  registerRollbackFn,
-  ROLLBACK_CACHE_KEY_PREFIX,
-} from "./lib/rollback.ts";
+import { calcRetryDuration, DelayFunctionError } from "./lib/retries.ts";
+import { parseRollbackOptions, ROLLBACK_CACHE_KEY_PREFIX } from "./lib/rollback.ts";
+import type { RollbackFn, WorkflowStepRollbackOptions } from "./lib/rollback.ts";
+import { normalizeForStorage } from "./lib/serialization.ts";
 import {
   cleanupPendingStreamOutput,
   createReplayReadableStream,
@@ -36,24 +50,14 @@ import {
   StreamOutputState,
   writeStreamOutput,
 } from "./lib/streams.ts";
+import type { StreamOutputMeta } from "./lib/streams.ts";
 import {
   isValidStepConfig,
   isValidStepName,
   MAX_STEP_NAME_LENGTH,
+  SENSITIVE_STEP_OUTPUT,
 } from "./lib/validators.ts";
 import { MODIFIER_KEYS } from "./modifier.ts";
-import type { Engine } from "./engine.ts";
-import type { InstanceMetadata } from "./instance.ts";
-import type {
-  RollbackFn,
-  WorkflowStepRollbackOptions,
-} from "./lib/rollback.ts";
-import type { StreamOutputMeta } from "./lib/streams.ts";
-import type {
-  WorkflowSleepDuration,
-  WorkflowStepConfig,
-  WorkflowStepEvent,
-} from "cloudflare:workers";
 
 export type Event = {
   timestamp: Date;
@@ -61,10 +65,69 @@ export type Event = {
   type: string;
 };
 
-export type ResolvedStepConfig = Required<
-  Pick<WorkflowStepConfig, "retries" | "timeout">
-> &
-  Pick<WorkflowStepConfig, "sensitive">;
+// Persisted in place of a dynamic delay function (functions can't be
+// serialized); the live function is re-read from the user's step config on each
+// execution.
+const SERIALIZABLE_DELAY_MARKER = "[dynamic]";
+type SerializableDelayMarker = typeof SERIALIZABLE_DELAY_MARKER;
+
+export const REDACTED_STEP_OUTPUT = "[REDACTED]";
+
+// The persisted, fully-merged config. A dynamic delay is stored as the marker.
+export type ResolvedStepConfig = {
+  retries: {
+    limit: number;
+    delay: WorkflowDelayDuration | SerializableDelayMarker;
+    backoff?: WorkflowBackoff;
+  };
+  timeout: WorkflowTimeoutDuration;
+  sensitive?: WorkflowStepSensitivity;
+};
+
+// The user-facing config (passed to step callbacks). The dynamic-delay marker is
+// never exposed: `delay` is omitted entirely when the delay is a function.
+export type EngineStepConfig = {
+  retries: {
+    limit: number;
+    delay?: WorkflowDelayDuration;
+    backoff?: WorkflowBackoff;
+  };
+  timeout: WorkflowTimeoutDuration;
+  sensitive?: WorkflowStepSensitivity;
+};
+
+export function toEngineStepConfig(config: ResolvedStepConfig): EngineStepConfig {
+  const { delay, ...retries } = config.retries;
+  if (
+    typeof delay === "number" ||
+    (typeof delay === "string" && delay !== SERIALIZABLE_DELAY_MARKER)
+  ) {
+    return { ...config, retries: { ...retries, delay } };
+  }
+  return { ...config, retries };
+}
+
+// Signal-aware wrapper around the global `scheduler.wait`. `scheduler.wait`
+// can't itself be cancelled, so an aborted signal resolves the returned promise
+// early and the dangling timer becomes a no-op.
+function schedulerWait(durationMs: number, opts?: { signal?: AbortSignal }): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const signal = opts?.signal;
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = (): void => {
+      if (!done) {
+        done = true;
+        resolve();
+      }
+    };
+    void scheduler.wait(durationMs).then(finish);
+    signal?.addEventListener("abort", finish, { once: true });
+  });
+}
 
 const defaultConfig: ResolvedStepConfig = {
   retries: {
@@ -74,103 +137,6 @@ const defaultConfig: ResolvedStepConfig = {
   },
   timeout: "10 minutes",
 };
-
-/**
- * Returns a copy of `value` that is safe to persist via Durable Object SQL
- * storage without dragging unrelated bytes along with typed-array views.
- *
- * Background: workerd's `v8::ValueSerializer` writes the entire backing
- * `ArrayBuffer` for typed-array views, not just `byteLength` bytes. A view
- * sliced from a much larger buffer (`crypto.getRandomValues`, `arr.slice(...)`,
- * fetch-stream copies) blows up the wire size by a factor of
- * (backing-size / view-size) and can hit `SQLITE_TOOBIG` at view sizes well
- * below the documented 1MiB step-output limit (see issue #14101). Copying the
- * view's bytes into a tight backing buffer before persistence brings local
- * `wrangler dev` behaviour in line with production.
- *
- * The walk is recursive (cycle-safe via a `WeakMap`) so views nested inside
- * objects, arrays, Maps, and Sets are also compacted. View types are preserved
- * (`Uint8Array` stays `Uint8Array`, `Int16Array` stays `Int16Array`, etc.) so
- * the persisted shape matches the live shape — cached replays observe the
- * same constructor type the step originally returned. Class instances and
- * host objects (`Date`, `RegExp`, raw `ArrayBuffer`, streams, `Blob`, …) are
- * passed through unchanged — recursing into them would either fail to
- * reconstruct the original type or trigger their own structured-clone path.
- */
-function normalizeForStorage(
-  value: unknown,
-  seen: WeakMap<object, unknown> = new WeakMap(),
-): unknown {
-  // Primitives: nothing to do.
-  if (value === null || typeof value !== "object") {
-    return value;
-  }
-
-  // Already visited (cycle): return the previously-built copy so the result
-  // graph mirrors the original's cycle topology.
-  if (seen.has(value)) {
-    return seen.get(value);
-  }
-
-  // Typed-array views (TypedArray + DataView): copy bytes into a tight
-  // backing buffer, preserving the original view constructor.
-  if (ArrayBuffer.isView(value)) {
-    return buildCompactView(value);
-  }
-
-  if (Array.isArray(value)) {
-    const result: Array<unknown> = [];
-    seen.set(value, result);
-    for (const item of value) {
-      result.push(normalizeForStorage(item, seen));
-    }
-    return result;
-  }
-
-  if (value instanceof Map) {
-    const result = new Map();
-    seen.set(value, result);
-    for (const [k, v] of value) {
-      result.set(normalizeForStorage(k, seen), normalizeForStorage(v, seen));
-    }
-    return result;
-  }
-
-  if (value instanceof Set) {
-    const result = new Set();
-    seen.set(value, result);
-    for (const v of value) {
-      result.add(normalizeForStorage(v, seen));
-    }
-    return result;
-  }
-
-  // Plain objects (Object literals and null-prototype objects). Class
-  // instances and host objects fall through to the pass-through below.
-  const proto = Object.getPrototypeOf(value);
-  if (proto === Object.prototype || proto === null) {
-    const result: Record<string, unknown> = {};
-    seen.set(value, result);
-    for (const key of Object.keys(value)) {
-      result[key] = normalizeForStorage(
-        (value as Record<string, unknown>)[key],
-        seen,
-      );
-    }
-    return result;
-  }
-
-  return value;
-}
-
-type ViewCtor = new (buffer: ArrayBufferLike) => ArrayBufferView;
-function buildCompactView(view: ArrayBufferView): ArrayBufferView {
-  const tightBuffer = view.buffer.slice(
-    view.byteOffset,
-    view.byteOffset + view.byteLength,
-  );
-  return new (view.constructor as ViewCtor)(tightBuffer);
-}
 
 export interface UserErrorField {
   isUserError?: boolean;
@@ -186,7 +152,7 @@ export type WorkflowStepContext = {
     count: number;
   };
   attempt: number;
-  config: ResolvedStepConfig;
+  config: EngineStepConfig;
 };
 
 const PAUSE_DATETIME = "PAUSE_DATETIME";
@@ -200,11 +166,7 @@ export class Context extends RpcTarget {
 
   #rollbackStep: { cacheKey: string } | undefined;
 
-  constructor(
-    engine: Engine,
-    state: DurableObjectState,
-    rollbackStep?: { cacheKey: string },
-  ) {
+  constructor(engine: Engine, state: DurableObjectState, rollbackStep?: { cacheKey: string }) {
     super();
     this.#engine = engine;
     this.#state = state;
@@ -224,8 +186,7 @@ export class Context extends RpcTarget {
 
     if (status === InstanceStatus.WaitingForPause) {
       await this.#state.storage.put(PAUSE_DATETIME, new Date());
-      const metadata =
-        await this.#state.storage.get<InstanceMetadata>(INSTANCE_METADATA);
+      const metadata = await this.#state.storage.get<InstanceMetadata>(INSTANCE_METADATA);
       if (metadata) {
         await this.#engine.setStatus(
           metadata.accountId,
@@ -253,10 +214,9 @@ export class Context extends RpcTarget {
     output?: unknown;
     rollbackConfig?: WorkflowStepConfig;
   }): void {
-    const { cacheKey, rollbackFn, stepContext, output, rollbackConfig } =
-      options;
+    const { cacheKey, rollbackFn, stepContext, output, rollbackConfig } = options;
     if (rollbackFn && this.#rollbackStep === undefined) {
-      registerRollbackFn(this.#engine.rollbackRegistry, {
+      this.#engine.registerRollbackFn({
         cacheKey,
         fn: rollbackFn,
         stepContext,
@@ -278,10 +238,7 @@ export class Context extends RpcTarget {
     rollbackOptions?: WorkflowStepRollbackOptions,
   ): Promise<unknown>;
 
-  async do<T>(
-    name: string,
-    ...rest: Array<unknown>
-  ): Promise<unknown | void | undefined> {
+  async do<T>(name: string, ...rest: Array<unknown>): Promise<unknown | void | undefined> {
     let closure: (ctx: WorkflowStepContext) => Promise<T>;
     let stepConfig: WorkflowStepConfig;
     let rollbackOptions: WorkflowStepRollbackOptions | undefined;
@@ -306,6 +263,10 @@ export class Context extends RpcTarget {
     const { rollback: rollbackFn, rollbackConfig } = rollbackOptions ?? {};
 
     const isRollback = this.#rollbackStep !== undefined;
+    if (this.#engine.rollbackPhase === "rollback" && !isRollback) {
+      throw new WorkflowFatalError("Cannot execute steps during rollback phase");
+    }
+
     const events = isRollback
       ? {
           start: InstanceEvent.ROLLBACK_STEP_START,
@@ -355,12 +316,16 @@ export class Context extends RpcTarget {
       throw error;
     }
 
+    let liveDelay: WorkflowDelayDuration | WorkflowDelayFunction =
+      stepConfig.retries?.delay ?? DEFAULT_RETRY_DELAY_MS;
+
     let config: ResolvedStepConfig = {
       ...defaultConfig,
       ...stepConfig,
       retries: {
         ...defaultConfig.retries,
         ...stepConfig.retries,
+        delay: typeof liveDelay === "function" ? SERIALIZABLE_DELAY_MARKER : liveDelay,
       },
     };
 
@@ -395,13 +360,8 @@ export class Context extends RpcTarget {
     ]);
 
     // Check cache -- streams first, then plain values
-    const maybeStreamMeta = maybeMap.get(streamMetaKey) as
-      | StreamOutputMeta
-      | undefined
-      | null;
-    const cachedConfig = maybeMap.get(configKey) as
-      | ResolvedStepConfig
-      | undefined;
+    const maybeStreamMeta = maybeMap.get(streamMetaKey) as StreamOutputMeta | undefined | null;
+    const cachedConfig = maybeMap.get(configKey) as ResolvedStepConfig | undefined;
     if (maybeStreamMeta?.state === StreamOutputState.Complete) {
       const cachedState = maybeMap.get(stepStateKey) as StepState | undefined;
       const maybeOutputError = getInvalidStoredStreamOutputError(
@@ -426,7 +386,7 @@ export class Context extends RpcTarget {
         stepContext: {
           step: { name, count },
           attempt: cachedState?.attemptedCount ?? 1,
-          config: cachedConfig ?? config,
+          config: toEngineStepConfig(cachedConfig ?? config),
         },
         output: result,
         rollbackConfig,
@@ -434,9 +394,7 @@ export class Context extends RpcTarget {
       return result;
     } else if (maybeStreamMeta !== undefined && maybeStreamMeta !== null) {
       // We're not in a complete state - means we crashed while persisting a stream on a previous invocation - need to cleanup
-      await cleanupPendingStreamOutput(this.#state.storage, cacheKey).catch(
-        () => {},
-      );
+      await cleanupPendingStreamOutput(this.#state.storage, cacheKey).catch(() => {});
     }
 
     const maybeResult = maybeMap.get(valueKey);
@@ -450,7 +408,7 @@ export class Context extends RpcTarget {
         stepContext: {
           step: { name, count },
           attempt: cachedState?.attemptedCount ?? 1,
-          config: cachedConfig ?? config,
+          config: toEngineStepConfig(cachedConfig ?? config),
         },
         output: result,
         rollbackConfig,
@@ -458,11 +416,22 @@ export class Context extends RpcTarget {
       return result;
     }
 
-    const maybeError: (Error & UserErrorField) | undefined = maybeMap.get(
-      errorKey,
-    ) as Error | undefined;
+    const maybeError: (Error & UserErrorField) | undefined = maybeMap.get(errorKey) as
+      | Error
+      | undefined;
 
     if (maybeError) {
+      const cachedState = maybeMap.get(stepStateKey) as StepState | undefined;
+      this.#registerRollback({
+        cacheKey,
+        rollbackFn,
+        stepContext: {
+          step: { name, count },
+          attempt: cachedState?.attemptedCount ?? 1,
+          config: toEngineStepConfig(cachedConfig ?? config),
+        },
+        rollbackConfig,
+      });
       maybeError.isUserError = true;
       throw maybeError;
     }
@@ -472,27 +441,41 @@ export class Context extends RpcTarget {
       await this.#state.storage.put(configKey, config);
     } else {
       config = cachedConfig;
+      // Recover the live delay from the (non-serializable) user config: a
+      // persisted marker means the user passed a function, so re-read it.
+      liveDelay =
+        config.retries.delay === SERIALIZABLE_DELAY_MARKER
+          ? typeof stepConfig.retries?.delay === "function"
+            ? stepConfig.retries.delay
+            : DEFAULT_RETRY_DELAY_MS
+          : config.retries.delay;
+    }
+
+    if (this.#engine.rollbackPhase === "replay" && !isRollback) {
+      const cachedState = maybeMap.get(stepStateKey) as StepState | undefined;
+      this.#registerRollback({
+        cacheKey,
+        rollbackFn,
+        stepContext: {
+          step: { name, count },
+          attempt: cachedState?.attemptedCount ?? 1,
+          config: toEngineStepConfig(config),
+        },
+        rollbackConfig,
+      });
+      return undefined;
     }
 
     const attemptLogs = this.#engine
       .readLogsFromStep(cacheKey)
       .filter((val) =>
-        [
-          events.attemptSuccess,
-          events.attemptFailure,
-          events.attemptStart,
-        ].includes(val.event),
+        [events.attemptSuccess, events.attemptFailure, events.attemptStart].includes(val.event),
       );
 
     // this means that the the engine died while executing this step - we can mark the latest attempt as failed
-    if (
-      attemptLogs.length > 0 &&
-      attemptLogs.at(-1)?.event === events.attemptStart
-    ) {
+    if (attemptLogs.length > 0 && attemptLogs.at(-1)?.event === events.attemptStart) {
       // TODO: We should get this from SQL
-      const stepState = ((await this.#state.storage.get(
-        stepStateKey,
-      )) as StepState) ?? {
+      const stepState = ((await this.#state.storage.get(stepStateKey)) as StepState) ?? {
         attemptedCount: 1,
       };
 
@@ -507,18 +490,13 @@ export class Context extends RpcTarget {
         // @ts-expect-error priorityQueue is initiated in init
         this.#engine.priorityQueue.remove(timeoutEntryPQ);
       }
-      this.#engine.writeLog(
-        events.attemptFailure,
-        cacheKey,
-        stepNameWithCounter,
-        {
-          attempt: stepState.attemptedCount,
-          error: {
-            name: "WorkflowInternalError",
-            message: `Attempt failed due to internal workflows error`,
-          },
+      this.#engine.writeLog(events.attemptFailure, cacheKey, stepNameWithCounter, {
+        attempt: stepState.attemptedCount,
+        error: {
+          name: "WorkflowInternalError",
+          message: `Attempt failed due to internal workflows error`,
         },
-      );
+      });
 
       await this.#state.storage.put(stepStateKey, stepState);
     }
@@ -526,27 +504,24 @@ export class Context extends RpcTarget {
     const doWrapper = async (
       doWrapperClosure: (ctx: WorkflowStepContext) => Promise<unknown>,
     ): Promise<unknown | void | undefined> => {
-      const stepState = ((await this.#state.storage.get(
-        stepStateKey,
-      )) as StepState) ?? {
+      const stepState = ((await this.#state.storage.get(stepStateKey)) as StepState) ?? {
         attemptedCount: 0,
       };
       const forwardStepContext = (): WorkflowStepContext => ({
         step: { name, count },
         attempt: stepState.attemptedCount,
-        config,
+        config: toEngineStepConfig(config),
       });
 
       // NOTE(caio): this might be a stream returning step - if so cleanup stale data from previous lifetimes
-      await cleanupPendingStreamOutput(this.#state.storage, cacheKey).catch(
-        () => {},
-      );
+      await cleanupPendingStreamOutput(this.#state.storage, cacheKey).catch(() => {});
 
       await this.#engine.timeoutHandler.acquire(this.#engine);
 
       if (stepState.attemptedCount == 0) {
         this.#engine.writeLog(events.start, cacheKey, stepNameWithCounter, {
-          config,
+          config: toEngineStepConfig(config),
+          ...(!isRollback && rollbackFn ? { hasRollback: true } : {}),
         });
       } else {
         // in case the engine dies while retrying and wakes up before the retry period
@@ -560,15 +535,11 @@ export class Context extends RpcTarget {
           const disableAllRetryDelays = await this.#state.storage.get(
             MODIFIER_KEYS.DISABLE_ALL_RETRY_DELAYS,
           );
-          const disableThisRetryDelay =
-            await this.#state.storage.get(retryDelayDisableKey);
-          const disableRetryDelay =
-            disableAllRetryDelays || disableThisRetryDelay;
+          const disableThisRetryDelay = await this.#state.storage.get(retryDelayDisableKey);
+          const disableRetryDelay = disableAllRetryDelays || disableThisRetryDelay;
 
           await this.#engine.timeoutHandler.release(this.#engine);
-          await scheduler.wait(
-            disableRetryDelay ? 0 : retryEntryPQ.targetTimestamp - Date.now(),
-          );
+          await scheduler.wait(disableRetryDelay ? 0 : retryEntryPQ.targetTimestamp - Date.now());
           await this.#engine.timeoutHandler.acquire(this.#engine);
           // @ts-expect-error priorityQueue is initiated in init
           this.#engine.priorityQueue.remove({
@@ -580,8 +551,7 @@ export class Context extends RpcTarget {
 
       let result;
 
-      const instanceMetadata =
-        await this.#state.storage.get<InstanceMetadata>(INSTANCE_METADATA);
+      const instanceMetadata = await this.#state.storage.get<InstanceMetadata>(INSTANCE_METADATA);
       if (!instanceMetadata) {
         throw new Error("instanceMetadata is undefined");
       }
@@ -616,22 +586,21 @@ export class Context extends RpcTarget {
             hash: priorityQueueHash,
             type: "timeout",
           });
-          const error = new WorkflowTimeoutError(
-            `Execution timed out after ${timeout}ms`,
-          );
+          const error = new WorkflowTimeoutError(`Execution timed out after ${timeout}ms`);
           abortController.abort(error);
           throw error;
         };
 
-        this.#engine.writeLog(
-          events.attemptStart,
-          cacheKey,
-          stepNameWithCounter,
-          {
-            attempt: stepState.attemptedCount + 1,
-          },
-        );
+        this.#engine.writeLog(events.attemptStart, cacheKey, stepNameWithCounter, {
+          attempt: stepState.attemptedCount + 1,
+        });
         stepState.attemptedCount++;
+        this.#registerRollback({
+          cacheKey,
+          rollbackFn,
+          stepContext: forwardStepContext(),
+          rollbackConfig,
+        });
         await this.#state.storage.put(stepStateKey, stepState);
         const priorityQueueHash = `${cacheKey}-${stepState.attemptedCount}`;
 
@@ -658,8 +627,7 @@ export class Context extends RpcTarget {
         );
 
         const forceStepTimeoutKey = `${MODIFIER_KEYS.FORCE_STEP_TIMEOUT}${valueKey}`;
-        const persistentStepTimeout =
-          await this.#state.storage.get(forceStepTimeoutKey);
+        const persistentStepTimeout = await this.#state.storage.get(forceStepTimeoutKey);
         const transientStepTimeout = await this.#state.storage.get(
           `${forceStepTimeoutKey}-${stepState.attemptedCount}`,
         );
@@ -742,7 +710,7 @@ export class Context extends RpcTarget {
             doWrapperClosure({
               step: { name, count },
               attempt: stepState.attemptedCount,
-              config: structuredClone(config),
+              config: toEngineStepConfig(config),
             }),
             timeoutTask,
           ]);
@@ -774,64 +742,34 @@ export class Context extends RpcTarget {
             e instanceof OversizedStreamChunkError ||
             e instanceof UnsupportedStreamChunkError
           ) {
-            this.#engine.writeLog(
-              events.attemptFailure,
-              cacheKey,
-              stepNameWithCounter,
-              {
-                attempt: stepState.attemptedCount,
-                error: new WorkflowFatalError(e.message),
-              },
-            );
-            this.#engine.writeLog(
-              events.failure,
-              cacheKey,
-              stepNameWithCounter,
-              {},
-            );
+            this.#engine.writeLog(events.attemptFailure, cacheKey, stepNameWithCounter, {
+              attempt: stepState.attemptedCount,
+              error: new WorkflowFatalError(e.message),
+            });
+            this.#engine.writeLog(events.failure, cacheKey, stepNameWithCounter, {});
             this.#engine.writeLog(InstanceEvent.WORKFLOW_FAILURE, null, null, {
               error: new WorkflowFatalError(
                 `The execution of the Workflow instance was terminated, as the step "${name}" returned an invalid ReadableStream output. ${e.message}`,
               ),
             });
 
-            await this.#engine.setStatus(
-              accountId,
-              instance.id,
-              InstanceStatus.Errored,
-            );
+            await this.#engine.setStatus(accountId, instance.id, InstanceStatus.Errored);
             await this.#engine.timeoutHandler.release(this.#engine);
             await this.#engine.abort(ABORT_REASONS.NOT_SERIALISABLE);
             return;
           }
 
           if (e instanceof StreamOutputStorageLimitError) {
-            this.#engine.writeLog(
-              events.attemptFailure,
-              cacheKey,
-              stepNameWithCounter,
-              {
-                attempt: stepState.attemptedCount,
-                error: new WorkflowFatalError(e.message),
-              },
-            );
-            this.#engine.writeLog(
-              events.failure,
-              cacheKey,
-              stepNameWithCounter,
-              {},
-            );
+            this.#engine.writeLog(events.attemptFailure, cacheKey, stepNameWithCounter, {
+              attempt: stepState.attemptedCount,
+              error: new WorkflowFatalError(e.message),
+            });
+            this.#engine.writeLog(events.failure, cacheKey, stepNameWithCounter, {});
             this.#engine.writeLog(InstanceEvent.WORKFLOW_FAILURE, null, null, {
-              error: new WorkflowFatalError(
-                "The instance has exceeded the 1GiB storage limit",
-              ),
+              error: new WorkflowFatalError("The instance has exceeded the 1GiB storage limit"),
             });
 
-            await this.#engine.setStatus(
-              accountId,
-              instance.id,
-              InstanceStatus.Errored,
-            );
+            await this.#engine.setStatus(accountId, instance.id, InstanceStatus.Errored);
             await this.#engine.timeoutHandler.release(this.#engine);
             await this.#engine.abort(ABORT_REASONS.STORAGE_LIMIT_EXCEEDED);
             return;
@@ -839,34 +777,20 @@ export class Context extends RpcTarget {
 
           // something that cannot be written to storage
           if (e instanceof Error && e.name === "DataCloneError") {
-            this.#engine.writeLog(
-              events.attemptFailure,
-              cacheKey,
-              stepNameWithCounter,
-              {
-                attempt: stepState.attemptedCount,
-                error: new WorkflowFatalError(
-                  `Value returned from step "${name}" is not serialisable`,
-                ),
-              },
-            );
-            this.#engine.writeLog(
-              events.failure,
-              cacheKey,
-              stepNameWithCounter,
-              {},
-            );
+            this.#engine.writeLog(events.attemptFailure, cacheKey, stepNameWithCounter, {
+              attempt: stepState.attemptedCount,
+              error: new WorkflowFatalError(
+                `Value returned from step "${name}" is not serialisable`,
+              ),
+            });
+            this.#engine.writeLog(events.failure, cacheKey, stepNameWithCounter, {});
             this.#engine.writeLog(InstanceEvent.WORKFLOW_FAILURE, null, null, {
               error: new WorkflowFatalError(
                 `The execution of the Workflow instance was terminated, as the step "${name}" returned a value which is not serialisable`,
               ),
             });
 
-            await this.#engine.setStatus(
-              accountId,
-              instance.id,
-              InstanceStatus.Errored,
-            );
+            await this.#engine.setStatus(accountId, instance.id, InstanceStatus.Errored);
             await this.#engine.timeoutHandler.release(this.#engine);
             await this.#engine.abort(ABORT_REASONS.NOT_SERIALISABLE);
           } else if (
@@ -892,14 +816,9 @@ export class Context extends RpcTarget {
           type: "timeout",
         });
 
-        this.#engine.writeLog(
-          events.attemptSuccess,
-          cacheKey,
-          stepNameWithCounter,
-          {
-            attempt: stepState.attemptedCount,
-          },
-        );
+        this.#engine.writeLog(events.attemptSuccess, cacheKey, stepNameWithCounter, {
+          attempt: stepState.attemptedCount,
+        });
       } catch (e) {
         const error = e as Error;
         // if we reach here, means that the closure ran but errored out and we can remove the timeout from the PQ
@@ -912,11 +831,7 @@ export class Context extends RpcTarget {
         // Clean up any partial stream output from this failed attempt
         if (streamResultSeen) {
           try {
-            await rollbackStreamOutput(
-              this.#state.storage,
-              cacheKey,
-              stepState.attemptedCount,
-            );
+            await rollbackStreamOutput(this.#state.storage, cacheKey, stepState.attemptedCount);
           } catch {
             // Best-effort cleanup
           }
@@ -924,29 +839,21 @@ export class Context extends RpcTarget {
 
         if (
           e instanceof Error &&
-          (error.name === "NonRetryableError" ||
-            error.message.startsWith("NonRetryableError"))
+          (error.name === "NonRetryableError" || error.message.startsWith("NonRetryableError"))
         ) {
           const attemptError = shouldPreserveNonRetryableError()
             ? new PreservedNonRetryableError(e)
-            : new WorkflowFatalError(
-                `Step threw a NonRetryableError with message "${e.message}"`,
-              );
+            : new WorkflowFatalError(`Step threw a NonRetryableError with message "${e.message}"`);
 
-          this.#engine.writeLog(
-            events.attemptFailure,
-            cacheKey,
-            stepNameWithCounter,
-            {
-              attempt: stepState.attemptedCount,
-              error: attemptError,
-            },
-          );
+          this.#engine.writeLog(events.attemptFailure, cacheKey, stepNameWithCounter, {
+            attempt: stepState.attemptedCount,
+            error: attemptError,
+          });
           this.#engine.writeLog(
             events.failure,
             cacheKey,
             stepNameWithCounter,
-            {},
+            !isRollback && rollbackFn ? { hasRollback: true } : {},
           );
           this.#registerRollback({
             cacheKey,
@@ -958,69 +865,124 @@ export class Context extends RpcTarget {
           throw error;
         }
 
-        this.#engine.writeLog(
-          events.attemptFailure,
-          cacheKey,
-          stepNameWithCounter,
-          {
-            attempt: stepState.attemptedCount,
-            error: {
-              name: error.name,
-              message: error.message,
-              // TODO (WOR-79): Stacks are all incorrect over RPC and need work
-              // stack: error.stack,
-            },
-          },
-        );
-
         await this.#state.storage.put(stepStateKey, stepState);
 
-        if (stepState.attemptedCount <= config.retries.limit) {
+        const willRetry = stepState.attemptedCount <= config.retries.limit;
+        const priorityQueueHash = `${cacheKey}-${stepState.attemptedCount}`;
+
+        // Resolve the delay once per attempt. A broken delay function turns
+        // the retry into a non-retryable failure.
+        let retryDelayMs: number | undefined;
+        let delayFailure: (Error & UserErrorField) | undefined;
+        if (willRetry) {
+          try {
+            let resolvedDelay: unknown;
+            if (typeof liveDelay === "function") {
+              // Park a default-delayed retry before invoking the user's
+              // delay function so a crash while the function is in flight
+              // still reschedules the step. The PQ table is append-only
+              // with a UNIQUE(action, entryType, hash) constraint, so this
+              // exact entry is reused as the retry entry below — it is
+              // never removed and re-added (that would violate UNIQUE).
+              // @ts-expect-error priorityQueue is initiated in init
+              await this.#engine.priorityQueue.add({
+                hash: priorityQueueHash,
+                targetTimestamp: Date.now() + DEFAULT_RETRY_DELAY_MS,
+                type: "retry",
+              });
+
+              const stepCtx: WorkflowStepContext = {
+                step: { name, count },
+                attempt: stepState.attemptedCount,
+                config: toEngineStepConfig(config),
+              };
+
+              resolvedDelay = await invokeDelayFunction(
+                liveDelay,
+                { ctx: stepCtx, error },
+                {
+                  timeoutMs: DELAY_FUNCTION_TIMEOUT_MS,
+                  wait: schedulerWait,
+                  signal: this.#engine.engineAbortController.signal,
+                },
+              );
+            } else {
+              resolvedDelay = liveDelay;
+            }
+            retryDelayMs = calcRetryDuration(config, stepState, resolvedDelay);
+          } catch (delayErr) {
+            if (!(delayErr instanceof DelayFunctionError)) {
+              throw delayErr;
+            }
+            // @ts-expect-error priorityQueue is initiated in init
+            this.#engine.priorityQueue.remove({
+              hash: priorityQueueHash,
+              type: "retry",
+            });
+            const userError = new NonRetryableDelayError(
+              `The delay function for step "${stepNameWithCounter}" ${delayErr.message}`,
+            ) as Error & UserErrorField;
+            userError.isUserError = true;
+            delayFailure = userError;
+          }
+        }
+
+        this.#engine.writeLog(events.attemptFailure, cacheKey, stepNameWithCounter, {
+          attempt: stepState.attemptedCount,
+          error: {
+            name: error.name,
+            message: error.message,
+            // TODO (WOR-79): Stacks are all incorrect over RPC and need work
+            // stack: error.stack,
+          },
+          ...(retryDelayMs !== undefined ? { retryDelayMs } : {}),
+        });
+
+        if (willRetry && delayFailure === undefined) {
           // TODO (WOR-71): Think through if every Error should transition
-          const durationMs = calcRetryDuration(config, stepState);
+          const durationMs = retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
           const disableAllRetryDelays = await this.#state.storage.get(
             MODIFIER_KEYS.DISABLE_ALL_RETRY_DELAYS,
           );
-          const disableThisRetryDelay =
-            await this.#state.storage.get(retryDelayDisableKey);
-          const disableRetryDelay =
-            disableAllRetryDelays || disableThisRetryDelay;
+          const disableThisRetryDelay = await this.#state.storage.get(retryDelayDisableKey);
+          const disableRetryDelay = disableAllRetryDelays || disableThisRetryDelay;
           const effectiveDuration = disableRetryDelay ? 0 : durationMs;
 
-          const priorityQueueHash = `${cacheKey}-${stepState.attemptedCount}`;
-          // @ts-expect-error priorityQueue is initiated in init
-          await this.#engine.priorityQueue.add({
-            hash: priorityQueueHash,
-            targetTimestamp: Date.now() + effectiveDuration,
-            type: "retry",
-          });
+          // A dynamic delay already parked its retry entry under this hash
+          // above (the append-only PQ rejects re-adding the same hash), so
+          // only static delays add here. The live wait below uses
+          // effectiveDuration regardless; the parked entry's timestamp only
+          // drives crash recovery.
+          //
+          // Known trade-off: for a dynamic delay the parked entry keeps the
+          // DEFAULT_RETRY_DELAY_MS placeholder timestamp set before the delay
+          // function ran (see the add above) — the UNIQUE(action, entryType,
+          // hash) constraint means it can't be overwritten in place with the
+          // computed value without a remove+re-add that would violate the
+          // constraint. So if the engine crashes mid-wait, recovery resumes
+          // the step at the placeholder delay rather than the computed one.
+          // This is accepted for local dev: the step still retries with the
+          // correct semantics, only the post-crash wait can be shorter.
+          if (typeof liveDelay !== "function") {
+            // @ts-expect-error priorityQueue is initiated in init
+            await this.#engine.priorityQueue.add({
+              hash: priorityQueueHash,
+              targetTimestamp: Date.now() + effectiveDuration,
+              type: "retry",
+            });
+          }
           await this.#engine.timeoutHandler.release(this.#engine);
           // Race retry wait against the pause signal so pause
           // takes effect immediately during retries
           {
             const retryPauseSignal = this.#engine.pauseController.signal;
-            let pausedDuringRetry = false;
-            await Promise.race([
-              scheduler.wait(effectiveDuration),
-              new Promise<void>((resolve) => {
-                if (retryPauseSignal.aborted) {
-                  resolve();
-                  return;
-                }
-                retryPauseSignal.addEventListener("abort", () => resolve(), {
-                  once: true,
-                });
-              }),
-            ]);
+            await raceAgainstAbort(scheduler.wait(effectiveDuration), retryPauseSignal);
             const retryStatus = await this.#engine.getStatus();
-            if (
+            const pausedDuringRetry =
               retryStatus === InstanceStatus.Paused ||
-              retryStatus === InstanceStatus.WaitingForPause
-            ) {
-              pausedDuringRetry = true;
-            }
+              retryStatus === InstanceStatus.WaitingForPause;
             if (pausedDuringRetry) {
-              throw new Error(ABORT_REASONS.USER_PAUSE, { cause: e });
+              throw new Error(ABORT_REASONS.USER_PAUSE);
             }
           }
 
@@ -1036,11 +998,7 @@ export class Context extends RpcTarget {
           await this.#engine.timeoutHandler.release(this.#engine);
           // Clean up any leftover stream chunks on retry exhaustion
           try {
-            await rollbackStreamOutput(
-              this.#state.storage,
-              cacheKey,
-              stepState.attemptedCount,
-            );
+            await rollbackStreamOutput(this.#state.storage, cacheKey, stepState.attemptedCount);
           } catch {
             // Best-effort cleanup
           }
@@ -1048,7 +1006,7 @@ export class Context extends RpcTarget {
             events.failure,
             cacheKey,
             stepNameWithCounter,
-            {},
+            !isRollback && rollbackFn ? { hasRollback: true } : {},
           );
           this.#registerRollback({
             cacheKey,
@@ -1057,17 +1015,21 @@ export class Context extends RpcTarget {
             rollbackConfig,
           });
 
-          await this.#state.storage.put(errorKey, error);
-          throw error;
+          const finalError = delayFailure ?? error;
+          await this.#state.storage.put(errorKey, finalError);
+          throw finalError;
         }
       }
 
+      const redactOutput = config.sensitive === SENSITIVE_STEP_OUTPUT;
       this.#engine.writeLog(events.success, cacheKey, stepNameWithCounter, {
         // TODO (WOR-86): Add limits, figure out serialization
-        result: lastStreamMeta ? undefined : result,
-        ...(lastStreamMeta && {
-          streamOutput: { cacheKey, meta: lastStreamMeta },
-        }),
+        result: redactOutput ? REDACTED_STEP_OUTPUT : lastStreamMeta ? undefined : result,
+        ...(!redactOutput &&
+          lastStreamMeta && {
+            streamOutput: { cacheKey, meta: lastStreamMeta },
+          }),
+        ...(!isRollback && rollbackFn ? { hasRollback: true } : {}),
       });
       this.#registerRollback({
         cacheKey,
@@ -1082,13 +1044,21 @@ export class Context extends RpcTarget {
 
     const result = await doWrapper(closure);
 
-    // Check if a pause was requested while this step was running
-    await this.#checkForPendingPause();
+    // Check if a pause was requested while this step was running.
+    // Rollback steps may run while the instance is paused; don't let stale pause
+    // state abort rollback cleanup after the rollback step itself succeeds.
+    if (!isRollback) {
+      await this.#checkForPendingPause();
+    }
 
     return result;
   }
 
   async sleep(name: string, duration: WorkflowSleepDuration): Promise<void> {
+    if (this.#engine.rollbackPhase === "replay") {
+      return;
+    }
+
     if (typeof duration == "string") {
       duration = ms(duration);
     }
@@ -1102,15 +1072,11 @@ export class Context extends RpcTarget {
     const sleepLogWrittenKey = `${cacheKey}-log-written`;
     const maybeResult = await this.#state.storage.get(sleepKey);
 
-    const sleepNameCountHash = await computeHash(
-      name + this.#getCount("sleep-" + name),
-    );
+    const sleepNameCountHash = await computeHash(name + this.#getCount("sleep-" + name));
     const disableThisSleep = await this.#state.storage.get(
       `${MODIFIER_KEYS.DISABLE_SLEEP}${sleepNameCountHash}`,
     );
-    const disableAllSleeps = await this.#state.storage.get(
-      MODIFIER_KEYS.DISABLE_ALL_SLEEPS,
-    );
+    const disableAllSleeps = await this.#state.storage.get(MODIFIER_KEYS.DISABLE_ALL_SLEEPS);
 
     const disableSleep = disableAllSleeps || disableThisSleep;
 
@@ -1121,36 +1087,22 @@ export class Context extends RpcTarget {
       );
       // in case the engine dies while sleeping and wakes up before the retry period
       if (entryPQ !== undefined) {
-        await scheduler.wait(
-          disableSleep ? 0 : entryPQ.targetTimestamp - Date.now(),
-        );
+        await scheduler.wait(disableSleep ? 0 : entryPQ.targetTimestamp - Date.now());
         // @ts-expect-error priorityQueue is initiated in init
         this.#engine.priorityQueue.remove({ hash: cacheKey, type: "sleep" });
       }
-      const shouldWriteLog =
-        (await this.#state.storage.get(sleepLogWrittenKey)) == undefined;
+      const shouldWriteLog = (await this.#state.storage.get(sleepLogWrittenKey)) == undefined;
       if (shouldWriteLog) {
-        this.#engine.writeLog(
-          InstanceEvent.SLEEP_COMPLETE,
-          cacheKey,
-          sleepNameWithCounter,
-          {},
-        );
+        this.#engine.writeLog(InstanceEvent.SLEEP_COMPLETE, cacheKey, sleepNameWithCounter, {});
         await this.#state.storage.put(sleepLogWrittenKey, true);
       }
       return;
     }
 
-    this.#engine.writeLog(
-      InstanceEvent.SLEEP_START,
-      cacheKey,
-      sleepNameWithCounter,
-      {
-        durationMs: duration,
-      },
-    );
-    const instanceMetadata =
-      await this.#state.storage.get<InstanceMetadata>(INSTANCE_METADATA);
+    this.#engine.writeLog(InstanceEvent.SLEEP_START, cacheKey, sleepNameWithCounter, {
+      durationMs: duration,
+    });
+    const instanceMetadata = await this.#state.storage.get<InstanceMetadata>(INSTANCE_METADATA);
     if (!instanceMetadata) {
       throw new Error("instanceMetadata is undefined");
     }
@@ -1169,40 +1121,20 @@ export class Context extends RpcTarget {
     const pauseSignal = this.#engine.pauseController.signal;
     const sleepDuration = disableSleep ? 0 : duration;
 
-    let pausedDuringSleep = false;
-    await Promise.race([
-      scheduler.wait(sleepDuration),
-      new Promise<void>((resolve) => {
-        if (pauseSignal.aborted) {
-          resolve();
-          return;
-        }
-        pauseSignal.addEventListener("abort", () => resolve(), {
-          once: true,
-        });
-      }),
-    ]);
+    await raceAgainstAbort(scheduler.wait(sleepDuration), pauseSignal);
 
     // Check if we were paused during the sleep
     const statusAfterSleep = await this.#engine.getStatus();
-    if (
+    const pausedDuringSleep =
       statusAfterSleep === InstanceStatus.Paused ||
-      statusAfterSleep === InstanceStatus.WaitingForPause
-    ) {
-      pausedDuringSleep = true;
-    }
+      statusAfterSleep === InstanceStatus.WaitingForPause;
 
     if (pausedDuringSleep) {
       // Throw pause error
       throw new Error(ABORT_REASONS.USER_PAUSE);
     }
 
-    this.#engine.writeLog(
-      InstanceEvent.SLEEP_COMPLETE,
-      cacheKey,
-      sleepNameWithCounter,
-      {},
-    );
+    this.#engine.writeLog(InstanceEvent.SLEEP_COMPLETE, cacheKey, sleepNameWithCounter, {});
     await this.#state.storage.put(sleepLogWrittenKey, true);
 
     // @ts-expect-error priorityQueue is initiated in init
@@ -1210,6 +1142,10 @@ export class Context extends RpcTarget {
   }
 
   async sleepUntil(name: string, timestamp: Date | number): Promise<void> {
+    if (this.#engine.rollbackPhase === "replay") {
+      return;
+    }
+
     if (timestamp instanceof Date) {
       timestamp = timestamp.valueOf();
     }
@@ -1217,9 +1153,7 @@ export class Context extends RpcTarget {
     const now = Date.now();
     // timestamp needs to be in the future, throw if not
     if (timestamp < now) {
-      throw new Error(
-        "You can't sleep until a time in the past, time-traveler",
-      );
+      throw new Error("You can't sleep until a time in the past, time-traveler");
     }
 
     return this.sleep(name, timestamp - now);
@@ -1232,6 +1166,10 @@ export class Context extends RpcTarget {
       timeout?: string | number;
     },
   ): Promise<WorkflowStepEvent<T>> {
+    if (this.#engine.rollbackPhase === "rollback") {
+      throw new WorkflowFatalError("Cannot execute steps during rollback phase");
+    }
+
     if (!options.timeout) {
       options.timeout = "24 hours";
     }
@@ -1251,9 +1189,12 @@ export class Context extends RpcTarget {
 
     const maybeResult = await this.#state.storage.get<Event>(waitForEventKey);
 
+    if (this.#engine.rollbackPhase === "replay") {
+      return maybeResult as WorkflowStepEvent<T>;
+    }
+
     if (maybeResult) {
-      const shouldWriteLog =
-        (await this.#state.storage.get(waitForEventKey)) == undefined;
+      const shouldWriteLog = (await this.#state.storage.get(waitForEventKey)) == undefined;
       if (shouldWriteLog) {
         this.#engine.writeLog(
           InstanceEvent.WAIT_COMPLETE,
@@ -1264,27 +1205,21 @@ export class Context extends RpcTarget {
       }
       return maybeResult as WorkflowStepEvent<T>;
     }
-    const maybeError: (Error & UserErrorField) | undefined =
-      (await this.#state.storage.get(errorKey)) as Error | undefined;
+    const maybeError: (Error & UserErrorField) | undefined = (await this.#state.storage.get(
+      errorKey,
+    )) as Error | undefined;
 
     if (maybeError) {
       maybeError.isUserError = true;
       throw maybeError;
     }
 
-    const maybeRegistered = await this.#state.storage.get(
-      pendingWaiterRegistered,
-    );
+    const maybeRegistered = await this.#state.storage.get(pendingWaiterRegistered);
 
     if (!maybeRegistered) {
-      this.#engine.writeLog(
-        InstanceEvent.WAIT_START,
-        cacheKey,
-        waitForEventNameWithCounter,
-        {
-          event: options.type,
-        },
-      );
+      this.#engine.writeLog(InstanceEvent.WAIT_START, cacheKey, waitForEventNameWithCounter, {
+        event: options.type,
+      });
 
       await this.#state.storage.put(pendingWaiterRegistered, true);
     }
@@ -1304,19 +1239,13 @@ export class Context extends RpcTarget {
           hash: cacheKey,
           type: "timeout",
         })) ||
-      (timeoutEntryPQ !== undefined &&
-        timeoutEntryPQ.targetTimestamp < Date.now()) ||
+      (timeoutEntryPQ !== undefined && timeoutEntryPQ.targetTimestamp < Date.now()) ||
       forceEventTimeout
     ) {
-      this.#engine.writeLog(
-        InstanceEvent.WAIT_TIMED_OUT,
-        cacheKey,
-        waitForEventNameWithCounter,
-        {
-          name: timeoutError.name,
-          message: timeoutError.message,
-        },
-      );
+      this.#engine.writeLog(InstanceEvent.WAIT_TIMED_OUT, cacheKey, waitForEventNameWithCounter, {
+        name: timeoutError.name,
+        message: timeoutError.message,
+      });
       await this.#state.storage.put(errorKey, timeoutError);
       throw timeoutError;
     }
@@ -1366,26 +1295,17 @@ export class Context extends RpcTarget {
       this.#engine.waiters.set(options.type, callbacks);
     });
 
-    // Race event, timeout, and pause signal. The pause promise resolves
-    // when the race settles via event/timeout before the pause signal fires
+    // Race event and timeout against the pause signal.
     const pauseSignal = this.#engine.pauseController.signal;
-    const pausePromise = new Promise<void>((resolve) => {
-      if (pauseSignal.aborted) {
-        resolve();
-        return;
-      }
-      pauseSignal.addEventListener("abort", () => resolve(), {
-        once: true,
-      });
-    });
-
-    const raceResult = await Promise.race([
-      eventPromise,
-      timeoutEntryPQ !== undefined
-        ? timeoutPromise(timeoutEntryPQ.targetTimestamp - Date.now(), false)
-        : timeoutPromise(ms(options.timeout), true),
-      pausePromise,
-    ]).catch(async (error) => {
+    const raceResult = await raceAgainstAbort(
+      Promise.race([
+        eventPromise,
+        timeoutEntryPQ !== undefined
+          ? timeoutPromise(timeoutEntryPQ.targetTimestamp - Date.now(), false)
+          : timeoutPromise(ms(options.timeout), true),
+      ]),
+      pauseSignal,
+    ).catch(async (error) => {
       const callbacks = this.#engine.waiters.get(options.type);
       if (callbacks) {
         const idx = callbacks.findIndex(([key]) => key === cacheKey);
@@ -1405,18 +1325,19 @@ export class Context extends RpcTarget {
     });
 
     // Pause signal won the race — throw to stop the workflow
-    if (raceResult === undefined) {
+    if (raceResult.aborted) {
       throw new Error(ABORT_REASONS.USER_PAUSE);
     }
+    const event = raceResult.value;
 
     this.#engine.writeLog(
       InstanceEvent.WAIT_COMPLETE,
       cacheKey,
       waitForEventNameWithCounter,
-      raceResult as Event,
+      event,
     );
-    await this.#state.storage.put(waitForEventKey, raceResult);
+    await this.#state.storage.put(waitForEventKey, event);
 
-    return raceResult as WorkflowStepEvent<T>;
+    return event as WorkflowStepEvent<T>;
   }
 }

@@ -12,9 +12,8 @@ export interface GetLFTagRequest extends lf.GetLFTagRequest {}
  *
  * Reads one LF-tag definition (its allowed values) by key. Provide the
  * implementation with `Effect.provide(AWS.LakeFormation.GetLFTagHttp)`.
- * @binding
- * @section Reading LF-Tags
- * @example Read a Tag Definition
+ * ### Reading LF-Tags
+ * **Example:** Read a Tag Definition
  * ```typescript
  * // init — account-level binding takes no resource
  * const getLFTag = yield* AWS.LakeFormation.GetLFTag();
@@ -22,14 +21,14 @@ export interface GetLFTagRequest extends lf.GetLFTagRequest {}
  * // runtime
  * const { TagValues } = yield* getLFTag({ TagKey: "environment" });
  * ```
+ *
+ * @binding
  */
 export interface GetLFTag extends Binding.Service<
   GetLFTag,
   "AWS.LakeFormation.GetLFTag",
   () => Effect.Effect<
-    (
-      request: GetLFTagRequest,
-    ) => Effect.Effect<lf.GetLFTagResponse, lf.GetLFTagError>
+    (request: GetLFTagRequest) => Effect.Effect<lf.GetLFTagResponse, lf.GetLFTagError>
   >
 > {}
 

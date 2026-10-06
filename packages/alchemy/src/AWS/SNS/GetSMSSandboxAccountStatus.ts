@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetSMSSandboxAccountStatusRequest
-  extends sns.GetSMSSandboxAccountStatusInput {}
+export interface GetSMSSandboxAccountStatusRequest extends sns.GetSMSSandboxAccountStatusInput {}
 
 /**
  * Runtime binding for `sns:GetSMSSandboxAccountStatus`.
@@ -11,13 +10,14 @@ export interface GetSMSSandboxAccountStatusRequest
  * An account-scoped operation — reports whether the account is still in
  * the SMS sandbox (only verified destination numbers deliverable).
  * Provide the `GetSMSSandboxAccountStatusHttp` layer on the Function to implement the binding.
- * @binding
- * @section SMS Sandbox
- * @example Check Sandbox Status
+ * ### SMS Sandbox
+ * **Example:** Check Sandbox Status
  * ```typescript
  * const getSandboxStatus = yield* SNS.GetSMSSandboxAccountStatus();
  * const { IsInSandbox } = yield* getSandboxStatus();
  * ```
+ *
+ * @binding
  */
 export interface GetSMSSandboxAccountStatus extends Binding.Service<
   GetSMSSandboxAccountStatus,
@@ -25,14 +25,10 @@ export interface GetSMSSandboxAccountStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request?: GetSMSSandboxAccountStatusRequest,
-    ) => Effect.Effect<
-      sns.GetSMSSandboxAccountStatusResult,
-      sns.GetSMSSandboxAccountStatusError
-    >
+    ) => Effect.Effect<sns.GetSMSSandboxAccountStatusResult, sns.GetSMSSandboxAccountStatusError>
   >
 > {}
 
-export const GetSMSSandboxAccountStatus =
-  Binding.Service<GetSMSSandboxAccountStatus>(
-    "AWS.SNS.GetSMSSandboxAccountStatus",
-  );
+export const GetSMSSandboxAccountStatus = Binding.Service<GetSMSSandboxAccountStatus>(
+  "AWS.SNS.GetSMSSandboxAccountStatus",
+);

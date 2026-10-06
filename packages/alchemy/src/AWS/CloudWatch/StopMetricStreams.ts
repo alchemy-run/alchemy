@@ -14,9 +14,8 @@ type MetricStreams = [MetricStream, ...MetricStream[]];
  *
  * Provide `CloudWatch.StopMetricStreamsHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Managing Metric Streams
- * @example Pause a Metric Stream
+ * ### Managing Metric Streams
+ * **Example:** Pause a Metric Stream
  * ```typescript
  * // init — grants cloudwatch:StopMetricStreams on the stream
  * const stopMetricStreams = yield* AWS.CloudWatch.StopMetricStreams(stream);
@@ -24,15 +23,15 @@ type MetricStreams = [MetricStream, ...MetricStream[]];
  * // runtime
  * yield* stopMetricStreams();
  * ```
+ *
+ * @binding
  */
 export interface StopMetricStreams extends Binding.Service<
   StopMetricStreams,
   "AWS.CloudWatch.StopMetricStreams",
   (
     ...streams: MetricStreams
-  ) => Effect.Effect<
-    () => Effect.Effect<cloudwatch.StopMetricStreamsOutput, any>
-  >
+  ) => Effect.Effect<() => Effect.Effect<cloudwatch.StopMetricStreamsOutput, any>>
 > {}
 
 export const StopMetricStreams = Binding.Service<StopMetricStreams>(

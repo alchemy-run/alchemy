@@ -145,9 +145,8 @@ export interface Cluster extends Resource<
  * billed per node-hour while they exist. Place them in a {@link SubnetGroup}
  * and give them an IAM role that DAX assumes to reach DynamoDB. Destroy
  * clusters you are not using.
- * @resource
- * @section Creating a Cluster
- * @example Single-Node Development Cluster
+ * ### Creating a Cluster
+ * **Example:** Single-Node Development Cluster
  * ```typescript
  * const role = yield* IAM.Role("DaxRole", {
  *   assumeRolePolicyDocument: {
@@ -171,8 +170,8 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
- * @section Encryption
- * @example Cluster with Encryption At Rest and In Transit
+ * ### Encryption
+ * **Example:** Cluster with Encryption At Rest and In Transit
  * ```typescript
  * const cluster = yield* Cluster("SecureCache", {
  *   nodeType: "dax.t3.small",
@@ -183,6 +182,8 @@ export interface Cluster extends Resource<
  *   clusterEndpointEncryptionType: "TLS",
  * });
  * ```
+ *
+ * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.DAX.Cluster");
 
@@ -198,10 +199,7 @@ const retryIamRolePropagation = <A, E extends { _tag: string }, R>(
   Effect.retry(self, {
     while: (e) =>
       e._tag === "InvalidParameterValueException" &&
-      ((e as { message?: string }).message?.includes(
-        "No permission to assume role",
-      ) ??
-        false),
+      ((e as { message?: string }).message?.includes("No permission to assume role") ?? false),
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
   });
 
@@ -217,21 +215,14 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeClusters({ ClusterNames: [name] })
-          .pipe(
-            Effect.catchTag("ClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.Clusters?.[0];
       });
 
       // Bounded readiness wait. DAX cluster provisioning/modification
       // typically completes in 5-10 minutes; budget ~15 min (60 * 15s).
       const waitForAvailable = Effect.fn(function* (name: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ClusterArn) {
@@ -239,9 +230,7 @@ export const ClusterProvider = () =>
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(
-                  `DAX cluster '${name}' not available (status: ${cluster.Status})`,
-                ),
+                new Error(`DAX cluster '${name}' not available (status: ${cluster.Status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -253,10 +242,7 @@ export const ClusterProvider = () =>
       // Wait for a cluster to leave a transitional state before delete. Ends
       // when the cluster is available, deleting, or gone.
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (
@@ -265,9 +251,7 @@ export const ClusterProvider = () =>
               cluster.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(
-                  `DAX cluster '${name}' still settling (status: ${cluster.Status})`,
-                ),
+                new Error(`DAX cluster '${name}' still settling (status: ${cluster.Status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -279,9 +263,7 @@ export const ClusterProvider = () =>
       const toAttrs = Effect.fn(function* (cluster: dax.Cluster) {
         if (!cluster.ClusterName || !cluster.ClusterArn) {
           return yield* Effect.fail(
-            new Error(
-              `DAX cluster '${cluster.ClusterName}' is missing its ARN`,
-            ),
+            new Error(`DAX cluster '${cluster.ClusterName}' is missing its ARN`),
           );
         }
         return {
@@ -316,10 +298,7 @@ export const ClusterProvider = () =>
             return { action: "replace" } as const;
           }
           // Create-only properties force a replacement.
-          if (
-            (n.nodeType ?? DEFAULT_NODE_TYPE) !==
-            (o.nodeType ?? DEFAULT_NODE_TYPE)
-          ) {
+          if ((n.nodeType ?? DEFAULT_NODE_TYPE) !== (o.nodeType ?? DEFAULT_NODE_TYPE)) {
             return { action: "replace" } as const;
           }
           if (n.iamRoleArn !== o.iamRoleArn) {
@@ -350,15 +329,11 @@ export const ClusterProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.clusterName ??
-            (yield* toName(id, olds ?? { iamRoleArn: "" }));
+          const name = output?.clusterName ?? (yield* toName(id, olds ?? { iamRoleArn: "" }));
           const cluster = yield* readCluster(name);
           if (!cluster?.ClusterArn) return undefined;
           const attrs = yield* toAttrs(cluster);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -366,8 +341,7 @@ export const ClusterProvider = () =>
           const name = output?.clusterName ?? (yield* toName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
-          const desiredReplicationFactor =
-            props.replicationFactor ?? DEFAULT_REPLICATION_FACTOR;
+          const desiredReplicationFactor = props.replicationFactor ?? DEFAULT_REPLICATION_FACTOR;
 
           // 1. Observe — cloud state is authoritative.
           let observed = yield* readCluster(name);
@@ -388,11 +362,8 @@ export const ClusterProvider = () =>
                 NotificationTopicArn: props.notificationTopicArn,
                 ParameterGroupName: props.parameterGroupName,
                 SSESpecification:
-                  props.sseEnabled !== undefined
-                    ? { Enabled: props.sseEnabled }
-                    : undefined,
-                ClusterEndpointEncryptionType:
-                  props.clusterEndpointEncryptionType,
+                  props.sseEnabled !== undefined ? { Enabled: props.sseEnabled } : undefined,
+                ClusterEndpointEncryptionType: props.clusterEndpointEncryptionType,
                 NetworkType: props.networkType,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
@@ -413,34 +384,27 @@ export const ClusterProvider = () =>
           // 3. Sync — compute the update delta from OBSERVED state.
           const update: dax.UpdateClusterRequest = { ClusterName: name };
           let mutated = false;
-          if (
-            props.description !== undefined &&
-            props.description !== observed.Description
-          ) {
+          if (props.description !== undefined && props.description !== observed.Description) {
             update.Description = props.description;
             mutated = true;
           }
           if (
             props.preferredMaintenanceWindow !== undefined &&
-            props.preferredMaintenanceWindow !==
-              observed.PreferredMaintenanceWindow
+            props.preferredMaintenanceWindow !== observed.PreferredMaintenanceWindow
           ) {
-            update.PreferredMaintenanceWindow =
-              props.preferredMaintenanceWindow;
+            update.PreferredMaintenanceWindow = props.preferredMaintenanceWindow;
             mutated = true;
           }
           if (
             props.notificationTopicArn !== undefined &&
-            props.notificationTopicArn !==
-              observed.NotificationConfiguration?.TopicArn
+            props.notificationTopicArn !== observed.NotificationConfiguration?.TopicArn
           ) {
             update.NotificationTopicArn = props.notificationTopicArn;
             mutated = true;
           }
           if (
             props.parameterGroupName !== undefined &&
-            props.parameterGroupName !==
-              observed.ParameterGroup?.ParameterGroupName
+            props.parameterGroupName !== observed.ParameterGroup?.ParameterGroupName
           ) {
             update.ParameterGroupName = props.parameterGroupName;
             mutated = true;
@@ -463,10 +427,7 @@ export const ClusterProvider = () =>
           // 3b. Sync replication factor — DAX has dedicated add/remove-node
           // APIs instead of a general update.
           const observedFactor = observed.TotalNodes;
-          if (
-            observedFactor !== undefined &&
-            observedFactor !== desiredReplicationFactor
-          ) {
+          if (observedFactor !== undefined && observedFactor !== desiredReplicationFactor) {
             if (desiredReplicationFactor > observedFactor) {
               yield* dax.increaseReplicationFactor({
                 ClusterName: name,
@@ -513,10 +474,7 @@ export const ClusterProvider = () =>
             Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidClusterStateFault",
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
             }),
             // Exhausted retries: the cluster is in a state (e.g. an
             // out-of-band delete already in flight) where deletion is
@@ -540,9 +498,7 @@ export const ClusterProvider = () =>
             }
             return yield* Effect.forEach(
               clusters.filter(
-                (cluster) =>
-                  cluster.ClusterName !== undefined &&
-                  cluster.ClusterArn !== undefined,
+                (cluster) => cluster.ClusterName !== undefined && cluster.ClusterArn !== undefined,
               ),
               (cluster) => toAttrs(cluster),
               { concurrency: 4 },

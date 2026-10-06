@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * receipt. Acknowledging stops further escalation stages.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.AcceptPageHttp)`.
- * @binding
- * @section Working with Pages
- * @example Acknowledge a Page
+ * ### Working with Pages
+ * **Example:** Acknowledge a Page
  * ```typescript
  * const acceptPage = yield* AWS.SSMContacts.AcceptPage();
  *
@@ -22,16 +21,14 @@ import * as Binding from "../../Binding.ts";
  *   AcceptCode: "425440",
  * });
  * ```
+ *
+ * @binding
  */
 export interface AcceptPage extends Binding.Service<
   AcceptPage,
   "AWS.SSMContacts.AcceptPage",
   () => Effect.Effect<
-    (
-      request: ssm.AcceptPageRequest,
-    ) => Effect.Effect<ssm.AcceptPageResult, ssm.AcceptPageError>
+    (request: ssm.AcceptPageRequest) => Effect.Effect<ssm.AcceptPageResult, ssm.AcceptPageError>
   >
 > {}
-export const AcceptPage = Binding.Service<AcceptPage>(
-  "AWS.SSMContacts.AcceptPage",
-);
+export const AcceptPage = Binding.Service<AcceptPage>("AWS.SSMContacts.AcceptPage");

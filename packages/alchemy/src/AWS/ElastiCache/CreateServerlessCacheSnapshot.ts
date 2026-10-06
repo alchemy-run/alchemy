@@ -12,9 +12,8 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
  * pre-migration backup from an operational Lambda. Available for valkey,
  * redis, and serverless memcached. Provide the implementation with
  * `Effect.provide(AWS.ElastiCache.CreateServerlessCacheSnapshotHttp)`.
- * @binding
- * @section Managing Snapshots
- * @example Take an On-Demand Snapshot
+ * ### Managing Snapshots
+ * **Example:** Take an On-Demand Snapshot
  * ```typescript
  * const createSnapshot = yield* ElastiCache.CreateServerlessCacheSnapshot(cache);
  *
@@ -23,6 +22,8 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
  * });
  * // result.ServerlessCacheSnapshot.Status → "creating"
  * ```
+ *
+ * @binding
  */
 export interface CreateServerlessCacheSnapshot extends Binding.Service<
   CreateServerlessCacheSnapshot,
@@ -31,17 +32,13 @@ export interface CreateServerlessCacheSnapshot extends Binding.Service<
     cache: ServerlessCache,
   ) => Effect.Effect<
     (
-      request: Omit<
-        elasticache.CreateServerlessCacheSnapshotRequest,
-        "ServerlessCacheName"
-      >,
+      request: Omit<elasticache.CreateServerlessCacheSnapshotRequest, "ServerlessCacheName">,
     ) => Effect.Effect<
       elasticache.CreateServerlessCacheSnapshotResponse,
       elasticache.CreateServerlessCacheSnapshotError
     >
   >
 > {}
-export const CreateServerlessCacheSnapshot =
-  Binding.Service<CreateServerlessCacheSnapshot>(
-    "AWS.ElastiCache.CreateServerlessCacheSnapshot",
-  );
+export const CreateServerlessCacheSnapshot = Binding.Service<CreateServerlessCacheSnapshot>(
+  "AWS.ElastiCache.CreateServerlessCacheSnapshot",
+);

@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface GetObjectTaggingRequest extends Omit<
-  S3.GetObjectTaggingRequest,
-  "Bucket"
-> {}
+export interface GetObjectTaggingRequest extends Omit<S3.GetObjectTaggingRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:GetObjectTagging`.
@@ -17,14 +13,15 @@ export interface GetObjectTaggingRequest extends Omit<
  * `s3:GetObjectTagging`/`s3:GetObjectVersionTagging` are granted on the
  * bucket's objects. Provide the implementation with
  * `Effect.provide(AWS.S3.GetObjectTaggingHttp)`.
- * @binding
- * @section Object Tagging
- * @example Read an Object's Tags
+ * ### Object Tagging
+ * **Example:** Read an Object's Tags
  * ```typescript
  * const getObjectTagging = yield* AWS.S3.GetObjectTagging(bucket);
  *
  * const { TagSet } = yield* getObjectTagging({ Key: "reports/q3.csv" });
  * ```
+ *
+ * @binding
  */
 export interface GetObjectTagging extends Binding.Service<
   GetObjectTagging,
@@ -37,6 +34,4 @@ export interface GetObjectTagging extends Binding.Service<
     ) => Effect.Effect<S3.GetObjectTaggingOutput, S3.GetObjectTaggingError>
   >
 > {}
-export const GetObjectTagging = Binding.Service<GetObjectTagging>(
-  "AWS.S3.GetObjectTagging",
-);
+export const GetObjectTagging = Binding.Service<GetObjectTagging>("AWS.S3.GetObjectTagging");

@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetMetricStatisticsRequest
-  extends cloudwatch.GetMetricStatisticsInput {}
+export interface GetMetricStatisticsRequest extends cloudwatch.GetMetricStatisticsInput {}
 
 /**
  * Runtime binding for `cloudwatch:GetMetricStatistics` — fetch aggregated
@@ -12,9 +11,8 @@ export interface GetMetricStatisticsRequest
  *
  * Provide `CloudWatch.GetMetricStatisticsHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Querying Metrics
- * @example Fetch Hourly Sums for a Metric
+ * ### Querying Metrics
+ * **Example:** Fetch Hourly Sums for a Metric
  * ```typescript
  * // init — grants cloudwatch:GetMetricStatistics
  * const getMetricStatistics = yield* AWS.CloudWatch.GetMetricStatistics();
@@ -31,6 +29,8 @@ export interface GetMetricStatisticsRequest
  * });
  * const datapoints = result.Datapoints ?? [];
  * ```
+ *
+ * @binding
  */
 export interface GetMetricStatistics extends Binding.Service<
   GetMetricStatistics,
@@ -38,10 +38,7 @@ export interface GetMetricStatistics extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetMetricStatisticsRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetMetricStatisticsOutput,
-      cloudwatch.GetMetricStatisticsError
-    >
+    ) => Effect.Effect<cloudwatch.GetMetricStatisticsOutput, cloudwatch.GetMetricStatisticsError>
   >
 > {}
 

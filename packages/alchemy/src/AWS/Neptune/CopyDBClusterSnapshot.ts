@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * a retention prefix, or copy it for cross-region disaster recovery. Provide
  * the implementation with
  * `Effect.provide(AWS.Neptune.CopyDBClusterSnapshotHttp)`.
- * @binding
- * @section Managing Snapshots
- * @example Archive a Snapshot
+ * ### Managing Snapshots
+ * **Example:** Archive a Snapshot
  * ```typescript
  * const copyDBClusterSnapshot = yield* AWS.Neptune.CopyDBClusterSnapshot();
  *
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   TargetDBClusterSnapshotIdentifier: `${snapshotId}-archive`,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CopyDBClusterSnapshot extends Binding.Service<
   CopyDBClusterSnapshot,
@@ -28,10 +29,7 @@ export interface CopyDBClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request?: neptune.CopyDBClusterSnapshotMessage,
-    ) => Effect.Effect<
-      neptune.CopyDBClusterSnapshotResult,
-      neptune.CopyDBClusterSnapshotError
-    >
+    ) => Effect.Effect<neptune.CopyDBClusterSnapshotResult, neptune.CopyDBClusterSnapshotError>
   >
 > {}
 export const CopyDBClusterSnapshot = Binding.Service<CopyDBClusterSnapshot>(

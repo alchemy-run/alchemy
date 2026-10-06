@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Channel } from "./Channel.ts";
 
-export interface GetStreamSessionRequest extends Omit<
-  ivs.GetStreamSessionRequest,
-  "channelArn"
-> {}
+export interface GetStreamSessionRequest extends Omit<ivs.GetStreamSessionRequest, "channelArn"> {}
 
 /**
  * Runtime binding for `ivs:GetStreamSession`.
@@ -16,9 +13,8 @@ export interface GetStreamSessionRequest extends Omit<
  * session's truncated event log. Omit `streamId` to read the most recent
  * session. The channel ARN is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.IVS.GetStreamSessionHttp)`.
- * @binding
- * @section Monitoring Live Streams
- * @example Inspect the Latest Broadcast Session
+ * ### Monitoring Live Streams
+ * **Example:** Inspect the Latest Broadcast Session
  * ```typescript
  * // init — bind the operation to the channel
  * const getStreamSession = yield* AWS.IVS.GetStreamSession(channel);
@@ -27,6 +23,8 @@ export interface GetStreamSessionRequest extends Omit<
  * const { streamSession } = yield* getStreamSession({});
  * yield* Effect.log(`codec: ${streamSession?.ingestConfiguration?.video?.codec}`);
  * ```
+ *
+ * @binding
  */
 export interface GetStreamSession extends Binding.Service<
   GetStreamSession,
@@ -39,6 +37,4 @@ export interface GetStreamSession extends Binding.Service<
     ) => Effect.Effect<ivs.GetStreamSessionResponse, ivs.GetStreamSessionError>
   >
 > {}
-export const GetStreamSession = Binding.Service<GetStreamSession>(
-  "AWS.IVS.GetStreamSession",
-);
+export const GetStreamSession = Binding.Service<GetStreamSession>("AWS.IVS.GetStreamSession");

@@ -11,14 +11,15 @@ import type { ContactChannel } from "./ContactChannel.ts";
  * as `ContactChannelId`.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ActivateContactChannelHttp)`.
- * @binding
- * @section Activating Contact Channels
- * @example Activate a Channel with the Received Code
+ * ### Activating Contact Channels
+ * **Example:** Activate a Channel with the Received Code
  * ```typescript
  * const activateContactChannel = yield* AWS.SSMContacts.ActivateContactChannel(email);
  *
  * yield* activateContactChannel({ ActivationCode: "466136" });
  * ```
+ *
+ * @binding
  */
 export interface ActivateContactChannel extends Binding.Service<
   ActivateContactChannel,
@@ -28,10 +29,7 @@ export interface ActivateContactChannel extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.ActivateContactChannelRequest, "ContactChannelId">,
-    ) => Effect.Effect<
-      ssm.ActivateContactChannelResult,
-      ssm.ActivateContactChannelError
-    >
+    ) => Effect.Effect<ssm.ActivateContactChannelResult, ssm.ActivateContactChannelError>
   >
 > {}
 export const ActivateContactChannel = Binding.Service<ActivateContactChannel>(

@@ -59,9 +59,8 @@ export interface Lexicon extends Resource<
  * Identity is the region-scoped `lexiconName`; the PLS `content` is
  * updatable in place.
  *
- * @resource
- * @section Managing Lexicons
- * @example Store a pronunciation lexicon
+ * ### Managing Lexicons
+ * **Example:** Store a pronunciation lexicon
  * ```typescript
  * const lexicon = yield* AWS.Polly.Lexicon("Acronyms", {
  *   lexiconName: "acronyms",
@@ -73,7 +72,7 @@ export interface Lexicon extends Resource<
  * });
  * ```
  *
- * @example Synthesize speech with the lexicon applied
+ * **Example:** Synthesize speech with the lexicon applied
  * ```typescript
  * const synthesizeSpeech = yield* AWS.Polly.SynthesizeSpeech();
  * const result = yield* synthesizeSpeech({
@@ -83,6 +82,8 @@ export interface Lexicon extends Resource<
  *   LexiconNames: [lexicon.lexiconName],
  * });
  * ```
+ *
+ * @resource
  */
 export const Lexicon = Resource<Lexicon>("AWS.Polly.Lexicon");
 
@@ -153,9 +154,7 @@ export const LexiconProvider = () =>
 
       const getOne = (name: string) =>
         retryTransient(polly.getLexicon({ Name: name })).pipe(
-          Effect.catchTag("LexiconNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("LexiconNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const waitForContent = (name: string, desired: string) =>
@@ -176,9 +175,7 @@ export const LexiconProvider = () =>
             yield* Effect.sleep("500 millis");
           }
           return yield* Effect.fail(
-            new Error(
-              `Polly lexicon '${name}' did not converge to the desired content`,
-            ),
+            new Error(`Polly lexicon '${name}' did not converge to the desired content`),
           );
         });
 
@@ -196,9 +193,7 @@ export const LexiconProvider = () =>
             yield* Effect.sleep("500 millis");
           }
           return yield* Effect.fail(
-            new Error(
-              `Polly lexicon '${name}' is still observable after deletion`,
-            ),
+            new Error(`Polly lexicon '${name}' is still observable after deletion`),
           );
         });
 
@@ -206,16 +201,12 @@ export const LexiconProvider = () =>
         stables: ["lexiconName", "lexiconArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? { content: "" })) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? { content: "" })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.lexiconName ?? (yield* toName(id, olds ?? { content: "" }));
+          const name = output?.lexiconName ?? (yield* toName(id, olds ?? { content: "" }));
           const found = yield* getOne(name);
           if (!found) return undefined;
           return toAttributes(
@@ -245,8 +236,7 @@ export const LexiconProvider = () =>
                   attrs.push(
                     toAttributes(
                       lexicon.Name,
-                      lexicon.Attributes?.LexiconArn ??
-                        (yield* lexiconArn(lexicon.Name)),
+                      lexicon.Attributes?.LexiconArn ?? (yield* lexiconArn(lexicon.Name)),
                       lexicon.Attributes,
                     ),
                   );
@@ -284,9 +274,7 @@ export const LexiconProvider = () =>
           // single call converges both the missing and the content-drift
           // cases. Skip the API entirely when the observed content matches.
           if (contentOf(observed?.Lexicon) !== news.content) {
-            yield* retryTransient(
-              polly.putLexicon({ Name: name, Content: news.content }),
-            );
+            yield* retryTransient(polly.putLexicon({ Name: name, Content: news.content }));
           }
 
           yield* session.note(name);
@@ -304,9 +292,7 @@ export const LexiconProvider = () =>
           // Idempotent — the lexicon may already be gone (including the case
           // where only the precreate stub was persisted and PutLexicon never
           // ran).
-          yield* retryTransient(
-            polly.deleteLexicon({ Name: output.lexiconName }),
-          ).pipe(
+          yield* retryTransient(polly.deleteLexicon({ Name: output.lexiconName })).pipe(
             Effect.catchTag("LexiconNotFoundException", () => Effect.void),
           );
           // DeleteLexicon may return before the control plane consistently

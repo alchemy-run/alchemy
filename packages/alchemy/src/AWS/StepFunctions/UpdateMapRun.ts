@@ -11,14 +11,15 @@ export interface UpdateMapRunRequest extends sfn.UpdateMapRunInput {}
  * Adjusts a running Distributed Map Run's `maxConcurrency` and tolerated
  * failure thresholds in place. IAM access is scoped to Map Runs of the
  * bound {@link StateMachine}.
- * @binding
- * @section Distributed Map Runs
- * @example Throttle a running Map Run
+ * ### Distributed Map Runs
+ * **Example:** Throttle a running Map Run
  * ```typescript
  * const updateMapRun = yield* StepFunctions.UpdateMapRun(machine);
  *
  * yield* updateMapRun({ mapRunArn, maxConcurrency: 10 });
  * ```
+ *
+ * @binding
  */
 export interface UpdateMapRun extends Binding.Service<
   UpdateMapRun,
@@ -26,11 +27,7 @@ export interface UpdateMapRun extends Binding.Service<
   (
     stateMachine: StateMachine,
   ) => Effect.Effect<
-    (
-      request: UpdateMapRunRequest,
-    ) => Effect.Effect<sfn.UpdateMapRunOutput, sfn.UpdateMapRunError>
+    (request: UpdateMapRunRequest) => Effect.Effect<sfn.UpdateMapRunOutput, sfn.UpdateMapRunError>
   >
 > {}
-export const UpdateMapRun = Binding.Service<UpdateMapRun>(
-  "AWS.StepFunctions.UpdateMapRun",
-);
+export const UpdateMapRun = Binding.Service<UpdateMapRun>("AWS.StepFunctions.UpdateMapRun");

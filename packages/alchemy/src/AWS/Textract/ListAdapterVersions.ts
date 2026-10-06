@@ -7,9 +7,8 @@ import type { Adapter } from "./Adapter.ts";
  * Runtime binding for `textract:ListAdapterVersions` — list the versions
  * of the bound adapter and their training status.
  *
- * @binding
- * @section Managing Adapters
- * @example List Adapter Versions
+ * ### Managing Adapters
+ * **Example:** List Adapter Versions
  * ```typescript
  * // init
  * const listAdapterVersions = yield* AWS.Textract.ListAdapterVersions(adapter);
@@ -18,6 +17,8 @@ import type { Adapter } from "./Adapter.ts";
  * const result = yield* listAdapterVersions();
  * const versions = result.AdapterVersions;
  * ```
+ *
+ * @binding
  */
 export interface ListAdapterVersions extends Binding.Service<
   ListAdapterVersions,
@@ -27,10 +28,7 @@ export interface ListAdapterVersions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<textract.ListAdapterVersionsRequest, "AdapterId">,
-    ) => Effect.Effect<
-      textract.ListAdapterVersionsResponse,
-      textract.ListAdapterVersionsError
-    >
+    ) => Effect.Effect<textract.ListAdapterVersionsResponse, textract.ListAdapterVersionsError>
   >
 > {}
 export const ListAdapterVersions = Binding.Service<ListAdapterVersions>(

@@ -68,9 +68,8 @@ export interface Application extends Resource<
  * The namespace is immutable; changing it replaces the application. The
  * name, description, access URL, approved origins, and permissions can all
  * be updated in place.
- * @resource
- * @section Creating an Application
- * @example Basic Application
+ * ### Creating an Application
+ * **Example:** Basic Application
  * ```typescript
  * import * as AppIntegrations from "alchemy/AWS/AppIntegrations";
  *
@@ -80,7 +79,7 @@ export interface Application extends Resource<
  * });
  * ```
  *
- * @example Application with Permissions and Tags
+ * **Example:** Application with Permissions and Tags
  * ```typescript
  * const app = yield* AppIntegrations.Application("AgentApp", {
  *   namespace: "com.example.agentapp",
@@ -90,10 +89,10 @@ export interface Application extends Resource<
  *   tags: { team: "contact-center" },
  * });
  * ```
+ *
+ * @resource
  */
-export const Application = Resource<Application>(
-  "AWS.AppIntegrations.Application",
-);
+export const Application = Resource<Application>("AWS.AppIntegrations.Application");
 
 /**
  * Raised when the AppIntegrations API returns an application without the
@@ -107,24 +106,15 @@ export const ApplicationProvider = () =>
   Provider.effect(
     Application,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Get a single application by ARN or ID; undefined if absent. */
       const observe = (arnOrId: string) =>
         appintegrations
           .getApplication({ Arn: arnOrId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       /**
        * Find an application ARN by namespace via list enumeration. The
@@ -141,9 +131,7 @@ export const ApplicationProvider = () =>
           Effect.map((chunk) => Array.from(chunk)[0]?.Arn),
         );
 
-      const toAttrs = Effect.fn(function* (
-        live: appintegrations.GetApplicationResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (live: appintegrations.GetApplicationResponse) {
         if (
           live.Arn === undefined ||
           live.Id === undefined ||
@@ -218,9 +206,7 @@ export const ApplicationProvider = () =>
           const desiredSourceConfig: appintegrations.ApplicationSourceConfig = {
             ExternalUrlConfig: {
               AccessUrl: news.accessUrl,
-              ...(news.approvedOrigins
-                ? { ApprovedOrigins: news.approvedOrigins }
-                : {}),
+              ...(news.approvedOrigins ? { ApprovedOrigins: news.approvedOrigins } : {}),
             },
           };
 
@@ -272,19 +258,14 @@ export const ApplicationProvider = () =>
 
           // 3. Sync mutable aspects — compare observed cloud state against
           //    desired and push a single update with only the changed fields.
-          const update: Omit<appintegrations.UpdateApplicationRequest, "Arn"> =
-            {};
+          const update: Omit<appintegrations.UpdateApplicationRequest, "Arn"> = {};
           if (live.Name !== name) {
             update.Name = name;
           }
-          if (
-            news.description !== undefined &&
-            news.description !== live.Description
-          ) {
+          if (news.description !== undefined && news.description !== live.Description) {
             update.Description = news.description;
           }
-          const observedUrlConfig =
-            live.ApplicationSourceConfig?.ExternalUrlConfig;
+          const observedUrlConfig = live.ApplicationSourceConfig?.ExternalUrlConfig;
           if (
             observedUrlConfig?.AccessUrl !== news.accessUrl ||
             JSON.stringify(observedUrlConfig?.ApprovedOrigins ?? []) !==
@@ -330,9 +311,7 @@ export const ApplicationProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* appintegrations
             .deleteApplication({ Arn: output.applicationArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

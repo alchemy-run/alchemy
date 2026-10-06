@@ -27,12 +27,9 @@ import type { Zone } from "../Zone/Zone.ts";
  * permission, scoped to the single zone passed to `bind`, and binds its value
  * into the Worker so runtime code can authenticate.
  *
- * @binding
- * @product DNS
- * @category Domains & DNS
  *
- * @section Mutating DNS records at runtime
- * @example Create, update, and delete records from inside a Worker
+ * ### Mutating DNS records at runtime
+ * **Example:** Create, update, and delete records from inside a Worker
  * Bind the client in the Worker's Init phase and provide {@link WriteDnsBinding}.
  * The zone is fixed by `WriteDnsBinding(zone)` — the provisioned token only grants
  * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
@@ -40,7 +37,7 @@ import type { Zone } from "../Zone/Zone.ts";
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * const Zone = Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
  *
@@ -74,13 +71,17 @@ import type { Zone } from "../Zone/Zone.ts";
  * ) {}
  * ```
  *
- * @example Apply a batch of changes atomically
+ * **Example:** Apply a batch of changes atomically
  * ```typescript
  * yield* dns.batchDnsRecords({
  *   posts: [{ type: "A", name: "a.example.com", content: "192.0.2.1", ttl: 1 }],
  *   deletes: [{ id: oldRecordId }],
  * });
  * ```
+ *
+ * @binding
+ * @product DNS
+ * @category Domains & DNS
  */
 export interface WriteDns extends Binding.Service<
   WriteDns,
@@ -94,16 +95,10 @@ export const WriteDns = Binding.Service<WriteDns>("Cloudflare.DNS.WriteDns");
 export type CreateRecordRequestInput = Omit<CreateRecordRequest, "zoneId">;
 
 /** Update-record request, minus the zone id and record id. */
-export type UpdateRecordRequestInput = Omit<
-  UpdateRecordRequest,
-  "zoneId" | "dnsRecordId"
->;
+export type UpdateRecordRequestInput = Omit<UpdateRecordRequest, "zoneId" | "dnsRecordId">;
 
 /** Patch-record request, minus the zone id and record id. */
-export type PatchRecordRequestInput = Omit<
-  PatchRecordRequest,
-  "zoneId" | "dnsRecordId"
->;
+export type PatchRecordRequestInput = Omit<PatchRecordRequest, "zoneId" | "dnsRecordId">;
 
 /** Batch-records request, minus the zone id (bound at `WriteDnsBinding(zone)` time). */
 export type BatchRecordRequestInput = Omit<BatchRecordRequest, "zoneId">;

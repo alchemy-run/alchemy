@@ -48,9 +48,8 @@ export interface SSHPublicKey extends Resource<
  *
  * `SSHPublicKey` uploads and manages a user's public key for services such as
  * AWS CodeCommit that authenticate through IAM-backed SSH credentials.
- * @resource
- * @section Managing SSH Keys
- * @example Upload an SSH Public Key
+ * ### Managing SSH Keys
+ * **Example:** Upload an SSH Public Key
  * ```typescript
  * const user = yield* User("GitUser", {
  *   userName: "codecommit-user",
@@ -61,6 +60,8 @@ export interface SSHPublicKey extends Resource<
  *   sshPublicKeyBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample codecommit-user",
  * });
  * ```
+ *
+ * @resource
  */
 export const SSHPublicKey = Resource<SSHPublicKey>("AWS.IAM.SSHPublicKey");
 
@@ -69,10 +70,7 @@ export const SSHPublicKeyProvider = () =>
     stables: ["sshPublicKeyId"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
-      if (
-        olds.userName !== news.userName ||
-        olds.sshPublicKeyBody !== news.sshPublicKeyBody
-      ) {
+      if (olds.userName !== news.userName || olds.sshPublicKeyBody !== news.sshPublicKeyBody) {
         return { action: "replace" } as const;
       }
     }),
@@ -86,11 +84,7 @@ export const SSHPublicKeyProvider = () =>
           SSHPublicKeyId: output.sshPublicKeyId,
           Encoding: "SSH",
         })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       if (!response?.SSHPublicKey?.SSHPublicKeyId) {
         return undefined;
       }
@@ -117,9 +111,7 @@ export const SSHPublicKeyProvider = () =>
             })
             .pipe(
               Effect.map((r) => r.SSHPublicKey),
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
             )
         : undefined;
 
@@ -131,9 +123,7 @@ export const SSHPublicKeyProvider = () =>
           SSHPublicKeyBody: news.sshPublicKeyBody,
         });
         if (!uploaded.SSHPublicKey?.SSHPublicKeyId) {
-          return yield* Effect.fail(
-            new Error(`uploadSSHPublicKey returned no key id`),
-          );
+          return yield* Effect.fail(new Error(`uploadSSHPublicKey returned no key id`));
         }
         key = uploaded.SSHPublicKey;
       }
@@ -181,9 +171,7 @@ export const SSHPublicKeyProvider = () =>
         (user) =>
           iam.listSSHPublicKeys.pages({ UserName: user.UserName }).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.SSHPublicKeys ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.SSHPublicKeys ?? [])),
             Effect.flatMap((metas) =>
               Effect.forEach(
                 metas,
@@ -198,18 +186,14 @@ export const SSHPublicKeyProvider = () =>
                       Effect.map((r) => r.SSHPublicKey),
                       // The key may be deleted between enumeration and
                       // hydration.
-                      Effect.catchTag("NoSuchEntityException", () =>
-                        Effect.succeed(undefined),
-                      ),
+                      Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
                     ),
                 { concurrency: 10 },
               ),
             ),
             Effect.map((keys) =>
               keys
-                .filter(
-                  (key): key is iam.SSHPublicKey => key?.SSHPublicKeyId != null,
-                )
+                .filter((key): key is iam.SSHPublicKey => key?.SSHPublicKeyId != null)
                 .map((key) => ({
                   userName: key.UserName,
                   sshPublicKeyId: key.SSHPublicKeyId,

@@ -6,11 +6,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fetchWafTags,
@@ -123,9 +119,8 @@ export interface WebACL extends Resource<
  * distributions (set `Distribution.webAclId` to the web ACL's ARN) and are
  * always provisioned in `us-east-1` — the provider pins the region for you.
  *
- * @resource
- * @section Creating Web ACLs
- * @example Allow-by-Default Web ACL with a Managed Rule Group
+ * ### Creating Web ACLs
+ * **Example:** Allow-by-Default Web ACL with a Managed Rule Group
  * ```typescript
  * const acl = yield* AWS.WAFv2.WebACL("ApiFirewall", {
  *   rules: [
@@ -149,7 +144,7 @@ export interface WebACL extends Resource<
  * });
  * ```
  *
- * @example Rate Limiting Requests per IP
+ * **Example:** Rate Limiting Requests per IP
  * ```typescript
  * const acl = yield* AWS.WAFv2.WebACL("RateLimited", {
  *   defaultAction: { Allow: {} },
@@ -171,8 +166,8 @@ export interface WebACL extends Resource<
  * });
  * ```
  *
- * @section CloudFront Scope
- * @example Web ACL for a CloudFront Distribution
+ * ### CloudFront Scope
+ * **Example:** Web ACL for a CloudFront Distribution
  * ```typescript
  * const acl = yield* AWS.WAFv2.WebACL("EdgeFirewall", {
  *   scope: "CLOUDFRONT", // provisioned in us-east-1 automatically
@@ -185,14 +180,16 @@ export interface WebACL extends Resource<
  * });
  * ```
  *
- * @section Protecting Regional Resources
- * @example Associate with a Cognito User Pool
+ * ### Protecting Regional Resources
+ * **Example:** Associate with a Cognito User Pool
  * ```typescript
  * const association = yield* AWS.WAFv2.WebACLAssociation("PoolFirewall", {
  *   webAclArn: acl.webAclArn,
  *   resourceArn: userPool.userPoolArn,
  * });
  * ```
+ *
+ * @resource
  */
 export const WebACL = Resource<WebACL>("AWS.WAFv2.WebACL");
 
@@ -216,10 +213,7 @@ export const WebACLProvider = () =>
     WebACL,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: WebACLProps) {
-        return (
-          props.webAclName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.webAclName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       // Resolve a web ACL to its full detail + LockToken. Prefers the
@@ -235,9 +229,7 @@ export const WebACLProvider = () =>
             wafv2
               .getWebACL({ Name: name, Scope: scope, Id: cachedId })
               .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
               ),
           );
           if (byId?.WebACL) {
@@ -257,9 +249,7 @@ export const WebACLProvider = () =>
               wafv2
                 .getWebACL({ Name: name, Scope: scope, Id: summary.Id })
                 .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
                 ),
             );
           }
@@ -277,8 +267,7 @@ export const WebACLProvider = () =>
         // props survive engine serialization as plain JSON — restore
         // ByteMatchStatement SearchString blobs to Uint8Array
         Rules: normalizeWafRules(props.rules),
-        VisibilityConfig:
-          props.visibilityConfig ?? defaultVisibilityConfig(name),
+        VisibilityConfig: props.visibilityConfig ?? defaultVisibilityConfig(name),
         CustomResponseBodies: props.customResponseBodies,
         CaptchaConfig: props.captchaConfig,
         ChallengeConfig: props.challengeConfig,
@@ -336,8 +325,7 @@ export const WebACLProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const scope = output?.scope ?? olds?.scope ?? defaultScope;
-          const name =
-            output?.webAclName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.webAclName ?? (yield* createName(id, olds ?? {}));
           const found = yield* findWebACL(scope, name, output?.webAclId);
           if (!found?.WebACL) {
             return undefined;
@@ -371,9 +359,7 @@ export const WebACLProvider = () =>
                     Tags: createTagsList(desiredTags),
                   })
                   .pipe(
-                    Effect.catchTag("WAFDuplicateItemException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
                   ),
               ),
             );
@@ -381,9 +367,7 @@ export const WebACLProvider = () =>
           }
 
           if (!observed?.WebACL) {
-            return yield* Effect.fail(
-              new Error(`Failed to observe WebACL '${name}' after create`),
-            );
+            return yield* Effect.fail(new Error(`Failed to observe WebACL '${name}' after create`));
           }
 
           const acl = observed.WebACL;
@@ -426,9 +410,7 @@ export const WebACLProvider = () =>
             observedAspects.AssociationConfig = acl.AssociationConfig;
             desiredAspects.AssociationConfig = desired.AssociationConfig;
           }
-          if (
-            !deepEqual(observedAspects, desiredAspects, { stripNullish: true })
-          ) {
+          if (!deepEqual(observedAspects, desiredAspects, { stripNullish: true })) {
             yield* retryOptimisticLock(
               Effect.gen(function* () {
                 const fresh = yield* findWebACL(scope, name, acl.Id);
@@ -492,12 +474,7 @@ export const WebACLProvider = () =>
                       Id: output.webAclId,
                       LockToken: found.LockToken,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        "WAFNonexistentItemException",
-                        () => Effect.void,
-                      ),
-                    ),
+                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
                 );
               }),
             ),

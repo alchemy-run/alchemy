@@ -7,10 +7,7 @@ import type { Role } from "../IAM/Role.ts";
  * `StartRestoreJob` request with `IamRoleArn` defaulting to the bound
  * restore role.
  */
-export interface StartRestoreJobRequest extends Omit<
-  backup.StartRestoreJobInput,
-  "IamRoleArn"
-> {
+export interface StartRestoreJobRequest extends Omit<backup.StartRestoreJobInput, "IamRoleArn"> {
   /**
    * IAM role AWS Backup assumes to create the restored resource.
    * @default the restore role bound via `StartRestoreJob(role)`
@@ -29,9 +26,8 @@ export interface StartRestoreJobRequest extends Omit<
  * overrides it. `backup:StartRestoreJob` authorizes on the recovery point's
  * underlying resource ARN, so the grant is on `*`. Provide the
  * implementation with `Effect.provide(AWS.Backup.StartRestoreJobHttp)`.
- * @binding
- * @section Restoring Recovery Points
- * @example Restore The Latest Recovery Point
+ * ### Restoring Recovery Points
+ * **Example:** Restore The Latest Recovery Point
  * ```typescript
  * const startRestoreJob = yield* AWS.Backup.StartRestoreJob(restoreRole);
  *
@@ -41,6 +37,8 @@ export interface StartRestoreJobRequest extends Omit<
  * });
  * yield* Effect.log(`restore job ${job.RestoreJobId} started`);
  * ```
+ *
+ * @binding
  */
 export interface StartRestoreJob extends Binding.Service<
   StartRestoreJob,
@@ -50,12 +48,7 @@ export interface StartRestoreJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartRestoreJobRequest,
-    ) => Effect.Effect<
-      backup.StartRestoreJobOutput,
-      backup.StartRestoreJobError
-    >
+    ) => Effect.Effect<backup.StartRestoreJobOutput, backup.StartRestoreJobError>
   >
 > {}
-export const StartRestoreJob = Binding.Service<StartRestoreJob>(
-  "AWS.Backup.StartRestoreJob",
-);
+export const StartRestoreJob = Binding.Service<StartRestoreJob>("AWS.Backup.StartRestoreJob");

@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type AppStatus = qapps.AppStatus;
@@ -115,9 +110,8 @@ export interface QApp extends Resource<
  * `instanceId`), which itself requires IAM Identity Center. The calling
  * identity must be a user of that Q Business application.
  * :::
- * @resource
- * @section Creating Q Apps
- * @example Prompt-Driven Q App
+ * ### Creating Q Apps
+ * **Example:** Prompt-Driven Q App
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -146,7 +140,7 @@ export interface QApp extends Resource<
  * });
  * ```
  *
- * @example File Upload Q App
+ * **Example:** File Upload Q App
  * ```typescript
  * const analyzer = yield* AWS.QApps.QApp("DocAnalyzer", {
  *   instanceId: qbusinessApp.applicationId,
@@ -172,22 +166,18 @@ export interface QApp extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const QApp = Resource<QApp>("AWS.QApps.QApp");
 
 const createTitle = (id: string, props: { title?: string | undefined }) =>
-  props.title
-    ? Effect.succeed(props.title)
-    : createPhysicalName({ id, maxLength: 100 });
+  props.title ? Effect.succeed(props.title) : createPhysicalName({ id, maxLength: 100 });
 
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qapps
     .listTagsForResource({ resourceARN: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(response?.tags ?? {})) {
     if (value !== undefined) tags[key] = value;
@@ -203,11 +193,7 @@ interface QAppState {
 const readQAppById = Effect.fn(function* (instanceId: string, appId: string) {
   const observed = yield* qapps
     .getQApp({ instanceId, appId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!observed || observed.status === "DELETED") return undefined;
   const state: QAppState = {
     observed,
@@ -226,17 +212,12 @@ const readQAppById = Effect.fn(function* (instanceId: string, appId: string) {
   return state;
 });
 
-const findQAppByTitle = Effect.fn(function* (
-  instanceId: string,
-  title: string,
-) {
+const findQAppByTitle = Effect.fn(function* (instanceId: string, title: string) {
   const apps = yield* qapps.listQApps.pages({ instanceId }).pipe(
     EffectStream.runCollect,
     Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.apps ?? [])),
   );
-  const match = apps.find(
-    (app) => app.title === title && app.status !== "DELETED",
-  );
+  const match = apps.find((app) => app.title === title && app.status !== "DELETED");
   if (!match?.appId) return undefined;
   return yield* readQAppById(instanceId, match.appId);
 });
@@ -258,21 +239,13 @@ const isSubsetOf = (desired: unknown, observed: unknown): boolean => {
   if (typeof desired === "object" && desired !== null) {
     if (typeof observed !== "object" || observed === null) return false;
     const observedRecord: Record<string, unknown> = { ...observed };
-    return Object.entries(desired).every(([key, value]) =>
-      isSubsetOf(value, observedRecord[key]),
-    );
+    return Object.entries(desired).every(([key, value]) => isSubsetOf(value, observedRecord[key]));
   }
   return desired === observed;
 };
 
-const definitionDrifted = (
-  desired: QAppDefinition,
-  observed: qapps.GetQAppOutput,
-): boolean => {
-  if (
-    desired.initialPrompt !== undefined &&
-    desired.initialPrompt !== observed.initialPrompt
-  ) {
+const definitionDrifted = (desired: QAppDefinition, observed: qapps.GetQAppOutput): boolean => {
+  if (desired.initialPrompt !== undefined && desired.initialPrompt !== observed.initialPrompt) {
     return true;
   }
   return !isSubsetOf(desired.cards, observed.appDefinition.cards);
@@ -292,10 +265,7 @@ export const QAppProvider = () =>
           if (instanceId === undefined) return undefined;
           const state = output?.appId
             ? yield* readQAppById(instanceId, output.appId)
-            : yield* findQAppByTitle(
-                instanceId,
-                yield* createTitle(id, olds ?? {}),
-              );
+            : yield* findQAppByTitle(instanceId, yield* createTitle(id, olds ?? {}));
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -339,9 +309,7 @@ export const QAppProvider = () =>
             yield* session.note(`Created Q App ${title} (${created.appId})`);
             state = yield* readQAppById(news.instanceId, created.appId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created Q App ${title}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created Q App ${title}`));
             }
           }
 
@@ -376,9 +344,7 @@ export const QAppProvider = () =>
           if (upsert.length > 0) {
             yield* qapps.tagResource({
               resourceARN: state.attrs.appArn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
 
@@ -386,9 +352,7 @@ export const QAppProvider = () =>
 
           const final = yield* readQAppById(news.instanceId, state.attrs.appId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled Q App ${title}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled Q App ${title}`));
           }
           return final.attrs;
         }),
@@ -398,9 +362,7 @@ export const QAppProvider = () =>
               instanceId: output.instanceId,
               appId: output.appId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

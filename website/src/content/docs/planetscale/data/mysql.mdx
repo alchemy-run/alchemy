@@ -128,14 +128,14 @@ requires. See the full example —
 
 ## Apply migrations
 
-Point `migrationsDir` at a directory of `.sql` files — on either the
+Point `migrations` at a directory of `.sql` files — on either the
 database (applied to the default branch) or a branch:
 
 ```typescript
 const branch = yield* Planetscale.MySQLBranch("app-branch", {
   database,
   isProduction: false,
-  migrationsDir: "./migrations",
+  migrations: "./migrations",
 });
 ```
 

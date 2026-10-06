@@ -11,13 +11,14 @@ export interface DeleteEndpointRequest extends sns.DeleteEndpointInput {}
  * Bind this operation to a {@link PlatformApplication} to deregister one
  * of its device endpoints (idempotent).
  * Provide the `DeleteEndpointHttp` layer on the Function to implement the binding.
- * @binding
- * @section Mobile Push
- * @example Delete an Endpoint
+ * ### Mobile Push
+ * **Example:** Delete an Endpoint
  * ```typescript
  * const deleteEndpoint = yield* SNS.DeleteEndpoint(app);
  * yield* deleteEndpoint({ EndpointArn: endpointArn });
  * ```
+ *
+ * @binding
  */
 export interface DeleteEndpoint extends Binding.Service<
   DeleteEndpoint,
@@ -31,6 +32,4 @@ export interface DeleteEndpoint extends Binding.Service<
   >
 > {}
 
-export const DeleteEndpoint = Binding.Service<DeleteEndpoint>(
-  "AWS.SNS.DeleteEndpoint",
-);
+export const DeleteEndpoint = Binding.Service<DeleteEndpoint>("AWS.SNS.DeleteEndpoint");

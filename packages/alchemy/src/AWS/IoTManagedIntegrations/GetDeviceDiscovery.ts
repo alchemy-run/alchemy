@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetDeviceDiscovery}.
  */
-export interface GetDeviceDiscoveryRequest
-  extends mi.GetDeviceDiscoveryRequest {}
+export interface GetDeviceDiscoveryRequest extends mi.GetDeviceDiscoveryRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:GetDeviceDiscovery`
@@ -16,14 +15,15 @@ export interface GetDeviceDiscoveryRequest
  * {@link StartDeviceDiscovery}. Provide the implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.GetDeviceDiscoveryHttp)`.
  *
- * @binding
- * @section Discovering Devices
- * @example Poll a Discovery Scan
+ * ### Discovering Devices
+ * **Example:** Poll a Discovery Scan
  * ```typescript
  * const getDiscovery = yield* IoTManagedIntegrations.GetDeviceDiscovery();
  *
  * const { Status } = yield* getDiscovery({ Identifier: discoveryId });
  * ```
+ *
+ * @binding
  */
 export interface GetDeviceDiscovery extends Binding.Service<
   GetDeviceDiscovery,
@@ -31,10 +31,7 @@ export interface GetDeviceDiscovery extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetDeviceDiscoveryRequest,
-    ) => Effect.Effect<
-      mi.GetDeviceDiscoveryResponse,
-      mi.GetDeviceDiscoveryError
-    >
+    ) => Effect.Effect<mi.GetDeviceDiscoveryResponse, mi.GetDeviceDiscoveryError>
   >
 > {}
 export const GetDeviceDiscovery = Binding.Service<GetDeviceDiscovery>(

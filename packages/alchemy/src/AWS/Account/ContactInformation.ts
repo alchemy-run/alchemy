@@ -68,9 +68,8 @@ export interface ContactInformation extends Resource<
  * contact, so destroying the resource stops managing it and leaves the last
  * value in place.
  *
- * @resource
- * @section Setting the Primary Contact
- * @example Primary Contact for the Calling Account
+ * ### Setting the Primary Contact
+ * **Example:** Primary Contact for the Calling Account
  * ```typescript
  * const contact = yield* ContactInformation("PrimaryContact", {
  *   fullName: "Jane Doe",
@@ -85,7 +84,7 @@ export interface ContactInformation extends Resource<
  * });
  * ```
  *
- * @example Primary Contact for an Organizations Member Account
+ * **Example:** Primary Contact for an Organizations Member Account
  * ```typescript
  * const contact = yield* ContactInformation("MemberContact", {
  *   fullName: "Acme Ops",
@@ -97,10 +96,10 @@ export interface ContactInformation extends Resource<
  *   accountId: "123456789012",
  * });
  * ```
+ *
+ * @resource
  */
-export const ContactInformation = Resource<ContactInformation>(
-  "AWS.Account.ContactInformation",
-);
+export const ContactInformation = Resource<ContactInformation>("AWS.Account.ContactInformation");
 
 export const ContactInformationProvider = () =>
   Provider.effect(
@@ -124,13 +123,9 @@ export const ContactInformationProvider = () =>
       const observe = (accountId: string | undefined) =>
         account.getContactInformation({ AccountId: accountId }).pipe(
           Effect.map((r) =>
-            r.ContactInformation
-              ? toAttributes(r.ContactInformation)
-              : undefined,
+            r.ContactInformation ? toAttributes(r.ContactInformation) : undefined,
           ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -187,10 +182,7 @@ export const ContactInformationProvider = () =>
           };
         }),
         // Account-global singleton: return the one contact if it exists.
-        list: () =>
-          observe(undefined).pipe(
-            Effect.map((contact) => (contact ? [contact] : [])),
-          ),
+        list: () => observe(undefined).pipe(Effect.map((contact) => (contact ? [contact] : []))),
         // AWS does not allow deleting the primary contact of an account —
         // destroy just stops managing it and leaves the last value in place.
         delete: Effect.fn(function* () {}),

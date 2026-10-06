@@ -33,7 +33,12 @@ const decodeDate = (encoded: unknown): Date | undefined => {
   return Number.isNaN(date.getTime()) ? undefined : date;
 };
 
-const decodeDuration = (encoded: unknown): Duration.Duration | undefined => {
+/**
+ * Rebuild a {@link Duration.Duration} from `Duration.toJSON`'s
+ * `{_id,_tag,millis?,nanos?}` shape. Shared by state persistence and the
+ * RPC sidecar — that JSON is not a valid `Duration.Input`.
+ */
+export const decodeDuration = (encoded: unknown): Duration.Duration | undefined => {
   if (encoded === null || typeof encoded !== "object") return undefined;
   const json = encoded as {
     _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
@@ -42,17 +47,13 @@ const decodeDuration = (encoded: unknown): Duration.Duration | undefined => {
   };
   switch (json._tag) {
     case "Millis":
-      return json.millis !== undefined
-        ? Duration.millis(json.millis)
-        : undefined;
+      return json.millis !== undefined ? Duration.millis(json.millis) : undefined;
     case "Nanos":
-      return json.nanos !== undefined
-        ? Duration.nanos(BigInt(json.nanos))
-        : undefined;
+      return json.nanos !== undefined ? Duration.nanos(BigInt(json.nanos)) : undefined;
     case "Infinity":
       return Duration.infinity;
     case "NegativeInfinity":
-      return Duration.zero; // Effect treats negatives as zero clamp
+      return Duration.negativeInfinity;
     default:
       return undefined;
   }

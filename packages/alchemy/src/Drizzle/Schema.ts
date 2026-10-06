@@ -1,14 +1,15 @@
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import { ChildProcess } from "effect/unstable/process";
-import * as crypto from "node:crypto";
+import { ChildProcess } from "effect/process";
 import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { exec } from "../Util/exec.ts";
+import { isNonInteractive } from "../Util/interactive.ts";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
@@ -40,8 +41,9 @@ export type SchemaProps = {
   /**
    * Output directory for generated migrations. Each migration is written as
    * `{out}/{timestamp}_migration/{migration.sql, snapshot.json}`. Pass this
-   * value through to `Neon.Branch`/`Cloudflare.D1.Database` as `migrationsDir`
-   * to apply pending migrations on deploy.
+   * through as a database resource's `migrations` prop (`Neon.Branch`,
+   * `Fly.Postgres`, `Cloudflare.D1.Database`, …) to apply pending
+   * migrations on deploy.
    *
    * @default "./migrations"
    */
@@ -81,8 +83,8 @@ export type Schema = Resource<
  * Wraps drizzle-kit's programmatic API (`generateDrizzleJson` /
  * `generateMigration`) so migration SQL is regenerated as part of `alchemy
  * deploy` whenever the source schema changes. The output directory is
- * intended to be passed straight to a database resource's `migrationsDir`,
- * giving you a single deploy-driven flow:
+ * intended to be passed straight to a database resource's `migrations`
+ * prop, giving you a single deploy-driven flow:
  *
  * ```typescript
  * const schema = yield* Drizzle.Schema("app-schema", {
@@ -91,17 +93,23 @@ export type Schema = Resource<
  *
  * const branch = yield* Neon.Branch("app-branch", {
  *   project,
- *   migrationsDir: schema.out,
+ *   migrations: schema,
+ * });
+ *
+ * const db = yield* Fly.Postgres("Db", {
+ *   region: "iad",
+ *   migrations: schema,
  * });
  * ```
  *
- * `Drizzle.Schema` runs first (because `Neon.Branch` depends on its `out`
- * output), regenerates pending migration files, and `Neon.Branch` then
- * applies them transactionally.
+ * `Drizzle.Schema` runs first (because the database resource depends
+ * on its `out` output), regenerates pending migration files, and the
+ * database resource then applies them.
  *
  * The resource is delete-safe: removing it from the stack does **not** wipe
  * the migrations directory, since migration files are typically checked in
  * and shared with other environments.
+ *
  * @resource
  */
 export const Schema = Resource<Schema>("Drizzle.Schema");
@@ -119,8 +127,7 @@ const dialectModule = (dialect: Dialect): string => {
 
 const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
-const tsStamp = () =>
-  new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+const tsStamp = () => new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
 
 export const SchemaProvider = () =>
   Provider.effect(
@@ -129,8 +136,7 @@ export const SchemaProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
-      const resolveOut = (p: SchemaProps) =>
-        path.resolve(process.cwd(), p.out ?? "./migrations");
+      const resolveOut = (p: SchemaProps) => path.resolve(process.cwd(), p.out ?? "./migrations");
 
       // The `out` attribute is exposed as a path relative to the current
       // working directory so that persisted state stays portable across
@@ -138,28 +144,20 @@ export const SchemaProvider = () =>
       // `resolveOut` form.
       const relativeOut = (abs: string) => path.relative(process.cwd(), abs);
 
-      const resolveSchema = (p: SchemaProps) =>
-        path.resolve(process.cwd(), p.schema);
+      const resolveSchema = (p: SchemaProps) => path.resolve(process.cwd(), p.schema);
 
       const loadSchemaModule = (p: SchemaProps) =>
         Effect.gen(function* () {
           const schemaPath = resolveSchema(p);
           return yield* Effect.tryPromise({
-            try: () =>
-              import(/* @vite-ignore */ schemaPath) as Promise<
-                Record<string, unknown>
-              >,
-            catch: (cause) =>
-              new Error(`Failed to import schema at ${p.schema}: ${cause}`),
+            try: () => import(/* @vite-ignore */ schemaPath) as Promise<Record<string, unknown>>,
+            catch: (cause) => new Error(`Failed to import schema at ${p.schema}: ${cause}`),
           });
         });
 
       const loadKit = (dialect: Dialect) =>
         Effect.tryPromise({
-          try: () =>
-            import(
-              /* @vite-ignore */ dialectModule(dialect)
-            ) as Promise<DrizzleKitApi>,
+          try: () => import(/* @vite-ignore */ dialectModule(dialect)) as Promise<DrizzleKitApi>,
           catch: (cause) =>
             new Error(
               `Failed to load drizzle-kit/${dialect} (is drizzle-kit installed?): ${cause}`,
@@ -170,13 +168,11 @@ export const SchemaProvider = () =>
         Effect.gen(function* () {
           const apiUrl = yield* Effect.try({
             try: () => import.meta.resolve(dialectModule(dialect)),
-            catch: (cause) =>
-              new Error(`Failed to resolve drizzle-kit/${dialect}: ${cause}`),
+            catch: (cause) => new Error(`Failed to resolve drizzle-kit/${dialect}: ${cause}`),
           });
           const apiFileUrl = yield* Effect.try({
             try: () => new URL(apiUrl),
-            catch: (cause) =>
-              new Error(`Failed to parse drizzle-kit/${dialect} URL: ${cause}`),
+            catch: (cause) => new Error(`Failed to parse drizzle-kit/${dialect} URL: ${cause}`),
           });
           const apiPath = yield* path.fromFileUrl(apiFileUrl);
           return path.join(path.dirname(apiPath), "bin.cjs");
@@ -210,13 +206,10 @@ export const SchemaProvider = () =>
             extendEnv: true,
           };
 
-          const interactive =
-            !process.env.CI &&
-            process.stdin.isTTY &&
-            process.stdout.isTTY &&
-            process.stderr.isTTY;
-
-          if (interactive) {
+          // Hand the terminal to drizzle-kit only when this process may
+          // prompt at all — the same detection (TTY, CI, `--no-input`,
+          // `ALCHEMY_NO_TUI`, agent env) every other spawned command uses.
+          if (!isNonInteractive() && process.stderr.isTTY) {
             const handle = yield* ChildProcess.make(nodeExecPath, args, {
               ...commandOptions,
               stdin: "inherit",
@@ -224,8 +217,7 @@ export const SchemaProvider = () =>
               stderr: "inherit",
             }).pipe(
               Effect.mapError(
-                (cause) =>
-                  new Error(`drizzle-kit generate failed: ${String(cause)}`),
+                (cause) => new Error(`drizzle-kit generate failed: ${String(cause)}`),
               ),
             );
             const exitCode = yield* handle.exitCode;
@@ -237,13 +229,8 @@ export const SchemaProvider = () =>
             return;
           }
 
-          const result = yield* exec(
-            ChildProcess.make(nodeExecPath, args, commandOptions),
-          ).pipe(
-            Effect.mapError(
-              (cause) =>
-                new Error(`drizzle-kit generate failed: ${String(cause)}`),
-            ),
+          const result = yield* exec(ChildProcess.make(nodeExecPath, args, commandOptions)).pipe(
+            Effect.mapError((cause) => new Error(`drizzle-kit generate failed: ${String(cause)}`)),
           );
           if (result.exitCode === 0) return;
 
@@ -271,9 +258,7 @@ export const SchemaProvider = () =>
           }
 
           return yield* Effect.fail(
-            new Error(
-              `drizzle-kit generate failed: ${result.stdout}\n${result.stderr}`,
-            ),
+            new Error(`drizzle-kit generate failed: ${result.stdout}\n${result.stderr}`),
           );
         });
 
@@ -294,8 +279,7 @@ export const SchemaProvider = () =>
       const readLatestSnapshot = (out: string) =>
         Effect.gen(function* () {
           const dirs = yield* listMigrationDirs(out);
-          const entries: Array<{ snapshot: DrizzleSnapshot; hash: string }> =
-            [];
+          const entries: Array<{ snapshot: DrizzleSnapshot; hash: string }> = [];
           for (const dir of dirs) {
             const snapshotPath = path.join(out, dir, "snapshot.json");
             const exists = yield* fs.exists(snapshotPath);
@@ -307,13 +291,9 @@ export const SchemaProvider = () =>
             });
           }
           if (entries.length === 0) return undefined;
-          const referenced = new Set(
-            entries.flatMap((entry) => entry.snapshot.prevIds ?? []),
-          );
+          const referenced = new Set(entries.flatMap((entry) => entry.snapshot.prevIds ?? []));
           const head = entries.find(
-            (entry) =>
-              entry.snapshot.id !== undefined &&
-              !referenced.has(entry.snapshot.id),
+            (entry) => entry.snapshot.id !== undefined && !referenced.has(entry.snapshot.id),
           );
           // Fall back to name order for snapshots without id/prevIds chains.
           return head ?? entries[entries.length - 1];
@@ -337,9 +317,7 @@ export const SchemaProvider = () =>
             const latest = yield* readLatestSnapshot(tmpOut);
             const changed = after.some((dir) => !before.includes(dir));
 
-            const prevEntry = outExists
-              ? yield* readLatestSnapshot(out)
-              : undefined;
+            const prevEntry = outExists ? yield* readLatestSnapshot(out) : undefined;
 
             return {
               mode: "cli" as const,
@@ -348,11 +326,7 @@ export const SchemaProvider = () =>
               prevEntry,
               changed,
             };
-          }).pipe(
-            Effect.ensuring(
-              fs.remove(tmpOut, { recursive: true }).pipe(Effect.ignore),
-            ),
-          );
+          }).pipe(Effect.ensuring(fs.remove(tmpOut, { recursive: true }).pipe(Effect.ignore)));
         });
 
       /**
@@ -377,10 +351,8 @@ export const SchemaProvider = () =>
           const schemaModule = yield* loadSchemaModule(props);
           const prevEntry = yield* readLatestSnapshot(out);
           const cur = yield* Effect.tryPromise({
-            try: () =>
-              generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
-            catch: (cause) =>
-              new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
+            try: () => generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
+            catch: (cause) => new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
           });
 
           // For the initial migration, drizzle-kit needs an *empty* snapshot
@@ -391,14 +363,11 @@ export const SchemaProvider = () =>
             (yield* Effect.tryPromise({
               try: () => generateDrizzleJson({}),
               catch: (cause) =>
-                new Error(
-                  `drizzle-kit generateDrizzleJson (empty baseline) failed: ${cause}`,
-                ),
+                new Error(`drizzle-kit generateDrizzleJson (empty baseline) failed: ${cause}`),
             }));
           const sqlStatements = yield* Effect.tryPromise({
             try: () => generateMigration(prev, cur),
-            catch: (cause) =>
-              new Error(`drizzle-kit generateMigration failed: ${cause}`),
+            catch: (cause) => new Error(`drizzle-kit generateMigration failed: ${cause}`),
           });
           return {
             mode: "programmatic" as const,
@@ -439,8 +408,7 @@ export const SchemaProvider = () =>
             const dirName = `${tsStamp()}_migration`;
             const dirPath = path.join(out, dirName);
             yield* fs.makeDirectory(dirPath, { recursive: true });
-            const sql =
-              sqlStatements.join("\n--> statement-breakpoint\n") + "\n";
+            const sql = sqlStatements.join("\n--> statement-breakpoint\n") + "\n";
             yield* fs.writeFileString(path.join(dirPath, "migration.sql"), sql);
             yield* fs.writeFileString(
               path.join(dirPath, "snapshot.json"),
@@ -472,10 +440,7 @@ export const SchemaProvider = () =>
           // `schema.out` as an unresolved Output during plan and cascade
           // into spurious updates of their own.
           const drift = yield* detectDrift(news);
-          const changed =
-            drift.mode === "cli"
-              ? drift.changed
-              : drift.sqlStatements.length > 0;
+          const changed = drift.mode === "cli" ? drift.changed : drift.sqlStatements.length > 0;
           // Originally `output.out` was an absolute path, which is not portable.
           // So, we trigger an update to migrate existing resources to the
           // canonical (cwd-relative) form. This is safe because `regenerate`

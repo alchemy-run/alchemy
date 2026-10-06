@@ -1,18 +1,24 @@
 import * as lambda from "@distilled.cloud/aws/lambda";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 export type StartingPosition = "TRIM_HORIZON" | "LATEST" | "AT_TIMESTAMP";
+
+/** Internal retry signal: the mapping has not reached its desired state yet. */
+class MappingNotSettled extends Data.TaggedError("MappingNotSettled")<{
+  readonly state: string | undefined;
+}> {}
 
 export type FunctionResponseType = "ReportBatchItemFailures";
 
@@ -189,14 +195,13 @@ export interface EventSourceMapping extends Resource<
  * directly when you need full control over batching, starting position, retry
  * behavior, or filtering.
  *
- * @resource
- * @section Polling an SQS Queue
+ * ### Polling an SQS Queue
  * SQS is the simplest source: no `startingPosition` is needed because there is
  * no stream cursor. Lambda long-polls the queue and invokes the function with
  * up to `batchSize` messages, and `functionName` plus `eventSourceArn` are the
  * only required props.
  *
- * @example Subscribe a function to a queue
+ * **Example:** Subscribe a function to a queue
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -218,13 +223,13 @@ export interface EventSourceMapping extends Resource<
  * for fewer, larger invocations — useful for amortizing cold starts or
  * downstream write costs on bursty queues.
  *
- * @section Streaming from Kinesis & DynamoDB
+ * ### Streaming from Kinesis & DynamoDB
  * Stream sources (Kinesis and DynamoDB Streams) deliver records in shard order
  * and therefore require a `startingPosition` that tells Lambda where in the
  * shard to begin reading. These sources also unlock the stream-only tuning
  * knobs covered in the next sections.
  *
- * @example Process a Kinesis stream from the latest records
+ * **Example:** Process a Kinesis stream from the latest records
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -245,7 +250,7 @@ export interface EventSourceMapping extends Resource<
  * written after the mapping is created — the right choice for live event
  * pipelines where replaying history would be wasteful or incorrect.
  *
- * @example Replay a DynamoDB stream from the beginning
+ * **Example:** Replay a DynamoDB stream from the beginning
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -267,7 +272,7 @@ export interface EventSourceMapping extends Resource<
  * function processes the full available history before catching up to new
  * writes — use it when every change matters (e.g. building a projection).
  *
- * @example Start reading from a specific timestamp
+ * **Example:** Start reading from a specific timestamp
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("EventsFromTime", {
  *   functionName: consumer.functionName,
@@ -281,12 +286,12 @@ export interface EventSourceMapping extends Resource<
  * `startingPositionTimestamp`, letting you reprocess a known time range without
  * replaying the entire stream.
  *
- * @section Tuning Throughput
+ * ### Tuning Throughput
  * For stream sources, throughput is governed by how records are batched and how
  * many batches run in parallel per shard. These knobs let you balance
  * end-to-end latency against invocation count and downstream load.
  *
- * @example Increase parallelism and use tumbling windows
+ * **Example:** Increase parallelism and use tumbling windows
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("HighThroughput", {
  *   functionName: consumer.functionName,
@@ -305,12 +310,12 @@ export interface EventSourceMapping extends Resource<
  * windowed stream processing. Raising `batchSize`/`maximumBatchingWindow`
  * favors fewer, larger invocations.
  *
- * @section Error Handling & Retries
+ * ### Error Handling & Retries
  * For stream sources a single poison-pill record can block a shard forever.
  * These props bound retries, split failing batches, expire stale records, and
  * route failures elsewhere instead of stalling the stream.
  *
- * @example Bisect on error, cap retries, and expire old records
+ * **Example:** Bisect on error, cap retries, and expire old records
  * ```typescript
  * const dlq = yield* AWS.SQS.Queue("StreamFailures", {});
  *
@@ -333,7 +338,7 @@ export interface EventSourceMapping extends Resource<
  * discarded and its metadata is sent to the `destinationConfig.OnFailure`
  * target so it is never silently lost.
  *
- * @example Report partial batch failures
+ * **Example:** Report partial batch failures
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("PartialFailures", {
  *   functionName: handler.functionName,
@@ -348,13 +353,13 @@ export interface EventSourceMapping extends Resource<
  * instead of the whole batch — avoiding redundant reprocessing of records that
  * already succeeded.
  *
- * @section Filtering Records
+ * ### Filtering Records
  * Attach `filterCriteria` so the function is only invoked for records matching
  * an event pattern. Filtering happens before invocation, so it cuts both cost
  * and unnecessary cold starts. Encrypt the patterns with `kmsKeyArn` when they
  * contain sensitive values.
  *
- * @example Only deliver records where `type` is `"order"`
+ * **Example:** Only deliver records where `type` is `"order"`
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("OrdersOnly", {
  *   functionName: worker.functionName,
@@ -371,11 +376,11 @@ export interface EventSourceMapping extends Resource<
  * dropped without invoking the function. The optional `kmsKeyArn` encrypts the
  * stored filter criteria with your own KMS key instead of an AWS-managed one.
  *
- * @section Enabling & Disabling
+ * ### Enabling & Disabling
  * The `enabled` flag controls whether Lambda actively polls the source without
  * deleting the mapping, so you can pause and resume delivery in place.
  *
- * @example Create a paused mapping
+ * **Example:** Create a paused mapping
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("PausedConsumer", {
  *   functionName: consumer.functionName,
@@ -389,12 +394,12 @@ export interface EventSourceMapping extends Resource<
  * to `true` to resume. This is handy for maintenance windows or for staging a
  * consumer before turning on traffic.
  *
- * @section Scaling & Provisioned Pollers
+ * ### Scaling & Provisioned Pollers
  * Cap concurrency for SQS sources with `scalingConfig`, or reserve dedicated
  * polling capacity (for Kafka/MSK and SQS) with `provisionedPollerConfig` to
  * keep latency predictable under load.
  *
- * @example Limit SQS concurrency and provision pollers
+ * **Example:** Limit SQS concurrency and provision pollers
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("BoundedConsumer", {
  *   functionName: worker.functionName,
@@ -412,14 +417,14 @@ export interface EventSourceMapping extends Resource<
  * `provisionedPollerConfig` keeps a pool of dedicated event pollers warm so
  * throughput doesn't lag behind sudden spikes.
  *
- * @section Kafka, MQ & DocumentDB Sources
+ * ### Kafka, MQ & DocumentDB Sources
  * Beyond AWS-native streams, an event source mapping can poll Amazon MSK,
  * self-managed Apache Kafka, Amazon MQ brokers, and Amazon DocumentDB change
  * streams. These sources use `topics`/`queues` to select what to consume,
  * `sourceAccessConfigurations` for VPC and authentication wiring, and
  * source-specific config props.
  *
- * @example Consume a self-managed Kafka topic
+ * **Example:** Consume a self-managed Kafka topic
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("KafkaConsumer", {
  *   functionName: consumer.functionName,
@@ -442,7 +447,7 @@ export interface EventSourceMapping extends Resource<
  * consumer group. For Amazon MSK use `amazonManagedKafkaEventSourceConfig`
  * instead.
  *
- * @example Consume an Amazon MQ queue and a DocumentDB change stream
+ * **Example:** Consume an Amazon MQ queue and a DocumentDB change stream
  * ```typescript
  * const mqMapping = yield* AWS.Lambda.EventSourceMapping("MqConsumer", {
  *   functionName: worker.functionName,
@@ -469,12 +474,12 @@ export interface EventSourceMapping extends Resource<
  * `documentDBEventSourceConfig` selects the database/collection and whether full
  * documents are delivered on updates.
  *
- * @section Metrics & Tags
+ * ### Metrics & Tags
  * Opt into per-mapping CloudWatch metrics with `metricsConfig` and brand the
  * mapping with your own `tags` (Alchemy also applies its internal ownership
  * tags automatically).
  *
- * @example Enable event metrics and add tags
+ * **Example:** Enable event metrics and add tags
  * ```typescript
  * const mapping = yield* AWS.Lambda.EventSourceMapping("ObservedConsumer", {
  *   functionName: worker.functionName,
@@ -487,10 +492,10 @@ export interface EventSourceMapping extends Resource<
  * `metricsConfig.Metrics` turns on the named CloudWatch metrics (e.g.
  * `EventCount`) for this mapping, and `tags` attaches arbitrary key/value pairs
  * for cost allocation and discovery.
+ *
+ * @resource
  */
-export const EventSourceMapping = Resource<EventSourceMapping>(
-  "AWS.Lambda.EventSourceMapping",
-);
+export const EventSourceMapping = Resource<EventSourceMapping>("AWS.Lambda.EventSourceMapping");
 
 export const EventSourceMappingProvider = () =>
   Provider.effect(
@@ -512,9 +517,7 @@ export const EventSourceMappingProvider = () =>
         EventSourceArn: props.eventSourceArn as string,
         Enabled: props.enabled ?? true,
         BatchSize: props.batchSize,
-        MaximumBatchingWindowInSeconds: toWireSeconds(
-          props.maximumBatchingWindow,
-        ),
+        MaximumBatchingWindowInSeconds: toWireSeconds(props.maximumBatchingWindow),
         StartingPosition: props.startingPosition,
         StartingPositionTimestamp: props.startingPositionTimestamp,
         ParallelizationFactor: props.parallelizationFactor,
@@ -522,19 +525,15 @@ export const EventSourceMappingProvider = () =>
         MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
         TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
-        FunctionResponseTypes: props.functionResponseTypes ?? [
-          "ReportBatchItemFailures",
-        ],
+        FunctionResponseTypes: props.functionResponseTypes ?? ["ReportBatchItemFailures"],
         ScalingConfig: props.scalingConfig,
         DestinationConfig: props.destinationConfig,
         FilterCriteria: props.filterCriteria,
         KMSKeyArn: props.kmsKeyArn,
         MetricsConfig: props.metricsConfig ?? { Metrics: ["EventCount"] },
         ProvisionedPollerConfig: props.provisionedPollerConfig,
-        AmazonManagedKafkaEventSourceConfig:
-          props.amazonManagedKafkaEventSourceConfig,
-        SelfManagedKafkaEventSourceConfig:
-          props.selfManagedKafkaEventSourceConfig,
+        AmazonManagedKafkaEventSourceConfig: props.amazonManagedKafkaEventSourceConfig,
+        SelfManagedKafkaEventSourceConfig: props.selfManagedKafkaEventSourceConfig,
         SelfManagedEventSource: props.selfManagedEventSource,
         SourceAccessConfigurations: props.sourceAccessConfigurations,
         Topics: props.topics,
@@ -552,26 +551,20 @@ export const EventSourceMappingProvider = () =>
         FunctionName: props.functionName as string,
         Enabled: props.enabled ?? true,
         BatchSize: props.batchSize,
-        MaximumBatchingWindowInSeconds: toWireSeconds(
-          props.maximumBatchingWindow,
-        ),
+        MaximumBatchingWindowInSeconds: toWireSeconds(props.maximumBatchingWindow),
         BisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
         MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
         TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
-        FunctionResponseTypes: props.functionResponseTypes ?? [
-          "ReportBatchItemFailures",
-        ],
+        FunctionResponseTypes: props.functionResponseTypes ?? ["ReportBatchItemFailures"],
         ScalingConfig: props.scalingConfig,
         DestinationConfig: props.destinationConfig,
         FilterCriteria: props.filterCriteria,
         KMSKeyArn: props.kmsKeyArn,
         MetricsConfig: props.metricsConfig ?? { Metrics: ["EventCount"] },
         ProvisionedPollerConfig: props.provisionedPollerConfig,
-        AmazonManagedKafkaEventSourceConfig:
-          props.amazonManagedKafkaEventSourceConfig,
-        SelfManagedKafkaEventSourceConfig:
-          props.selfManagedKafkaEventSourceConfig,
+        AmazonManagedKafkaEventSourceConfig: props.amazonManagedKafkaEventSourceConfig,
+        SelfManagedKafkaEventSourceConfig: props.selfManagedKafkaEventSourceConfig,
         SourceAccessConfigurations: props.sourceAccessConfigurations,
         DocumentDBEventSourceConfig: props.documentDBEventSourceConfig,
         LoggingConfig: props.loggingConfig,
@@ -590,23 +583,18 @@ export const EventSourceMappingProvider = () =>
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
-          if (
-            (news.eventSourceArn as string) !== (olds.eventSourceArn as string)
-          ) {
+          if ((news.eventSourceArn as string) !== (olds.eventSourceArn as string)) {
             return { action: "replace" } as const;
           }
           if (news.startingPosition !== olds.startingPosition) {
             return { action: "replace" } as const;
           }
           if (
-            news.startingPositionTimestamp?.getTime() !==
-            olds.startingPositionTimestamp?.getTime()
+            news.startingPositionTimestamp?.getTime() !== olds.startingPositionTimestamp?.getTime()
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            !deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)
-          ) {
+          if (!deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)) {
             return { action: "replace" } as const;
           }
         }),
@@ -626,11 +614,7 @@ export const EventSourceMappingProvider = () =>
           if (output?.uuid) {
             config = yield* lambda
               .getEventSourceMapping({ UUID: output.uuid })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
           if (!config?.UUID) {
             config = yield* lambda.listEventSourceMappings
@@ -668,39 +652,37 @@ export const EventSourceMappingProvider = () =>
               .pipe(
                 Effect.catchTags({
                   ResourceConflictException: () =>
-                    lambda.listEventSourceMappings
-                      .pages({ FunctionName: functionName })
-                      .pipe(
-                        Stream.mapEffect(
-                          Effect.fn(function* (page) {
-                            const mapping = page.EventSourceMappings?.find(
-                              (m) => m.EventSourceArn === eventSourceArn,
-                            );
-                            if (mapping?.UUID) {
-                              const { Tags } = yield* lambda
-                                .listTags({
-                                  Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
-                                })
-                                .pipe(retryTransient);
-                              if (hasTags(expectedInternalTags, Tags)) {
-                                return mapping;
-                              }
+                    lambda.listEventSourceMappings.pages({ FunctionName: functionName }).pipe(
+                      Stream.mapEffect(
+                        Effect.fn(function* (page) {
+                          const mapping = page.EventSourceMappings?.find(
+                            (m) => m.EventSourceArn === eventSourceArn,
+                          );
+                          if (mapping?.UUID) {
+                            const { Tags } = yield* lambda
+                              .listTags({
+                                Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
+                              })
+                              .pipe(retryTransient);
+                            if (hasTags(expectedInternalTags, Tags)) {
+                              return mapping;
                             }
-                          }),
-                        ),
-                        Stream.filter((item) => item !== undefined),
-                        Stream.runHead,
-                        Effect.map(Option.getOrUndefined),
-                        Effect.flatMap((mapping) =>
-                          mapping
-                            ? Effect.succeed(mapping)
-                            : Effect.die(
-                                new Error(
-                                  `EventSourceMapping(${id}) not found on function ${functionName}`,
-                                ),
-                              ),
-                        ),
+                          }
+                        }),
                       ),
+                      Stream.filter((item) => item !== undefined),
+                      Stream.runHead,
+                      Effect.map(Option.getOrUndefined),
+                      Effect.flatMap((mapping) =>
+                        mapping
+                          ? Effect.succeed(mapping)
+                          : Effect.die(
+                              new Error(
+                                `EventSourceMapping(${id}) not found on function ${functionName}`,
+                              ),
+                            ),
+                      ),
+                    ),
                 }),
                 retryPermissionsPropagation,
                 retryTransient,
@@ -720,21 +702,47 @@ export const EventSourceMappingProvider = () =>
           // for mutable fields. We always send the full desired config so
           // observed state converges. Retry `ResourceInUseException`
           // (mapping is transitioning) and known IAM-propagation errors.
-          config = yield* lambda
-            .updateEventSourceMapping(toUpdateRequest(uuid, news))
-            .pipe(
+          config = yield* lambda.updateEventSourceMapping(toUpdateRequest(uuid, news)).pipe(
+            Effect.retry({
+              while: (e: any) =>
+                e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
+              schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
+            }),
+            retryPermissionsPropagation,
+            retryTransient,
+          );
+
+          // Wait for the mapping to settle into its desired terminal state.
+          // A fresh mapping sits in `Creating` for up to ~a minute before
+          // Lambda actually starts polling — and for stream sources with
+          // `startingPosition: LATEST`, records written before polling
+          // starts are silently skipped. Returning early would hand the
+          // caller a mapping that looks deployed but drops events.
+          const desiredState = (news.enabled ?? true) ? "Enabled" : "Disabled";
+          if (config.State !== desiredState) {
+            config = yield* lambda.getEventSourceMapping({ UUID: uuid }).pipe(
+              Effect.flatMap((observed) =>
+                observed.State === desiredState
+                  ? Effect.succeed(observed)
+                  : Effect.fail(new MappingNotSettled({ state: observed.State })),
+              ),
               Effect.retry({
-                while: (e: any) =>
-                  e._tag === "ResourceInUseException" ||
-                  e._tag === "ResourceConflictException",
-                schedule: Schedule.max([
-                  Schedule.exponential(100),
-                  Schedule.recurs(20),
-                ]),
+                while: (e) => e._tag === "MappingNotSettled",
+                schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]).pipe(
+                  Schedule.tap(({ attempt }) =>
+                    session.note(
+                      `EventSourceMapping ${uuid}: waiting to become ${desiredState} (${(attempt + 1) * 2}s elapsed)`,
+                    ),
+                  ),
+                ),
               }),
-              retryPermissionsPropagation,
-              retryTransient,
+              // Never wedge a deploy on a mapping stuck in transition —
+              // surface the observed state in the attributes instead.
+              Effect.catchTag("MappingNotSettled", () =>
+                lambda.getEventSourceMapping({ UUID: uuid }),
+              ),
             );
+          }
 
           // Sync tags — diff observed cloud tags against desired so
           // adoption rewrites ownership tags correctly.
@@ -743,8 +751,7 @@ export const EventSourceMappingProvider = () =>
             .pipe(retryTransient);
           const observedTags: Record<string, string> = Object.fromEntries(
             Object.entries(observedTagsResp.Tags ?? {}).filter(
-              (entry): entry is [string, string] =>
-                typeof entry[1] === "string",
+              (entry): entry is [string, string] => typeof entry[1] === "string",
             ),
           );
           const { removed, upsert } = diffTags(observedTags, desiredTags);
@@ -772,12 +779,8 @@ export const EventSourceMappingProvider = () =>
           yield* lambda.deleteEventSourceMapping({ UUID: output.uuid }).pipe(
             Effect.retry({
               while: (e: any) =>
-                e._tag === "ResourceInUseException" ||
-                e._tag === "ResourceConflictException",
-              schedule: Schedule.max([
-                Schedule.exponential(100),
-                Schedule.recurs(20),
-              ]),
+                e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
+              schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
             }),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
@@ -819,27 +822,24 @@ export const EventSourceMappingProvider = () =>
     }),
   );
 
-const retryTransient: <A, R, Err>(
-  self: Effect.Effect<A, Err, R>,
-) => Effect.Effect<A, Err, R> = Effect.retry({
-  while: (e: any) =>
-    e._tag === "InternalFailure" ||
-    e._tag === "RequestExpired" ||
-    e._tag === "ServiceException" ||
-    e._tag === "ServiceUnavailable" ||
-    e._tag === "ThrottlingException" ||
-    e._tag === "TooManyRequestsException" ||
-    e._tag === "RequestLimitExceeded" ||
-    e._tag === "ResourceInUseException",
-  schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
-});
+const retryTransient: <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R> =
+  Effect.retry({
+    while: (e: any) =>
+      e._tag === "InternalFailure" ||
+      e._tag === "RequestExpired" ||
+      e._tag === "ServiceException" ||
+      e._tag === "ServiceUnavailable" ||
+      e._tag === "ThrottlingException" ||
+      e._tag === "TooManyRequestsException" ||
+      e._tag === "RequestLimitExceeded" ||
+      e._tag === "ResourceInUseException",
+    schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
+  });
 
 const retryPermissionsPropagation = Effect.retry({
   while: (e: any) =>
     e._tag === "InvalidParameterValueException" &&
-    (e.message?.includes(
-      "The function execution role does not have permissions to call",
-    ) ||
+    (e.message?.includes("The function execution role does not have permissions to call") ||
       e.message?.includes("cannot be assumed by Lambda") ||
       e.message?.includes("Please add Lambda as a Trusted Entity") ||
       e.message?.includes("Cannot access stream") ||
@@ -847,5 +847,4 @@ const retryPermissionsPropagation = Effect.retry({
   schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
 }) as <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R>;
 
-const sanitizeAwsTagValue = (value: string) =>
-  value.replace(/[^\p{L}\p{Z}\p{N}_.:/=+\-@]/gu, "-");
+const sanitizeAwsTagValue = (value: string) => value.replace(/[^\p{L}\p{Z}\p{N}_.:/=+\-@]/gu, "-");

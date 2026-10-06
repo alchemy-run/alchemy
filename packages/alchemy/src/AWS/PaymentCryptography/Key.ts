@@ -163,9 +163,8 @@ export interface Key extends Resource<
  * The key ARN is auto-assigned by the service; attach an {@link Alias} for a
  * stable human-readable identifier. Deletion schedules the key for removal
  * after a waiting window (minimum 3 days) during which it can be restored.
- * @resource
- * @section Creating Keys
- * @example Symmetric data-encryption key
+ * ### Creating Keys
+ * **Example:** Symmetric data-encryption key
  * ```typescript
  * import * as PaymentCryptography from "alchemy/AWS/PaymentCryptography";
  *
@@ -179,7 +178,7 @@ export interface Key extends Resource<
  * });
  * ```
  *
- * @example HMAC key for MAC generation and verification
+ * **Example:** HMAC key for MAC generation and verification
  * ```typescript
  * const macKey = yield* PaymentCryptography.Key("MacKey", {
  *   keyAttributes: {
@@ -191,8 +190,8 @@ export interface Key extends Resource<
  * });
  * ```
  *
- * @section Managing Key State
- * @example Disable a key without deleting it
+ * ### Managing Key State
+ * **Example:** Disable a key without deleting it
  * ```typescript
  * const key = yield* PaymentCryptography.Key("DataKey", {
  *   keyAttributes: { ... },
@@ -200,8 +199,8 @@ export interface Key extends Resource<
  * });
  * ```
  *
- * @section Using Keys at Runtime
- * @example Encrypt data from a Lambda handler
+ * ### Using Keys at Runtime
+ * **Example:** Encrypt data from a Lambda handler
  * ```typescript
  * // init
  * const encrypt = yield* PaymentCryptography.EncryptData(key);
@@ -217,12 +216,12 @@ export interface Key extends Resource<
  *   }),
  * };
  * ```
+ *
+ * @resource
  */
 export const Key = Resource<Key>("AWS.PaymentCryptography.Key");
 
-const toWireKeyAttributes = (
-  attributes: KeyAttributes,
-): paymentcryptography.KeyAttributes => ({
+const toWireKeyAttributes = (attributes: KeyAttributes): paymentcryptography.KeyAttributes => ({
   KeyAlgorithm: attributes.keyAlgorithm,
   KeyClass: attributes.keyClass,
   KeyUsage: attributes.keyUsage,
@@ -247,9 +246,7 @@ const toAttrs = (key: paymentcryptography.Key): Key["Attributes"] => ({
   exportable: key.Exportable,
 });
 
-const tagsToRecord = (
-  tags: readonly paymentcryptography.Tag[],
-): Record<string, string> =>
+const tagsToRecord = (tags: readonly paymentcryptography.Tag[]): Record<string, string> =>
   Object.fromEntries(tags.map((t) => [t.Key, t.Value ?? ""]));
 
 const fetchKeyTags = (keyArn: string) =>
@@ -267,14 +264,10 @@ export const KeyProvider = () =>
       // `undefined`. A key inside its deletion window (DELETE_PENDING) is
       // still returned so reconcile can restore it.
       const observeKey = Effect.fn(function* (keyArn: string) {
-        const found = yield* paymentcryptography
-          .getKey({ KeyIdentifier: keyArn })
-          .pipe(
-            Effect.map((r) => r.Key),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const found = yield* paymentcryptography.getKey({ KeyIdentifier: keyArn }).pipe(
+          Effect.map((r) => r.Key),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
         if (found === undefined || found.KeyState === "DELETE_COMPLETE") {
           return undefined;
         }
@@ -287,9 +280,7 @@ export const KeyProvider = () =>
       const findKeyByTags = Effect.fn(function* (id: string) {
         const summaries = yield* paymentcryptography.listKeys.items({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).filter((k) => k.KeyState !== "DELETE_COMPLETE"),
-          ),
+          Effect.map((chunk) => Array.from(chunk).filter((k) => k.KeyState !== "DELETE_COMPLETE")),
         );
         for (const summary of summaries) {
           const tags = yield* fetchKeyTags(summary.KeyArn);
@@ -310,11 +301,7 @@ export const KeyProvider = () =>
                 // Keys already inside their deletion window are as deleted
                 // as the API allows — a second DeleteKey is a no-op, so they
                 // are not orphans (mirrors KMS PendingDeletion filtering).
-                .filter(
-                  (k) =>
-                    k.KeyState !== "DELETE_PENDING" &&
-                    k.KeyState !== "DELETE_COMPLETE",
-                )
+                .filter((k) => k.KeyState !== "DELETE_PENDING" && k.KeyState !== "DELETE_COMPLETE")
                 .map((k): Key["Attributes"] => ({
                   keyArn: k.KeyArn,
                   keyState: k.KeyState,
@@ -355,8 +342,7 @@ export const KeyProvider = () =>
           //    is authoritative. Fall back to a tag scan for adoption after
           //    state-persistence failures.
           const cachedArn = output?.keyArn ?? (yield* findKeyByTags(id));
-          let key =
-            cachedArn === undefined ? undefined : yield* observeKey(cachedArn);
+          let key = cachedArn === undefined ? undefined : yield* observeKey(cachedArn);
 
           // A key inside its deletion window is restored rather than
           // recreated — the material (and dependent ciphertext) survives.
@@ -430,20 +416,14 @@ export const KeyProvider = () =>
               // DeleteKey with a conflict — that is the desired end state,
               // so treat it as success. Any other conflict is re-raised.
               Effect.catchTag("ConflictException", (error) =>
-                paymentcryptography
-                  .getKey({ KeyIdentifier: output.keyArn })
-                  .pipe(
-                    Effect.flatMap((r) =>
-                      r.Key.KeyState === "DELETE_PENDING" ||
-                      r.Key.KeyState === "DELETE_COMPLETE"
-                        ? Effect.void
-                        : Effect.fail(error),
-                    ),
-                    Effect.catchTag(
-                      "ResourceNotFoundException",
-                      () => Effect.void,
-                    ),
+                paymentcryptography.getKey({ KeyIdentifier: output.keyArn }).pipe(
+                  Effect.flatMap((r) =>
+                    r.Key.KeyState === "DELETE_PENDING" || r.Key.KeyState === "DELETE_COMPLETE"
+                      ? Effect.void
+                      : Effect.fail(error),
                   ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                ),
               ),
             );
         }),

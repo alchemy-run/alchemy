@@ -76,8 +76,8 @@ export interface AttackEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Attack Events
- * @example Page on Detected DDoS Attacks
+ * ### Consuming Attack Events
+ * **Example:** Page on Detected DDoS Attacks
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -112,9 +112,7 @@ export const consumeAttackEvents = <StreamReq = never, Req = never>(
       detail: {
         service: [...(props.services ?? ["SHIELD"])],
         eventTypeCategory: ["issue"],
-        ...(props.eventTypeCodes !== undefined
-          ? { eventTypeCode: [...props.eventTypeCodes] }
-          : {}),
+        ...(props.eventTypeCodes !== undefined ? { eventTypeCode: [...props.eventTypeCodes] } : {}),
       },
     },
     { description: props.description, state: props.state },

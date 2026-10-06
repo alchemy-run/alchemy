@@ -1,6 +1,7 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -61,18 +62,17 @@ export interface KeyValueStore extends Resource<
  *
  * KeyValueStores can be associated with CloudFront Functions and are useful for
  * routing metadata or other small edge-time lookup tables.
- * @resource
- * @section Creating KeyValueStores
- * @example Basic Store
+ * ### Creating KeyValueStores
+ * **Example:** Basic Store
  * ```typescript
  * const store = yield* KeyValueStore("RouterStore", {
  *   comment: "Route metadata",
  * });
  * ```
+ *
+ * @resource
  */
-export const KeyValueStore = Resource<KeyValueStore>(
-  "AWS.CloudFront.KeyValueStore",
-);
+export const KeyValueStore = Resource<KeyValueStore>("AWS.CloudFront.KeyValueStore");
 
 export const KeyValueStoreProvider = () =>
   Provider.effect(
@@ -90,12 +90,8 @@ export const KeyValueStoreProvider = () =>
           return undefined;
         }
         return yield* cloudfront
-          .describeKeyValueStore({
-            Name: store.Name,
-          })
-          .pipe(
-            Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)),
-          );
+          .describeKeyValueStore({ Name: store.Name })
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -103,20 +99,14 @@ export const KeyValueStoreProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));
           const current = yield* cloudfront
-            .describeKeyValueStore({
-              Name: name,
-            })
+            .describeKeyValueStore({ Name: name })
             .pipe(Effect.catchTag("EntityNotFound", () => getByName(name)));
           if (!current?.KeyValueStore) {
             return undefined;
@@ -138,8 +128,7 @@ export const KeyValueStoreProvider = () =>
             ),
           ),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.keyValueStoreName ?? (yield* createName(id, news));
+          const name = output?.keyValueStoreName ?? (yield* createName(id, news));
 
           // Observe — describe the store, falling back to a list lookup
           // by name. Trust live state, not stale `olds`.
@@ -151,10 +140,7 @@ export const KeyValueStoreProvider = () =>
           // `EntityAlreadyExists` (race with a peer reconciler).
           if (!observed?.KeyValueStore) {
             const created = yield* cloudfront
-              .createKeyValueStore({
-                Name: name,
-                Comment: news.comment,
-              })
+              .createKeyValueStore({ Name: name, Comment: news.comment })
               .pipe(
                 Effect.catchTag("EntityAlreadyExists", () =>
                   getByName(name).pipe(
@@ -169,9 +155,7 @@ export const KeyValueStoreProvider = () =>
                 ),
               );
             if (!created.KeyValueStore) {
-              return yield* Effect.die(
-                "createKeyValueStore returned no key value store",
-              );
+              return yield* Effect.die("createKeyValueStore returned no key value store");
             }
             yield* session.note(created.KeyValueStore.Id);
             return toAttrs(created.KeyValueStore, created.ETag, name);
@@ -185,46 +169,40 @@ export const KeyValueStoreProvider = () =>
             IfMatch: observed.ETag!,
           });
           if (!updated.KeyValueStore) {
-            return yield* Effect.die(
-              "updateKeyValueStore returned no key value store",
-            );
+            return yield* Effect.die("updateKeyValueStore returned no key value store");
           }
           yield* session.note(updated.KeyValueStore.Id);
-          return toAttrs(
-            updated.KeyValueStore,
-            updated.ETag,
-            observed.KeyValueStore.Name,
-          );
+          return toAttrs(updated.KeyValueStore, updated.ETag, observed.KeyValueStore.Name);
         }),
-        delete: Effect.fn(function* ({ output }) {
-          const current = yield* cloudfront
-            .describeKeyValueStore({
-              Name: output.keyValueStoreName,
-            })
-            .pipe(
-              Effect.catchTag("EntityNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+        delete: Effect.fn(
+          function* ({ output }) {
+            const current = yield* cloudfront
+              .describeKeyValueStore({ Name: output.keyValueStoreName })
+              .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
 
-          const etag = current?.ETag;
-          if (!etag) {
+            const etag = current?.ETag;
+            if (!etag) {
+              yield* Effect.logInfo(
+                `CloudFront KeyValueStore delete: ${output.keyValueStoreName} already absent`,
+              );
+              return;
+            }
+
             yield* Effect.logInfo(
-              `CloudFront KeyValueStore delete: ${output.keyValueStoreName} already absent`,
+              `CloudFront KeyValueStore delete: deleting ${output.keyValueStoreName} with etag=${etag}`,
             );
-            return;
-          }
-
-          yield* Effect.logInfo(
-            `CloudFront KeyValueStore delete: deleting ${output.keyValueStoreName} with etag=${etag}`,
-          );
-          yield* cloudfront
-            .deleteKeyValueStore({
-              Name: output.keyValueStoreName,
-              IfMatch: etag,
-            })
-            .pipe(Effect.catchTag("EntityNotFound", () => Effect.void));
-        }),
+            yield* cloudfront
+              .deleteKeyValueStore({ Name: output.keyValueStoreName, IfMatch: etag })
+              .pipe(Effect.catchTag("EntityNotFound", () => Effect.void));
+          },
+          Effect.retry({
+            // KV writes can invalidate the control-plane ETag before Describe
+            // catches up. Retry the entire read/delete pair with a fresh ETag.
+            while: (error) => error._tag === "PreconditionFailed",
+            schedule: Schedule.spaced("500 millis"),
+            times: 8,
+          }),
+        ),
       };
     }),
   );
@@ -232,11 +210,7 @@ export const KeyValueStoreProvider = () =>
 const createName = (id: string, props: KeyValueStoreProps) =>
   props.name
     ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        maxLength: 64,
-        lowercase: true,
-      });
+    : createPhysicalName({ id, maxLength: 64, lowercase: true });
 
 const toAttrs = (
   store: cloudfront.KeyValueStore,

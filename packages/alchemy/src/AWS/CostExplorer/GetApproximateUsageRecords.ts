@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetApproximateUsageRecords}.
  */
-export interface GetApproximateUsageRecordsRequest
-  extends ce.GetApproximateUsageRecordsRequest {}
+export interface GetApproximateUsageRecordsRequest extends ce.GetApproximateUsageRecordsRequest {}
 
 /**
  * Runtime binding for `ce:GetApproximateUsageRecords`.
@@ -15,9 +14,8 @@ export interface GetApproximateUsageRecordsRequest
  * usage records per service — useful for sizing Data Exports and CUR
  * deliveries before enabling them. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.GetApproximateUsageRecordsHttp)`.
- * @binding
- * @section Querying Cost and Usage
- * @example Estimate Usage Record Volume
+ * ### Querying Cost and Usage
+ * **Example:** Estimate Usage Record Volume
  * ```typescript
  * // init — account-level binding takes no resource
  * const getApproximateUsageRecords = yield* AWS.CostExplorer.GetApproximateUsageRecords();
@@ -29,6 +27,8 @@ export interface GetApproximateUsageRecordsRequest
  * });
  * const total = result.TotalRecords;
  * ```
+ *
+ * @binding
  */
 export interface GetApproximateUsageRecords extends Binding.Service<
   GetApproximateUsageRecords,
@@ -36,14 +36,10 @@ export interface GetApproximateUsageRecords extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetApproximateUsageRecordsRequest,
-    ) => Effect.Effect<
-      ce.GetApproximateUsageRecordsResponse,
-      ce.GetApproximateUsageRecordsError
-    >
+    ) => Effect.Effect<ce.GetApproximateUsageRecordsResponse, ce.GetApproximateUsageRecordsError>
   >
 > {}
 
-export const GetApproximateUsageRecords =
-  Binding.Service<GetApproximateUsageRecords>(
-    "AWS.CostExplorer.GetApproximateUsageRecords",
-  );
+export const GetApproximateUsageRecords = Binding.Service<GetApproximateUsageRecords>(
+  "AWS.CostExplorer.GetApproximateUsageRecords",
+);

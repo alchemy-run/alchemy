@@ -16,9 +16,8 @@ export interface ListHostsRequest extends codeconnections.ListHostsInput {}
  * governance sweeps that audit which provider endpoints are registered.
  * Provide the implementation with
  * `Effect.provide(AWS.CodeConnections.ListHostsHttp)`.
- * @binding
- * @section Inspecting a Host
- * @example List the Account's Hosts
+ * ### Inspecting a Host
+ * **Example:** List the Account's Hosts
  * ```typescript
  * // init — account-level binding takes no resource
  * const listHosts = yield* AWS.CodeConnections.ListHosts();
@@ -27,6 +26,8 @@ export interface ListHostsRequest extends codeconnections.ListHostsInput {}
  * const result = yield* listHosts();
  * const urls = (result.Hosts ?? []).map((h) => h.ProviderEndpoint);
  * ```
+ *
+ * @binding
  */
 export interface ListHosts extends Binding.Service<
   ListHosts,
@@ -34,13 +35,8 @@ export interface ListHosts extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListHostsRequest,
-    ) => Effect.Effect<
-      codeconnections.ListHostsOutput,
-      codeconnections.ListHostsError
-    >
+    ) => Effect.Effect<codeconnections.ListHostsOutput, codeconnections.ListHostsError>
   >
 > {}
 
-export const ListHosts = Binding.Service<ListHosts>(
-  "AWS.CodeConnections.ListHosts",
-);
+export const ListHosts = Binding.Service<ListHosts>("AWS.CodeConnections.ListHosts");

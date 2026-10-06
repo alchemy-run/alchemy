@@ -7,10 +7,7 @@ import type { Map as LocationMap } from "./Map.ts";
  * `GetMapTile` request with `MapName` injected from the bound
  * resource.
  */
-export interface GetMapTileRequest extends Omit<
-  location.GetMapTileRequest,
-  "MapName"
-> {}
+export interface GetMapTileRequest extends Omit<location.GetMapTileRequest, "MapName"> {}
 
 /**
  * Retrieves a single map tile (vector or raster) addressed by zoom/x/y.
@@ -19,15 +16,16 @@ export interface GetMapTileRequest extends Omit<
  * `geo:GetMapTile`), scoped to one {@link LocationMap | Map}. Provide the implementation with
  * `Effect.provide(AWS.Location.GetMapTileHttp)`.
  *
- * @binding
- * @section Serving Map Assets
- * @example Serve a Tile
+ * ### Serving Map Assets
+ * **Example:** Serve a Tile
  * ```typescript
  * const getTile = yield* Location.GetMapTile(map);
  *
  * const tile = yield* getTile({ Z: "0", X: "0", Y: "0" });
  * // tile.Blob → tile bytes, tile.ContentType → e.g. "application/vnd.mapbox-vector-tile"
  * ```
+ *
+ * @binding
  */
 export interface GetMapTile extends Binding.Service<
   GetMapTile,
@@ -40,6 +38,4 @@ export interface GetMapTile extends Binding.Service<
     ) => Effect.Effect<location.GetMapTileResponse, location.GetMapTileError>
   >
 > {}
-export const GetMapTile = Binding.Service<GetMapTile>(
-  "AWS.Location.GetMapTile",
-);
+export const GetMapTile = Binding.Service<GetMapTile>("AWS.Location.GetMapTile");

@@ -11,9 +11,8 @@ import type { Queue } from "./Queue.ts";
  * succeed the step's tasks in one call. The queue's `farmId`/`queueId` are
  * injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Deadline.UpdateStepHttp)`.
- * @binding
- * @section Managing Steps
- * @example Requeue A Step's Tasks
+ * ### Managing Steps
+ * **Example:** Requeue A Step's Tasks
  * ```typescript
  * // init — bind the operation to the queue
  * const updateStep = yield* AWS.Deadline.UpdateStep(queue);
@@ -21,6 +20,8 @@ import type { Queue } from "./Queue.ts";
  * // runtime
  * yield* updateStep({ jobId, stepId, targetTaskRunStatus: "READY" });
  * ```
+ *
+ * @binding
  */
 export interface UpdateStep extends Binding.Service<
   UpdateStep,
@@ -33,6 +34,4 @@ export interface UpdateStep extends Binding.Service<
     ) => Effect.Effect<deadline.UpdateStepResponse, deadline.UpdateStepError>
   >
 > {}
-export const UpdateStep = Binding.Service<UpdateStep>(
-  "AWS.Deadline.UpdateStep",
-);
+export const UpdateStep = Binding.Service<UpdateStep>("AWS.Deadline.UpdateStep");

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListSchemaVersions}.
  */
-export interface ListSchemaVersionsRequest
-  extends mi.ListSchemaVersionsRequest {}
+export interface ListSchemaVersionsRequest extends mi.ListSchemaVersionsRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:ListSchemaVersions`
@@ -17,9 +16,8 @@ export interface ListSchemaVersionsRequest
  * visibility, or semantic version. Provide the implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.ListSchemaVersionsHttp)`.
  *
- * @binding
- * @section Working with the Schema Catalog
- * @example List Matter Capability Schemas
+ * ### Working with the Schema Catalog
+ * **Example:** List Matter Capability Schemas
  * ```typescript
  * const listSchemaVersions = yield* IoTManagedIntegrations.ListSchemaVersions();
  *
@@ -28,6 +26,8 @@ export interface ListSchemaVersionsRequest
  *   Namespace: "matter",
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListSchemaVersions extends Binding.Service<
   ListSchemaVersions,
@@ -35,10 +35,7 @@ export interface ListSchemaVersions extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListSchemaVersionsRequest,
-    ) => Effect.Effect<
-      mi.ListSchemaVersionsResponse,
-      mi.ListSchemaVersionsError
-    >
+    ) => Effect.Effect<mi.ListSchemaVersionsResponse, mi.ListSchemaVersionsError>
   >
 > {}
 export const ListSchemaVersions = Binding.Service<ListSchemaVersions>(

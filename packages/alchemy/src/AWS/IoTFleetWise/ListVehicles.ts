@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * manifest or attribute values. Provide the implementation with
  * `Effect.provide(AWS.IoTFleetWise.ListVehiclesHttp)`.
  *
- * @binding
- * @section Provisioning Vehicles
- * @example List Vehicles by Attribute
+ * ### Provisioning Vehicles
+ * **Example:** List Vehicles by Attribute
  * ```typescript
  * const listVehicles = yield* IoTFleetWise.ListVehicles();
  *
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   attributeValues: ["red"],
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListVehicles extends Binding.Service<
   ListVehicles,
@@ -28,12 +29,7 @@ export interface ListVehicles extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iotfleetwise.ListVehiclesRequest,
-    ) => Effect.Effect<
-      iotfleetwise.ListVehiclesResponse,
-      iotfleetwise.ListVehiclesError
-    >
+    ) => Effect.Effect<iotfleetwise.ListVehiclesResponse, iotfleetwise.ListVehiclesError>
   >
 > {}
-export const ListVehicles = Binding.Service<ListVehicles>(
-  "AWS.IoTFleetWise.ListVehicles",
-);
+export const ListVehicles = Binding.Service<ListVehicles>("AWS.IoTFleetWise.ListVehicles");

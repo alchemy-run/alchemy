@@ -7,10 +7,7 @@ import type { Room } from "./Room.ts";
  * The `roomIdentifier` is injected by the binding from the bound room;
  * the caller supplies the event name and optional attributes.
  */
-export interface SendEventRequest extends Omit<
-  ivschat.SendEventRequest,
-  "roomIdentifier"
-> {}
+export interface SendEventRequest extends Omit<ivschat.SendEventRequest, "roomIdentifier"> {}
 
 /**
  * Send an application-defined event to every client connected to the bound
@@ -19,14 +16,13 @@ export interface SendEventRequest extends Omit<
  * notices) alongside user chat messages; `attributes` carries the payload
  * as string key-value pairs.
  *
- * @binding
- * @section Broadcasting Events
+ * ### Broadcasting Events
  * Provide the `SendEventHttp` implementation layer on the Function effect,
  * bind the room in the init phase, then call the returned client at
  * runtime. The binding grants `ivschat:SendEvent` on the room and injects
  * its ARN as the `roomIdentifier` automatically.
  *
- * @example Broadcast from a Lambda
+ * **Example:** Broadcast from a Lambda
  * ```typescript
  * // init
  * const room = yield* IVSChat.Room("LiveChat");
@@ -45,6 +41,8 @@ export interface SendEventRequest extends Omit<
  * // on the Function effect:
  * // .pipe(Effect.provide(IVSChat.SendEventHttp))
  * ```
+ *
+ * @binding
  */
 export interface SendEvent extends Binding.Service<
   SendEvent,
@@ -52,9 +50,7 @@ export interface SendEvent extends Binding.Service<
   (
     room: Room,
   ) => Effect.Effect<
-    (
-      request: SendEventRequest,
-    ) => Effect.Effect<ivschat.SendEventResponse, ivschat.SendEventError>
+    (request: SendEventRequest) => Effect.Effect<ivschat.SendEventResponse, ivschat.SendEventError>
   >
 > {}
 export const SendEvent = Binding.Service<SendEvent>("AWS.IVSChat.SendEvent");

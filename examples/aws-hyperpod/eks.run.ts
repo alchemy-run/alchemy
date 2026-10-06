@@ -12,7 +12,7 @@
  *   TypeScript and pinned + governed through HyperPod resource attributes
  *   (`quota.namespace`, `quota.queueName`, the group's `nodeSelector`).
  *
- * Deploy with `bun alchemy deploy ./eks.run.ts`. The EKS control plane
+ * Deploy with `bun alchemy deploy --config ./eks.run.ts`. The EKS control plane
  * takes ~10-15 minutes and the HyperPod cluster another ~10-20.
  */
 import * as Alchemy from "alchemy";
@@ -30,8 +30,7 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const { eks, hyperpod, scheduler, researchQuota } =
-      yield* HyperPodEksInfra;
+    const { eks, hyperpod, scheduler, researchQuota } = yield* HyperPodEksInfra;
 
     // ── LOW LEVEL: any Kubernetes object, applied as data. This one is
     // governed: it runs in the research team's namespace (created by the

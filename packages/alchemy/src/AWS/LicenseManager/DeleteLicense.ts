@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DeleteLicense}.
  */
-export interface DeleteLicenseRequest
-  extends licensemanager.DeleteLicenseRequest {}
+export interface DeleteLicenseRequest extends licensemanager.DeleteLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:DeleteLicense` — delete a
@@ -15,9 +14,8 @@ export interface DeleteLicenseRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.DeleteLicenseHttp)`.
- * @binding
- * @section Issuing Licenses
- * @example Delete a License on Cancellation
+ * ### Issuing Licenses
+ * **Example:** Delete a License on Cancellation
  * ```typescript
  * // init
  * const deleteLicense = yield* AWS.LicenseManager.DeleteLicense();
@@ -29,6 +27,8 @@ export interface DeleteLicenseRequest
  *   SourceVersion: License!.Version!,
  * });
  * ```
+ *
+ * @binding
  */
 export interface DeleteLicense extends Binding.Service<
   DeleteLicense,
@@ -36,12 +36,7 @@ export interface DeleteLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.DeleteLicenseResponse,
-      licensemanager.DeleteLicenseError
-    >
+    ) => Effect.Effect<licensemanager.DeleteLicenseResponse, licensemanager.DeleteLicenseError>
   >
 > {}
-export const DeleteLicense = Binding.Service<DeleteLicense>(
-  "AWS.LicenseManager.DeleteLicense",
-);
+export const DeleteLicense = Binding.Service<DeleteLicense>("AWS.LicenseManager.DeleteLicense");

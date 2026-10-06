@@ -68,8 +68,8 @@ export interface DataZoneEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming DataZone Events
- * @example Auto-approve Subscription Requests
+ * ### Consuming DataZone Events
+ * **Example:** Auto-approve Subscription Requests
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -112,9 +112,7 @@ export const consumeDataZoneEvents = <StreamReq = never, Req = never>(
     props.id ?? "DataZoneEvents",
     {
       source: ["aws.datazone"],
-      ...(props.detailTypes !== undefined
-        ? { "detail-type": [...props.detailTypes] }
-        : {}),
+      ...(props.detailTypes !== undefined ? { "detail-type": [...props.detailTypes] } : {}),
     },
     { description: props.description, state: props.state },
     process,

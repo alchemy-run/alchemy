@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `DeleteUser` request with `applicationId` injected from the bound application.
  */
-export interface DeleteUserRequest extends Omit<
-  qbusiness.DeleteUserRequest,
-  "applicationId"
-> {}
+export interface DeleteUserRequest extends Omit<qbusiness.DeleteUserRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `DeleteUser` operation (IAM action
@@ -19,14 +16,15 @@ export interface DeleteUserRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.DeleteUserHttp)`.
  *
- * @binding
- * @section User Management
- * @example Delete a User
+ * ### User Management
+ * **Example:** Delete a User
  * ```typescript
  * const deleteUser = yield* AWS.QBusiness.DeleteUser(app);
  *
  * yield* deleteUser({ userId: "user@example.com" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteUser extends Binding.Service<
   DeleteUser,
@@ -39,6 +37,4 @@ export interface DeleteUser extends Binding.Service<
     ) => Effect.Effect<qbusiness.DeleteUserResponse, qbusiness.DeleteUserError>
   >
 > {}
-export const DeleteUser = Binding.Service<DeleteUser>(
-  "AWS.QBusiness.DeleteUser",
-);
+export const DeleteUser = Binding.Service<DeleteUser>("AWS.QBusiness.DeleteUser");

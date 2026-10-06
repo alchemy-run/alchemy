@@ -53,9 +53,8 @@ export interface QueryLoggingConfiguration extends Resource<
  * Prometheus workspace — ships PromQL query logs (query text, QSP cost,
  * response code) to CloudWatch Logs. A workspace has at most one.
  *
- * @resource
- * @section Creating a Query Logging Configuration
- * @example Log Expensive Queries to CloudWatch Logs
+ * ### Creating a Query Logging Configuration
+ * **Example:** Log Expensive Queries to CloudWatch Logs
  * ```typescript
  * const workspace = yield* AMP.Workspace("Metrics", {});
  * const logs = yield* Logs.LogGroup("QueryLogs", {
@@ -66,6 +65,8 @@ export interface QueryLoggingConfiguration extends Resource<
  *   destinations: [{ logGroupArn: logs.logGroupArn, qspThreshold: 1000 }],
  * });
  * ```
+ *
+ * @resource
  */
 export const QueryLoggingConfiguration = Resource<QueryLoggingConfiguration>(
   "AWS.AMP.QueryLoggingConfiguration",
@@ -79,11 +80,7 @@ export const QueryLoggingConfigurationProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeQueryLoggingConfiguration({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.queryLoggingConfiguration;
       });
 
@@ -92,18 +89,13 @@ export const QueryLoggingConfigurationProvider = () =>
        * a still-transitioning configuration converges on a later reconcile.
        */
       const waitActive = Effect.fn(function* (workspaceId: string) {
-        return yield* amp
-          .describeQueryLoggingConfiguration({ workspaceId })
-          .pipe(
-            Effect.map((r) => r.queryLoggingConfiguration),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(20),
-              ]),
-              until: (c) => c.status.statusCode === "ACTIVE",
-            }),
-          );
+        return yield* amp.describeQueryLoggingConfiguration({ workspaceId }).pipe(
+          Effect.map((r) => r.queryLoggingConfiguration),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
+            until: (c) => c.status.statusCode === "ACTIVE",
+          }),
+        );
       });
 
       /** Desired props → wire destinations (normalized + defaulted). */
@@ -183,9 +175,7 @@ export const QueryLoggingConfigurationProvider = () =>
                   }),
                 ),
               );
-          } else if (
-            canonical([...existing.destinations]) !== canonical(desired)
-          ) {
+          } else if (canonical([...existing.destinations]) !== canonical(desired)) {
             yield* amp.updateQueryLoggingConfiguration({
               workspaceId,
               destinations: desired,
@@ -206,10 +196,7 @@ export const QueryLoggingConfigurationProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
               }),
             );
         }),

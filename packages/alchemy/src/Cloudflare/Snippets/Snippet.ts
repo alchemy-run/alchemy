@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -80,11 +79,8 @@ export type Snippet = Resource<
  * state, `read` looks the snippet up by name and reports an existing match
  * as `Unowned`, so the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
- * @resource
- * @product Snippets
- * @category Rules & Configuration
- * @section Creating a Snippet
- * @example Add a response header
+ * ### Creating a Snippet
+ * **Example:** Add a response header
  * ```typescript
  * const snippet = yield* Cloudflare.Snippets.Snippet("HeaderSnippet", {
  *   zoneId: zone.zoneId,
@@ -101,8 +97,8 @@ export type Snippet = Resource<
  * });
  * ```
  *
- * @section Activating with Snippet Rules
- * @example Route traffic through the snippet
+ * ### Activating with Snippet Rules
+ * **Example:** Route traffic through the snippet
  * ```typescript
  * yield* Cloudflare.Snippets.SnippetRules("Rules", {
  *   zoneId: zone.zoneId,
@@ -114,12 +110,15 @@ export type Snippet = Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
+ * @product Snippets
+ * @category Rules & Configuration
  */
 export const Snippet = Resource<Snippet>("Cloudflare.Snippets.Snippet");
 
 export const isSnippet = (value: unknown): value is Snippet =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Snippets.Snippet";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Snippets.Snippet";
 
 const DEFAULT_MAIN_MODULE = "snippet.js";
 
@@ -139,24 +138,20 @@ export const SnippetProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (s): SnippetAttributes => ({
-                    name: s.snippetName,
-                    zoneId: zone.id,
-                    // The list response carries no main module; snippets
-                    // upload under the engine default and `read` falls
-                    // back to it too, so report the same here.
-                    mainModule: DEFAULT_MAIN_MODULE,
-                    createdOn: s.createdOn,
-                    modifiedOn: s.modifiedOn ?? undefined,
-                  }),
-                ),
+                (page.result ?? []).map((s): SnippetAttributes => ({
+                  name: s.snippetName,
+                  zoneId: zone.id,
+                  // The list response carries no main module; snippets
+                  // upload under the engine default and `read` falls
+                  // back to it too, so report the same here.
+                  mainModule: DEFAULT_MAIN_MODULE,
+                  createdOn: s.createdOn,
+                  modifiedOn: s.modifiedOn ?? undefined,
+                })),
               ),
             ),
             // Plan-gated / partial-permission zones reject the route; skip.
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as SnippetAttributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as SnippetAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -169,8 +164,7 @@ export const SnippetProvider = () =>
       const n = news as SnippetProps;
 
       // Name is the snippet's identity within the zone.
-      const oldName =
-        output?.name ?? (yield* createSnippetName(id, o.name as string));
+      const oldName = output?.name ?? (yield* createSnippetName(id, o.name as string));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -179,13 +173,8 @@ export const SnippetProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; only compare once both are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        typeof n.zoneId === "string" &&
-        oldZoneId !== undefined &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (typeof n.zoneId === "string" && oldZoneId !== undefined && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -193,10 +182,7 @@ export const SnippetProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       // Owned path: refresh from persisted identity.
       if (output?.name && output.zoneId) {
-        const observed = yield* getSnippetOrUndefined(
-          output.zoneId,
-          output.name,
-        );
+        const observed = yield* getSnippetOrUndefined(output.zoneId, output.name);
         if (observed) {
           return toAttributes(observed, output.zoneId, output.mainModule);
         }
@@ -210,13 +196,7 @@ export const SnippetProvider = () =>
       const name = output?.name ?? (yield* createSnippetName(id, olds?.name));
       const observed = yield* getSnippetOrUndefined(zoneId, name);
       if (observed) {
-        return Unowned(
-          toAttributes(
-            observed,
-            zoneId,
-            olds?.mainModule ?? DEFAULT_MAIN_MODULE,
-          ),
-        );
+        return Unowned(toAttributes(observed, zoneId, olds?.mainModule ?? DEFAULT_MAIN_MODULE));
       }
       return undefined;
     }),
@@ -259,10 +239,7 @@ export const SnippetProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "SnippetInUse",
-            schedule: Schedule.max([
-              Schedule.exponential("1 second"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
           }),
           Effect.catchTag("SnippetNotFound", () => Effect.void),
         );

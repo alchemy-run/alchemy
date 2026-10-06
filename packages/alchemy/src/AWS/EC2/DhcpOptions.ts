@@ -100,9 +100,8 @@ export interface DhcpOptions extends Resource<
  * account's default options set, since a set must be disassociated from every
  * VPC before it can be deleted.
  *
- * @resource
- * @section Creating a DHCP Options Set
- * @example Custom DNS and Search Domain
+ * ### Creating a DHCP Options Set
+ * **Example:** Custom DNS and Search Domain
  * ```typescript
  * const dhcp = yield* AWS.EC2.DhcpOptions("CorpDhcp", {
  *   domainName: "corp.internal",
@@ -114,7 +113,7 @@ export interface DhcpOptions extends Resource<
  * Instances launched into the VPC receive the `corp.internal` search domain and
  * the listed DNS servers.
  *
- * @example NTP and NetBIOS Configuration
+ * **Example:** NTP and NetBIOS Configuration
  * ```typescript
  * const dhcp = yield* AWS.EC2.DhcpOptions("Dhcp", {
  *   ntpServers: ["169.254.169.123"],
@@ -124,19 +123,17 @@ export interface DhcpOptions extends Resource<
  * ```
  * Creates an unassociated options set that you can associate later by setting
  * `vpcId`.
+ *
+ * @resource
  */
 export const DhcpOptions = Resource<DhcpOptions>("AWS.EC2.DhcpOptions");
 
-class DhcpOptionsStillVisible extends Data.TaggedError(
-  "DhcpOptionsStillVisible",
-)<{
+class DhcpOptionsStillVisible extends Data.TaggedError("DhcpOptionsStillVisible")<{
   dhcpOptionsId: string;
 }> {}
 
 // Build the NewDhcpConfiguration list AWS expects from the flat props.
-const buildConfigurations = (
-  props: DhcpOptionsProps,
-): ec2.NewDhcpConfiguration[] => {
+const buildConfigurations = (props: DhcpOptionsProps): ec2.NewDhcpConfiguration[] => {
   const configs: ec2.NewDhcpConfiguration[] = [];
   if (props.domainName !== undefined) {
     configs.push({ Key: "domain-name", Values: [props.domainName] });
@@ -169,10 +166,7 @@ export const DhcpOptionsProvider = () =>
   Provider.effect(
     DhcpOptions,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -183,12 +177,8 @@ export const DhcpOptionsProvider = () =>
       const describeDhcpOptions = (dhcpOptionsId: string) =>
         ec2.describeDhcpOptions({ DhcpOptionsIds: [dhcpOptionsId] }).pipe(
           Effect.map((r) => r.DhcpOptions?.[0]),
-          Effect.catchTag("InvalidDhcpOptionID.NotFound", () =>
-            Effect.succeed(undefined),
-          ),
-          Effect.catchTag("InvalidDhcpOptionsID.NotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("InvalidDhcpOptionID.NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidDhcpOptionsID.NotFound", () => Effect.succeed(undefined)),
         );
 
       const waitUntilDhcpOptionsGone = (dhcpOptionsId: string) =>
@@ -306,9 +296,7 @@ export const DhcpOptionsProvider = () =>
               ],
             });
             opts = result.DhcpOptions!;
-            yield* session.note(
-              `DHCP options set created: ${opts.DhcpOptionsId}`,
-            );
+            yield* session.note(`DHCP options set created: ${opts.DhcpOptionsId}`);
           }
 
           const dhcpOptionsId = opts.DhcpOptionsId!;
@@ -342,9 +330,10 @@ export const DhcpOptionsProvider = () =>
               .pipe(
                 Effect.map(
                   (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                    Object.fromEntries(r.Tags?.map((t) => [t.Key!, t.Value!]) ?? []) as Record<
+                      string,
+                      string
+                    >,
                 ),
               )) ?? {};
           const { removed, upsert } = diffTags(currentTags, desiredTags);
@@ -369,17 +358,13 @@ export const DhcpOptionsProvider = () =>
 
           // Disassociate any VPC first — a set cannot be deleted while attached.
           if (output.vpcId) {
-            yield* session.note(
-              `Restoring default DHCP options on ${output.vpcId}...`,
-            );
+            yield* session.note(`Restoring default DHCP options on ${output.vpcId}...`);
             yield* ec2
               .associateDhcpOptions({
                 DhcpOptionsId: "default",
                 VpcId: output.vpcId as string,
               })
-              .pipe(
-                Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void));
           }
 
           yield* session.note(`Deleting DHCP options set: ${dhcpOptionsId}`);
@@ -389,10 +374,7 @@ export const DhcpOptionsProvider = () =>
             // A VPC association may still be clearing.
             Effect.retry({
               while: (e: { _tag: string }) => e._tag === "DependencyViolation",
-              schedule: Schedule.max([
-                Schedule.fixed(3000),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(20)]),
             }),
           );
           yield* waitUntilDhcpOptionsGone(dhcpOptionsId);

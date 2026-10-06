@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.DetectFacesHttp)`.
  *
- * @binding
- * @section Image Analysis
- * @example Detect Faces with All Attributes
+ * ### Image Analysis
+ * **Example:** Detect Faces with All Attributes
  * ```typescript
  * // init
  * const detectFaces = yield* AWS.Rekognition.DetectFaces();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const ages = (result.FaceDetails ?? []).map((f) => f.AgeRange);
  * ```
+ *
+ * @binding
  */
 export interface DetectFaces extends Binding.Service<
   DetectFaces,
@@ -32,12 +33,7 @@ export interface DetectFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DetectFacesRequest,
-    ) => Effect.Effect<
-      rekognition.DetectFacesResponse,
-      rekognition.DetectFacesError
-    >
+    ) => Effect.Effect<rekognition.DetectFacesResponse, rekognition.DetectFacesError>
   >
 > {}
-export const DetectFaces = Binding.Service<DetectFaces>(
-  "AWS.Rekognition.DetectFaces",
-);
+export const DetectFaces = Binding.Service<DetectFaces>("AWS.Rekognition.DetectFaces");

@@ -10,14 +10,9 @@ import type { Topic } from "./Topic.ts";
  * the sink assigns per API call. Callers stay in control of `Message`,
  * `Subject`, `MessageGroupId`, `MessageDeduplicationId`, attributes, etc.
  */
-export interface TopicSinkEntry extends Omit<
-  sns.PublishBatchRequestEntry,
-  "Id"
-> {}
+export interface TopicSinkEntry extends Omit<sns.PublishBatchRequestEntry, "Id"> {}
 
-export type TopicSinkError =
-  | sns.PublishBatchError
-  | BatchRetryExhaustedError<TopicSinkEntry>;
+export type TopicSinkError = sns.PublishBatchError | BatchRetryExhaustedError<TopicSinkEntry>;
 
 /**
  * A batching sink over SNS `PublishBatch` (10 entries / 256 KiB per call).
@@ -29,9 +24,8 @@ export type TopicSinkError =
  * The binding grants the host function `sns:Publish` on the topic. Provide
  * the `TopicSinkHttp` layer (which itself needs `PublishBatchHttp`) on the
  * Function to implement the binding.
- * @binding
- * @section Streaming Messages into a Topic
- * @example Run a Stream into a Topic
+ * ### Streaming Messages into a Topic
+ * **Example:** Run a Stream into a Topic
  * ```typescript
  * // init (provide SNS.TopicSinkHttp + SNS.PublishBatchHttp on the Function)
  * const sink = yield* SNS.TopicSink(topic);
@@ -43,15 +37,15 @@ export type TopicSinkError =
  *   Stream.run(sink),
  * );
  * ```
+ *
+ * @binding
  */
 export interface TopicSink extends Binding.Service<
   TopicSink,
   "AWS.SNS.TopicSink",
   (
     topic: Topic,
-  ) => Effect.Effect<
-    Sink.Sink<void, TopicSinkEntry, readonly TopicSinkEntry[], TopicSinkError>
-  >
+  ) => Effect.Effect<Sink.Sink<void, TopicSinkEntry, readonly TopicSinkEntry[], TopicSinkError>>
 > {}
 
 export const TopicSink = Binding.Service<TopicSink>("AWS.SNS.TopicSink");

@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link UngroupResources} — the group is injected from the binding. */
-export type UngroupResourcesRequest = Omit<
-  resourcegroups.UngroupResourcesInput,
-  "Group"
->;
+export type UngroupResourcesRequest = Omit<resourcegroups.UngroupResourcesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:UngroupResources`.
@@ -19,9 +16,8 @@ export type UngroupResourcesRequest = Omit<
  * {@link ListGroupingStatuses}. The group name is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.ResourceGroups.UngroupResourcesHttp)`.
- * @binding
- * @section Managing Group Membership
- * @example Remove A Resource From An Application Group
+ * ### Managing Group Membership
+ * **Example:** Remove A Resource From An Application Group
  * ```typescript
  * // init — bind the operation to the group
  * const ungroupResources = yield* AWS.ResourceGroups.UngroupResources(group);
@@ -31,6 +27,8 @@ export type UngroupResourcesRequest = Omit<
  *   ResourceArns: [resourceArn],
  * });
  * ```
+ *
+ * @binding
  */
 export interface UngroupResources extends Binding.Service<
   UngroupResources,
@@ -40,10 +38,7 @@ export interface UngroupResources extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UngroupResourcesRequest,
-    ) => Effect.Effect<
-      resourcegroups.UngroupResourcesOutput,
-      resourcegroups.UngroupResourcesError
-    >
+    ) => Effect.Effect<resourcegroups.UngroupResourcesOutput, resourcegroups.UngroupResourcesError>
   >
 > {}
 export const UngroupResources = Binding.Service<UngroupResources>(

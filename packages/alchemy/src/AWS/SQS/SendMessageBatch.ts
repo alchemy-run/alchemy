@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface SendMessageBatchRequest extends Omit<
-  sqs.SendMessageBatchRequest,
-  "QueueUrl"
-> {}
+export interface SendMessageBatchRequest extends Omit<sqs.SendMessageBatchRequest, "QueueUrl"> {}
 
 /**
  * Runtime binding for `sqs:SendMessageBatch`.
@@ -18,9 +15,8 @@ export interface SendMessageBatchRequest extends Omit<
  *
  * For an unbounded stream of messages with automatic batching and bounded
  * retry of transient per-entry failures, prefer {@link QueueSink}.
- * @binding
- * @section Sending Message Batches
- * @example Send a Batch of Messages
+ * ### Sending Message Batches
+ * **Example:** Send a Batch of Messages
  * ```typescript
  * // init (provide SQS.SendMessageBatchHttp on the Function)
  * const sendMessageBatch = yield* SQS.SendMessageBatch(queue);
@@ -34,6 +30,8 @@ export interface SendMessageBatchRequest extends Omit<
  * });
  * // result.Successful / result.Failed
  * ```
+ *
+ * @binding
  */
 export interface SendMessageBatch extends Binding.Service<
   SendMessageBatch,
@@ -47,6 +45,4 @@ export interface SendMessageBatch extends Binding.Service<
   >
 > {}
 
-export const SendMessageBatch = Binding.Service<SendMessageBatch>(
-  "AWS.SQS.SendMessageBatch",
-);
+export const SendMessageBatch = Binding.Service<SendMessageBatch>("AWS.SQS.SendMessageBatch");

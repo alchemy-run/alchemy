@@ -9,15 +9,16 @@ export interface ListRunTasksRequest extends omics.ListRunTasksRequest {}
  *
  * An account-level run-control operation (no resource argument) that lists the tasks within a run.
  * Provide the implementation with `Effect.provide(AWS.Omics.ListRunTasksHttp)`.
- * @binding
- * @section Runs
- * @example Call ListRunTasks
+ * ### Runs
+ * **Example:** Call ListRunTasks
  * ```typescript
  * // init — account-level binding takes no resource
  * const listRunTasks = yield* AWS.Omics.ListRunTasks();
  * // runtime
  * const result = yield* listRunTasks({ id: runId });
  * ```
+ *
+ * @binding
  */
 export interface ListRunTasks extends Binding.Service<
   ListRunTasks,
@@ -29,6 +30,4 @@ export interface ListRunTasks extends Binding.Service<
   >
 > {}
 
-export const ListRunTasks = Binding.Service<ListRunTasks>(
-  "AWS.Omics.ListRunTasks",
-);
+export const ListRunTasks = Binding.Service<ListRunTasks>("AWS.Omics.ListRunTasks");

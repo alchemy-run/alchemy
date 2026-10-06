@@ -4,12 +4,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface InstrumentationConfigurationProps {
@@ -114,9 +109,8 @@ export interface InstrumentationConfiguration extends Resource<
  * replaces the configuration. Tags remain mutable through the standard
  * tagging APIs.
  *
- * @resource
- * @section Creating an Instrumentation Configuration
- * @example Snapshot Probe on a Python Method
+ * ### Creating an Instrumentation Configuration
+ * **Example:** Snapshot Probe on a Python Method
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -142,7 +136,7 @@ export interface InstrumentationConfiguration extends Resource<
  * );
  * ```
  *
- * @example Expiring Probe with Attribute Filters
+ * **Example:** Expiring Probe with Attribute Filters
  * ```typescript
  * const probe = yield* AWS.ApplicationSignals.InstrumentationConfiguration(
  *   "DebugProbe",
@@ -166,11 +160,12 @@ export interface InstrumentationConfiguration extends Resource<
  *   },
  * );
  * ```
+ *
+ * @resource
  */
-export const InstrumentationConfiguration =
-  Resource<InstrumentationConfiguration>(
-    "AWS.ApplicationSignals.InstrumentationConfiguration",
-  );
+export const InstrumentationConfiguration = Resource<InstrumentationConfiguration>(
+  "AWS.ApplicationSignals.InstrumentationConfiguration",
+);
 
 /**
  * Normalize `expiresAt` (which the engine's state serialization flattens to
@@ -225,29 +220,21 @@ export const InstrumentationConfigurationProvider = () =>
               ? { LocationHash: locationHash }
               : { CodeLocation: props.location },
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.Configuration;
       });
 
       const observedTags = (arn: string) =>
         appsignals.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((response) =>
-            Object.fromEntries(
-              (response.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-            ),
+            Object.fromEntries((response.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
           ),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
           ),
         );
 
-      const toAttrs = (
-        configuration: appsignals.InstrumentationConfiguration,
-      ) => ({
+      const toAttrs = (configuration: appsignals.InstrumentationConfiguration) => ({
         arn: configuration.ARN,
         locationHash: configuration.LocationHash,
         instrumentationType: configuration.InstrumentationType,
@@ -281,10 +268,7 @@ export const InstrumentationConfigurationProvider = () =>
           if (!isResolved(news)) return undefined;
           // Configurations are immutable after creation — any change other
           // than tags replaces. Tags fall through to the default update.
-          if (
-            olds !== undefined &&
-            immutableFingerprint(news) !== immutableFingerprint(olds)
-          ) {
+          if (olds !== undefined && immutableFingerprint(news) !== immutableFingerprint(olds)) {
             return { action: "replace" } as const;
           }
         }),

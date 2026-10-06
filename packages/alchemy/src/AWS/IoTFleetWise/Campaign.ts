@@ -128,9 +128,7 @@ export interface SignalFetchInformation {
   actions: (string | Redacted.Redacted<string>)[];
 }
 
-const toWireCollectionScheme = (
-  scheme: CollectionScheme,
-): iotfleetwise.CollectionScheme =>
+const toWireCollectionScheme = (scheme: CollectionScheme): iotfleetwise.CollectionScheme =>
   scheme.timeBasedCollectionScheme !== undefined
     ? {
         timeBasedCollectionScheme: {
@@ -144,8 +142,7 @@ const toWireCollectionScheme = (
             scheme.conditionBasedCollectionScheme.minimumTriggerInterval,
           ),
           triggerMode: scheme.conditionBasedCollectionScheme.triggerMode,
-          conditionLanguageVersion:
-            scheme.conditionBasedCollectionScheme.conditionLanguageVersion,
+          conditionLanguageVersion: scheme.conditionBasedCollectionScheme.conditionLanguageVersion,
         },
       };
 
@@ -309,9 +306,8 @@ export interface Campaign extends Resource<
  * Only the description and extra dimensions are mutable — every other
  * change replaces the campaign. AWS IoT FleetWise is allowlist-gated and
  * offered in `us-east-1`/`eu-central-1` only.
- * @resource
- * @section Creating a Campaign
- * @example Time-Based Collection to S3
+ * ### Creating a Campaign
+ * **Example:** Time-Based Collection to S3
  * ```typescript
  * const campaign = yield* Campaign("SpeedTelemetry", {
  *   signalCatalogArn: catalog.signalCatalogArn,
@@ -327,7 +323,7 @@ export interface Campaign extends Resource<
  * });
  * ```
  *
- * @example Condition-Based Collection
+ * **Example:** Condition-Based Collection
  * ```typescript
  * const campaign = yield* Campaign("HardBraking", {
  *   signalCatalogArn: catalog.signalCatalogArn,
@@ -348,6 +344,8 @@ export interface Campaign extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const Campaign = Resource<Campaign>("AWS.IoTFleetWise.Campaign");
 
@@ -363,9 +361,7 @@ export const CampaignProvider = () =>
       const readCampaign = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getCampaign({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -378,9 +374,7 @@ export const CampaignProvider = () =>
               return Effect.fail(new Error(`Campaign '${name}' not found`));
             }
             if (campaign.status === "CREATING") {
-              return Effect.fail(
-                new Error(`Campaign '${name}' still creating`),
-              );
+              return Effect.fail(new Error(`Campaign '${name}' still creating`));
             }
             return Effect.succeed(campaign);
           }),
@@ -388,13 +382,9 @@ export const CampaignProvider = () =>
         );
       });
 
-      const toAttrs = Effect.fn(function* (
-        campaign: iotfleetwise.GetCampaignResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (campaign: iotfleetwise.GetCampaignResponse) {
         if (campaign.name === undefined || campaign.arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`Campaign '${campaign.name}' is missing its ARN`),
-          );
+          return yield* Effect.fail(new Error(`Campaign '${campaign.name}' is missing its ARN`));
         }
         return {
           campaignName: campaign.name,
@@ -425,9 +415,7 @@ export const CampaignProvider = () =>
             dataDestinationConfigs: props.dataDestinationConfigs,
             startTime: props.startTime,
             expiryTime: props.expiryTime,
-            postTriggerCollectionDuration: toWireSeconds(
-              props.postTriggerCollectionDuration,
-            ),
+            postTriggerCollectionDuration: toWireSeconds(props.postTriggerCollectionDuration),
             diagnosticsMode: props.diagnosticsMode,
             spoolingMode: props.spoolingMode,
             compression: props.compression,
@@ -467,17 +455,9 @@ export const CampaignProvider = () =>
                 collectionScheme: toWireCollectionScheme(news.collectionScheme),
                 signalsToCollect: toWireSignalsToCollect(news.signalsToCollect),
                 dataDestinationConfigs: news.dataDestinationConfigs,
-                startTime:
-                  news.startTime !== undefined
-                    ? new Date(news.startTime)
-                    : undefined,
-                expiryTime:
-                  news.expiryTime !== undefined
-                    ? new Date(news.expiryTime)
-                    : undefined,
-                postTriggerCollectionDuration: toWireSeconds(
-                  news.postTriggerCollectionDuration,
-                ),
+                startTime: news.startTime !== undefined ? new Date(news.startTime) : undefined,
+                expiryTime: news.expiryTime !== undefined ? new Date(news.expiryTime) : undefined,
+                postTriggerCollectionDuration: toWireSeconds(news.postTriggerCollectionDuration),
                 diagnosticsMode: news.diagnosticsMode,
                 spoolingMode: news.spoolingMode,
                 compression: news.compression,
@@ -496,35 +476,24 @@ export const CampaignProvider = () =>
           // 3. Sync mutable aspects — description / dataExtraDimensions via
           //    the UPDATE action, applied only on an observed delta.
           const descriptionChanged =
-            news.description !== undefined &&
-            news.description !== observed.description;
+            news.description !== undefined && news.description !== observed.description;
           const dimensionsChanged =
             news.dataExtraDimensions !== undefined &&
-            !stableEquals(
-              observed.dataExtraDimensions ?? [],
-              news.dataExtraDimensions,
-            );
+            !stableEquals(observed.dataExtraDimensions ?? [], news.dataExtraDimensions);
           if (descriptionChanged || dimensionsChanged) {
             yield* iotfleetwise
               .updateCampaign({
                 name,
                 action: "UPDATE",
                 description: descriptionChanged ? news.description : undefined,
-                dataExtraDimensions: dimensionsChanged
-                  ? news.dataExtraDimensions
-                  : undefined,
+                dataExtraDimensions: dimensionsChanged ? news.dataExtraDimensions : undefined,
               })
               .pipe(inFleetWiseRegion);
           }
 
           // 3b. Approve a waiting campaign when requested.
-          if (
-            news.autoApprove === true &&
-            observed.status === "WAITING_FOR_APPROVAL"
-          ) {
-            yield* iotfleetwise
-              .updateCampaign({ name, action: "APPROVE" })
-              .pipe(inFleetWiseRegion);
+          if (news.autoApprove === true && observed.status === "WAITING_FOR_APPROVAL") {
+            yield* iotfleetwise.updateCampaign({ name, action: "APPROVE" }).pipe(inFleetWiseRegion);
           }
 
           // 3c. Sync tags against OBSERVED cloud tags.
@@ -541,12 +510,10 @@ export const CampaignProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Deleting a campaign suspends data collection and removes it
           // from vehicles; deleting a missing campaign is success.
-          yield* iotfleetwise
-            .deleteCampaign({ name: output.campaignName })
-            .pipe(
-              inFleetWiseRegion,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* iotfleetwise.deleteCampaign({ name: output.campaignName }).pipe(
+            inFleetWiseRegion,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
 
         list: () =>

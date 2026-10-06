@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
-export interface GetUsageRequest extends Omit<
-  ag.GetUsageRequest,
-  "usagePlanId"
-> {}
+export interface GetUsageRequest extends Omit<ag.GetUsageRequest, "usagePlanId"> {}
 
 /**
  * Runtime binding for reading usage data of a {@link UsagePlan}
@@ -17,9 +14,8 @@ export interface GetUsageRequest extends Omit<
  * Provide `ApiGateway.GetUsageHttp` on the Function effect to implement
  * the binding.
  *
- * @binding
- * @section Metering usage
- * @example Read this month's usage for a key
+ * ### Metering usage
+ * **Example:** Read this month's usage for a key
  * ```typescript
  * // init
  * const getUsage = yield* ApiGateway.GetUsage(plan);
@@ -31,14 +27,14 @@ export interface GetUsageRequest extends Omit<
  *   endDate: "2026-07-14",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetUsage extends Binding.Service<
   GetUsage,
   "AWS.ApiGateway.GetUsage",
   <P extends UsagePlan>(
     usagePlan: P,
-  ) => Effect.Effect<
-    (request: GetUsageRequest) => Effect.Effect<ag.Usage, ag.GetUsageError>
-  >
+  ) => Effect.Effect<(request: GetUsageRequest) => Effect.Effect<ag.Usage, ag.GetUsageError>>
 > {}
 export const GetUsage = Binding.Service<GetUsage>("AWS.ApiGateway.GetUsage");

@@ -72,9 +72,8 @@ export interface PlatformApplication extends Resource<
  * `CreatePlatformEndpoint` binding, and messages are delivered with
  * `PublishToEndpoint`. SNS validates the credential when the application is
  * created, so a real push-service credential is required.
- * @resource
- * @section Creating Platform Applications
- * @example FCM (GCM) Application
+ * ### Creating Platform Applications
+ * **Example:** FCM (GCM) Application
  * ```typescript
  * import * as SNS from "alchemy/AWS/SNS";
  * import * as Redacted from "effect/Redacted";
@@ -85,7 +84,7 @@ export interface PlatformApplication extends Resource<
  * });
  * ```
  *
- * @example APNS Application
+ * **Example:** APNS Application
  * ```typescript
  * const app = yield* SNS.PlatformApplication("IosPushApp", {
  *   platform: "APNS",
@@ -94,8 +93,8 @@ export interface PlatformApplication extends Resource<
  * });
  * ```
  *
- * @section Runtime Endpoints
- * @example Register a Device Token at Runtime
+ * ### Runtime Endpoints
+ * **Example:** Register a Device Token at Runtime
  * ```typescript
  * // init
  * const createEndpoint = yield* SNS.CreatePlatformEndpoint(app);
@@ -108,19 +107,17 @@ export interface PlatformApplication extends Resource<
  *   Message: "hello",
  * });
  * ```
+ *
+ * @resource
  */
-export const PlatformApplication = Resource<PlatformApplication>(
-  "AWS.SNS.PlatformApplication",
-);
+export const PlatformApplication = Resource<PlatformApplication>("AWS.SNS.PlatformApplication");
 
 export const PlatformApplicationProvider = () =>
   Provider.succeed(PlatformApplication, {
     list: Effect.fn(function* () {
       const applications = yield* sns.listPlatformApplications.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.PlatformApplications ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.PlatformApplications ?? [])),
       );
 
       return applications.flatMap((application) => {
@@ -131,8 +128,7 @@ export const PlatformApplicationProvider = () =>
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const arn =
-        output?.platformApplicationArn ??
-        (yield* toApplicationArn(id, olds ?? { platform: "" }));
+        output?.platformApplicationArn ?? (yield* toApplicationArn(id, olds ?? { platform: "" }));
       return yield* readApplication(arn);
     }),
     stables: ["platformApplicationArn", "name", "platform"],
@@ -149,8 +145,7 @@ export const PlatformApplicationProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
       const name = yield* toApplicationName(id, news);
-      const arn =
-        output?.platformApplicationArn ?? (yield* toApplicationArn(id, news));
+      const arn = output?.platformApplicationArn ?? (yield* toApplicationArn(id, news));
 
       // Observe — the credential attributes are write-only, so observation
       // covers existence plus the non-sensitive mutable attributes.
@@ -180,10 +175,7 @@ export const PlatformApplicationProvider = () =>
         const platformApplicationArn = created.PlatformApplicationArn ?? arn;
         yield* session.note(platformApplicationArn);
         const state = yield* readApplication(platformApplicationArn);
-        return (
-          state ??
-          toApplicationAttributes(platformApplicationArn, desiredAttributes)
-        );
+        return state ?? toApplicationAttributes(platformApplicationArn, desiredAttributes);
       }
 
       // Sync — mutable non-secret attributes diff observed vs desired;
@@ -204,14 +196,11 @@ export const PlatformApplicationProvider = () =>
 
       const credentialChanged =
         olds === undefined ||
-        Redacted.value(olds.platformCredential) !==
-          Redacted.value(news.platformCredential) ||
-        (olds.platformPrincipal === undefined) !==
-          (news.platformPrincipal === undefined) ||
+        Redacted.value(olds.platformCredential) !== Redacted.value(news.platformCredential) ||
+        (olds.platformPrincipal === undefined) !== (news.platformPrincipal === undefined) ||
         (olds.platformPrincipal !== undefined &&
           news.platformPrincipal !== undefined &&
-          Redacted.value(olds.platformPrincipal) !==
-            Redacted.value(news.platformPrincipal));
+          Redacted.value(olds.platformPrincipal) !== Redacted.value(news.platformPrincipal));
       if (credentialChanged) {
         Object.assign(updates, credentialAttributes);
       }

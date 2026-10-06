@@ -13,14 +13,15 @@ import type { Service } from "./Service.ts";
  * Provide `AppRunner.PauseServiceHttp` on the hosting function's Effect to
  * implement the binding.
  *
- * @binding
- * @section Pausing and Resuming
- * @example Pause a service overnight
+ * ### Pausing and Resuming
+ * **Example:** Pause a service overnight
  * ```typescript
  * const pauseService = yield* AppRunner.PauseService(service);
  * const { Service: paused } = yield* pauseService();
  * // paused.Status -> "OPERATION_IN_PROGRESS" (settles to "PAUSED")
  * ```
+ *
+ * @binding
  */
 export interface PauseService extends Binding.Service<
   PauseService,
@@ -28,12 +29,7 @@ export interface PauseService extends Binding.Service<
   (
     service: Service,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      apprunner.PauseServiceResponse,
-      apprunner.PauseServiceError
-    >
+    () => Effect.Effect<apprunner.PauseServiceResponse, apprunner.PauseServiceError>
   >
 > {}
-export const PauseService = Binding.Service<PauseService>(
-  "AWS.AppRunner.PauseService",
-);
+export const PauseService = Binding.Service<PauseService>("AWS.AppRunner.PauseService");

@@ -12,9 +12,8 @@ import type { Task } from "./Task.ts";
  * `StartTaskExecution`; access is granted on the bound task's executions.
  * Provide the implementation with
  * `Effect.provide(AWS.DataSync.DescribeTaskExecutionHttp)`.
- * @binding
- * @section Running Transfers
- * @example Watch A Transfer's Progress
+ * ### Running Transfers
+ * **Example:** Watch A Transfer's Progress
  * ```typescript
  * // init — bind the operation to the task
  * const describeTaskExecution = yield* AWS.DataSync.DescribeTaskExecution(task);
@@ -25,6 +24,8 @@ import type { Task } from "./Task.ts";
  * });
  * yield* Effect.log(`${execution.Status}: ${execution.BytesTransferred} bytes`);
  * ```
+ *
+ * @binding
  */
 export interface DescribeTaskExecution extends Binding.Service<
   DescribeTaskExecution,
@@ -34,10 +35,7 @@ export interface DescribeTaskExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: datasync.DescribeTaskExecutionRequest,
-    ) => Effect.Effect<
-      datasync.DescribeTaskExecutionResponse,
-      datasync.DescribeTaskExecutionError
-    >
+    ) => Effect.Effect<datasync.DescribeTaskExecutionResponse, datasync.DescribeTaskExecutionError>
   >
 > {}
 export const DescribeTaskExecution = Binding.Service<DescribeTaskExecution>(

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface TagResourceRequest extends Omit<
-  sns.TagResourceRequest,
-  "ResourceArn"
-> {}
+export interface TagResourceRequest extends Omit<sns.TagResourceRequest, "ResourceArn"> {}
 
 /**
  * Runtime binding for `sns:TagResource`.
@@ -16,9 +13,8 @@ export interface TagResourceRequest extends Omit<
  * The binding grants the host function `sns:TagResource` on the topic.
  * Provide the `TagResourceHttp` layer on the Function to implement the
  * binding.
- * @binding
- * @section Tagging Topics
- * @example Tag a Topic
+ * ### Tagging Topics
+ * **Example:** Tag a Topic
  * ```typescript
  * // init (provide SNS.TagResourceHttp on the Function)
  * const tagResource = yield* SNS.TagResource(topic);
@@ -28,6 +24,8 @@ export interface TagResourceRequest extends Omit<
  *   Tags: [{ Key: "team", Value: "orders" }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface TagResource extends Binding.Service<
   TagResource,
@@ -35,9 +33,7 @@ export interface TagResource extends Binding.Service<
   (
     topic: Topic,
   ) => Effect.Effect<
-    (
-      request: TagResourceRequest,
-    ) => Effect.Effect<sns.TagResourceResponse, sns.TagResourceError>
+    (request: TagResourceRequest) => Effect.Effect<sns.TagResourceResponse, sns.TagResourceError>
   >
 > {}
 

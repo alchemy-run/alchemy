@@ -22,9 +22,8 @@ export interface StartIngestionJobRequest extends Omit<
  * data source's parent knowledge base. Poll the returned job with
  * {@link GetIngestionJob} until its status settles.
  *
- * @binding
- * @section Syncing a Data Source
- * @example Start an Ingestion Job
+ * ### Syncing a Data Source
+ * **Example:** Start an Ingestion Job
  * ```typescript
  * // init
  * const startIngestionJob = yield* Bedrock.StartIngestionJob(dataSource);
@@ -35,6 +34,8 @@ export interface StartIngestionJobRequest extends Omit<
  * });
  * const jobId = ingestionJob.ingestionJobId;
  * ```
+ *
+ * @binding
  */
 export interface StartIngestionJob extends Binding.Service<
   StartIngestionJob,
@@ -44,10 +45,7 @@ export interface StartIngestionJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartIngestionJobRequest,
-    ) => Effect.Effect<
-      bedrock.StartIngestionJobResponse,
-      bedrock.StartIngestionJobError
-    >
+    ) => Effect.Effect<bedrock.StartIngestionJobResponse, bedrock.StartIngestionJobError>
   >
 > {}
 export const StartIngestionJob = Binding.Service<StartIngestionJob>(

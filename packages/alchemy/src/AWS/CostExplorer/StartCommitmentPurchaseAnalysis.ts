@@ -14,9 +14,8 @@ export interface StartCommitmentPurchaseAnalysisRequest
  * Start an analysis of a planned Savings Plans commitment purchase —
  * projects the cost impact before you buy. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.StartCommitmentPurchaseAnalysisHttp)`.
- * @binding
- * @section Commitment Purchase Analysis
- * @example Analyze a Planned Commitment
+ * ### Commitment Purchase Analysis
+ * **Example:** Analyze a Planned Commitment
  * ```typescript
  * // init — account-level binding takes no resource
  * const startCommitmentPurchaseAnalysis = yield* AWS.CostExplorer.StartCommitmentPurchaseAnalysis();
@@ -27,6 +26,8 @@ export interface StartCommitmentPurchaseAnalysisRequest
  * });
  * const analysisId = result.AnalysisId;
  * ```
+ *
+ * @binding
  */
 export interface StartCommitmentPurchaseAnalysis extends Binding.Service<
   StartCommitmentPurchaseAnalysis,
@@ -41,7 +42,6 @@ export interface StartCommitmentPurchaseAnalysis extends Binding.Service<
   >
 > {}
 
-export const StartCommitmentPurchaseAnalysis =
-  Binding.Service<StartCommitmentPurchaseAnalysis>(
-    "AWS.CostExplorer.StartCommitmentPurchaseAnalysis",
-  );
+export const StartCommitmentPurchaseAnalysis = Binding.Service<StartCommitmentPurchaseAnalysis>(
+  "AWS.CostExplorer.StartCommitmentPurchaseAnalysis",
+);

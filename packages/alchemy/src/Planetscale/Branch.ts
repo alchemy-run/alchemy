@@ -8,7 +8,17 @@ import { havePropsChanged, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
-import { hashImports, hashMigrations } from "../SQL/SqlFile.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationRun,
+  type MigrationsInput,
+  type NormalizedMigrationsInput,
+  type StampedMigrationsState,
+} from "../SQL/Migrations/index.ts";
+import { hashImports } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
 import {
@@ -16,12 +26,7 @@ import {
   toPostgresClusterSku,
   waitForPendingPostgresChanges,
 } from "./Postgres/PostgresClusterSize.ts";
-import {
-  DEFAULT_MIGRATIONS_TABLE,
-  PlanetscaleConflict,
-  isKnownError,
-  waitForBranchReady,
-} from "./Util.ts";
+import { PlanetscaleConflict, isKnownError, waitForBranchReady } from "./Util.ts";
 
 /**
  * Props shared between {@link MySQLBranch} and {@link PostgresBranch}. The
@@ -57,17 +62,12 @@ export interface BaseBranchProps {
   region?: { slug: string };
 
   /**
-   * Directory containing `.sql` migration files. Files are sorted by numeric
-   * prefix (for example `0001_init.sql`) and applied in order against this
-   * branch.
+   * SQL migrations to apply against this branch. Accepts a directory path,
+   * a `Drizzle.Schema` resource, or `{ dir, table? }`. Bookkeeping lives
+   * in Alchemy's `__alchemy_migrations` table; drizzle/prisma history is
+   * converted one-way on first deploy.
    */
-  migrationsDir?: string;
-
-  /**
-   * Name of the table used to track applied migrations.
-   * @default "__alchemy_migrations"
-   */
-  migrationsTable?: string;
+  migrations?: MigrationsInput;
 
   /**
    * Paths to additional `.sql` files to apply after migrations. Each file is
@@ -126,9 +126,7 @@ export interface BaseBranchAttributes {
 type DatabaseRef = string | { name: string; organization?: string };
 type BranchRef = string | { name: string };
 
-const resolveDatabase = (
-  database: unknown,
-): { name: string; organization?: string } => {
+const resolveDatabase = (database: unknown): { name: string; organization?: string } => {
   const ref = database as DatabaseRef | undefined;
   if (!ref) return { name: "" };
   return typeof ref === "string"
@@ -143,10 +141,7 @@ const resolveParent = (parent: unknown): string => {
 
 const createBranchName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }))
-    );
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 /**
@@ -157,9 +152,9 @@ const createBranchName = (id: string, name: string | undefined) =>
 export interface BranchMigrationRunners {
   runMigrations: (
     target: { organization: string; database: string; branch: string },
-    migrationsDir: string,
-    migrationsTable: string,
-  ) => Effect.Effect<Record<string, string>, any, any>;
+    input: NormalizedMigrationsInput,
+    stamped: StampedMigrationsState,
+  ) => Effect.Effect<MigrationRun, any, any>;
   runImports: (
     target: { organization: string; database: string; branch: string },
     importFiles: string[],
@@ -180,9 +175,7 @@ const isResizeInProgress = (error: unknown): boolean =>
   error !== null &&
   (error as { readonly _tag?: unknown })._tag === "UnprocessableEntity" &&
   typeof (error as { readonly message?: unknown }).message === "string" &&
-  (error as { readonly message: string }).message.includes(
-    "cluster resize in progress",
-  );
+  (error as { readonly message: string }).message.includes("cluster resize in progress");
 
 /**
  * Build a branch provider for a specific PlanetScale engine. The
@@ -207,53 +200,47 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
     list: Effect.fn(function* () {
       const { organization } = yield* yield* Credentials;
 
-      const databases = yield* planetscale.listDatabases
-        .pages({ organization })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.data)),
-        );
+      const databases = yield* planetscale.listDatabases.pages({ organization }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.data)),
+      );
 
       const rows = yield* Effect.forEach(
         databases,
         (db) =>
-          planetscale.listBranches
-            .pages({ organization, database: db.name })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  page.data
-                    .filter((branch) => branch.kind === opts.expectedKind)
-                    .map(
-                      (branch) =>
-                        ({
-                          name: branch.name,
-                          organization,
-                          database: db.name,
-                          parentBranch: branch.parent_branch ?? "main",
-                          production: branch.production,
-                          createdAt: branch.created_at,
-                          updatedAt: branch.updated_at,
-                          htmlUrl: branch.html_url,
-                          region: { slug: branch.region.slug },
-                          migrationsDir: undefined,
-                          migrationsTable: undefined,
-                          migrationsHashes: {},
-                          importHashes: {},
-                          desiredReplicas: undefined,
-                          hasReplicas: branch.has_replicas,
-                          hasReadOnlyReplicas: branch.has_read_only_replicas,
-                        }) satisfies BaseBranchAttributes,
-                    ),
-                ),
-              ),
-              // A database can be deleted between enumeration and the
-              // per-database branch list — skip it rather than fail.
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as BaseBranchAttributes[]),
+          planetscale.listBranches.pages({ organization, database: db.name }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                page.data
+                  .filter((branch) => branch.kind === opts.expectedKind)
+                  .map(
+                    (branch) =>
+                      ({
+                        name: branch.name,
+                        organization,
+                        database: db.name,
+                        parentBranch: branch.parent_branch ?? "main",
+                        production: branch.production,
+                        createdAt: branch.created_at,
+                        updatedAt: branch.updated_at,
+                        htmlUrl: branch.html_url,
+                        region: { slug: branch.region.slug },
+                        migrationsDir: undefined,
+                        migrationsTable: undefined,
+                        migrationsHashes: {},
+                        importHashes: {},
+                        desiredReplicas: undefined,
+                        hasReplicas: branch.has_replicas,
+                        hasReadOnlyReplicas: branch.has_read_only_replicas,
+                      }) satisfies BaseBranchAttributes,
+                  ),
               ),
             ),
+            // A database can be deleted between enumeration and the
+            // per-database branch list — skip it rather than fail.
+            Effect.catchTag("NotFound", () => Effect.succeed([] as BaseBranchAttributes[])),
+          ),
         { concurrency: 10 },
       );
 
@@ -279,12 +266,8 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       // across updates — the instance id only rotates on replacement).
       const nameIsStable =
         output?.name !== undefined &&
-        (news.name !== undefined
-          ? news.name === output.name
-          : olds?.name === undefined);
-      const stables = nameIsStable
-        ? ["organization", "database", "name"]
-        : undefined;
+        (news.name !== undefined ? news.name === output.name : olds?.name === undefined);
+      const stables = nameIsStable ? ["organization", "database", "name"] : undefined;
 
       const newDb = resolveDatabase(news.database).name;
       const oldDbRef = output?.database ?? olds.database;
@@ -296,17 +279,12 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       }
 
       const newParent = resolveParent(news.parentBranch);
-      const oldParent =
-        output?.parentBranch ?? resolveParent(olds.parentBranch);
+      const oldParent = output?.parentBranch ?? resolveParent(olds.parentBranch);
       if (newParent !== oldParent) {
         return { action: "replace" } as const;
       }
 
-      if (
-        news.region?.slug &&
-        output?.region?.slug &&
-        news.region.slug !== output.region.slug
-      ) {
+      if (news.region?.slug && output?.region?.slug && news.region.slug !== output.region.slug) {
         return { action: "replace" } as const;
       }
 
@@ -316,25 +294,13 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
 
         const desiredHasReplicas = news.replicas > 0;
-        if (
-          output?.hasReplicas !== undefined &&
-          output.hasReplicas !== desiredHasReplicas
-        ) {
+        if (output?.hasReplicas !== undefined && output.hasReplicas !== desiredHasReplicas) {
           return { action: "update", stables } as const;
         }
       }
 
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update", stables } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update", stables } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -369,11 +335,9 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         ? { name: output.database, organization: output.organization }
         : resolveDatabase(olds.database);
       const { organization: envOrg } = yield* yield* Credentials;
-      const organization =
-        output?.organization ?? dbInfo.organization ?? envOrg;
+      const organization = output?.organization ?? dbInfo.organization ?? envOrg;
       const databaseName = output?.database ?? dbInfo.name;
-      const branchName =
-        output?.name ?? (yield* createBranchName(id, olds.name));
+      const branchName = output?.name ?? (yield* createBranchName(id, olds.name));
 
       return yield* planetscale
         .getBranch({
@@ -397,10 +361,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
               migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
               migrationsHashes: output?.migrationsHashes ?? {},
               importHashes: output?.importHashes ?? {},
-              desiredReplicas:
-                output?.desiredReplicas ??
-                olds?.desiredReplicas ??
-                olds?.replicas,
+              desiredReplicas: output?.desiredReplicas ?? olds?.desiredReplicas ?? olds?.replicas,
               hasReplicas: data.has_replicas,
               hasReadOnlyReplicas: data.has_read_only_replicas,
             } satisfies BaseBranchAttributes;
@@ -414,8 +375,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
     reconcile: Effect.fn(function* ({ id, news, output, session }: any) {
       const { organization: envOrg } = yield* yield* Credentials;
       const dbInfo = resolveDatabase(news.database);
-      const organization =
-        output?.organization ?? dbInfo.organization ?? envOrg;
+      const organization = output?.organization ?? dbInfo.organization ?? envOrg;
       const databaseName = output?.database ?? dbInfo.name;
       const desiredBranchName = yield* createBranchName(id, news.name);
       const observedBranchName = output?.name ?? desiredBranchName;
@@ -426,12 +386,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       // is a Branch resource, Alchemy's resource graph already guarantees
       // readiness before this resource's inputs are resolved.
       if (news.parentBranch && typeof news.parentBranch === "string") {
-        yield* waitForBranchReady(
-          organization,
-          databaseName,
-          parentBranchName,
-          session,
-        );
+        yield* waitForBranchReady(organization, databaseName, parentBranchName, session);
       }
 
       // Observe — fetch the live branch state.
@@ -487,12 +442,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         );
       }
 
-      yield* waitForBranchReady(
-        organization,
-        databaseName,
-        current.name,
-        session,
-      );
+      yield* waitForBranchReady(organization, databaseName, current.name, session);
 
       // Sync name — branch names are mutable. Continue subsequent syncs
       // under the name returned by the API.
@@ -517,10 +467,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           // rejected with an UnprocessableEntity. Retry until it clears.
           const retryWhileResizing = Effect.retry({
             while: isResizeInProgress,
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(120),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),
           });
           current = desiredProduction
             ? yield* planetscale
@@ -542,10 +489,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
       // Sync safeMigrations — observed via `current.safe_migrations`,
       // skip the API call entirely on no-op.
-      if (
-        news.safeMigrations !== undefined &&
-        current.safe_migrations !== news.safeMigrations
-      ) {
+      if (news.safeMigrations !== undefined && current.safe_migrations !== news.safeMigrations) {
         if (news.safeMigrations) {
           yield* planetscale.enableSafeMigrations({
             organization,
@@ -569,23 +513,14 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           (desiredHasReplicas && output?.desiredReplicas !== desiredReplicas);
 
         if (shouldApplyReplicaChange) {
-          yield* waitForPendingPostgresChanges(
-            organization,
-            databaseName,
-            branchName,
-          );
+          yield* waitForPendingPostgresChanges(organization, databaseName, branchName);
           const change = yield* planetscale.updateBranchChangeRequest({
             organization,
             database: databaseName,
             branch: branchName,
             replicas: desiredReplicas,
           });
-          yield* waitForPendingPostgresChanges(
-            organization,
-            databaseName,
-            branchName,
-            change.id,
-          );
+          yield* waitForPendingPostgresChanges(organization, databaseName, branchName, change.id);
           current = yield* planetscale.getBranch({
             organization,
             database: databaseName,
@@ -626,17 +561,10 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         branch: updated.name,
       };
 
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
-        ? yield* opts.runners.runMigrations(
-            migrationTarget,
-            news.migrationsDir,
-            migrationsTable,
-          )
-        : (output?.migrationsHashes ?? {});
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
+        ? yield* opts.runners.runMigrations(migrationTarget, migrationsInput, stampedOf(output))
+        : undefined;
       const importHashes = news.importFiles?.length
         ? yield* opts.runners.runImports(
             migrationTarget,
@@ -656,9 +584,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         updatedAt: updated.updated_at,
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
         desiredReplicas: news.replicas ?? output?.desiredReplicas,
         hasReplicas: updated.has_replicas,
@@ -680,10 +606,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         .pipe(
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.catchIf(
-            isKnownError(
-              "UnprocessableEntity",
-              "The default branch cannot be deleted.",
-            ),
+            isKnownError("UnprocessableEntity", "The default branch cannot be deleted."),
             () => Effect.void,
           ),
         );

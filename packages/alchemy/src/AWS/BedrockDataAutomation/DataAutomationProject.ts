@@ -10,13 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  bdaConfigEquals,
-  readBdaTags,
-  syncBdaTags,
-  toBdaTagList,
-  unredact,
-} from "./internal.ts";
+import { bdaConfigEquals, readBdaTags, syncBdaTags, toBdaTagList, unredact } from "./internal.ts";
 
 // Explicitly-typed pipeable repeat helper. Inlining `Effect.repeat` in a
 // provider lifecycle op leaks its conditional return type into declaration
@@ -26,8 +20,7 @@ const repeatUntilProjectSettled = <E, R>(
 ): Effect.Effect<bda.DataAutomationProject | undefined, E, R> =>
   Effect.repeat(self, {
     schedule: Schedule.fixed("3 seconds"),
-    until: (project) =>
-      project === undefined || project.status !== "IN_PROGRESS",
+    until: (project) => project === undefined || project.status !== "IN_PROGRESS",
     times: 25,
   });
 
@@ -114,9 +107,8 @@ export interface DataAutomationProject extends Resource<
  * turns documents, images, audio, and video into structured output, with
  * optional custom output driven by `Blueprint`s.
  *
- * @resource
- * @section Creating Projects
- * @example Project with default standard output
+ * ### Creating Projects
+ * **Example:** Project with default standard output
  * ```typescript
  * import * as BDA from "alchemy/AWS/BedrockDataAutomation";
  *
@@ -125,7 +117,7 @@ export interface DataAutomationProject extends Resource<
  * });
  * ```
  *
- * @example Document project with granular extraction
+ * **Example:** Document project with granular extraction
  * ```typescript
  * const project = yield* BDA.DataAutomationProject("Docs", {
  *   projectDescription: "invoice pipeline",
@@ -145,8 +137,8 @@ export interface DataAutomationProject extends Resource<
  * });
  * ```
  *
- * @section Custom Output
- * @example Attach blueprints for custom output
+ * ### Custom Output
+ * **Example:** Attach blueprints for custom output
  * ```typescript
  * const blueprint = yield* BDA.Blueprint("InvoiceBlueprint", {
  *   type: "DOCUMENT",
@@ -160,6 +152,8 @@ export interface DataAutomationProject extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const DataAutomationProject = Resource<DataAutomationProject>(
   "AWS.BedrockDataAutomation.DataAutomationProject",
@@ -169,9 +163,10 @@ export const DataAutomationProject = Resource<DataAutomationProject>(
  * Raised when a Data Automation project reaches the terminal `FAILED` status
  * during provisioning or update.
  */
-export class DataAutomationProjectFailed extends Data.TaggedError(
-  "DataAutomationProjectFailed",
-)<{ projectArn: string; message: string }> {}
+export class DataAutomationProjectFailed extends Data.TaggedError("DataAutomationProjectFailed")<{
+  projectArn: string;
+  message: string;
+}> {}
 
 export const DataAutomationProjectProvider = () =>
   Provider.effect(
@@ -181,10 +176,7 @@ export const DataAutomationProjectProvider = () =>
         id: string,
         props: Pick<DataAutomationProjectProps, "projectName">,
       ) {
-        return (
-          props.projectName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.projectName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const toAttributes = (project: bda.DataAutomationProject) => ({
@@ -198,14 +190,10 @@ export const DataAutomationProjectProvider = () =>
         projectArn: string,
         projectStage?: bda.DataAutomationProjectStage,
       ) {
-        return yield* bda
-          .getDataAutomationProject({ projectArn, projectStage })
-          .pipe(
-            Effect.map((r) => r.project),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* bda.getDataAutomationProject({ projectArn, projectStage }).pipe(
+          Effect.map((r) => r.project),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       const findProjectArn = Effect.fn(function* (name: string) {
@@ -213,8 +201,7 @@ export const DataAutomationProjectProvider = () =>
           .items({ resourceOwner: "ACCOUNT" })
           .pipe(Stream.runCollect);
         return Array.from(summaries).find(
-          (s) =>
-            s.projectName !== undefined && unredact(s.projectName) === name,
+          (s) => s.projectName !== undefined && unredact(s.projectName) === name,
         )?.projectArn;
       });
 
@@ -250,9 +237,7 @@ export const DataAutomationProjectProvider = () =>
               Array.from(summaries),
               (s) =>
                 observeProject(s.projectArn, s.projectStage).pipe(
-                  Effect.map((project) =>
-                    project === undefined ? [] : [toAttributes(project)],
-                  ),
+                  Effect.map((project) => (project === undefined ? [] : [toAttributes(project)])),
                 ),
               { concurrency: 5 },
             );
@@ -261,8 +246,7 @@ export const DataAutomationProjectProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const projectArn =
-            output?.projectArn ??
-            (yield* findProjectArn(yield* createName(id, olds ?? {})));
+            output?.projectArn ?? (yield* findProjectArn(yield* createName(id, olds ?? {})));
           if (projectArn === undefined) return undefined;
           const found = yield* observeProject(projectArn, olds?.projectStage);
           if (found === undefined) return undefined;
@@ -286,14 +270,12 @@ export const DataAutomationProjectProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const projectName =
-            output?.projectName ?? (yield* createName(id, news));
+          const projectName = output?.projectName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative; output caches the ARN.
-          const cachedArn =
-            output?.projectArn ?? (yield* findProjectArn(projectName));
+          const cachedArn = output?.projectArn ?? (yield* findProjectArn(projectName));
           let live =
             cachedArn === undefined
               ? undefined
@@ -312,8 +294,7 @@ export const DataAutomationProjectProvider = () =>
                 standardOutputConfiguration: news.standardOutputConfiguration,
                 customOutputConfiguration: news.customOutputConfiguration,
                 overrideConfiguration: news.overrideConfiguration,
-                dataAutomationLibraryConfiguration:
-                  news.dataAutomationLibraryConfiguration,
+                dataAutomationLibraryConfiguration: news.dataAutomationLibraryConfiguration,
                 encryptionConfiguration: news.encryptionConfiguration,
                 tags: toBdaTagList(desiredTags),
               })
@@ -322,9 +303,7 @@ export const DataAutomationProjectProvider = () =>
                 Effect.catchTag("ConflictException", (conflict) =>
                   Effect.gen(function* () {
                     const arn = yield* findProjectArn(projectName);
-                    return arn === undefined
-                      ? yield* Effect.fail(conflict)
-                      : arn;
+                    return arn === undefined ? yield* Effect.fail(conflict) : arn;
                   }),
                 ),
               );
@@ -343,22 +322,12 @@ export const DataAutomationProjectProvider = () =>
           //    idempotent PUT only on drift. The server may fill defaulted
           //    fields, in which case the PUT re-applies harmlessly.
           const drift =
-            unredact(live.projectDescription ?? "") !==
-              (news.projectDescription ?? "") ||
-            !bdaConfigEquals(
-              live.standardOutputConfiguration,
-              news.standardOutputConfiguration,
-            ) ||
+            unredact(live.projectDescription ?? "") !== (news.projectDescription ?? "") ||
+            !bdaConfigEquals(live.standardOutputConfiguration, news.standardOutputConfiguration) ||
             (news.customOutputConfiguration !== undefined &&
-              !bdaConfigEquals(
-                live.customOutputConfiguration,
-                news.customOutputConfiguration,
-              )) ||
+              !bdaConfigEquals(live.customOutputConfiguration, news.customOutputConfiguration)) ||
             (news.overrideConfiguration !== undefined &&
-              !bdaConfigEquals(
-                live.overrideConfiguration,
-                news.overrideConfiguration,
-              )) ||
+              !bdaConfigEquals(live.overrideConfiguration, news.overrideConfiguration)) ||
             (news.encryptionConfiguration !== undefined &&
               live.kmsKeyId !== news.encryptionConfiguration.kmsKeyId);
           if (drift) {
@@ -369,13 +338,10 @@ export const DataAutomationProjectProvider = () =>
               standardOutputConfiguration: news.standardOutputConfiguration,
               customOutputConfiguration: news.customOutputConfiguration,
               overrideConfiguration: news.overrideConfiguration,
-              dataAutomationLibraryConfiguration:
-                news.dataAutomationLibraryConfiguration,
+              dataAutomationLibraryConfiguration: news.dataAutomationLibraryConfiguration,
               encryptionConfiguration: news.encryptionConfiguration,
             });
-            live =
-              (yield* waitForSettled(live.projectArn, news.projectStage)) ??
-              live;
+            live = (yield* waitForSettled(live.projectArn, news.projectStage)) ?? live;
           }
 
           // 3b. SYNC TAGS against observed cloud tags.
@@ -388,9 +354,7 @@ export const DataAutomationProjectProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* bda
             .deleteDataAutomationProject({ projectArn: output.projectArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

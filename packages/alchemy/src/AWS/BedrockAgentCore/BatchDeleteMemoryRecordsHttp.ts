@@ -1,7 +1,7 @@
 import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Layer from "effect/Layer";
-import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import { BatchDeleteMemoryRecords } from "./BatchDeleteMemoryRecords.ts";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Memory } from "./Memory.ts";
 
 export const BatchDeleteMemoryRecordsHttp = Layer.effect(

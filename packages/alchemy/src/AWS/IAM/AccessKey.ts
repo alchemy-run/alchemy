@@ -51,9 +51,8 @@ export interface AccessKey extends Resource<
  * `AccessKey` manages long-lived programmatic credentials for an IAM user. The
  * secret access key is only returned during creation, so later reads preserve
  * the originally stored redacted value instead of pretending AWS can return it again.
- * @resource
- * @section Managing Programmatic Credentials
- * @example Create an Access Key
+ * ### Managing Programmatic Credentials
+ * **Example:** Create an Access Key
  * ```typescript
  * const user = yield* User("DeployUser", {
  *   userName: "deploy-user",
@@ -64,6 +63,8 @@ export interface AccessKey extends Resource<
  *   status: "Active",
  * });
  * ```
+ *
+ * @resource
  */
 export const AccessKey = Resource<AccessKey>("AWS.IAM.AccessKey");
 
@@ -110,13 +111,9 @@ export const AccessKeyProvider = () =>
       const existing = output
         ? yield* iam.listAccessKeys({ UserName: output.userName }).pipe(
             Effect.map((listed) =>
-              listed.AccessKeyMetadata.find(
-                (entry) => entry.AccessKeyId === output.accessKeyId,
-              ),
+              listed.AccessKeyMetadata.find((entry) => entry.AccessKeyId === output.accessKeyId),
             ),
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
           )
         : undefined;
 
@@ -125,8 +122,7 @@ export const AccessKeyProvider = () =>
       // best we can do is preserve any redacted value already stored.
       let accessKeyId = existing?.AccessKeyId ?? output?.accessKeyId;
       let secretAccessKey = output?.secretAccessKey;
-      let createDate: Date | undefined =
-        existing?.CreateDate ?? output?.createDate;
+      let createDate: Date | undefined = existing?.CreateDate ?? output?.createDate;
 
       if (!existing) {
         const created = yield* iam.createAccessKey({
@@ -138,9 +134,7 @@ export const AccessKeyProvider = () =>
       }
 
       if (!accessKeyId) {
-        return yield* Effect.fail(
-          new Error(`AccessKey for user '${news.userName}' has no id`),
-        );
+        return yield* Effect.fail(new Error(`AccessKey for user '${news.userName}' has no id`));
       }
 
       // Sync — apply the desired status when it differs from the observed

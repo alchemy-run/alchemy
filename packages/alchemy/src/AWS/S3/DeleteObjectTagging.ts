@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface DeleteObjectTaggingRequest extends Omit<
-  S3.DeleteObjectTaggingRequest,
-  "Bucket"
-> {}
+export interface DeleteObjectTaggingRequest extends Omit<S3.DeleteObjectTaggingRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:DeleteObjectTagging`.
@@ -17,14 +13,15 @@ export interface DeleteObjectTaggingRequest extends Omit<
  * `s3:DeleteObjectTagging`/`s3:DeleteObjectVersionTagging` are granted on the
  * bucket's objects. Provide the implementation with
  * `Effect.provide(AWS.S3.DeleteObjectTaggingHttp)`.
- * @binding
- * @section Object Tagging
- * @example Remove All Tags from an Object
+ * ### Object Tagging
+ * **Example:** Remove All Tags from an Object
  * ```typescript
  * const deleteObjectTagging = yield* AWS.S3.DeleteObjectTagging(bucket);
  *
  * yield* deleteObjectTagging({ Key: "reports/q3.csv" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteObjectTagging extends Binding.Service<
   DeleteObjectTagging,
@@ -34,10 +31,7 @@ export interface DeleteObjectTagging extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteObjectTaggingRequest,
-    ) => Effect.Effect<
-      S3.DeleteObjectTaggingOutput,
-      S3.DeleteObjectTaggingError
-    >
+    ) => Effect.Effect<S3.DeleteObjectTaggingOutput, S3.DeleteObjectTaggingError>
   >
 > {}
 export const DeleteObjectTagging = Binding.Service<DeleteObjectTagging>(

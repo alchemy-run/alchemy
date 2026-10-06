@@ -183,9 +183,7 @@ export interface JobTemplate extends Resource<
   Providers
 > {}
 
-export class JobTemplateConsistencyError extends Data.TaggedError(
-  "JobTemplateConsistencyError",
-)<{
+export class JobTemplateConsistencyError extends Data.TaggedError("JobTemplateConsistencyError")<{
   readonly jobTemplateId: string;
   readonly jobTemplateName: string;
   readonly operation: "create" | "delete";
@@ -204,9 +202,8 @@ export class JobTemplateConsistencyError extends Data.TaggedError(
  * {@link StartJobRun | AWS.EMRContainers.StartJobRun} binding — a Lambda can
  * start a templated Spark job with just the template ID and parameter values.
  *
- * @resource
- * @section Creating Job Templates
- * @example A Spark Job Template
+ * ### Creating Job Templates
+ * **Example:** A Spark Job Template
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -224,7 +221,7 @@ export class JobTemplateConsistencyError extends Data.TaggedError(
  * });
  * ```
  *
- * @example Parameterized Template
+ * **Example:** Parameterized Template
  * ```typescript
  * const template = yield* AWS.EMRContainers.JobTemplate("Parameterized", {
  *   jobTemplateData: {
@@ -240,15 +237,13 @@ export class JobTemplateConsistencyError extends Data.TaggedError(
  * });
  * // StartJobRun with jobTemplateId + jobTemplateParameters: { EntryPoint: "s3://..." }
  * ```
+ *
+ * @resource
  */
-export const JobTemplate = Resource<JobTemplate>(
-  "AWS.EMRContainers.JobTemplate",
-);
+export const JobTemplate = Resource<JobTemplate>("AWS.EMRContainers.JobTemplate");
 
 /** Convert declared props to the distilled wire shape. */
-const toJobTemplateData = (
-  data: JobTemplateDataProps,
-): emrc.JobTemplateData => ({
+const toJobTemplateData = (data: JobTemplateDataProps): emrc.JobTemplateData => ({
   executionRoleArn: data.executionRoleArn,
   releaseLabel: data.releaseLabel,
   configurationOverrides: data.configurationOverrides,
@@ -265,10 +260,7 @@ export const JobTemplateProvider = () =>
         id: string,
         props: { jobTemplateName?: string | undefined },
       ) {
-        return (
-          props.jobTemplateName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.jobTemplateName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const toAttributes = (jt: emrc.JobTemplate) => ({
@@ -312,20 +304,13 @@ export const JobTemplateProvider = () =>
         });
 
       const awaitAbsent = (id: string) =>
-        Effect.repeat(
-          Effect.all([observeById(id), observeListedById(id)] as const),
-          {
-            schedule: Schedule.spaced("3 seconds"),
-            until: ([described, listed]) =>
-              described === undefined && listed === undefined,
-            times: 10,
-          },
-        );
+        Effect.repeat(Effect.all([observeById(id), observeListedById(id)] as const), {
+          schedule: Schedule.spaced("3 seconds"),
+          until: ([described, listed]) => described === undefined && listed === undefined,
+          times: 10,
+        });
 
-      const observe = Effect.fn(function* (
-        id: string | undefined,
-        name: string,
-      ) {
+      const observe = Effect.fn(function* (id: string | undefined, name: string) {
         const byId = id !== undefined ? yield* observeById(id) : undefined;
         return byId ?? (yield* observeByName(name));
       });
@@ -335,23 +320,15 @@ export const JobTemplateProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* emrc.listJobTemplates
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* emrc.listJobTemplates.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.templates ?? [])
-              .filter(
-                (jt) =>
-                  jt.id !== undefined &&
-                  jt.name !== undefined &&
-                  jt.arn !== undefined,
-              )
+              .filter((jt) => jt.id !== undefined && jt.name !== undefined && jt.arn !== undefined)
               .map(toAttributes);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.jobTemplateName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.jobTemplateName ?? (yield* createName(id, olds ?? {}));
           const jt = yield* observe(output?.jobTemplateId, name);
           if (jt?.id === undefined || jt.arn === undefined) {
             return undefined;
@@ -364,10 +341,7 @@ export const JobTemplateProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
-          const { upsert, removed } = diffTags(
-            olds.tags ?? {},
-            news.tags ?? {},
-          );
+          const { upsert, removed } = diffTags(olds.tags ?? {}, news.tags ?? {});
           if (
             oldName !== newName ||
             JSON.stringify(toJobTemplateData(olds.jobTemplateData)) !==
@@ -383,13 +357,7 @@ export const JobTemplateProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const name = output?.jobTemplateName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -402,9 +370,7 @@ export const JobTemplateProvider = () =>
             const created = yield* emrc.createJobTemplate({
               // deterministic per instance: a retried create after a crashed
               // reconcile never double-provisions
-              clientToken:
-                instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 64) ||
-                "alchemy",
+              clientToken: instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 64) || "alchemy",
               name,
               jobTemplateData: toJobTemplateData(news.jobTemplateData),
               kmsKeyArn: news.kmsKeyArn,

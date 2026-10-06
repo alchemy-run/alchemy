@@ -54,9 +54,8 @@ export interface Destination extends Resource<
  * forwards log events to a Kinesis stream. Producers in other accounts create
  * subscription filters whose `destinationArn` points at this destination;
  * the `accessPolicy` controls which accounts may subscribe.
- * @resource
- * @section Cross-Account Log Fan-Out
- * @example Kinesis-Backed Destination
+ * ### Cross-Account Log Fan-Out
+ * **Example:** Kinesis-Backed Destination
  * ```typescript
  * const destination = yield* Destination("CentralLogs", {
  *   targetArn: stream.streamArn,
@@ -74,6 +73,8 @@ export interface Destination extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Destination = Resource<Destination>("AWS.Logs.Destination");
 
@@ -90,9 +91,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "InvalidParameterException" ||
-      e._tag === "OperationAbortedException",
+    while: (e) => e._tag === "InvalidParameterException" || e._tag === "OperationAbortedException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(9)]),
   });
 
@@ -100,10 +99,7 @@ export const DestinationProvider = () =>
   Provider.effect(
     Destination,
     Effect.gen(function* () {
-      const toDestinationName = (
-        id: string,
-        props: { destinationName?: string } = {},
-      ) =>
+      const toDestinationName = (id: string, props: { destinationName?: string } = {}) =>
         props.destinationName
           ? Effect.succeed(props.destinationName)
           : createPhysicalName({ id, maxLength: 512 });
@@ -119,9 +115,7 @@ export const DestinationProvider = () =>
         return yield* logs.describeDestinations
           .items({ DestinationNamePrefix: destinationName })
           .pipe(
-            Stream.filter(
-              (destination) => destination.destinationName === destinationName,
-            ),
+            Stream.filter((destination) => destination.destinationName === destinationName),
             Stream.runHead,
             Effect.map(Option.getOrUndefined),
           );
@@ -141,9 +135,7 @@ export const DestinationProvider = () =>
                   ): destination is logs.Destination & {
                     destinationName: string;
                     arn: string;
-                  } =>
-                    destination.destinationName != null &&
-                    destination.arn != null,
+                  } => destination.destinationName != null && destination.arn != null,
                 )
                 .map((destination) => ({
                   destinationName: destination.destinationName,
@@ -156,17 +148,13 @@ export const DestinationProvider = () =>
           ),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toDestinationName(id, olds)) !==
-            (yield* toDestinationName(id, news))
-          ) {
+          if ((yield* toDestinationName(id, olds)) !== (yield* toDestinationName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const destinationName =
-            output?.destinationName ??
-            (yield* toDestinationName(id, olds ?? {}));
+            output?.destinationName ?? (yield* toDestinationName(id, olds ?? {}));
           const observed = yield* observe(destinationName);
           if (!observed?.arn) return undefined;
           return {
@@ -178,17 +166,13 @@ export const DestinationProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const destinationName =
-            output?.destinationName ?? (yield* toDestinationName(id, news));
+          const destinationName = output?.destinationName ?? (yield* toDestinationName(id, news));
           const desiredPolicy = toPolicyString(news.accessPolicy);
 
           // Observe — putDestination upserts by name; skip when target/role
           // already match.
           let observed = yield* observe(destinationName);
-          if (
-            observed?.targetArn !== news.targetArn ||
-            observed?.roleArn !== news.roleArn
-          ) {
+          if (observed?.targetArn !== news.targetArn || observed?.roleArn !== news.roleArn) {
             const put = yield* retryThroughRolePropagation(
               logs.putDestination({
                 destinationName,
@@ -200,10 +184,7 @@ export const DestinationProvider = () =>
           }
 
           // Sync access policy against the observed policy.
-          if (
-            desiredPolicy !== undefined &&
-            observed?.accessPolicy !== desiredPolicy
-          ) {
+          if (desiredPolicy !== undefined && observed?.accessPolicy !== desiredPolicy) {
             yield* retryThroughRolePropagation(
               logs.putDestinationPolicy({
                 destinationName,
@@ -223,18 +204,16 @@ export const DestinationProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* logs
-            .deleteDestination({ destinationName: output.destinationName })
-            .pipe(
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "OperationAbortedException" ||
-                  error._tag === "ServiceUnavailableException",
-                schedule: Schedule.exponential(100),
-                times: 8,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* logs.deleteDestination({ destinationName: output.destinationName }).pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "OperationAbortedException" ||
+                error._tag === "ServiceUnavailableException",
+              schedule: Schedule.exponential(100),
+              times: 8,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       };
     }),

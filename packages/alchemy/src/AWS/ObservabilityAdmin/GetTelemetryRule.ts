@@ -11,9 +11,8 @@ import type { TelemetryRule } from "./TelemetryRule.ts";
  *
  * Provide `AWS.ObservabilityAdmin.GetTelemetryRuleHttp` on the hosting
  * Lambda Function to satisfy the requirement.
- * @binding
- * @section Reading a Telemetry Rule
- * @example Read the bound rule's configuration
+ * ### Reading a Telemetry Rule
+ * **Example:** Read the bound rule's configuration
  * ```typescript
  * // init — grants observabilityadmin:GetTelemetryRule on the rule
  * const getTelemetryRule = yield* AWS.ObservabilityAdmin.GetTelemetryRule(rule);
@@ -21,15 +20,15 @@ import type { TelemetryRule } from "./TelemetryRule.ts";
  * // runtime
  * const { TelemetryRule: config, RegionStatuses } = yield* getTelemetryRule();
  * ```
+ *
+ * @binding
  */
 export interface GetTelemetryRule extends Binding.Service<
   GetTelemetryRule,
   "AWS.ObservabilityAdmin.GetTelemetryRule",
   (
     rule: TelemetryRule,
-  ) => Effect.Effect<
-    () => Effect.Effect<obs.GetTelemetryRuleOutput, obs.GetTelemetryRuleError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<obs.GetTelemetryRuleOutput, obs.GetTelemetryRuleError>>
 > {}
 
 export const GetTelemetryRule = Binding.Service<GetTelemetryRule>(

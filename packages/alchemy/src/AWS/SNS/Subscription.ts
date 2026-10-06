@@ -63,9 +63,8 @@ export interface Subscription extends Resource<
  * `Subscription` keeps the lifecycle of the subscription itself separate from the
  * topic, which lets Lambda event sources and manually managed subscriptions share
  * the same canonical resource model.
- * @resource
- * @section Creating Subscriptions
- * @example Lambda Subscription
+ * ### Creating Subscriptions
+ * **Example:** Lambda Subscription
  * ```typescript
  * const subscription = yield* Subscription("TopicSubscription", {
  *   topicArn: topic.topicArn,
@@ -74,7 +73,7 @@ export interface Subscription extends Resource<
  * });
  * ```
  *
- * @example Fan Out a Topic to an SQS Queue
+ * **Example:** Fan Out a Topic to an SQS Queue
  * ```typescript
  * const topic = yield* SNS.Topic("Events");
  * const queue = yield* SQS.Queue("Notifications");
@@ -87,7 +86,7 @@ export interface Subscription extends Resource<
  * });
  * ```
  *
- * @example Filtered Subscription
+ * **Example:** Filtered Subscription
  * ```typescript
  * const subscription = yield* Subscription("OrderSubscription", {
  *   topicArn: topic.topicArn,
@@ -98,6 +97,8 @@ export interface Subscription extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Subscription = Resource<Subscription>("AWS.SNS.Subscription");
 
@@ -120,9 +121,7 @@ export const SubscriptionProvider = () =>
     list: Effect.fn(function* () {
       const subscriptions = yield* sns.listSubscriptions.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.Subscriptions ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Subscriptions ?? [])),
       );
 
       const concrete = subscriptions.filter(
@@ -147,9 +146,7 @@ export const SubscriptionProvider = () =>
         { concurrency: 10 },
       );
 
-      return rows.filter(
-        (row): row is NonNullable<typeof row> => row !== undefined,
-      );
+      return rows.filter((row): row is NonNullable<typeof row> => row !== undefined);
     }),
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
@@ -184,21 +181,14 @@ export const SubscriptionProvider = () =>
       // confirmed it out of band. Cached ARN is preferred when concrete;
       // otherwise we list-and-match by (topicArn, protocol, endpoint).
       let subscriptionArn: string | undefined;
-      if (
-        output?.subscriptionArn &&
-        !isPendingConfirmation(output.subscriptionArn)
-      ) {
+      if (output?.subscriptionArn && !isPendingConfirmation(output.subscriptionArn)) {
         const observed = yield* sns
           .getSubscriptionAttributes({
             SubscriptionArn: output.subscriptionArn,
           })
           .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InvalidParameterException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
           );
         if (observed) {
           subscriptionArn = output.subscriptionArn;
@@ -244,9 +234,7 @@ export const SubscriptionProvider = () =>
         .getSubscriptionAttributes({ SubscriptionArn: subscriptionArn })
         .pipe(
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("InvalidParameterException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
         );
       const observedAttributes = toAttributeMap(attrsResponse?.Attributes);
 
@@ -264,9 +252,7 @@ export const SubscriptionProvider = () =>
       // user-specified keys (those present in `news.attributes`/`olds`),
       // not all observed keys, because SNS exposes many read-only system
       // attributes we should not touch.
-      const previousKeys = new Set(
-        Object.keys(toAttributeMap(output?.attributes)),
-      );
+      const previousKeys = new Set(Object.keys(toAttributeMap(output?.attributes)));
       for (const name of previousKeys) {
         if (!(name in desiredAttributes)) {
           yield* sns.setSubscriptionAttributes({
@@ -294,7 +280,11 @@ export const SubscriptionProvider = () =>
             topicArn: (output.topicArn ?? olds.topicArn) as string | undefined,
             protocol: output.protocol ?? olds.protocol,
             endpoint: (output.endpoint ?? olds.endpoint) as string | undefined,
-          })
+          }).pipe(
+            // The topic is already gone — SNS drops its subscriptions with
+            // it, so there is nothing left to unsubscribe.
+            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          )
         : output.subscriptionArn;
 
       if (!subscriptionArn) {
@@ -313,8 +303,7 @@ export const SubscriptionProvider = () =>
   });
 
 const isPendingConfirmation = (subscriptionArn: string | undefined) =>
-  subscriptionArn === undefined ||
-  subscriptionArn.toLowerCase() === "pending confirmation";
+  subscriptionArn === undefined || subscriptionArn.toLowerCase() === "pending confirmation";
 
 const toAttributeMap = (
   attributes: Record<string, string | undefined> | undefined,
@@ -338,18 +327,16 @@ const findSubscription = Effect.fn(function* ({
     return undefined;
   }
 
-  const match = yield* sns.listSubscriptionsByTopic
-    .items({ TopicArn: topicArn })
-    .pipe(
-      Stream.filter(
-        (subscription) =>
-          subscription.Protocol === protocol &&
-          subscription.Endpoint === endpoint &&
-          !!subscription.SubscriptionArn,
-      ),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-    );
+  const match = yield* sns.listSubscriptionsByTopic.items({ TopicArn: topicArn }).pipe(
+    Stream.filter(
+      (subscription) =>
+        subscription.Protocol === protocol &&
+        subscription.Endpoint === endpoint &&
+        !!subscription.SubscriptionArn,
+    ),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 
   return match?.SubscriptionArn;
 });
@@ -365,14 +352,28 @@ const readSubscription = Effect.fn(function* ({
   protocol?: string;
   endpoint: string | undefined;
 }) {
-  const resolvedSubscriptionArn =
-    subscriptionArn && !isPendingConfirmation(subscriptionArn)
-      ? subscriptionArn
-      : yield* findSubscription({
-          topicArn,
-          protocol,
-          endpoint,
-        });
+  let resolvedSubscriptionArn: string | undefined;
+  if (subscriptionArn && !isPendingConfirmation(subscriptionArn)) {
+    resolvedSubscriptionArn = subscriptionArn;
+  } else {
+    // No concrete ARN to hydrate — list the topic's subscriptions and match
+    // by (protocol, endpoint). If the topic itself no longer exists (deleted
+    // out of band, or by an interrupted destroy that committed the topic's
+    // state row late) then the subscription is gone too: report "missing"
+    // rather than failing the read, so a subsequent destroy can proceed.
+    const found = yield* findSubscription({
+      topicArn,
+      protocol,
+      endpoint,
+    }).pipe(
+      Effect.map((arn) => ({ arn })),
+      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+    );
+    if (found === undefined) {
+      return undefined;
+    }
+    resolvedSubscriptionArn = found.arn;
+  }
 
   if (!resolvedSubscriptionArn) {
     if (!topicArn || !protocol) {
@@ -396,9 +397,7 @@ const readSubscription = Effect.fn(function* ({
     })
     .pipe(
       Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      Effect.catchTag("InvalidParameterException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
     );
 
   if (!response) {
@@ -420,8 +419,7 @@ const readSubscription = Effect.fn(function* ({
     endpoint: attributes.Endpoint ?? endpoint,
     owner: attributes.Owner,
     pendingConfirmation:
-      attributes.PendingConfirmation === "true" ||
-      isPendingConfirmation(resolvedSubscriptionArn),
+      attributes.PendingConfirmation === "true" || isPendingConfirmation(resolvedSubscriptionArn),
     attributes,
   };
 });

@@ -12,10 +12,7 @@ import * as Binding from "../../Binding.ts";
  * Amazon Nova) — there is no auto-marshalling. The response `body` is a
  * byte `Stream` of the model-specific JSON response.
  */
-export interface InvokeModelRequest extends Omit<
-  bedrock.InvokeModelRequest,
-  "modelId"
-> {
+export interface InvokeModelRequest extends Omit<bedrock.InvokeModelRequest, "modelId"> {
   /**
    * The model to run inference on for this call. Must be one of the model
    * ids the binding was created with (IAM is scoped to exactly those).
@@ -42,9 +39,8 @@ export interface InvokeModelRequest extends Omit<
  * console (Model access) before invoking, otherwise calls fail with
  * `AccessDeniedException`.
  *
- * @binding
- * @section Invoking a Model
- * @example Invoke with a Model-Native Payload
+ * ### Invoking a Model
+ * **Example:** Invoke with a Model-Native Payload
  * ```typescript
  * // init
  * const invokeModel = yield* Bedrock.InvokeModel("us.amazon.nova-micro-v1:0");
@@ -63,6 +59,8 @@ export interface InvokeModelRequest extends Omit<
  *   yield* Stream.mkString(Stream.decodeText(result.body)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface InvokeModel extends Binding.Service<
   InvokeModel,
@@ -76,6 +74,4 @@ export interface InvokeModel extends Binding.Service<
     ) => Effect.Effect<bedrock.InvokeModelResponse, bedrock.InvokeModelError>
   >
 > {}
-export const InvokeModel = Binding.Service<InvokeModel>(
-  "AWS.Bedrock.InvokeModel",
-);
+export const InvokeModel = Binding.Service<InvokeModel>("AWS.Bedrock.InvokeModel");

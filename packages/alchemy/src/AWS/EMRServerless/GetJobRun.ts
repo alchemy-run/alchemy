@@ -16,9 +16,8 @@ export type GetJobRunInput = Omit<emr.GetJobRunRequest, "applicationId">;
  * driver, resource utilization, timeout — so a function can poll a submitted
  * job to completion or inspect why it failed. Provide the implementation
  * with `Effect.provide(AWS.EMRServerless.GetJobRunHttp)`.
- * @binding
- * @section Running Jobs
- * @example Poll A Job Run
+ * ### Running Jobs
+ * **Example:** Poll A Job Run
  * ```typescript
  * // init
  * const getJobRun = yield* AWS.EMRServerless.GetJobRun(app);
@@ -27,6 +26,8 @@ export type GetJobRunInput = Omit<emr.GetJobRunRequest, "applicationId">;
  * const { jobRun } = yield* getJobRun({ jobRunId });
  * yield* Effect.log(`${jobRun.jobRunId} is ${jobRun.state}`);
  * ```
+ *
+ * @binding
  */
 export interface GetJobRun extends Binding.Service<
   GetJobRun,
@@ -34,11 +35,7 @@ export interface GetJobRun extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: GetJobRunInput,
-    ) => Effect.Effect<emr.GetJobRunResponse, emr.GetJobRunError>
+    (request: GetJobRunInput) => Effect.Effect<emr.GetJobRunResponse, emr.GetJobRunError>
   >
 > {}
-export const GetJobRun = Binding.Service<GetJobRun>(
-  "AWS.EMRServerless.GetJobRun",
-);
+export const GetJobRun = Binding.Service<GetJobRun>("AWS.EMRServerless.GetJobRun");

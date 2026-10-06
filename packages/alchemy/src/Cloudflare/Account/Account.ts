@@ -2,7 +2,6 @@ import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -94,13 +93,7 @@ export interface AccountAttributes {
   enforceTwofactor: boolean;
 }
 
-export type Account = Resource<
-  TypeId,
-  AccountProps,
-  AccountAttributes,
-  never,
-  Providers
->;
+export type Account = Resource<TypeId, AccountProps, AccountAttributes, never, Providers>;
 
 /**
  * A Cloudflare account (subaccount), for tenant / partner platforms that
@@ -116,16 +109,13 @@ export type Account = Resource<
  * The account's physical identity is the Cloudflare-assigned `accountId`.
  * Account names are not unique, so there is no find-by-name fallback: if
  * state is lost, the account is treated as missing rather than guessed at.
- * @resource
- * @product Accounts
- * @category Account & Identity
- * @section Creating an account
- * @example Standard subaccount with a generated name
+ * ### Creating an account
+ * **Example:** Standard subaccount with a generated name
  * ```typescript
  * const account = yield* Cloudflare.Account.Account("CustomerAccount", {});
  * ```
  *
- * @example Subaccount on a specific tenant unit
+ * **Example:** Subaccount on a specific tenant unit
  * ```typescript
  * const account = yield* Cloudflare.Account.Account("CustomerAccount", {
  *   name: "Customer: ACME Inc",
@@ -133,8 +123,8 @@ export type Account = Resource<
  * });
  * ```
  *
- * @section Account settings
- * @example Enforce two-factor authentication for all members
+ * ### Account settings
+ * **Example:** Enforce two-factor authentication for all members
  * ```typescript
  * const account = yield* Cloudflare.Account.Account("CustomerAccount", {
  *   name: "Customer: ACME Inc",
@@ -144,6 +134,10 @@ export type Account = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/tenant/how-to/manage-accounts/
+ *
+ * @resource
+ * @product Accounts
+ * @category Account & Identity
  */
 export const Account = Resource<Account>(TypeId, {
   aliases: ["Cloudflare.Account"],
@@ -198,14 +192,11 @@ export const AccountProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const name =
-        news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
+      const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
       // 1. Observe — the account id cached on `output` is a hint, not a
       //    guarantee: a deleted account falls through to create.
-      let observed = output?.accountId
-        ? yield* getAccount(output.accountId)
-        : undefined;
+      let observed = output?.accountId ? yield* getAccount(output.accountId) : undefined;
 
       // 2. Ensure — create when missing. Names are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to

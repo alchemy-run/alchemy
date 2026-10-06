@@ -47,8 +47,7 @@ export interface ControlTowerLifecycleEventDetail {
 }
 
 /** An AWS Control Tower lifecycle EventBridge event delivered to the handler. */
-export type ControlTowerLifecycleEvent =
-  EventRecord<ControlTowerLifecycleEventDetail>;
+export type ControlTowerLifecycleEvent = EventRecord<ControlTowerLifecycleEventDetail>;
 
 export interface LifecycleEventSourceProps extends EventRouteProps {
   /**
@@ -78,8 +77,8 @@ export interface LifecycleEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Lifecycle Events
- * @example Customize Newly Provisioned Accounts
+ * ### Consuming Lifecycle Events
+ * **Example:** Customize Newly Provisioned Accounts
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -113,9 +112,7 @@ export const consumeLifecycleEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.controltower"],
       "detail-type": ["AWS Service Event via CloudTrail"],
-      ...(props.events === undefined
-        ? {}
-        : { detail: { eventName: [...props.events] } }),
+      ...(props.events === undefined ? {} : { detail: { eventName: [...props.events] } }),
     },
     { description: props.description, state: props.state },
     process,

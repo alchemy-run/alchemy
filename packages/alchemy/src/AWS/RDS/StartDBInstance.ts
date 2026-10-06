@@ -11,9 +11,8 @@ import type { DBInstance } from "./DBInstance.ts";
  * function that wakes a development database on a schedule. The instance
  * identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.StartDBInstanceHttp)`.
- * @binding
- * @section Operating an Instance
- * @example Start a Stopped Instance
+ * ### Operating an Instance
+ * **Example:** Start a Stopped Instance
  * ```typescript
  * // init — bind the operation to the instance
  * const startDBInstance = yield* AWS.RDS.StartDBInstance(instance);
@@ -21,16 +20,14 @@ import type { DBInstance } from "./DBInstance.ts";
  * // runtime
  * yield* startDBInstance();
  * ```
+ *
+ * @binding
  */
 export interface StartDBInstance extends Binding.Service<
   StartDBInstance,
   "AWS.RDS.StartDBInstance",
   (
     instance: DBInstance,
-  ) => Effect.Effect<
-    () => Effect.Effect<rds.StartDBInstanceResult, rds.StartDBInstanceError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<rds.StartDBInstanceResult, rds.StartDBInstanceError>>
 > {}
-export const StartDBInstance = Binding.Service<StartDBInstance>(
-  "AWS.RDS.StartDBInstance",
-);
+export const StartDBInstance = Binding.Service<StartDBInstance>("AWS.RDS.StartDBInstance");

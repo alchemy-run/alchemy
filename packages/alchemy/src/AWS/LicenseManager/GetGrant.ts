@@ -13,9 +13,8 @@ export interface GetGrantRequest extends licensemanager.GetGrantRequest {}
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.GetGrantHttp)`.
- * @binding
- * @section Reading Licenses and Grants
- * @example Read a Grant
+ * ### Reading Licenses and Grants
+ * **Example:** Read a Grant
  * ```typescript
  * // init
  * const getGrant = yield* AWS.LicenseManager.GetGrant();
@@ -23,6 +22,8 @@ export interface GetGrantRequest extends licensemanager.GetGrantRequest {}
  * // runtime
  * const { Grant } = yield* getGrant({ GrantArn: grantArn });
  * ```
+ *
+ * @binding
  */
 export interface GetGrant extends Binding.Service<
   GetGrant,
@@ -30,12 +31,7 @@ export interface GetGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetGrantRequest,
-    ) => Effect.Effect<
-      licensemanager.GetGrantResponse,
-      licensemanager.GetGrantError
-    >
+    ) => Effect.Effect<licensemanager.GetGrantResponse, licensemanager.GetGrantError>
   >
 > {}
-export const GetGrant = Binding.Service<GetGrant>(
-  "AWS.LicenseManager.GetGrant",
-);
+export const GetGrant = Binding.Service<GetGrant>("AWS.LicenseManager.GetGrant");

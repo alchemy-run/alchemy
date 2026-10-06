@@ -76,8 +76,8 @@ export interface TrackerEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Tracker Events
- * @example React to Geofence Breaches
+ * ### Consuming Tracker Events
+ * **Example:** React to Geofence Breaches
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -111,9 +111,7 @@ export const consumeTrackerEvents = <StreamReq = never, Req = never>(
       "detail-type": (props.kinds ?? (["geofence-event"] as const)).map(
         (kind) => DETAIL_TYPES[kind],
       ),
-      ...(props.resourceArns !== undefined
-        ? { resources: [...props.resourceArns] }
-        : {}),
+      ...(props.resourceArns !== undefined ? { resources: [...props.resourceArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

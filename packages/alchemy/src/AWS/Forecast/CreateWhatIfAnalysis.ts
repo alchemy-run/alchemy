@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  * arguments and grants `forecast:CreateWhatIfAnalysis` on `*`. Provide the
  * implementation with `Effect.provide(AWS.Forecast.CreateWhatIfAnalysisHttp)`.
  *
- * @binding
- * @section What-If Scenarios
- * @example Start a What-If Analysis
+ * ### What-If Scenarios
+ * **Example:** Start a What-If Analysis
  * ```typescript
  * // init
  * const createWhatIfAnalysis = yield* AWS.Forecast.CreateWhatIfAnalysis();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  *   ForecastArn: forecastArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateWhatIfAnalysis extends Binding.Service<
   CreateWhatIfAnalysis,
@@ -32,10 +33,7 @@ export interface CreateWhatIfAnalysis extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.CreateWhatIfAnalysisRequest,
-    ) => Effect.Effect<
-      forecast.CreateWhatIfAnalysisResponse,
-      forecast.CreateWhatIfAnalysisError
-    >
+    ) => Effect.Effect<forecast.CreateWhatIfAnalysisResponse, forecast.CreateWhatIfAnalysisError>
   >
 > {}
 export const CreateWhatIfAnalysis = Binding.Service<CreateWhatIfAnalysis>(

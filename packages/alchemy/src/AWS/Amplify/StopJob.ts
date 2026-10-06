@@ -11,9 +11,8 @@ export interface StopJobRequest extends Omit<amplify.StopJobRequest, "appId"> {}
  * Bind an {@link App} in the function's init phase to get a callable that
  * cancels an in-progress build job on one of the app's branches. Provide the
  * implementation with `Effect.provide(AWS.Amplify.StopJobHttp)`.
- * @binding
- * @section Controlling Jobs
- * @example Cancel a Running Build
+ * ### Controlling Jobs
+ * **Example:** Cancel a Running Build
  * ```typescript
  * // init — bind the operation to the app
  * const stopJob = yield* AWS.Amplify.StopJob(app);
@@ -24,6 +23,8 @@ export interface StopJobRequest extends Omit<amplify.StopJobRequest, "appId"> {}
  *   jobId: "42",
  * });
  * ```
+ *
+ * @binding
  */
 export interface StopJob extends Binding.Service<
   StopJob,
@@ -31,9 +32,7 @@ export interface StopJob extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: StopJobRequest,
-    ) => Effect.Effect<amplify.StopJobResult, amplify.StopJobError>
+    (request: StopJobRequest) => Effect.Effect<amplify.StopJobResult, amplify.StopJobError>
   >
 > {}
 

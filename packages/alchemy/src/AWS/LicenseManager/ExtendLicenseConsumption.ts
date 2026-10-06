@@ -15,9 +15,8 @@ export interface ExtendLicenseConsumptionRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.ExtendLicenseConsumptionHttp)`.
- * @binding
- * @section License Checkout Data Plane
- * @example Extend a Provisional Checkout
+ * ### License Checkout Data Plane
+ * **Example:** Extend a Provisional Checkout
  * ```typescript
  * // init
  * const extendConsumption =
@@ -28,6 +27,8 @@ export interface ExtendLicenseConsumptionRequest
  *   LicenseConsumptionToken: token,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ExtendLicenseConsumption extends Binding.Service<
   ExtendLicenseConsumption,
@@ -41,7 +42,6 @@ export interface ExtendLicenseConsumption extends Binding.Service<
     >
   >
 > {}
-export const ExtendLicenseConsumption =
-  Binding.Service<ExtendLicenseConsumption>(
-    "AWS.LicenseManager.ExtendLicenseConsumption",
-  );
+export const ExtendLicenseConsumption = Binding.Service<ExtendLicenseConsumption>(
+  "AWS.LicenseManager.ExtendLicenseConsumption",
+);

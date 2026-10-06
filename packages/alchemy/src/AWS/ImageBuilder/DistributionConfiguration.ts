@@ -58,9 +58,8 @@ export interface DistributionConfiguration extends Resource<
  * An EC2 Image Builder distribution configuration — defines where and how
  * the output AMIs (or containers) of a pipeline are distributed across
  * regions and accounts.
- * @resource
- * @section Creating a Distribution Configuration
- * @example Distribute in the Build Region
+ * ### Creating a Distribution Configuration
+ * **Example:** Distribute in the Build Region
  * ```typescript
  * const distribution = yield* ImageBuilder.DistributionConfiguration("Dist", {
  *   distributions: [{
@@ -73,8 +72,8 @@ export interface DistributionConfiguration extends Resource<
  * });
  * ```
  *
- * @section Using in a Pipeline
- * @example Wire into an Image Pipeline
+ * ### Using in a Pipeline
+ * **Example:** Wire into an Image Pipeline
  * ```typescript
  * const pipeline = yield* ImageBuilder.ImagePipeline("Pipeline", {
  *   imageRecipeArn: recipe.imageRecipeArn,
@@ -82,6 +81,8 @@ export interface DistributionConfiguration extends Resource<
  *   distributionConfigurationArn: distribution.distributionConfigurationArn,
  * });
  * ```
+ *
+ * @resource
  */
 export const DistributionConfiguration = Resource<DistributionConfiguration>(
   "AWS.ImageBuilder.DistributionConfiguration",
@@ -96,30 +97,21 @@ export const DistributionConfigurationProvider = () =>
           ? Effect.succeed(props.distributionConfigurationName)
           : createPhysicalName({ id, maxLength: 126 });
 
-      const toArn = (name: string) =>
-        imageBuilderArn("distribution-configuration", name);
+      const toArn = (name: string) => imageBuilderArn("distribution-configuration", name);
 
       const getConfiguration = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getDistributionConfiguration({
             distributionConfigurationArn: arn,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.distributionConfiguration;
       });
 
-      const toAttrs = Effect.fn(function* (
-        config: imagebuilder.DistributionConfiguration,
-      ) {
+      const toAttrs = Effect.fn(function* (config: imagebuilder.DistributionConfiguration) {
         if (!config.arn || !config.name) {
           return yield* Effect.fail(
-            new Error(
-              "Image Builder distribution configuration is missing its ARN or name",
-            ),
+            new Error("Image Builder distribution configuration is missing its ARN or name"),
           );
         }
         return {
@@ -130,10 +122,7 @@ export const DistributionConfigurationProvider = () =>
       });
 
       return {
-        stables: [
-          "distributionConfigurationName",
-          "distributionConfigurationArn",
-        ],
+        stables: ["distributionConfigurationName", "distributionConfigurationArn"],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -144,8 +133,7 @@ export const DistributionConfigurationProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
-            output?.distributionConfigurationArn ??
-            (yield* toArn(yield* toName(id, olds)));
+            output?.distributionConfigurationArn ?? (yield* toArn(yield* toName(id, olds)));
           const config = yield* getConfiguration(arn);
           if (config === undefined) return undefined;
           const attrs = yield* toAttrs(config);
@@ -157,14 +145,12 @@ export const DistributionConfigurationProvider = () =>
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
-          const name =
-            output?.distributionConfigurationName ?? (yield* toName(id, news));
+          const name = output?.distributionConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
           // 1. Observe.
-          const arn =
-            output?.distributionConfigurationArn ?? (yield* toArn(name));
+          const arn = output?.distributionConfigurationArn ?? (yield* toArn(name));
           let observed = yield* getConfiguration(arn);
 
           // 2. Ensure — create if missing; tolerate an AlreadyExists race.
@@ -178,13 +164,9 @@ export const DistributionConfigurationProvider = () =>
                 clientToken,
               })
               .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
               );
-            observed = yield* getConfiguration(
-              created?.distributionConfigurationArn ?? arn,
-            );
+            observed = yield* getConfiguration(created?.distributionConfigurationArn ?? arn);
             if (observed === undefined) {
               return yield* Effect.fail(
                 new Error(
@@ -225,9 +207,7 @@ export const DistributionConfigurationProvider = () =>
             imagebuilder.deleteDistributionConfiguration({
               distributionConfigurationArn: output.distributionConfigurationArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

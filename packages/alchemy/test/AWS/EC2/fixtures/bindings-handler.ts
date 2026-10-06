@@ -1,3 +1,13 @@
+import type * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import {
   amazonLinux2023,
@@ -28,13 +38,30 @@ import {
   Volume,
   Vpc,
 } from "@/AWS/EC2";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+type BindingError =
+  | ec2.DescribeInstancesError
+  | ec2.DescribeInstanceStatusError
+  | ec2.StartInstancesError
+  | ec2.StopInstancesError
+  | ec2.RebootInstancesError
+  | ec2.GetConsoleOutputError
+  | ec2.GetPasswordDataError
+  | ec2.CreateSnapshotError
+  | ec2.AuthorizeSecurityGroupIngressError
+  | ec2.RevokeSecurityGroupIngressError;
+
+const authorizationResult = <A, E extends BindingError, R>(operation: Effect.Effect<A, E, R>) =>
+  operation.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "UnauthorizedOperation",
+      schedule: Schedule.spaced("3 seconds"),
+      times: 8,
+    }),
+    // Return a typed timeout before Lambda's 30-second invocation limit.
+    Effect.timeout("25 seconds"),
+    Effect.result,
+  );
 
 /** The dynamic-allowlisting rule the authorize/revoke routes add and remove. */
 export const testIngressRule = {
@@ -90,7 +117,12 @@ export const BindingsFleetLive = Layer.effect(
 export default Ec2BindingsFunction.make(
   {
     main: import.meta.url,
-    url: true,
+    functionUrl: true,
+    // The AWS defaults (128 MB / 3s) are too tight for the EC2 client:
+    // cold routes time out at 3s (502 from the function URL) with memory
+    // pegged against the 128 MB floor.
+    timeout: Duration.seconds(30),
+    memorySize: 512,
   },
   Effect.gen(function* () {
     const { instance, group, volume } = yield* BindingsFleet;
@@ -108,15 +140,10 @@ export default Ec2BindingsFunction.make(
 
     // Subscribe to instance stop/terminate transitions (creates the
     // EventBridge rule at deploy time).
-    yield* consumeInstanceStateEvents(
-      instance,
-      { states: ["stopped", "terminated"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `${event.detail["instance-id"]} is now ${event.detail.state}`,
-          ),
-        ),
+    yield* consumeInstanceStateEvents(instance, { states: ["stopped", "terminated"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`${event.detail["instance-id"]} is now ${event.detail.state}`),
+      ),
     );
 
     return {
@@ -129,21 +156,18 @@ export default Ec2BindingsFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/describe") {
-          const result = yield* describeInstance().pipe(Effect.result);
+          const result = yield* describeInstance().pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            state:
-              result._tag === "Success"
-                ? result.success?.State?.Name
-                : undefined,
+            state: result._tag === "Success" ? result.success?.State?.Name : undefined,
           });
         }
 
         if (request.method === "GET" && pathname === "/status") {
           const result = yield* describeStatus({
             IncludeAllInstances: true,
-          }).pipe(Effect.result);
+          }).pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
@@ -155,7 +179,7 @@ export default Ec2BindingsFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/console") {
-          const result = yield* getConsoleOutput().pipe(Effect.result);
+          const result = yield* getConsoleOutput().pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
@@ -166,23 +190,19 @@ export default Ec2BindingsFunction.make(
         // empty — the probe proves the IAM grant and that a present
         // `PasswordData` surfaces as Redacted (never a raw string).
         if (request.method === "GET" && pathname === "/password") {
-          const result = yield* getPasswordData().pipe(Effect.result);
-          const passwordData =
-            result._tag === "Success" ? result.success.PasswordData : undefined;
+          const result = yield* getPasswordData().pipe(authorizationResult);
+          const passwordData = result._tag === "Success" ? result.success.PasswordData : undefined;
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
             hasField: passwordData !== undefined,
-            redacted:
-              passwordData !== undefined
-                ? Redacted.isRedacted(passwordData)
-                : null,
+            redacted: passwordData !== undefined ? Redacted.isRedacted(passwordData) : null,
           });
         }
 
         // Starting an already-running instance succeeds without effect.
         if (request.method === "POST" && pathname === "/start") {
-          const result = yield* startInstance().pipe(Effect.result);
+          const result = yield* startInstance().pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
@@ -190,7 +210,7 @@ export default Ec2BindingsFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/reboot") {
-          const result = yield* rebootInstance().pipe(Effect.result);
+          const result = yield* rebootInstance().pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
@@ -200,7 +220,7 @@ export default Ec2BindingsFunction.make(
         // Runs LAST in the test file — the instance stays stopped until the
         // stack is destroyed.
         if (request.method === "POST" && pathname === "/stop") {
-          const result = yield* stopInstance().pipe(Effect.result);
+          const result = yield* stopInstance().pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
@@ -221,7 +241,7 @@ export default Ec2BindingsFunction.make(
                 IpRanges: [{ CidrIp: testIngressRule.CidrIp }],
               },
             ],
-          }).pipe(Effect.result);
+          }).pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
@@ -238,7 +258,7 @@ export default Ec2BindingsFunction.make(
                 IpRanges: [{ CidrIp: testIngressRule.CidrIp }],
               },
             ],
-          }).pipe(Effect.result);
+          }).pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
@@ -249,12 +269,11 @@ export default Ec2BindingsFunction.make(
         if (request.method === "POST" && pathname === "/snapshot") {
           const result = yield* createSnapshot({
             Description: "alchemy EC2 bindings test snapshot",
-          }).pipe(Effect.result);
+          }).pipe(authorizationResult);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            snapshotId:
-              result._tag === "Success" ? result.success.SnapshotId : undefined,
+            snapshotId: result._tag === "Success" ? result.success.SnapshotId : undefined,
           });
         }
 

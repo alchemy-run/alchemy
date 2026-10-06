@@ -10,14 +10,15 @@ import type { Workspace } from "./Workspace.ts";
  * Removes the Grafana Enterprise license from the workspace, downgrading it
  * back to the standard edition. Provide the implementation with
  * `Effect.provide(AWS.Grafana.DisassociateLicenseHttp)`.
- * @binding
- * @section Managing Licenses
- * @example Downgrade from Grafana Enterprise
+ * ### Managing Licenses
+ * **Example:** Downgrade from Grafana Enterprise
  * ```typescript
  * const disassociateLicense = yield* Grafana.DisassociateLicense(workspace);
  *
  * yield* disassociateLicense({ licenseType: "ENTERPRISE" });
  * ```
+ *
+ * @binding
  */
 export interface DisassociateLicense extends Binding.Service<
   DisassociateLicense,
@@ -27,10 +28,7 @@ export interface DisassociateLicense extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<grafana.DisassociateLicenseRequest, "workspaceId">,
-    ) => Effect.Effect<
-      grafana.DisassociateLicenseResponse,
-      grafana.DisassociateLicenseError
-    >
+    ) => Effect.Effect<grafana.DisassociateLicenseResponse, grafana.DisassociateLicenseError>
   >
 > {}
 export const DisassociateLicense = Binding.Service<DisassociateLicense>(

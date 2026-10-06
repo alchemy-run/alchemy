@@ -7,14 +7,15 @@ import type { ReportGroup } from "./ReportGroup.ts";
  * Runtime binding for `codebuild:DescribeCodeCoverages` — reads the
  * per-file line/branch coverage of a coverage report in the bound report
  * group.
- * @binding
- * @section Reading Reports
- * @example Read Code Coverage
+ * ### Reading Reports
+ * **Example:** Read Code Coverage
  * ```typescript
  * const describeCodeCoverages = yield* AWS.CodeBuild.DescribeCodeCoverages(reportGroup);
  *
  * const { codeCoverages } = yield* describeCodeCoverages({ reportArn });
  * ```
+ *
+ * @binding
  */
 export interface DescribeCodeCoverages extends Binding.Service<
   DescribeCodeCoverages,
@@ -24,10 +25,7 @@ export interface DescribeCodeCoverages extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.DescribeCodeCoveragesInput,
-    ) => Effect.Effect<
-      SVC.DescribeCodeCoveragesOutput,
-      SVC.DescribeCodeCoveragesError
-    >
+    ) => Effect.Effect<SVC.DescribeCodeCoveragesOutput, SVC.DescribeCodeCoveragesError>
   >
 > {}
 export const DescribeCodeCoverages = Binding.Service<DescribeCodeCoverages>(

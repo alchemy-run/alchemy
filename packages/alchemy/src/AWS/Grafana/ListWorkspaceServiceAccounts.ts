@@ -11,9 +11,8 @@ import type { Workspace } from "./Workspace.ts";
  * Lists the Grafana service accounts in the workspace. Provide the
  * implementation with
  * `Effect.provide(AWS.Grafana.ListWorkspaceServiceAccountsHttp)`.
- * @binding
- * @section Managing Service Accounts
- * @example List the Workspace's Service Accounts
+ * ### Managing Service Accounts
+ * **Example:** List the Workspace's Service Accounts
  * ```typescript
  * const listServiceAccounts =
  *   yield* Grafana.ListWorkspaceServiceAccounts(workspace);
@@ -23,6 +22,8 @@ import type { Workspace } from "./Workspace.ts";
  *   yield* Effect.logInfo(`${account.name} (${account.grafanaRole})`);
  * }
  * ```
+ *
+ * @binding
  */
 export interface ListWorkspaceServiceAccounts extends Binding.Service<
   ListWorkspaceServiceAccounts,
@@ -31,17 +32,13 @@ export interface ListWorkspaceServiceAccounts extends Binding.Service<
     workspace: Workspace,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        grafana.ListWorkspaceServiceAccountsRequest,
-        "workspaceId"
-      >,
+      request?: Omit<grafana.ListWorkspaceServiceAccountsRequest, "workspaceId">,
     ) => Effect.Effect<
       grafana.ListWorkspaceServiceAccountsResponse,
       grafana.ListWorkspaceServiceAccountsError
     >
   >
 > {}
-export const ListWorkspaceServiceAccounts =
-  Binding.Service<ListWorkspaceServiceAccounts>(
-    "AWS.Grafana.ListWorkspaceServiceAccounts",
-  );
+export const ListWorkspaceServiceAccounts = Binding.Service<ListWorkspaceServiceAccounts>(
+  "AWS.Grafana.ListWorkspaceServiceAccounts",
+);

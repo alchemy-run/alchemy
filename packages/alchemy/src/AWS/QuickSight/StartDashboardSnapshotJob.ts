@@ -13,9 +13,8 @@ import type { Dashboard } from "./Dashboard.ts";
  * {@link DescribeDashboardSnapshotJob | AWS.QuickSight.DescribeDashboardSnapshotJob}.
  * Provide the implementation with
  * `Effect.provide(AWS.QuickSight.StartDashboardSnapshotJobHttp)`.
- * @binding
- * @section Dashboard Snapshots
- * @example Start A PDF Snapshot
+ * ### Dashboard Snapshots
+ * **Example:** Start A PDF Snapshot
  * ```typescript
  * // init — bind the operation to the dashboard
  * const startSnapshotJob =
@@ -30,6 +29,8 @@ import type { Dashboard } from "./Dashboard.ts";
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartDashboardSnapshotJob extends Binding.Service<
   StartDashboardSnapshotJob,
@@ -38,17 +39,13 @@ export interface StartDashboardSnapshotJob extends Binding.Service<
     dashboard: Dashboard,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.StartDashboardSnapshotJobRequest,
-        "AwsAccountId" | "DashboardId"
-      >,
+      request: Omit<quicksight.StartDashboardSnapshotJobRequest, "AwsAccountId" | "DashboardId">,
     ) => Effect.Effect<
       quicksight.StartDashboardSnapshotJobResponse,
       quicksight.StartDashboardSnapshotJobError
     >
   >
 > {}
-export const StartDashboardSnapshotJob =
-  Binding.Service<StartDashboardSnapshotJob>(
-    "AWS.QuickSight.StartDashboardSnapshotJob",
-  );
+export const StartDashboardSnapshotJob = Binding.Service<StartDashboardSnapshotJob>(
+  "AWS.QuickSight.StartDashboardSnapshotJob",
+);

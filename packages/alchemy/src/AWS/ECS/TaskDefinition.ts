@@ -235,9 +235,8 @@ export interface TaskDefinition extends Resource<
  * `AWS.ECS.Task`; the bring-your-own-container path is `TaskDefinition`.
  * Both surface `taskDefinitionArn` / `containerName` / `port`, so either
  * plugs into `AWS.ECS.Service`'s `task` prop unchanged.
- * @resource
- * @section Creating a Task Definition
- * @example Public Image on Fargate
+ * ### Creating a Task Definition
+ * **Example:** Public Image on Fargate
  * ```typescript
  * const taskDef = yield* TaskDefinition("Nginx", {
  *   containerDefinitions: [
@@ -251,7 +250,7 @@ export interface TaskDefinition extends Resource<
  * });
  * ```
  *
- * @example With IAM Roles and CloudWatch Logs
+ * **Example:** With IAM Roles and CloudWatch Logs
  * ```typescript
  * const taskDef = yield* TaskDefinition("Api", {
  *   cpu: 512,
@@ -271,8 +270,8 @@ export interface TaskDefinition extends Resource<
  * });
  * ```
  *
- * @section Running with a Service
- * @example Wire into AWS.ECS.Service
+ * ### Running with a Service
+ * **Example:** Wire into AWS.ECS.Service
  * ```typescript
  * const service = yield* Service("ApiService", {
  *   cluster,
@@ -283,8 +282,8 @@ export interface TaskDefinition extends Resource<
  * });
  * ```
  *
- * @section EC2 Launch Type
- * @example EC2 Task with a Host Volume
+ * ### EC2 Launch Type
+ * **Example:** EC2 Task with a Host Volume
  * ```typescript
  * const taskDef = yield* TaskDefinition("Agent", {
  *   requiresCompatibilities: ["EC2"],
@@ -301,10 +300,10 @@ export interface TaskDefinition extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
-export const TaskDefinition = Resource<TaskDefinition>(
-  "AWS.ECS.TaskDefinition",
-);
+export const TaskDefinition = Resource<TaskDefinition>("AWS.ECS.TaskDefinition");
 
 // Deeply drop undefined-valued keys and empty arrays so that "not set" and
 // "AWS returned nothing" compare equal.
@@ -338,11 +337,7 @@ const projectionEquals = (desired: unknown, observed: unknown): boolean => {
     return desired.every((d, i) => projectionEquals(d, observed[i]));
   }
   if (desired !== null && typeof desired === "object") {
-    if (
-      observed === null ||
-      typeof observed !== "object" ||
-      Array.isArray(observed)
-    ) {
+    if (observed === null || typeof observed !== "object" || Array.isArray(observed)) {
       return false;
     }
     return Object.entries(desired).every(([k, v]) =>
@@ -363,17 +358,12 @@ const normalizeContainers = (
     ...cd,
     environment:
       cd.environment !== undefined && cd.environment.length > 0
-        ? [...cd.environment].sort((a, b) =>
-            (a.name ?? "").localeCompare(b.name ?? ""),
-          )
+        ? [...cd.environment].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
         : undefined,
     portMappings: cd.portMappings?.map((pm) => ({
       ...pm,
       protocol: pm.protocol ?? "tcp",
-      hostPort:
-        networkMode === "awsvpc"
-          ? (pm.hostPort ?? pm.containerPort)
-          : pm.hostPort,
+      hostPort: networkMode === "awsvpc" ? (pm.hostPort ?? pm.containerPort) : pm.hostPort,
     })),
   }));
 
@@ -393,19 +383,14 @@ export const TaskDefinitionProvider = () =>
       const roleArnOf = (ref: RoleRef | undefined): string | undefined =>
         typeof ref === "string"
           ? ref
-          : typeof (ref as { roleArn?: unknown } | undefined)?.roleArn ===
-              "string"
+          : typeof (ref as { roleArn?: unknown } | undefined)?.roleArn === "string"
             ? (ref as { roleArn: string }).roleArn
             : undefined;
 
-      const logGroupNameOf = (
-        family: string,
-        props: TaskDefinitionProps,
-      ): string | undefined =>
+      const logGroupNameOf = (family: string, props: TaskDefinitionProps): string | undefined =>
         props.awslogs
-          ? ((typeof props.awslogs === "object"
-              ? props.awslogs.group
-              : undefined) ?? `/ecs/${family}`)
+          ? ((typeof props.awslogs === "object" ? props.awslogs.group : undefined) ??
+            `/ecs/${family}`)
           : undefined;
 
       // The desired registerTaskDefinition request (sans tags), fully
@@ -415,17 +400,12 @@ export const TaskDefinitionProvider = () =>
         props: TaskDefinitionProps,
         region: string,
       ): Omit<ecs.RegisterTaskDefinitionRequest, "tags"> => {
-        const requiresCompatibilities = props.requiresCompatibilities ?? [
-          "FARGATE",
-        ];
+        const requiresCompatibilities = props.requiresCompatibilities ?? ["FARGATE"];
         const fargate = requiresCompatibilities.includes("FARGATE");
-        const networkMode =
-          props.networkMode ?? (fargate ? "awsvpc" : undefined);
+        const networkMode = props.networkMode ?? (fargate ? "awsvpc" : undefined);
         const logGroupName = logGroupNameOf(family, props);
         const streamPrefix =
-          (typeof props.awslogs === "object"
-            ? props.awslogs.streamPrefix
-            : undefined) ?? family;
+          (typeof props.awslogs === "object" ? props.awslogs.streamPrefix : undefined) ?? family;
         const containerDefinitions = props.containerDefinitions.map((cd) =>
           logGroupName !== undefined && cd.logConfiguration === undefined
             ? {
@@ -450,18 +430,8 @@ export const TaskDefinitionProvider = () =>
           volumes: props.volumes,
           placementConstraints: props.placementConstraints,
           requiresCompatibilities,
-          cpu:
-            props.cpu !== undefined
-              ? String(props.cpu)
-              : fargate
-                ? "256"
-                : undefined,
-          memory:
-            props.memory !== undefined
-              ? String(props.memory)
-              : fargate
-                ? "512"
-                : undefined,
+          cpu: props.cpu !== undefined ? String(props.cpu) : fargate ? "256" : undefined,
+          memory: props.memory !== undefined ? String(props.memory) : fargate ? "512" : undefined,
           pidMode: props.pidMode,
           ipcMode: props.ipcMode,
           proxyConfiguration: props.proxyConfiguration,
@@ -511,9 +481,7 @@ export const TaskDefinitionProvider = () =>
       const describeLatestActive = (taskDefinition: string) =>
         ecs.describeTaskDefinition({ taskDefinition }).pipe(
           Effect.map((described) =>
-            described.taskDefinition?.status === "ACTIVE"
-              ? described.taskDefinition
-              : undefined,
+            described.taskDefinition?.status === "ACTIVE" ? described.taskDefinition : undefined,
           ),
           // "Unable to describe task definition" — no ACTIVE revision exists.
           Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
@@ -558,24 +526,13 @@ export const TaskDefinitionProvider = () =>
         );
       });
 
-      const listFamilyArns = Effect.fn(function* (
-        family: string,
-        status: "ACTIVE" | "INACTIVE",
-      ) {
-        const arns = yield* ecs.listTaskDefinitions
-          .pages({ familyPrefix: family, status })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap(
-                (page) => page.taskDefinitionArns ?? [],
-              ),
-            ),
-          );
-        // familyPrefix is a prefix match — filter to the exact family.
-        return arns.filter(
-          (arn) => arn.split("/").pop()?.split(":")[0] === family,
+      const listFamilyArns = Effect.fn(function* (family: string, status: "ACTIVE" | "INACTIVE") {
+        const arns = yield* ecs.listTaskDefinitions.pages({ familyPrefix: family, status }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.taskDefinitionArns ?? [])),
         );
+        // familyPrefix is a prefix match — filter to the exact family.
+        return arns.filter((arn) => arn.split("/").pop()?.split(":")[0] === family);
       });
 
       class TaskDefinitionRevisionNotTerminal extends Data.TaggedError(
@@ -590,68 +547,55 @@ export const TaskDefinitionProvider = () =>
         Schedule.recurs(15),
       ]);
 
-      const waitUntilRevisionDeregistered = Effect.fn(function* (
-        taskDefinitionArn: string,
-      ) {
-        yield* ecs
-          .describeTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(
-            Effect.flatMap(({ taskDefinition }) =>
-              taskDefinition?.status !== "ACTIVE"
-                ? Effect.void
-                : Effect.fail(
-                    new TaskDefinitionRevisionNotTerminal({
-                      taskDefinitionArn,
-                      status: taskDefinition.status,
-                    }),
-                  ),
-            ),
-            Effect.retry({
-              while: (error) =>
-                error._tag === "TaskDefinitionRevisionNotTerminal",
-              schedule: deletionObservationSchedule,
-            }),
-            Effect.catchTag("ClientException", () => Effect.void),
-          );
+      const waitUntilRevisionDeregistered = Effect.fn(function* (taskDefinitionArn: string) {
+        yield* ecs.describeTaskDefinition({ taskDefinition: taskDefinitionArn }).pipe(
+          Effect.flatMap(({ taskDefinition }) =>
+            taskDefinition?.status !== "ACTIVE"
+              ? Effect.void
+              : Effect.fail(
+                  new TaskDefinitionRevisionNotTerminal({
+                    taskDefinitionArn,
+                    status: taskDefinition.status,
+                  }),
+                ),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "TaskDefinitionRevisionNotTerminal",
+            schedule: deletionObservationSchedule,
+          }),
+          Effect.catchTag("ClientException", () => Effect.void),
+        );
       });
 
-      const waitUntilRevisionDeletionStarted = Effect.fn(function* (
-        taskDefinitionArn: string,
-      ) {
-        yield* ecs
-          .describeTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(
-            Effect.flatMap(({ taskDefinition }) =>
-              taskDefinition?.status === "DELETE_IN_PROGRESS"
-                ? Effect.void
-                : Effect.fail(
-                    new TaskDefinitionRevisionNotTerminal({
-                      taskDefinitionArn,
-                      status: taskDefinition?.status,
-                    }),
-                  ),
-            ),
-            Effect.retry({
-              while: (error) =>
-                error._tag === "TaskDefinitionRevisionNotTerminal",
-              schedule: deletionObservationSchedule,
-            }),
-            // ECS eventually removes an unreferenced DELETE_IN_PROGRESS
-            // revision. Not-found is therefore also a successful terminal
-            // observation; literal absence is not required because referenced
-            // revisions may legitimately remain DELETE_IN_PROGRESS.
-            Effect.catchTag("ClientException", () => Effect.void),
-          );
+      const waitUntilRevisionDeletionStarted = Effect.fn(function* (taskDefinitionArn: string) {
+        yield* ecs.describeTaskDefinition({ taskDefinition: taskDefinitionArn }).pipe(
+          Effect.flatMap(({ taskDefinition }) =>
+            taskDefinition?.status === "DELETE_IN_PROGRESS"
+              ? Effect.void
+              : Effect.fail(
+                  new TaskDefinitionRevisionNotTerminal({
+                    taskDefinitionArn,
+                    status: taskDefinition?.status,
+                  }),
+                ),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "TaskDefinitionRevisionNotTerminal",
+            schedule: deletionObservationSchedule,
+          }),
+          // ECS eventually removes an unreferenced DELETE_IN_PROGRESS
+          // revision. Not-found is therefore also a successful terminal
+          // observation; literal absence is not required because referenced
+          // revisions may legitimately remain DELETE_IN_PROGRESS.
+          Effect.catchTag("ClientException", () => Effect.void),
+        );
       });
 
       return {
         stables: ["family"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toFamily(id, olds ?? {})) !==
-            (yield* toFamily(id, news ?? {}))
-          ) {
+          if ((yield* toFamily(id, olds ?? {})) !== (yield* toFamily(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -687,20 +631,13 @@ export const TaskDefinitionProvider = () =>
           if (output?.logGroupName && output.logGroupName !== logGroupName) {
             yield* logs
               .deleteLogGroup({ logGroupName: output.logGroupName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
           let logGroup: { logGroupName?: string; logGroupArn?: string } = {};
           if (logGroupName !== undefined) {
             yield* logs
               .createLogGroup({ logGroupName, tags: desiredTags })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             logGroup = {
               logGroupName,
               logGroupArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
@@ -717,14 +654,9 @@ export const TaskDefinitionProvider = () =>
           // that the projection comparison intentionally ignores).
           const removedProps =
             olds !== undefined &&
-            !deepEqual(
-              canonicalize(desiredRequestOf(family, olds, region)),
-              canonicalize(desired),
-            );
+            !deepEqual(canonicalize(desiredRequestOf(family, olds, region)), canonicalize(desired));
           const upToDate =
-            observed !== undefined &&
-            !removedProps &&
-            matchesObserved(desired, observed);
+            observed !== undefined && !removedProps && matchesObserved(desired, observed);
 
           if (upToDate) {
             // No-op redeploy — reuse the observed revision; converge tags.
@@ -771,16 +703,12 @@ export const TaskDefinitionProvider = () =>
         // family in the account/region.
         list: () =>
           Effect.gen(function* () {
-            const arns = yield* ecs.listTaskDefinitions
-              .pages({ status: "ACTIVE" })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.taskDefinitionArns ?? [],
-                  ),
-                ),
-              );
+            const arns = yield* ecs.listTaskDefinitions.pages({ status: "ACTIVE" }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.taskDefinitionArns ?? []),
+              ),
+            );
             const latest = new Map<string, { arn: string; revision: number }>();
             for (const arn of arns) {
               const suffix = arn.split("/").pop();
@@ -798,19 +726,13 @@ export const TaskDefinitionProvider = () =>
               ({ arn }) =>
                 ecs.describeTaskDefinition({ taskDefinition: arn }).pipe(
                   Effect.map((described) =>
-                    described.taskDefinition
-                      ? attrsOf(described.taskDefinition)
-                      : undefined,
+                    described.taskDefinition ? attrsOf(described.taskDefinition) : undefined,
                   ),
-                  Effect.catchTag("ClientException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is TaskDefinition["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is TaskDefinition["Attributes"] => row !== undefined);
           }),
         delete: Effect.fn(function* ({ output }) {
           // Deregister every ACTIVE revision of the family (the family is
@@ -819,17 +741,10 @@ export const TaskDefinitionProvider = () =>
           // revision in DELETE_IN_PROGRESS, so observe that exact terminal
           // status rather than waiting indefinitely for physical absence.
           const active = yield* listFamilyArns(output.family, "ACTIVE").pipe(
-            Effect.catchTag("ClientException", () =>
-              Effect.succeed([] as string[]),
-            ),
+            Effect.catchTag("ClientException", () => Effect.succeed([] as string[])),
           );
-          const alreadyInactive = yield* listFamilyArns(
-            output.family,
-            "INACTIVE",
-          ).pipe(
-            Effect.catchTag("ClientException", () =>
-              Effect.succeed([] as string[]),
-            ),
+          const alreadyInactive = yield* listFamilyArns(output.family, "INACTIVE").pipe(
+            Effect.catchTag("ClientException", () => Effect.succeed([] as string[])),
           );
           for (const arn of active) {
             yield* ecs
@@ -849,9 +764,7 @@ export const TaskDefinitionProvider = () =>
               ...active,
               ...alreadyInactive,
               ...(yield* listFamilyArns(output.family, "INACTIVE").pipe(
-                Effect.catchTag("ClientException", () =>
-                  Effect.succeed([] as string[]),
-                ),
+                Effect.catchTag("ClientException", () => Effect.succeed([] as string[])),
               )),
             ]),
           ];
@@ -885,9 +798,7 @@ export const TaskDefinitionProvider = () =>
           if (output.logGroupName) {
             yield* logs
               .deleteLogGroup({ logGroupName: output.logGroupName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
         }),
       };

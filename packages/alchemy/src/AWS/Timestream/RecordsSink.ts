@@ -22,10 +22,7 @@ export interface RecordsSinkProps {
 }
 
 export type RecordsSinkError =
-  | Exclude<
-      TSW.WriteRecordsError | TSW.DescribeEndpointsError,
-      TSW.RejectedRecordsException
-    >
+  | Exclude<TSW.WriteRecordsError | TSW.DescribeEndpointsError, TSW.RejectedRecordsException>
   | BatchRetryExhaustedError<RecordsSinkRecord>;
 
 /**
@@ -41,9 +38,8 @@ export type RecordsSinkError =
  * Provide `Timestream.RecordsSinkHttp` on the Function to implement the
  * binding.
  *
- * @binding
- * @section Streaming Records
- * @example Stream records into a table
+ * ### Streaming Records
+ * **Example:** Stream records into a table
  * ```typescript
  * // init — bind the sink to the table; shared attributes are sent once per
  * // batch as CommonAttributes and merged into every record server-side
@@ -64,6 +60,8 @@ export type RecordsSinkError =
  *   })),
  * ).pipe(Stream.run(sink));
  * ```
+ *
+ * @binding
  */
 export interface RecordsSink extends Binding.Service<
   RecordsSink,
@@ -72,15 +70,8 @@ export interface RecordsSink extends Binding.Service<
     table: Table,
     props?: RecordsSinkProps,
   ) => Effect.Effect<
-    Sink.Sink<
-      void,
-      RecordsSinkRecord,
-      readonly RecordsSinkRecord[],
-      RecordsSinkError
-    >
+    Sink.Sink<void, RecordsSinkRecord, readonly RecordsSinkRecord[], RecordsSinkError>
   >
 > {}
 
-export const RecordsSink = Binding.Service<RecordsSink>(
-  "AWS.Timestream.RecordsSink",
-);
+export const RecordsSink = Binding.Service<RecordsSink>("AWS.Timestream.RecordsSink");

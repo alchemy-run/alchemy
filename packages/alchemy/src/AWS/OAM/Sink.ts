@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  deleteSinkAndWait,
-  readOamTags,
-  retryOamMutation,
-  syncOamTags,
-} from "./internal.ts";
+import { deleteSinkAndWait, readOamTags, retryOamMutation, syncOamTags } from "./internal.ts";
 
 export interface SinkProps {
   /**
@@ -62,16 +57,15 @@ export interface Sink extends Resource<
  * attach a sink policy (the `policy` prop) that authorizes source accounts
  * (or an entire organization) to create links to it.
  *
- * @resource
- * @section Creating a Sink
- * @example Basic Sink
+ * ### Creating a Sink
+ * **Example:** Basic Sink
  * ```typescript
  * import * as OAM from "alchemy/AWS/OAM";
  *
  * const sink = yield* OAM.Sink("MonitoringSink");
  * ```
  *
- * @example Sink with a policy authorizing source accounts
+ * **Example:** Sink with a policy authorizing source accounts
  * ```typescript
  * const sink = yield* OAM.Sink("MonitoringSink", {
  *   policy: {
@@ -96,7 +90,7 @@ export interface Sink extends Resource<
  * });
  * ```
  *
- * @example Authorize an entire organization
+ * **Example:** Authorize an entire organization
  * ```typescript
  * const sink = yield* OAM.Sink("OrgSink", {
  *   policy: {
@@ -115,6 +109,8 @@ export interface Sink extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Sink = Resource<Sink>("AWS.OAM.Sink");
 
@@ -143,10 +139,7 @@ export const SinkProvider = () =>
     Effect.gen(function* () {
       // `props` may be undefined at runtime — all SinkProps fields are
       // optional, so callers can omit the props object entirely.
-      const createName = Effect.fn(function* (
-        id: string,
-        props: SinkProps | undefined,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: SinkProps | undefined) {
         return props?.sinkName ?? (yield* createPhysicalName({ id }));
       });
 
@@ -166,8 +159,7 @@ export const SinkProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 page.Items.filter(
-                  (item) =>
-                    item.Name != null && item.Arn != null && item.Id != null,
+                  (item) => item.Name != null && item.Arn != null && item.Id != null,
                 ).map((item) => ({
                   sinkName: item.Name!,
                   sinkArn: item.Arn!,
@@ -177,16 +169,11 @@ export const SinkProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const sinkName =
-            output?.sinkName ?? (yield* createName(id, olds ?? {}));
+          const sinkName = output?.sinkName ?? (yield* createName(id, olds ?? {}));
           const found = output?.sinkArn
             ? yield* oam
                 .getSink({ Identifier: output.sinkArn })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(sinkName);
           if (!found?.Arn) return undefined;
           const attrs = {
@@ -213,11 +200,7 @@ export const SinkProvider = () =>
           let live = output?.sinkArn
             ? yield* oam
                 .getSink({ Identifier: output.sinkArn })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(sinkName);
 
           // ENSURE — create when missing; a ConflictException means a peer
@@ -225,9 +208,7 @@ export const SinkProvider = () =>
           if (live?.Arn == null) {
             live = yield* retryOamMutation(
               oam.createSink({ Name: sinkName, Tags: news?.tags }),
-            ).pipe(
-              Effect.catchTag("ConflictException", () => findByName(sinkName)),
-            );
+            ).pipe(Effect.catchTag("ConflictException", () => findByName(sinkName)));
           }
           const sinkArn = live!.Arn!;
           const sinkId = live!.Id!;
@@ -238,14 +219,10 @@ export const SinkProvider = () =>
           const desiredPolicy = news?.policy;
           if (desiredPolicy !== undefined) {
             const desired = toPolicyString(desiredPolicy);
-            const observed = yield* oam
-              .getSinkPolicy({ SinkIdentifier: sinkArn })
-              .pipe(
-                Effect.map((r) => r.Policy),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+            const observed = yield* oam.getSinkPolicy({ SinkIdentifier: sinkArn }).pipe(
+              Effect.map((r) => r.Policy),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            );
             if (!samePolicy(observed, desired)) {
               yield* retryOamMutation(
                 oam.putSinkPolicy({

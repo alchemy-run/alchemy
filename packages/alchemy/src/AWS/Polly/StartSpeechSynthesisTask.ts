@@ -13,9 +13,8 @@ import * as Binding from "../../Binding.ts";
  * `AWS.S3.PutObject(bucket)`. Provide the implementation with
  * `Effect.provide(AWS.Polly.StartSpeechSynthesisTaskHttp)`.
  *
- * @binding
- * @section Asynchronous Synthesis
- * @example Start a synthesis task writing MP3 to S3
+ * ### Asynchronous Synthesis
+ * **Example:** Start a synthesis task writing MP3 to S3
  * ```typescript
  * // init — the S3 PutObject binding grants Polly's output write
  * yield* AWS.S3.PutObject(bucket);
@@ -30,6 +29,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const taskId = started.SynthesisTask?.TaskId;
  * ```
+ *
+ * @binding
  */
 export interface StartSpeechSynthesisTask extends Binding.Service<
   StartSpeechSynthesisTask,
@@ -37,13 +38,9 @@ export interface StartSpeechSynthesisTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: polly.StartSpeechSynthesisTaskInput,
-    ) => Effect.Effect<
-      polly.StartSpeechSynthesisTaskOutput,
-      polly.StartSpeechSynthesisTaskError
-    >
+    ) => Effect.Effect<polly.StartSpeechSynthesisTaskOutput, polly.StartSpeechSynthesisTaskError>
   >
 > {}
-export const StartSpeechSynthesisTask =
-  Binding.Service<StartSpeechSynthesisTask>(
-    "AWS.Polly.StartSpeechSynthesisTask",
-  );
+export const StartSpeechSynthesisTask = Binding.Service<StartSpeechSynthesisTask>(
+  "AWS.Polly.StartSpeechSynthesisTask",
+);

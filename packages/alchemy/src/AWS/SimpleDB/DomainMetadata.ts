@@ -9,15 +9,16 @@ import type { Domain } from "./Domain.ts";
  *
  * Bind this operation to a {@link Domain} inside a function runtime to get a
  * callable that returns the domain's item/attribute counts and sizes.
- * @binding
- * @section Domain Introspection
- * @example Read Domain Metadata
+ * ### Domain Introspection
+ * **Example:** Read Domain Metadata
  * ```typescript
  * const domainMetadata = yield* AWS.SimpleDB.DomainMetadata(domain);
  *
  * const metadata = yield* domainMetadata();
  * // metadata.ItemCount, metadata.AttributeValueCount, ...
  * ```
+ *
+ * @binding
  */
 export interface DomainMetadata extends Binding.Service<
   DomainMetadata,
@@ -25,13 +26,7 @@ export interface DomainMetadata extends Binding.Service<
   (
     domain: Domain,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      sdb.DomainMetadataResponse,
-      sdb.DomainMetadataError,
-      RuntimeContext
-    >
+    () => Effect.Effect<sdb.DomainMetadataResponse, sdb.DomainMetadataError, RuntimeContext>
   >
 > {}
-export const DomainMetadata = Binding.Service<DomainMetadata>(
-  "AWS.SimpleDB.DomainMetadata",
-);
+export const DomainMetadata = Binding.Service<DomainMetadata>("AWS.SimpleDB.DomainMetadata");

@@ -12,9 +12,8 @@ import type { LifecyclePolicy } from "./LifecyclePolicy.ts";
  * or alert on a policy that stopped running. The policy id is injected from
  * the binding. Provide the implementation with
  * `Effect.provide(AWS.DLM.GetLifecyclePolicyHttp)`.
- * @binding
- * @section Monitoring Lifecycle Policies
- * @example Check A Policy's State
+ * ### Monitoring Lifecycle Policies
+ * **Example:** Check A Policy's State
  * ```typescript
  * // init — bind the operation to the lifecycle policy
  * const getLifecyclePolicy = yield* AWS.DLM.GetLifecyclePolicy(policy);
@@ -25,6 +24,8 @@ import type { LifecyclePolicy } from "./LifecyclePolicy.ts";
  *   yield* Effect.logError(`DLM policy failed: ${Policy.StatusMessage}`);
  * }
  * ```
+ *
+ * @binding
  */
 export interface GetLifecyclePolicy extends Binding.Service<
   GetLifecyclePolicy,
@@ -32,12 +33,7 @@ export interface GetLifecyclePolicy extends Binding.Service<
   (
     policy: LifecyclePolicy,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      dlm.GetLifecyclePolicyResponse,
-      dlm.GetLifecyclePolicyError
-    >
+    () => Effect.Effect<dlm.GetLifecyclePolicyResponse, dlm.GetLifecyclePolicyError>
   >
 > {}
-export const GetLifecyclePolicy = Binding.Service<GetLifecyclePolicy>(
-  "AWS.DLM.GetLifecyclePolicy",
-);
+export const GetLifecyclePolicy = Binding.Service<GetLifecyclePolicy>("AWS.DLM.GetLifecyclePolicy");

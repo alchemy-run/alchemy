@@ -64,8 +64,8 @@ export interface JobRunEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Job Run Events
- * @example Alert On Failed Spark Jobs
+ * ### Consuming Job Run Events
+ * **Example:** Alert On Failed Spark Jobs
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -103,9 +103,7 @@ export const consumeJobRunEvents = <StreamReq = never, Req = never>(
               ...(props.virtualClusterIds !== undefined
                 ? { virtualClusterId: [...props.virtualClusterIds] }
                 : {}),
-              ...(props.states !== undefined
-                ? { state: [...props.states] }
-                : {}),
+              ...(props.states !== undefined ? { state: [...props.states] } : {}),
             },
           }
         : {}),

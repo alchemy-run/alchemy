@@ -85,11 +85,7 @@ export interface BudgetActionProps {
    *
    * Changing the action type replaces the action.
    */
-  actionType:
-    | "APPLY_IAM_POLICY"
-    | "APPLY_SCP_POLICY"
-    | "RUN_SSM_DOCUMENTS"
-    | (string & {});
+  actionType: "APPLY_IAM_POLICY" | "APPLY_SCP_POLICY" | "RUN_SSM_DOCUMENTS" | (string & {});
   /**
    * The threshold that triggers the action.
    */
@@ -154,9 +150,8 @@ export interface BudgetAction extends Resource<
  * permissions the action needs (the AWS managed policy
  * `AWSBudgetsActionsWithAWSResourceControlAccess` covers all three kinds).
  *
- * @resource
- * @section Creating a Budget Action
- * @example Apply a Deny-All Policy at 100% of the Budget
+ * ### Creating a Budget Action
+ * **Example:** Apply a Deny-All Policy at 100% of the Budget
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -184,7 +179,7 @@ export interface BudgetAction extends Resource<
  * });
  * ```
  *
- * @example Stop EC2 Instances Automatically
+ * **Example:** Stop EC2 Instances Automatically
  * ```typescript
  * const action = yield* AWS.Budgets.BudgetAction("StopDevInstances", {
  *   budgetName: budget.budgetName,
@@ -206,6 +201,8 @@ export interface BudgetAction extends Resource<
  *   subscribers: [{ subscriptionType: "EMAIL", address: "team@example.com" }],
  * });
  * ```
+ *
+ * @resource
  */
 export const BudgetAction = Resource<BudgetAction>("AWS.Budgets.BudgetAction");
 
@@ -213,11 +210,7 @@ export const BudgetAction = Resource<BudgetAction>("AWS.Budgets.BudgetAction");
  * Compute the ARN of a budget action. Budgets is a global service, so the ARN
  * has no region component.
  */
-export const budgetActionArn = (
-  accountId: string,
-  budgetName: string,
-  actionId: string,
-): string =>
+export const budgetActionArn = (accountId: string, budgetName: string, actionId: string): string =>
   `arn:aws:budgets::${accountId}:budget/${budgetName}/action/${actionId}`;
 
 const toDefinition = (d: BudgetActionDefinition): budgets.Definition => ({
@@ -286,9 +279,7 @@ const updatableSlice = (a: {
       .map(
         (s) =>
           `${s.SubscriptionType}:${
-            Redacted.isRedacted(s.Address)
-              ? Redacted.value(s.Address)
-              : s.Address
+            Redacted.isRedacted(s.Address) ? Redacted.value(s.Address) : s.Address
           }`,
       )
       .sort(),
@@ -298,22 +289,13 @@ export const BudgetActionProvider = () =>
   Provider.effect(
     BudgetAction,
     Effect.gen(function* () {
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desired: Record<string, string>,
-      ) {
-        const observed = yield* budgets
-          .listTagsForResource({ ResourceARN: arn })
-          .pipe(
-            Effect.map((r) =>
-              Object.fromEntries(
-                (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-              ),
-            ),
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed({} as Record<string, string>),
-            ),
-          );
+      const syncTags = Effect.fn(function* (arn: string, desired: Record<string, string>) {
+        const observed = yield* budgets.listTagsForResource({ ResourceARN: arn }).pipe(
+          Effect.map((r) =>
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
+          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed({} as Record<string, string>)),
+        );
         const { removed, upsert } = diffTags(observed, desired);
         if (upsert.length > 0) {
           yield* budgets.tagResource({
@@ -364,20 +346,13 @@ export const BudgetActionProvider = () =>
               BudgetName: output.budgetName,
               ActionId: output.actionId,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!found?.Action) return undefined;
           return attrs(accountId, output.budgetName, output.actionId);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds.budgetName !== news.budgetName ||
-            olds.actionType !== news.actionType
-          ) {
+          if (olds.budgetName !== news.budgetName || olds.actionType !== news.actionType) {
             return { action: "replace" } as const;
           }
         }),
@@ -408,9 +383,7 @@ export const BudgetActionProvider = () =>
                 })
                 .pipe(
                   Effect.map((r) => r.Action),
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
                 )
             : undefined;
 
@@ -438,8 +411,7 @@ export const BudgetActionProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e): boolean =>
-                    e._tag === "InvalidParameterException" ||
-                    e._tag === "AccessDeniedException",
+                    e._tag === "InvalidParameterException" || e._tag === "AccessDeniedException",
                   schedule: Schedule.exponential("2 seconds"),
                   times: 6,
                 }),

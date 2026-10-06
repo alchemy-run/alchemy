@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * account-level (`Resource: "*"`).
  * Provide the implementation with
  * `Effect.provide(AWS.SSMIncidents.UpdateRelatedItemsHttp)`.
- * @binding
- * @section Related Items
- * @example Attach A Link To An Incident
+ * ### Related Items
+ * **Example:** Attach A Link To An Incident
  * ```typescript
  * // init
  * const updateRelatedItems = yield* AWS.SSMIncidents.UpdateRelatedItems();
@@ -29,6 +28,8 @@ import * as Binding from "../../Binding.ts";
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateRelatedItems extends Binding.Service<
   UpdateRelatedItems,
@@ -36,10 +37,7 @@ export interface UpdateRelatedItems extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.UpdateRelatedItemsInput,
-    ) => Effect.Effect<
-      incidents.UpdateRelatedItemsOutput,
-      incidents.UpdateRelatedItemsError
-    >
+    ) => Effect.Effect<incidents.UpdateRelatedItemsOutput, incidents.UpdateRelatedItemsError>
   >
 > {}
 export const UpdateRelatedItems = Binding.Service<UpdateRelatedItems>(

@@ -6,14 +6,15 @@ import type { ReportGroup } from "./ReportGroup.ts";
 /**
  * Runtime binding for `codebuild:DeleteReport` — deletes a report of the
  * bound report group by report ARN.
- * @binding
- * @section Reading Reports
- * @example Delete an Old Report
+ * ### Reading Reports
+ * **Example:** Delete an Old Report
  * ```typescript
  * const deleteReport = yield* AWS.CodeBuild.DeleteReport(reportGroup);
  *
  * yield* deleteReport({ arn: reportArn });
  * ```
+ *
+ * @binding
  */
 export interface DeleteReport extends Binding.Service<
   DeleteReport,
@@ -21,11 +22,7 @@ export interface DeleteReport extends Binding.Service<
   <G extends ReportGroup>(
     reportGroup: G,
   ) => Effect.Effect<
-    (
-      request: SVC.DeleteReportInput,
-    ) => Effect.Effect<SVC.DeleteReportOutput, SVC.DeleteReportError>
+    (request: SVC.DeleteReportInput) => Effect.Effect<SVC.DeleteReportOutput, SVC.DeleteReportError>
   >
 > {}
-export const DeleteReport = Binding.Service<DeleteReport>(
-  "AWS.CodeBuild.DeleteReport",
-);
+export const DeleteReport = Binding.Service<DeleteReport>("AWS.CodeBuild.DeleteReport");

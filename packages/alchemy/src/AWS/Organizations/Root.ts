@@ -68,15 +68,14 @@ export interface Root extends Resource<
  * `parentId` for top-level {@link OrganizationalUnit}s and {@link Account}s,
  * and as the `targetId`/`rootId` for {@link PolicyAttachment} and
  * {@link RootPolicyType}.
- * @resource
- * @section Importing the Root
- * @example Adopt the Organization Root
+ * ### Importing the Root
+ * **Example:** Adopt the Organization Root
  * ```typescript
  * const organization = yield* Organization("Org", { featureSet: "ALL" });
  * const root = yield* Root("Root", {});
  * ```
  *
- * @example Parent OUs and Accounts Under the Root
+ * **Example:** Parent OUs and Accounts Under the Root
  * ```typescript
  * const workloads = yield* OrganizationalUnit("Workloads", {
  *   parentId: root.rootId,
@@ -89,6 +88,8 @@ export interface Root extends Resource<
  *   parentId: root.rootId,
  * });
  * ```
+ *
+ * @resource
  */
 export const Root = Resource<Root>("AWS.Organizations.Root");
 
@@ -108,9 +109,7 @@ export const RootProvider = () =>
             const roots = yield* retryOrganizations(
               organizations.listRoots.pages({}).pipe(
                 Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Roots ?? []),
-                ),
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Roots ?? [])),
               ),
             ).pipe(
               Effect.catchTags({
@@ -129,29 +128,24 @@ export const RootProvider = () =>
               } => root.Id != null && root.Arn != null && root.Name != null,
             );
 
-            const attrs: (Root["Attributes"] | undefined)[] =
-              yield* Effect.forEach(
-                valid,
-                Effect.fn(function* (root) {
-                  if (!root.Id || !root.Arn || !root.Name) return undefined;
-                  const tags = yield* readResourceTags(root.Id).pipe(
-                    Effect.catchTag("TargetNotFoundException", () =>
-                      Effect.succeed({}),
-                    ),
-                  );
-                  return {
-                    rootId: root.Id,
-                    rootArn: root.Arn,
-                    rootName: root.Name,
-                    policyTypes: root.PolicyTypes ?? [],
-                    tags,
-                  };
-                }),
-                { concurrency: 10 },
-              );
-            return attrs.filter(
-              (attr): attr is Root["Attributes"] => attr !== undefined,
+            const attrs: (Root["Attributes"] | undefined)[] = yield* Effect.forEach(
+              valid,
+              Effect.fn(function* (root) {
+                if (!root.Id || !root.Arn || !root.Name) return undefined;
+                const tags = yield* readResourceTags(root.Id).pipe(
+                  Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
+                );
+                return {
+                  rootId: root.Id,
+                  rootArn: root.Arn,
+                  rootName: root.Name,
+                  policyTypes: root.PolicyTypes ?? [],
+                  tags,
+                };
+              }),
+              { concurrency: 10 },
             );
+            return attrs.filter((attr): attr is Root["Attributes"] => attr !== undefined);
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
@@ -213,18 +207,11 @@ const listRoots = () =>
     (page) => page.Roots,
   );
 
-const readRoot = Effect.fn(function* ({
-  rootId,
-  name,
-}: {
-  rootId?: string;
-  name?: string;
-}) {
+const readRoot = Effect.fn(function* ({ rootId, name }: { rootId?: string; name?: string }) {
   const roots = yield* retryOrganizations(listRoots());
   const root = roots.find(
     (candidate) =>
-      (rootId ? candidate.Id === rootId : true) &&
-      (name ? candidate.Name === name : true),
+      (rootId ? candidate.Id === rootId : true) && (name ? candidate.Name === name : true),
   );
 
   if (!root?.Id || !root.Arn || !root.Name) {

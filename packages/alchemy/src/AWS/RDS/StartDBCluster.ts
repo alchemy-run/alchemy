@@ -11,9 +11,8 @@ import type { DBCluster } from "./DBCluster.ts";
  * function that wakes a development cluster on a schedule. The cluster
  * identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.StartDBClusterHttp)`.
- * @binding
- * @section Operating a Cluster
- * @example Start a Stopped Cluster
+ * ### Operating a Cluster
+ * **Example:** Start a Stopped Cluster
  * ```typescript
  * // init — bind the operation to the cluster
  * const startDBCluster = yield* AWS.RDS.StartDBCluster(cluster);
@@ -21,16 +20,14 @@ import type { DBCluster } from "./DBCluster.ts";
  * // runtime
  * yield* startDBCluster();
  * ```
+ *
+ * @binding
  */
 export interface StartDBCluster extends Binding.Service<
   StartDBCluster,
   "AWS.RDS.StartDBCluster",
   (
     cluster: DBCluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<rds.StartDBClusterResult, rds.StartDBClusterError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<rds.StartDBClusterResult, rds.StartDBClusterError>>
 > {}
-export const StartDBCluster = Binding.Service<StartDBCluster>(
-  "AWS.RDS.StartDBCluster",
-);
+export const StartDBCluster = Binding.Service<StartDBCluster>("AWS.RDS.StartDBCluster");

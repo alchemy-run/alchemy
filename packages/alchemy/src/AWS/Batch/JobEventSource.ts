@@ -71,8 +71,8 @@ export interface JobEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Job Events
- * @example Alert On Failed Jobs
+ * ### Consuming Job Events
+ * **Example:** Alert On Failed Jobs
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -103,9 +103,9 @@ export const consumeJobEvents = <StreamReq = never, Req = never>(
     props.id ?? "BatchJobEvents",
     {
       source: ["aws.batch"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as BatchJobEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as BatchJobEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
     },
     { description: props.description, state: props.state },
     process,

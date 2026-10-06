@@ -1,26 +1,23 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface UploadPartCopyRequest extends Omit<
-  S3.UploadPartCopyRequest,
-  "Bucket"
-> {}
+export interface UploadPartCopyRequest extends Omit<S3.UploadPartCopyRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:UploadPartCopy`.
  *
  * Bind this operation to a bucket to get a callable that uploads a multipart
  * part by copying from an existing object — the destination bucket name is
- * injected automatically and `s3:PutObject`/`s3:GetObject` are granted on the
- * bucket's objects. Copying from a *different* source bucket additionally
+ * injected automatically and `s3:PutObject`, `s3:GetObject`, and
+ * `s3:GetObjectVersion` are granted on the bucket's objects. Select a source
+ * version by appending `?versionId=<encoded version ID>` to the URL-encoded
+ * `CopySource` bucket/key. Copying from a *different* source bucket additionally
  * requires read access to that bucket (bind `GetObject` on it). Provide the
  * implementation with `Effect.provide(AWS.S3.UploadPartCopyHttp)`.
- * @binding
- * @section Multipart Uploads
- * @example Copy an Existing Object as a Part
+ * ### Multipart Uploads
+ * **Example:** Copy an Existing Object as a Part
  * ```typescript
  * const uploadPartCopy = yield* AWS.S3.UploadPartCopy(bucket);
  *
@@ -31,6 +28,8 @@ export interface UploadPartCopyRequest extends Omit<
  *   CopySource: `${bucketName}/source.bin`,
  * });
  * ```
+ *
+ * @binding
  */
 export interface UploadPartCopy extends Binding.Service<
   UploadPartCopy,
@@ -43,6 +42,4 @@ export interface UploadPartCopy extends Binding.Service<
     ) => Effect.Effect<S3.UploadPartCopyOutput, S3.UploadPartCopyError>
   >
 > {}
-export const UploadPartCopy = Binding.Service<UploadPartCopy>(
-  "AWS.S3.UploadPartCopy",
-);
+export const UploadPartCopy = Binding.Service<UploadPartCopy>("AWS.S3.UploadPartCopy");

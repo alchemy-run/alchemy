@@ -14,9 +14,8 @@ export interface GetLicenseRequest extends licensemanager.GetLicenseRequest {}
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.GetLicenseHttp)`.
- * @binding
- * @section Reading Licenses and Grants
- * @example Read a License
+ * ### Reading Licenses and Grants
+ * **Example:** Read a License
  * ```typescript
  * // init
  * const getLicense = yield* AWS.LicenseManager.GetLicense();
@@ -24,6 +23,8 @@ export interface GetLicenseRequest extends licensemanager.GetLicenseRequest {}
  * // runtime
  * const { License } = yield* getLicense({ LicenseArn: licenseArn });
  * ```
+ *
+ * @binding
  */
 export interface GetLicense extends Binding.Service<
   GetLicense,
@@ -31,12 +32,7 @@ export interface GetLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.GetLicenseResponse,
-      licensemanager.GetLicenseError
-    >
+    ) => Effect.Effect<licensemanager.GetLicenseResponse, licensemanager.GetLicenseError>
   >
 > {}
-export const GetLicense = Binding.Service<GetLicense>(
-  "AWS.LicenseManager.GetLicense",
-);
+export const GetLicense = Binding.Service<GetLicense>("AWS.LicenseManager.GetLicense");

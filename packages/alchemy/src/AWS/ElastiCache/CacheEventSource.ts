@@ -81,8 +81,8 @@ export interface CacheEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Cache Events
- * @example Alert When a Cache Approaches Its Usage Limit
+ * ### Consuming Cache Events
+ * **Example:** Alert When a Cache Approaches Its Usage Limit
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -105,9 +105,7 @@ export interface CacheEventSourceProps extends EventRouteProps {
  */
 export const consumeCacheEvents = <StreamReq = never, Req = never>(
   props: CacheEventSourceProps,
-  process: (
-    events: Stream.Stream<CacheEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<CacheEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "ElastiCacheEvents",
@@ -116,9 +114,7 @@ export const consumeCacheEvents = <StreamReq = never, Req = never>(
       ...(props.kinds !== undefined
         ? { "detail-type": props.kinds.map((kind) => DETAIL_TYPES[kind]) }
         : {}),
-      ...(props.resourceArns !== undefined
-        ? { resources: [...props.resourceArns] }
-        : {}),
+      ...(props.resourceArns !== undefined ? { resources: [...props.resourceArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

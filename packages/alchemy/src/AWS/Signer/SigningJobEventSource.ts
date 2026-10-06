@@ -52,8 +52,8 @@ export interface SigningJobEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Signing Job Events
- * @example React When Signing Fails
+ * ### Consuming Signing Job Events
+ * **Example:** React When Signing Fails
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -83,9 +83,7 @@ export const consumeSigningJobEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.signer"],
       "detail-type": ["Signer Job Status Change"],
-      ...(props.statuses !== undefined
-        ? { detail: { status: [...props.statuses] } }
-        : {}),
+      ...(props.statuses !== undefined ? { detail: { status: [...props.statuses] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

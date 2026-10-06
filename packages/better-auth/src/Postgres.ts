@@ -12,11 +12,7 @@ import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import type { PoolConfig } from "pg";
-import {
-  Database,
-  type DatabaseService,
-  type DirectDatabase,
-} from "./Database.ts";
+import { Database, type DatabaseService, type DirectDatabase } from "./Database.ts";
 import { BetterAuthMigrationError } from "./Errors.ts";
 
 export type { ConnectionSource };
@@ -53,10 +49,7 @@ export const makeMigrateSupport = (
   ) => Effect.Effect<DirectDatabase, never, Scope.Scope>,
   failure: string,
 ): NonNullable<DatabaseService["migrate"]> => ({
-  identity: { urlDigest: connectionSourceDigest(migrateSource) } as Record<
-    string,
-    unknown
-  >,
+  identity: { urlDigest: connectionSourceDigest(migrateSource) } as Record<string, unknown>,
   connect: Effect.gen(function* () {
     // Init half — capture the connection-string Output.
     const urlAccessor = yield* resolveConnectionSource(migrateSource);
@@ -86,11 +79,7 @@ export const makePostgresService = (
     const urlEffect = yield* resolveConnectionSource(source);
     const migrateSource = staticConnectionSource(source, options?.migrate);
     const open = (url: Effect.Effect<Redacted.Redacted<string>>) =>
-      openPostgresPool(url, options?.pool) as Effect.Effect<
-        DirectDatabase,
-        never,
-        Scope.Scope
-      >;
+      openPostgresPool(url, options?.pool) as Effect.Effect<DirectDatabase, never, Scope.Scope>;
 
     return {
       provider: "postgres",
@@ -123,15 +112,11 @@ export const makePostgresService = (
  * the dynamically-imported driver ships in the artifact with an npm layout
  * (its CJS require chain does not survive store-style node_modules).
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer pg
- * @product Postgres
  *
- * @section Connecting with a resource Output
+ * ### Connecting with a resource Output
  * Resource Outputs are bound into the host environment at deploy and read
  * back at runtime; the same source drives deploy-time migrations.
- * @example PlanetScale Postgres
+ * **Example:** PlanetScale Postgres
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Postgres } from "@alchemy.run/better-auth/Postgres";
@@ -144,19 +129,18 @@ export const makePostgresService = (
  * }).pipe(Effect.provide(Postgres(role.connectionUrl)))
  * ```
  *
- * @section Separate migration source
+ * ### Separate migration source
  * When the runtime URL is not deploy-resolvable (or points at a pooler),
  * pass a direct deploy-time URL as `migrate`.
- * @example Pooled runtime, direct migrations
+ * **Example:** Pooled runtime, direct migrations
  * ```typescript
  * Postgres(role.connectionUrlPooled, { migrate: role.connectionUrl })
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer pg
+ * @product Postgres
  */
-export const Postgres = (
-  url: ConnectionSource,
-  options?: PostgresOptions,
-): Layer.Layer<Database> =>
-  Layer.effect(
-    Database,
-    makePostgresService(url, options),
-  ) as Layer.Layer<Database>;
+export const Postgres = (url: ConnectionSource, options?: PostgresOptions): Layer.Layer<Database> =>
+  Layer.effect(Database, makePostgresService(url, options)) as Layer.Layer<Database>;

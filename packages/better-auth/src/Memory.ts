@@ -10,12 +10,9 @@ import { Database, type DatabaseInput } from "./Database.ts";
  * lifetime of the process/isolate; nothing is persisted and there is no
  * migration step (tables are seeded from the resolved auth schema).
  *
- * @layer
- * @provides BetterAuth.Database
- * @product Memory
  *
- * @section Testing
- * @example Unit-testing auth flows without a database
+ * ### Testing
+ * **Example:** Unit-testing auth flows without a database
  * ```typescript
  * import { BetterAuth, Memory } from "@alchemy.run/better-auth";
  *
@@ -29,6 +26,10 @@ import { Database, type DatabaseInput } from "./Database.ts";
  *   });
  * }).pipe(Effect.provide(Memory()))
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @product Memory
  */
 export const Memory = (db?: MemoryDB): Layer.Layer<Database> =>
   Layer.effect(

@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Service } from "./Service.ts";
 
-export interface ContinueServiceDeploymentRequest
-  extends ECS.ContinueServiceDeploymentRequest {}
+export interface ContinueServiceDeploymentRequest extends ECS.ContinueServiceDeploymentRequest {}
 
 /**
  * Runtime binding for `ecs:ContinueServiceDeployment`.
@@ -15,9 +14,8 @@ export interface ContinueServiceDeploymentRequest
  * that validates the green revision and then approves (or vetoes) the
  * traffic shift. The host is granted `ecs:ContinueServiceDeployment` on the
  * bound service's deployments.
- * @binding
- * @section Service Deployments
- * @example Approve a Lifecycle-Hook Stage
+ * ### Service Deployments
+ * **Example:** Approve a Lifecycle-Hook Stage
  * ```typescript
  * const continueServiceDeployment =
  *   yield* AWS.ECS.ContinueServiceDeployment(service);
@@ -27,6 +25,8 @@ export interface ContinueServiceDeploymentRequest
  *   hookId,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ContinueServiceDeployment extends Binding.Service<
   ContinueServiceDeployment,
@@ -36,13 +36,9 @@ export interface ContinueServiceDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ContinueServiceDeploymentRequest,
-    ) => Effect.Effect<
-      ECS.ContinueServiceDeploymentResponse,
-      ECS.ContinueServiceDeploymentError
-    >
+    ) => Effect.Effect<ECS.ContinueServiceDeploymentResponse, ECS.ContinueServiceDeploymentError>
   >
 > {}
-export const ContinueServiceDeployment =
-  Binding.Service<ContinueServiceDeployment>(
-    "AWS.ECS.ContinueServiceDeployment",
-  );
+export const ContinueServiceDeployment = Binding.Service<ContinueServiceDeployment>(
+  "AWS.ECS.ContinueServiceDeployment",
+);

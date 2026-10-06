@@ -70,16 +70,15 @@ export interface Queue extends Resource<
  * create additional queues to isolate workloads or to purchase reserved
  * render capacity.
  *
- * @resource
- * @section Creating a Queue
- * @example On-Demand Queue
+ * ### Creating a Queue
+ * **Example:** On-Demand Queue
  * ```typescript
  * const queue = yield* MediaConvert.Queue("Transcode", {
  *   description: "Marketing video transcodes",
  * });
  * ```
  *
- * @example Paused Queue
+ * **Example:** Paused Queue
  * ```typescript
  * const queue = yield* MediaConvert.Queue("Transcode", {
  *   status: "PAUSED",
@@ -87,8 +86,8 @@ export interface Queue extends Resource<
  * });
  * ```
  *
- * @section Reserved Capacity
- * @example Reserved Queue with a One-Year Commitment
+ * ### Reserved Capacity
+ * **Example:** Reserved Queue with a One-Year Commitment
  * ```typescript
  * const queue = yield* MediaConvert.Queue("Reserved", {
  *   pricingPlan: "RESERVED",
@@ -99,6 +98,8 @@ export interface Queue extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Queue = Resource<Queue>("AWS.MediaConvert.Queue");
 
@@ -107,9 +108,7 @@ export const QueueProvider = () =>
     Queue,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: QueueProps) {
-        return (
-          props.queueName ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.queueName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const toAttrs = (queue: mediaconvert.Queue & { Name: string }) => ({
@@ -124,11 +123,7 @@ export const QueueProvider = () =>
       const getQueue = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getQueue({ Name: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         return response?.Queue;
       });
 
@@ -142,10 +137,7 @@ export const QueueProvider = () =>
           // The name is the queue's identity; a change means a new queue.
           if (oldName !== newName) return { action: "replace" } as const;
           // Pricing plan is immutable once the queue exists.
-          if (
-            (olds.pricingPlan ?? "ON_DEMAND") !==
-            (news.pricingPlan ?? "ON_DEMAND")
-          ) {
+          if ((olds.pricingPlan ?? "ON_DEMAND") !== (news.pricingPlan ?? "ON_DEMAND")) {
             return { action: "replace" } as const;
           }
         }),
@@ -182,14 +174,10 @@ export const QueueProvider = () =>
           } else {
             // 3. Sync — MediaConvert's UpdateQueue is a full in-place update of
             // the mutable fields. Apply whenever any of them drift.
-            const statusDrift =
-              (news.status ?? "ACTIVE") !== (queue.Status ?? "ACTIVE");
-            const descDrift =
-              (news.description ?? undefined) !==
-              (queue.Description ?? undefined);
+            const statusDrift = (news.status ?? "ACTIVE") !== (queue.Status ?? "ACTIVE");
+            const descDrift = (news.description ?? undefined) !== (queue.Description ?? undefined);
             const concurrencyDrift =
-              news.concurrentJobs !== undefined &&
-              news.concurrentJobs !== queue.ConcurrentJobs;
+              news.concurrentJobs !== undefined && news.concurrentJobs !== queue.ConcurrentJobs;
             if (statusDrift || descDrift || concurrencyDrift) {
               const updated = yield* mediaconvert.updateQueue({
                 Name: name,
@@ -215,10 +203,7 @@ export const QueueProvider = () =>
             // A queue draining in-flight jobs can transiently reject deletion.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
             }),
           );
         }),
@@ -226,9 +211,7 @@ export const QueueProvider = () =>
         list: () =>
           mediaconvert.listQueues.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Queues ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Queues ?? [])),
             Effect.map((queues) =>
               queues
                 // The built-in `Default` queue is an AWS SYSTEM queue that

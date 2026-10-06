@@ -6,10 +6,7 @@ import type { Dataset } from "./Dataset.ts";
 /**
  * `PutItems` request with `datasetArn` injected from the bound dataset.
  */
-export interface PutItemsRequest extends Omit<
-  personalizeevents.PutItemsRequest,
-  "datasetArn"
-> {}
+export interface PutItemsRequest extends Omit<personalizeevents.PutItemsRequest, "datasetArn"> {}
 
 /**
  * Runtime binding for `personalize:PutItems`, scoped to one {@link Dataset} —
@@ -19,9 +16,8 @@ export interface PutItemsRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.PutItemsHttp)`.
  *
- * @binding
- * @section Incremental Imports
- * @example Upsert an Item
+ * ### Incremental Imports
+ * **Example:** Upsert an Item
  * ```typescript
  * // init
  * const putItems = yield* Personalize.PutItems(itemsDataset);
@@ -33,6 +29,8 @@ export interface PutItemsRequest extends Omit<
  *   }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutItems extends Binding.Service<
   PutItems,
@@ -42,10 +40,7 @@ export interface PutItems extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutItemsRequest,
-    ) => Effect.Effect<
-      personalizeevents.PutItemsResponse,
-      personalizeevents.PutItemsError
-    >
+    ) => Effect.Effect<personalizeevents.PutItemsResponse, personalizeevents.PutItemsError>
   >
 > {}
 export const PutItems = Binding.Service<PutItems>("AWS.Personalize.PutItems");

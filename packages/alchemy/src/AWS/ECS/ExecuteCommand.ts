@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface ExecuteCommandRequest extends Omit<
-  ECS.ExecuteCommandRequest,
-  "cluster"
-> {}
+export interface ExecuteCommandRequest extends Omit<ECS.ExecuteCommandRequest, "cluster"> {}
 
 /**
  * Runtime binding for `ecs:ExecuteCommand` (ECS Exec).
@@ -20,9 +17,8 @@ export interface ExecuteCommandRequest extends Omit<
  * task role must allow the SSM messages channel. The response's
  * `session.tokenValue` is a `Redacted` bearer token for the SSM WebSocket
  * stream (`session.streamUrl`).
- * @binding
- * @section Executing Commands
- * @example Run a Command in a Container
+ * ### Executing Commands
+ * **Example:** Run a Command in a Container
  * ```typescript
  * const executeCommand = yield* AWS.ECS.ExecuteCommand(cluster);
  *
@@ -33,6 +29,8 @@ export interface ExecuteCommandRequest extends Omit<
  * });
  * const streamUrl = response.session?.streamUrl;
  * ```
+ *
+ * @binding
  */
 export interface ExecuteCommand extends Binding.Service<
   ExecuteCommand,
@@ -45,6 +43,4 @@ export interface ExecuteCommand extends Binding.Service<
     ) => Effect.Effect<ECS.ExecuteCommandResponse, ECS.ExecuteCommandError>
   >
 > {}
-export const ExecuteCommand = Binding.Service<ExecuteCommand>(
-  "AWS.ECS.ExecuteCommand",
-);
+export const ExecuteCommand = Binding.Service<ExecuteCommand>("AWS.ECS.ExecuteCommand");

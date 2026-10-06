@@ -48,9 +48,8 @@ export interface ParameterGroup extends Resource<
  *
  * Parameter groups are free and provision instantly. DAX does not support
  * tags on parameter groups.
- * @resource
- * @section Creating a Parameter Group
- * @example Parameter Group with Custom Cache TTLs
+ * ### Creating a Parameter Group
+ * **Example:** Parameter Group with Custom Cache TTLs
  * ```typescript
  * const params = yield* ParameterGroup("DaxParams", {
  *   description: "5 minute item and query TTLs",
@@ -61,8 +60,8 @@ export interface ParameterGroup extends Resource<
  * });
  * ```
  *
- * @section Attaching to a Cluster
- * @example Cluster Using the Parameter Group
+ * ### Attaching to a Cluster
+ * **Example:** Cluster Using the Parameter Group
  * ```typescript
  * const cluster = yield* Cluster("Cache", {
  *   nodeType: "dax.t3.small",
@@ -71,10 +70,10 @@ export interface ParameterGroup extends Resource<
  *   parameterGroupName: params.parameterGroupName,
  * });
  * ```
+ *
+ * @resource
  */
-export const ParameterGroup = Resource<ParameterGroup>(
-  "AWS.DAX.ParameterGroup",
-);
+export const ParameterGroup = Resource<ParameterGroup>("AWS.DAX.ParameterGroup");
 
 export const ParameterGroupProvider = () =>
   Provider.effect(
@@ -88,11 +87,7 @@ export const ParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeParameterGroups({ ParameterGroupNames: [name] })
-          .pipe(
-            Effect.catchTag("ParameterGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.ParameterGroups?.[0];
       });
 
@@ -107,10 +102,7 @@ export const ParameterGroupProvider = () =>
             NextToken: nextToken,
           });
           for (const parameter of response.Parameters ?? []) {
-            if (
-              parameter.ParameterName !== undefined &&
-              parameter.ParameterValue !== undefined
-            ) {
+            if (parameter.ParameterName !== undefined && parameter.ParameterValue !== undefined) {
               values[parameter.ParameterName] = parameter.ParameterValue;
             }
           }
@@ -130,10 +122,7 @@ export const ParameterGroupProvider = () =>
         // Report only the user's overridden keys with their observed values,
         // not the entire engine parameter list.
         parameters: Object.fromEntries(
-          Object.keys(overrides ?? {}).map((key) => [
-            key,
-            parameters[key] ?? "",
-          ]),
+          Object.keys(overrides ?? {}).map((key) => [key, parameters[key] ?? ""]),
         ),
       });
 
@@ -142,16 +131,13 @@ export const ParameterGroupProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.parameterGroupName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.parameterGroupName ?? (yield* toName(id, olds ?? {}));
           const group = yield* readGroup(name);
           if (group?.ParameterGroupName === undefined) return undefined;
           const parameters = yield* readParameters(name);
@@ -174,12 +160,7 @@ export const ParameterGroupProvider = () =>
                 ParameterGroupName: name,
                 Description: props.description,
               })
-              .pipe(
-                Effect.catchTag(
-                  "ParameterGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
@@ -199,12 +180,10 @@ export const ParameterGroupProvider = () =>
           if (delta.length > 0) {
             yield* dax.updateParameterGroup({
               ParameterGroupName: name,
-              ParameterNameValues: delta.map(
-                ([ParameterName, ParameterValue]) => ({
-                  ParameterName,
-                  ParameterValue,
-                }),
-              ),
+              ParameterNameValues: delta.map(([ParameterName, ParameterValue]) => ({
+                ParameterName,
+                ParameterValue,
+              })),
             });
             for (const [key, value] of delta) {
               observedParameters[key] = value;
@@ -227,10 +206,7 @@ export const ParameterGroupProvider = () =>
               Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "InvalidParameterGroupStateFault",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
               }),
             );
         }),

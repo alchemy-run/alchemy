@@ -2,12 +2,12 @@ import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
@@ -15,16 +15,9 @@ import * as RpcProvider from "../../Local/RpcProvider.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import {
-  generateLocalId,
-  LOCAL_ENTRY_URL,
-  localRuntimeServices,
-} from "../LocalRuntime.ts";
+import { generateLocalId, LOCAL_PROVIDERS_URL, localRuntimeServices } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  deleteLocalSecret,
-  seedLocalSecret,
-} from "./LocalSecretsStoreGateway.ts";
+import { deleteLocalSecret, seedLocalSecret } from "./LocalSecretsStoreGateway.ts";
 
 export type StoreSecretProps = {
   /**
@@ -85,11 +78,8 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * The secret value is treated as redacted and is only ever sent to
  * Cloudflare at create time. Updating `scopes` or `comment` issues a
  * PATCH; changing `value` or `name` replaces the secret.
- * @resource
- * @product Secrets Store
- * @category Storage & Databases
- * @section Creating a Secret
- * @example Basic Secret
+ * ### Creating a Secret
+ * **Example:** Basic Secret
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore");
  * const apiKey = yield* Cloudflare.SecretsStore.Secret("ApiKey", {
@@ -98,8 +88,8 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Reading a secret at runtime
+ * ### Binding to a Worker
+ * **Example:** Reading a secret at runtime
  * ```typescript
  * const apiKey = yield* Cloudflare.SecretsStore.ReadSecret(ApiKey);
  * // `apiKey` is itself an Effect that resolves to the secret value:
@@ -107,6 +97,10 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * // Or call `.get()` explicitly:
  * const value = yield* apiKey.get();
  * ```
+ *
+ * @resource
+ * @product Secrets Store
+ * @category Storage & Databases
  */
 export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret");
 
@@ -159,14 +153,12 @@ export const SecretProviderLive = () =>
           );
       }
       if (!observed) {
-        observed = yield* secretsStore.listStoreSecrets
-          .items({ accountId, storeId })
-          .pipe(
-            Stream.filter((s) => s.name === name),
-            Stream.runHead,
-            Effect.catchTag("StoreNotFound", () => Effect.succeedNone),
-            Effect.map(Option.getOrUndefined),
-          );
+        observed = yield* secretsStore.listStoreSecrets.items({ accountId, storeId }).pipe(
+          Stream.filter((s) => s.name === name),
+          Stream.runHead,
+          Effect.catchTag("StoreNotFound", () => Effect.succeedNone),
+          Effect.map(Option.getOrUndefined),
+        );
       }
 
       // Ensure — create if missing. Cloudflare reports a concurrent
@@ -188,11 +180,7 @@ export const SecretProviderLive = () =>
               },
             ],
           })
-          .pipe(
-            Effect.catchTag("SecretNameAlreadyExists", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("SecretNameAlreadyExists", () => Effect.succeed(undefined)));
         if (created) {
           const secret = created.result[0]!;
           // Freshly created secrets report "pending" until Cloudflare
@@ -214,13 +202,11 @@ export const SecretProviderLive = () =>
             comment: secret.comment ?? undefined,
           };
         }
-        const existing = yield* secretsStore.listStoreSecrets
-          .items({ accountId, storeId })
-          .pipe(
-            Stream.filter((s) => s.name === name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-          );
+        const existing = yield* secretsStore.listStoreSecrets.items({ accountId, storeId }).pipe(
+          Stream.filter((s) => s.name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
         if (!existing) {
           return yield* Effect.die(
             new Error(
@@ -333,36 +319,32 @@ export const SecretProviderLive = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const stores = yield* secretsStore.listStores.pages({ accountId }).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.result ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
       );
       const rows = yield* Effect.forEach(
         stores,
         (store) =>
-          secretsStore.listStoreSecrets
-            .pages({ accountId, storeId: store.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((secret) => ({
-                    secretId: secret.id,
-                    secretName: secret.name,
-                    storeId: secret.storeId,
-                    accountId,
-                    status: asSecretStatus(secret.status),
-                    scopes: resolveScopes(secret.scopes ?? undefined),
-                    comment: secret.comment ?? undefined,
-                  })),
-                ),
-              ),
-              // A store deleted out-of-band between enumeration and
-              // listing its secrets surfaces as StoreNotFound — skip it.
-              Effect.catchTag("StoreNotFound", () =>
-                Effect.succeed([] as ReadonlyArray<Secret["Attributes"]>),
+          secretsStore.listStoreSecrets.pages({ accountId, storeId: store.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((secret) => ({
+                  secretId: secret.id,
+                  secretName: secret.name,
+                  storeId: secret.storeId,
+                  accountId,
+                  status: asSecretStatus(secret.status),
+                  scopes: resolveScopes(secret.scopes ?? undefined),
+                  comment: secret.comment ?? undefined,
+                })),
               ),
             ),
+            // A store deleted out-of-band between enumeration and
+            // listing its secrets surfaces as StoreNotFound — skip it.
+            Effect.catchTag("StoreNotFound", () =>
+              Effect.succeed([] as ReadonlyArray<Secret["Attributes"]>),
+            ),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -390,15 +372,13 @@ export const SecretProviderLive = () =>
 export const SecretProviderLocal = () =>
   RpcProvider.effect(
     Secret,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       // The local runtime services (workerd `Runtime`, binding plugins) and
       // the HTTP client are resolved once at layer build and closed over —
       // lifecycle effects run with the engine's call-time context, which
       // doesn't include them.
-      const runtimeContext = yield* Effect.context<
-        RuntimeServices | HttpClient.HttpClient
-      >();
+      const runtimeContext = yield* Effect.context<RuntimeServices | HttpClient.HttpClient>();
 
       return {
         stables: ["accountId"],
@@ -432,11 +412,9 @@ export const SecretProviderLocal = () =>
           // Seed — write the value into the local simulator so the dev
           // worker's `env.<binding>.get()` returns it. An overwrite is
           // idempotent, so re-running after a crash converges.
-          yield* seedLocalSecret(
-            storeId,
-            name,
-            Redacted.value(news.value),
-          ).pipe(Effect.provideContext(runtimeContext));
+          yield* seedLocalSecret(storeId, name, Redacted.value(news.value)).pipe(
+            Effect.provideContext(runtimeContext),
+          );
 
           return {
             secretId: output?.secretId ?? generateLocalId(),
@@ -465,11 +443,10 @@ export const StoreSecretProvider = () =>
     // The local provider's reconcile/delete boot an ephemeral workerd
     // gateway to seed the simulator, so it needs the shared local runtime
     // layer. Under `alchemy dev` the provider is an RPC stub (this gated
-    // layer is empty and unused) and the sidecar entry (`../Local.ts`)
+    // layer is empty and unused) and the provider group (`../Local.ts`)
     // supplies the real runtime; without the proxy the provider builds
     // in-process and this layer is real.
-    local: () =>
-      SecretProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+    local: () => SecretProviderLocal().pipe(Layer.provide(localRuntimeServices())),
     live: () => SecretProviderLive(),
   });
 
@@ -504,5 +481,4 @@ const waitForSecretActive = (
 const resolveScopes = (scopes: string[] | undefined): string[] =>
   scopes && scopes.length > 0 ? scopes : ["workers"];
 
-const resolveName = (id: string, name: string | undefined): string =>
-  name ?? id;
+const resolveName = (id: string, name: string | undefined): string => name ?? id;

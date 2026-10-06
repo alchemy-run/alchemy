@@ -1,11 +1,11 @@
-import * as DirectoryService from "@/AWS/DirectoryService";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DirectoryService from "@/AWS/DirectoryService";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -16,7 +16,7 @@ export class DirectoryServiceTestFunction extends Lambda.Function<Lambda.Functio
 export default DirectoryServiceTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
@@ -55,9 +55,7 @@ export default DirectoryServiceTestFunction.make(
         if (request.method === "GET" && pathname === "/directories") {
           const { DirectoryDescriptions } = yield* describeDirectories();
           return yield* HttpServerResponse.json({
-            ids: (DirectoryDescriptions ?? []).map(
-              (directory) => directory.DirectoryId,
-            ),
+            ids: (DirectoryDescriptions ?? []).map((directory) => directory.DirectoryId),
           });
         }
 

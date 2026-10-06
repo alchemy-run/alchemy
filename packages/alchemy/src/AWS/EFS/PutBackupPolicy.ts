@@ -7,10 +7,7 @@ import type { FileSystem } from "./FileSystem.ts";
  * `PutBackupPolicy` request with `FileSystemId` injected from the bound
  * {@link FileSystem}.
  */
-export interface PutBackupPolicyRequest extends Omit<
-  efs.PutBackupPolicyRequest,
-  "FileSystemId"
-> {}
+export interface PutBackupPolicyRequest extends Omit<efs.PutBackupPolicyRequest, "FileSystemId"> {}
 
 /**
  * Runtime binding for the `PutBackupPolicy` operation (IAM action
@@ -21,9 +18,8 @@ export interface PutBackupPolicyRequest extends Omit<
  * FileSystem resource's `backup` prop — this binding is for operational
  * tooling that toggles backups on demand. Provide the implementation with
  * `Effect.provide(AWS.EFS.PutBackupPolicyHttp)`.
- * @binding
- * @section Backup Policy
- * @example Enable automatic backups
+ * ### Backup Policy
+ * **Example:** Enable automatic backups
  * ```typescript
  * const putBackupPolicy = yield* AWS.EFS.PutBackupPolicy(files);
  *
@@ -31,6 +27,8 @@ export interface PutBackupPolicyRequest extends Omit<
  *   BackupPolicy: { Status: "ENABLED" },
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutBackupPolicy extends Binding.Service<
   PutBackupPolicy,
@@ -43,6 +41,4 @@ export interface PutBackupPolicy extends Binding.Service<
     ) => Effect.Effect<efs.BackupPolicyDescription, efs.PutBackupPolicyError>
   >
 > {}
-export const PutBackupPolicy = Binding.Service<PutBackupPolicy>(
-  "AWS.EFS.PutBackupPolicy",
-);
+export const PutBackupPolicy = Binding.Service<PutBackupPolicy>("AWS.EFS.PutBackupPolicy");

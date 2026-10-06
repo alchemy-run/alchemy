@@ -40,9 +40,7 @@ export interface BotAliasBinding {
  * same alias locale — Lex supports exactly one dialog/fulfillment function
  * per alias locale.
  */
-export class ConflictingCodeHook extends Data.TaggedError(
-  "ConflictingCodeHook",
-)<{
+export class ConflictingCodeHook extends Data.TaggedError("ConflictingCodeHook")<{
   readonly localeId: string;
   readonly functionArns: readonly string[];
 }> {}
@@ -109,9 +107,8 @@ export interface BotAlias extends Resource<
  * An alias of an Amazon Lex V2 bot — a stable pointer to a numbered bot
  * version that runtime conversations (e.g. `RecognizeText`) target.
  *
- * @resource
- * @section Creating an Alias
- * @example Alias on a Version
+ * ### Creating an Alias
+ * **Example:** Alias on a Version
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -121,7 +118,7 @@ export interface BotAlias extends Resource<
  * });
  * ```
  *
- * @example Unassociated Alias
+ * **Example:** Unassociated Alias
  * ```typescript
  * // point it at a version later without changing consumers
  * const alias = yield* AWS.LexV2.BotAlias("Staging", {
@@ -129,8 +126,8 @@ export interface BotAlias extends Resource<
  * });
  * ```
  *
- * @section Conversing at Runtime
- * @example RecognizeText from a Lambda
+ * ### Conversing at Runtime
+ * **Example:** RecognizeText from a Lambda
  * ```typescript
  * const recognizeText = yield* AWS.LexV2.RecognizeText(alias);
  * const reply = yield* recognizeText({
@@ -139,13 +136,12 @@ export interface BotAlias extends Resource<
  *   text: "hello",
  * });
  * ```
+ *
+ * @resource
  */
 export const BotAlias = Resource<BotAlias>("AWS.LexV2.BotAlias");
 
-const createAliasName = (
-  id: string,
-  props: { botAliasName?: string | undefined },
-) =>
+const createAliasName = (id: string, props: { botAliasName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.botAliasName) return props.botAliasName;
     return toLexName(yield* createPhysicalName({ id, maxLength: 100 }));
@@ -154,18 +150,11 @@ const createAliasName = (
 const describeAlias = Effect.fn(function* (botId: string, botAliasId: string) {
   return yield* lexm
     .describeBotAlias({ botId, botAliasId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
 /** Find an alias of the bot by exact name (used when state was lost). */
-const findAliasByName = Effect.fn(function* (
-  botId: string,
-  botAliasName: string,
-) {
+const findAliasByName = Effect.fn(function* (botId: string, botAliasName: string) {
   const pages = yield* lexm.listBotAliases.pages({ botId }).pipe(
     Stream.runCollect,
     Effect.catchTag("ResourceNotFoundException", () =>
@@ -246,9 +235,7 @@ const toLocaleSettings = (
  * comparison.
  */
 const localeSettingsProjection = (
-  settings:
-    | { [key: string]: lexm.BotAliasLocaleSettings | undefined }
-    | undefined,
+  settings: { [key: string]: lexm.BotAliasLocaleSettings | undefined } | undefined,
 ): string =>
   JSON.stringify(
     Object.entries(settings ?? {})
@@ -261,9 +248,7 @@ const localeSettingsProjection = (
       .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
   );
 
-const attributesOf = Effect.fn(function* (
-  alias: lexm.DescribeBotAliasResponse,
-) {
+const attributesOf = Effect.fn(function* (alias: lexm.DescribeBotAliasResponse) {
   const botAliasArn = yield* aliasArnOf(alias.botId!, alias.botAliasId!);
   return {
     botAliasId: alias.botAliasId!,
@@ -293,15 +278,10 @@ export const BotAliasProvider = () =>
           const observed =
             output?.botAliasId !== undefined
               ? yield* describeAlias(botId, output.botAliasId)
-              : yield* findAliasByName(
-                  botId,
-                  yield* createAliasName(id, olds ?? {}),
-                );
+              : yield* findAliasByName(botId, yield* createAliasName(id, olds ?? {}));
           if (observed === undefined) return undefined;
           const attrs = yield* attributesOf(observed);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -311,13 +291,7 @@ export const BotAliasProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          bindings,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, bindings }) {
           const botAliasName = yield* createAliasName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -345,17 +319,12 @@ export const BotAliasProvider = () =>
                 tags: desiredTags,
               }),
             );
-            observed = yield* waitForAliasSettled(
-              news.botId,
-              created.botAliasId!,
-            );
+            observed = yield* waitForAliasSettled(news.botId, created.botAliasId!);
           } else if (
             // 3. SYNC — apply the delta when a declared prop drifted.
             observed.botAliasName !== botAliasName ||
-            (observed.botVersion ?? undefined) !==
-              (news.botVersion ?? undefined) ||
-            (observed.description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (observed.botVersion ?? undefined) !== (news.botVersion ?? undefined) ||
+            (observed.description ?? undefined) !== (news.description ?? undefined) ||
             localeSettingsProjection(observed.botAliasLocaleSettings) !==
               localeSettingsProjection(desiredLocaleSettings)
           ) {
@@ -369,17 +338,11 @@ export const BotAliasProvider = () =>
                 description: news.description,
               }),
             );
-            observed = yield* waitForAliasSettled(
-              news.botId,
-              observed.botAliasId!,
-            );
+            observed = yield* waitForAliasSettled(news.botId, observed.botAliasId!);
           }
 
           // 3b. SYNC TAGS — diff against observed cloud tags.
-          const botAliasArn = yield* aliasArnOf(
-            news.botId,
-            observed.botAliasId!,
-          );
+          const botAliasArn = yield* aliasArnOf(news.botId, observed.botAliasId!);
           const observedTags = yield* readLexTags(botAliasArn);
           yield* syncLexTags(botAliasArn, observedTags, desiredTags);
 
@@ -396,9 +359,7 @@ export const BotAliasProvider = () =>
               botAliasId: output.botAliasId,
               skipResourceInUseCheck: true,
             }),
-          ).pipe(
-            Effect.catchTag("PreconditionFailedException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("PreconditionFailedException", () => Effect.void));
         }),
       };
     }),

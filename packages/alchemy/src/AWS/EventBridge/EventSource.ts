@@ -7,29 +7,14 @@ import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import type { EventBus } from "./EventBus.ts";
 import type { RuleProps } from "./Rule.ts";
-import {
-  toEcsTask as createEcsTaskRoute,
-  type EcsRouteTargetProps,
-} from "./ToEcsTask.ts";
-import {
-  toLambda as createLambdaRoute,
-  type LambdaRouteTargetProps,
-} from "./ToLambda.ts";
-import {
-  toQueue as createQueueRoute,
-  type QueueRouteTargetProps,
-} from "./ToQueue.ts";
+import { toEcsTask as createEcsTaskRoute, type EcsRouteTargetProps } from "./ToEcsTask.ts";
+import { toLambda as createLambdaRoute, type LambdaRouteTargetProps } from "./ToLambda.ts";
+import { toQueue as createQueueRoute, type QueueRouteTargetProps } from "./ToQueue.ts";
 
 export type EventPattern = Record<string, any>;
-export type EventRecord<Detail = unknown> = lambda.EventBridgeEvent<
-  string,
-  Detail
->;
+export type EventRecord<Detail = unknown> = lambda.EventBridgeEvent<string, Detail>;
 
-export interface EventRouteProps extends Pick<
-  RuleProps,
-  "description" | "state"
-> {}
+export interface EventRouteProps extends Pick<RuleProps, "description" | "state"> {}
 
 export interface SubscribeProps extends EventRouteProps {}
 
@@ -52,9 +37,8 @@ interface EventDescriptor {
  * Use it through the {@link consumeBusEvents} helper; the host-specific
  * implementation layer (e.g. `AWS.Lambda.EventSource`) creates the rule,
  * grants EventBridge invoke permission, and dispatches events at runtime.
- * @binding
- * @section Consuming Events
- * @example Consume Matching Events on a Lambda Function
+ * ### Consuming Events
+ * **Example:** Consume Matching Events on a Lambda Function
  * ```typescript
  * // init — subscribe to matching events (provide AWS.Lambda.EventSource on the Function)
  * yield* AWS.EventBridge.consumeBusEvents(
@@ -68,21 +52,17 @@ interface EventDescriptor {
  *     ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface EventSource extends Binding.Service<
   EventSource,
   "AWS.EventBridge.EventSource",
   EventSourceService
 > {}
-export const EventSource = Binding.Service<EventSource>(
-  "AWS.EventBridge.EventSource",
-);
+export const EventSource = Binding.Service<EventSource>("AWS.EventBridge.EventSource");
 
-export type EventSourceService = <
-  Detail = unknown,
-  StreamReq = never,
-  Req = never,
->(
+export type EventSourceService = <Detail = unknown, StreamReq = never, Req = never>(
   descriptor: EventDescriptor,
   process: (
     events: Stream.Stream<EventRecord<Detail>, never, StreamReq>,
@@ -144,13 +124,8 @@ export const consumeBusEvents = (...args: any[]) => {
   return EventSource.use((source) => source(descriptor, process));
 };
 
-export const matchesEventPattern = (
-  pattern: EventPattern,
-  event: Record<string, any>,
-): boolean =>
-  Object.entries(pattern).every(([key, expected]) =>
-    matchValue(expected, event[key]),
-  );
+export const matchesEventPattern = (pattern: EventPattern, event: Record<string, any>): boolean =>
+  Object.entries(pattern).every(([key, expected]) => matchValue(expected, event[key]));
 
 const matchValue = (expected: any, actual: any): boolean => {
   if (Array.isArray(expected)) {
@@ -162,9 +137,7 @@ const matchValue = (expected: any, actual: any): boolean => {
       return false;
     }
 
-    return Object.entries(expected).every(([key, value]) =>
-      matchValue(value, actual[key]),
-    );
+    return Object.entries(expected).every(([key, value]) => matchValue(value, actual[key]));
   }
 
   return actual === expected;

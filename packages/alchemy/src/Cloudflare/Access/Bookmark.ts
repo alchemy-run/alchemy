@@ -1,11 +1,9 @@
-import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as crypto from "node:crypto";
-
+import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -64,23 +62,20 @@ export type Bookmark = Resource<
 /**
  * A Cloudflare Zero Trust Access bookmark application — an unprotected link
  * shown in the App Launcher.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
  * @deprecated **Legacy resource.** Cloudflare has deprecated the dedicated
  * bookmarks API in favor of Access applications with `type: "bookmark"` —
  * prefer {@link Application} for new configurations. This resource is
  * provided for managing pre-existing bookmark records.
  *
- * @section Creating a Bookmark
- * @example Basic bookmark
+ * ### Creating a Bookmark
+ * **Example:** Basic bookmark
  * ```typescript
  * const bookmark = yield* Cloudflare.Access.Bookmark("Wiki", {
  *   domain: "wiki.example.com",
  * });
  * ```
  *
- * @example Bookmark with a logo, hidden from the App Launcher
+ * **Example:** Bookmark with a logo, hidden from the App Launcher
  * ```typescript
  * const bookmark = yield* Cloudflare.Access.Bookmark("Wiki", {
  *   name: "internal-wiki",
@@ -90,20 +85,23 @@ export type Bookmark = Resource<
  * });
  * ```
  *
- * @section Preferred Alternative
- * @example Bookmark-type Access application (non-legacy)
+ * ### Preferred Alternative
+ * **Example:** Bookmark-type Access application (non-legacy)
  * ```typescript
  * const app = yield* Cloudflare.Access.Application("Wiki", {
  *   type: "bookmark",
  *   domain: "wiki.example.com",
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const Bookmark = Resource<Bookmark>("Cloudflare.Access.Bookmark");
 
 export const isBookmark = (value: unknown): value is Bookmark =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Bookmark";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Bookmark";
 
 export const BookmarkProvider = () =>
   Provider.succeed(Bookmark, {
@@ -168,9 +166,7 @@ export const BookmarkProvider = () =>
             ),
           );
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Bookmark: created bookmark missing id"),
-          );
+          return yield* Effect.fail(new Error("Bookmark: created bookmark missing id"));
         }
         return toAttrs(created, acct);
       }
@@ -216,9 +212,7 @@ export const BookmarkProvider = () =>
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
-              .filter((b): b is ObservedBookmark & { id: string } =>
-                Predicate.isNotNullish(b.id),
-              )
+              .filter((b): b is ObservedBookmark & { id: string } => Predicate.isNotNullish(b.id))
               .map((b) => toAttrs(b, accountId)),
           ),
         ),
@@ -235,11 +229,7 @@ const createBookmarkName = (id: string, name: string | undefined) =>
 const getBookmark = (acct: string, bookmarkId: string) =>
   zeroTrust
     .getAccessBookmark({ accountId: acct, bookmarkId })
-    .pipe(
-      Effect.catchTag("AccessBookmarkNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.succeed(undefined)));
 
 const findBookmarkByName = (acct: string, name: string) =>
   zeroTrust.listAccessBookmarks.items({ accountId: acct }).pipe(

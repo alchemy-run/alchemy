@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `UpdateUser` request with `applicationId` injected from the bound application.
  */
-export interface UpdateUserRequest extends Omit<
-  qbusiness.UpdateUserRequest,
-  "applicationId"
-> {}
+export interface UpdateUserRequest extends Omit<qbusiness.UpdateUserRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `UpdateUser` operation (IAM action
@@ -19,9 +16,8 @@ export interface UpdateUserRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.UpdateUserHttp)`.
  *
- * @binding
- * @section User Management
- * @example Update a User's Aliases
+ * ### User Management
+ * **Example:** Update a User's Aliases
  * ```typescript
  * const updateUser = yield* AWS.QBusiness.UpdateUser(app);
  *
@@ -30,6 +26,8 @@ export interface UpdateUserRequest extends Omit<
  *   userAliasesToUpdate: [{ userId: "corp\\user" }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateUser extends Binding.Service<
   UpdateUser,
@@ -42,6 +40,4 @@ export interface UpdateUser extends Binding.Service<
     ) => Effect.Effect<qbusiness.UpdateUserResponse, qbusiness.UpdateUserError>
   >
 > {}
-export const UpdateUser = Binding.Service<UpdateUser>(
-  "AWS.QBusiness.UpdateUser",
-);
+export const UpdateUser = Binding.Service<UpdateUser>("AWS.QBusiness.UpdateUser");

@@ -8,15 +8,16 @@ import * as Binding from "../../Binding.ts";
  * Deletes a sent data grant, revoking the receiver's entitlement.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.DeleteDataGrantHttp)`.
- * @binding
- * @section Data Grants
- * @example Revoke A Sent Grant
+ * ### Data Grants
+ * **Example:** Revoke A Sent Grant
  * ```typescript
  * const deleteDataGrant = yield* AWS.DataExchange.DeleteDataGrant();
  *
  * // runtime
  * yield* deleteDataGrant({ DataGrantId: grantId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteDataGrant extends Binding.Service<
   DeleteDataGrant,
@@ -24,12 +25,7 @@ export interface DeleteDataGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.DeleteDataGrantRequest,
-    ) => Effect.Effect<
-      dataexchange.DeleteDataGrantResponse,
-      dataexchange.DeleteDataGrantError
-    >
+    ) => Effect.Effect<dataexchange.DeleteDataGrantResponse, dataexchange.DeleteDataGrantError>
   >
 > {}
-export const DeleteDataGrant = Binding.Service<DeleteDataGrant>(
-  "AWS.DataExchange.DeleteDataGrant",
-);
+export const DeleteDataGrant = Binding.Service<DeleteDataGrant>("AWS.DataExchange.DeleteDataGrant");

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface SearchTypesRequest extends Omit<
-  datazone.SearchTypesInput,
-  "domainIdentifier"
-> {}
+export interface SearchTypesRequest extends Omit<datazone.SearchTypesInput, "domainIdentifier"> {}
 
 /**
  * Runtime binding for `datazone:SearchTypes`.
@@ -14,9 +11,8 @@ export interface SearchTypesRequest extends Omit<
  * Searches asset types and form types registered in the bound domain. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.SearchTypesHttp)`.
- * @binding
- * @section Searching the Catalog
- * @example List Managed Asset Types
+ * ### Searching the Catalog
+ * **Example:** List Managed Asset Types
  * ```typescript
  * // init — bind the operation to the domain
  * const searchTypes = yield* AWS.DataZone.SearchTypes(domain);
@@ -24,6 +20,8 @@ export interface SearchTypesRequest extends Omit<
  * // runtime
  * const result = yield* searchTypes({ searchScope: "ASSET_TYPE", managed: true });
  * ```
+ *
+ * @binding
  */
 export interface SearchTypes extends Binding.Service<
   SearchTypes,
@@ -36,6 +34,4 @@ export interface SearchTypes extends Binding.Service<
     ) => Effect.Effect<datazone.SearchTypesOutput, datazone.SearchTypesError>
   >
 > {}
-export const SearchTypes = Binding.Service<SearchTypes>(
-  "AWS.DataZone.SearchTypes",
-);
+export const SearchTypes = Binding.Service<SearchTypes>("AWS.DataZone.SearchTypes");

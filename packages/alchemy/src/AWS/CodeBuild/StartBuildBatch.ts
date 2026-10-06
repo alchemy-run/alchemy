@@ -7,14 +7,15 @@ import type { Project } from "./Project.ts";
  * Runtime binding for `codebuild:StartBuildBatch` — kicks off a batch
  * (fan-out) build of the bound project. The project must have a build batch
  * configuration and the buildspec a `batch:` section.
- * @binding
- * @section Batch Builds
- * @example Start a Batch Build
+ * ### Batch Builds
+ * **Example:** Start a Batch Build
  * ```typescript
  * const startBuildBatch = yield* AWS.CodeBuild.StartBuildBatch(project);
  *
  * const { buildBatch } = yield* startBuildBatch();
  * ```
+ *
+ * @binding
  */
 export interface StartBuildBatch extends Binding.Service<
   StartBuildBatch,
@@ -27,6 +28,4 @@ export interface StartBuildBatch extends Binding.Service<
     ) => Effect.Effect<SVC.StartBuildBatchOutput, SVC.StartBuildBatchError>
   >
 > {}
-export const StartBuildBatch = Binding.Service<StartBuildBatch>(
-  "AWS.CodeBuild.StartBuildBatch",
-);
+export const StartBuildBatch = Binding.Service<StartBuildBatch>("AWS.CodeBuild.StartBuildBatch");

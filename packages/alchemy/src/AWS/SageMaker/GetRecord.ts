@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { FeatureGroup } from "./FeatureGroup.ts";
 
-export interface GetRecordRequest extends Omit<
-  featurestore.GetRecordRequest,
-  "FeatureGroupName"
-> {}
+export interface GetRecordRequest extends Omit<featurestore.GetRecordRequest, "FeatureGroupName"> {}
 
 /**
  * Runtime binding for `sagemaker:GetRecord` — read the latest record for an
@@ -15,9 +12,8 @@ export interface GetRecordRequest extends Omit<
  * Bind this operation to a `FeatureGroup` inside a function runtime to get a
  * callable that automatically injects the feature group name. If no record
  * exists for the identifier, the response's `Record` is empty.
- * @binding
- * @section Reading Records
- * @example Get a Record
+ * ### Reading Records
+ * **Example:** Get a Record
  * ```typescript
  * // init
  * const getRecord = yield* AWS.SageMaker.GetRecord(featureGroup);
@@ -27,6 +23,8 @@ export interface GetRecordRequest extends Omit<
  *   RecordIdentifierValueAsString: "user-123",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetRecord extends Binding.Service<
   GetRecord,
@@ -36,10 +34,7 @@ export interface GetRecord extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetRecordRequest,
-    ) => Effect.Effect<
-      featurestore.GetRecordResponse,
-      featurestore.GetRecordError
-    >
+    ) => Effect.Effect<featurestore.GetRecordResponse, featurestore.GetRecordError>
   >
 > {}
 export const GetRecord = Binding.Service<GetRecord>("AWS.SageMaker.GetRecord");

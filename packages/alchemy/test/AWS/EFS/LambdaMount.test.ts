@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as efs from "@distilled.cloud/aws/efs";
 import { describe, expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 // Flagship EFS e2e: a VPC-attached Lambda mounts an EFS access point at
@@ -56,9 +56,7 @@ const resolveNetwork = Effect.gen(function* () {
 const infra = (marker: string) =>
   Effect.gen(function* () {
     yield* resolveNetwork;
-    const files = yield* AWS.EFS.FileSystem("MountFiles", {
-      throughputMode: "elastic",
-    });
+    const files = yield* AWS.EFS.FileSystem("MountFiles", { throughputMode: "elastic" });
     const target = yield* AWS.EFS.MountTarget("MountTarget", {
       fileSystemId: files.fileSystemId,
       subnetId,
@@ -75,7 +73,7 @@ const infra = (marker: string) =>
       main: handlerPath,
       handler: "handler",
       isExternal: true,
-      url: true,
+      functionUrl: true,
       memorySize: 256,
       timeout: Duration.seconds(30),
       vpc: { subnetIds: [subnetId], securityGroupIds: [securityGroupId] },
@@ -104,18 +102,11 @@ const getJsonWithRetry = (url: string, times: number) =>
         ? response.json
         : response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new Error(`${url} returned ${response.status}: ${body}`),
-              ),
+              Effect.fail(new Error(`${url} returned ${response.status}: ${body}`)),
             ),
           ),
     ),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(times),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(times)]) }),
   );
 
 // Gated behind AWS_TEST_SLOW: the suite's wall clock is ~6–8 minutes end to
@@ -124,9 +115,12 @@ const getJsonWithRetry = (url: string, times: number) =>
 // afterAll teardown waits out the mount-target/ENI release (~2–4 min). That
 // is genuinely slow platform provisioning, not a failure mode; the suite was
 // verified green in wave 1C (commit e77b9fd83). Run with AWS_TEST_SLOW=1.
-describe
-  .skipIf(!process.env.AWS_TEST_SLOW)
-  .sequential("EFS Lambda mount", () => {
+describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
+  "EFS Lambda mount",
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:efs", "provider:aws:lambda", "live"],
+  },
+  () => {
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
@@ -195,4 +189,5 @@ describe
         }),
       { timeout: 180_000 },
     );
-  });
+  },
+);

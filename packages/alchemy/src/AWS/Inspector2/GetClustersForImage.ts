@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.GetClustersForImageHttp)`.
- * @binding
- * @section Coverage & Vulnerability Intel
- * @example Find Clusters Running an Image
+ * ### Coverage & Vulnerability Intel
+ * **Example:** Find Clusters Running an Image
  * ```typescript
  * // init
  * const getClustersForImage = yield* AWS.Inspector2.GetClustersForImage();
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   filter: { resourceId: imageResourceId },
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetClustersForImage extends Binding.Service<
   GetClustersForImage,
@@ -28,10 +29,7 @@ export interface GetClustersForImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetClustersForImageRequest,
-    ) => Effect.Effect<
-      inspector2.GetClustersForImageResponse,
-      inspector2.GetClustersForImageError
-    >
+    ) => Effect.Effect<inspector2.GetClustersForImageResponse, inspector2.GetClustersForImageError>
   >
 > {}
 export const GetClustersForImage = Binding.Service<GetClustersForImage>(

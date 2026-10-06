@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * feed. Account-level: the deploy-time grant is `medialive:ListInputs`
  * on `*`. Provide the implementation with
  * `Effect.provide(AWS.MediaLive.ListInputsHttp)`.
- * @binding
- * @section Observing Inputs
- * @example Enumerate the Account's Inputs
+ * ### Observing Inputs
+ * **Example:** Enumerate the Account's Inputs
  * ```typescript
  * // init — bind the account-level operation
  * const listInputs = yield* AWS.MediaLive.ListInputs();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * const { Inputs } = yield* listInputs({ MaxResults: 20 });
  * const attached = (Inputs ?? []).filter((i) => i.State === "ATTACHED");
  * ```
+ *
+ * @binding
  */
 export interface ListInputs extends Binding.Service<
   ListInputs,
@@ -32,6 +33,4 @@ export interface ListInputs extends Binding.Service<
     ) => Effect.Effect<medialive.ListInputsResponse, medialive.ListInputsError>
   >
 > {}
-export const ListInputs = Binding.Service<ListInputs>(
-  "AWS.MediaLive.ListInputs",
-);
+export const ListInputs = Binding.Service<ListInputs>("AWS.MediaLive.ListInputs");

@@ -1,7 +1,6 @@
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -95,11 +94,8 @@ export type MagicStaticRoute = Resource<
  * identity is the `(prefix, nexthop, priority)` triple — when state is
  * lost, `read` scans for a matching route and reports it as `Unowned` so
  * takeover is gated behind `--adopt`.
- * @resource
- * @product Magic Transit
- * @category Network
- * @section Creating a static route
- * @example Route a prefix over a GRE tunnel
+ * ### Creating a static route
+ * **Example:** Route a prefix over a GRE tunnel
  * ```typescript
  * const tunnel = yield* Cloudflare.MagicTransit.GreTunnel("office", {
  *   name: "office-gre-1",
@@ -115,7 +111,7 @@ export type MagicStaticRoute = Resource<
  * });
  * ```
  *
- * @example ECMP route scoped to a region
+ * **Example:** ECMP route scoped to a region
  * ```typescript
  * yield* Cloudflare.MagicTransit.MagicStaticRoute("ecmp-route", {
  *   prefix: "10.100.0.0/24",
@@ -127,6 +123,10 @@ export type MagicStaticRoute = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/magic-transit/how-to/configure-static-routes/
+ *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  */
 export const MagicStaticRoute = Resource<MagicStaticRoute>(TypeId);
 
@@ -156,9 +156,7 @@ export const MagicStaticRouteProvider = () =>
       const prefix = output?.prefix ?? olds?.prefix;
       const nexthop =
         output?.nexthop ??
-        (olds?.nexthop !== undefined && isResolved(olds.nexthop)
-          ? olds.nexthop
-          : undefined);
+        (olds?.nexthop !== undefined && isResolved(olds.nexthop) ? olds.nexthop : undefined);
       if (prefix && nexthop) {
         const priority = output?.priority ?? olds?.priority ?? DEFAULT_PRIORITY;
         const observed = yield* findRoute(acct, prefix, nexthop, priority);
@@ -175,9 +173,7 @@ export const MagicStaticRouteProvider = () =>
 
       // Observe — the id on `output` is a hint; fall back to scanning for
       // the identity triple when it is gone.
-      let observed = output?.routeId
-        ? yield* getRoute(accountId, output.routeId)
-        : undefined;
+      let observed = output?.routeId ? yield* getRoute(accountId, output.routeId) : undefined;
       if (!observed) {
         observed = yield* findRoute(accountId, news.prefix, nexthop, priority);
       }
@@ -204,8 +200,7 @@ export const MagicStaticRouteProvider = () =>
         observed.priority !== priority ||
         (news.description !== undefined &&
           (observed.description ?? undefined) !== news.description) ||
-        (news.weight !== undefined &&
-          (observed.weight ?? undefined) !== news.weight) ||
+        (news.weight !== undefined && (observed.weight ?? undefined) !== news.weight) ||
         scopeDirty(observed.scope, news.scope);
       if (dirty) {
         const updated = yield* magicTransit.updateRoute({
@@ -218,10 +213,7 @@ export const MagicStaticRouteProvider = () =>
           weight: news.weight,
           scope: news.scope,
         });
-        observed =
-          updated.modifiedRoute ??
-          (yield* getRoute(accountId, observed.id)) ??
-          observed;
+        observed = updated.modifiedRoute ?? (yield* getRoute(accountId, observed.id)) ?? observed;
       }
 
       return toAttributes(observed, accountId);
@@ -242,9 +234,7 @@ export const MagicStaticRouteProvider = () =>
       // route shape, so each item maps directly to the `read` Attributes.
       return yield* magicTransit.listRoutes({ accountId }).pipe(
         Effect.map((response) =>
-          (response.routes ?? []).map((route) =>
-            toAttributes(route, accountId),
-          ),
+          (response.routes ?? []).map((route) => toAttributes(route, accountId)),
         ),
         // Accounts without a Magic Transit / Magic WAN subscription can't
         // enumerate routes — treat as empty rather than failing the list.
@@ -281,29 +271,19 @@ const getRoute = (accountId: string, routeId: string) =>
 /**
  * Find a route by its (prefix, nexthop, priority) identity triple.
  */
-const findRoute = (
-  accountId: string,
-  prefix: string,
-  nexthop: string,
-  priority: number,
-) =>
+const findRoute = (accountId: string, prefix: string, nexthop: string, priority: number) =>
   magicTransit
     .listRoutes({ accountId })
     .pipe(
       Effect.map((r): ObservedRoute | undefined =>
         (r.routes ?? []).find(
           (route) =>
-            route.prefix === prefix &&
-            route.nexthop === nexthop &&
-            route.priority === priority,
+            route.prefix === prefix && route.nexthop === nexthop && route.priority === priority,
         ),
       ),
     );
 
-const sameList = (
-  a: string[] | null | undefined,
-  b: string[] | undefined,
-): boolean =>
+const sameList = (a: string[] | null | undefined, b: string[] | undefined): boolean =>
   [...(a ?? [])].sort().join(",") === [...(b ?? [])].sort().join(",");
 
 const scopeDirty = (
@@ -317,10 +297,7 @@ const scopeDirty = (
   );
 };
 
-const toAttributes = (
-  route: ObservedRoute,
-  accountId: string,
-): MagicStaticRouteAttributes => ({
+const toAttributes = (route: ObservedRoute, accountId: string): MagicStaticRouteAttributes => ({
   routeId: route.id,
   accountId,
   prefix: route.prefix,

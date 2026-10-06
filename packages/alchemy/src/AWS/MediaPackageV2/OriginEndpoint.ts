@@ -145,9 +145,8 @@ export interface OriginEndpoint extends Resource<
  * low-latency HLS, DASH, and/or MSS manifests and serves them to downstream
  * devices (players or CDNs) on the channel group's egress domain.
  *
- * @resource
- * @section Creating an Origin Endpoint
- * @example HLS Endpoint on a Channel
+ * ### Creating an Origin Endpoint
+ * **Example:** HLS Endpoint on a Channel
  * ```typescript
  * import * as MediaPackageV2 from "alchemy/AWS/MediaPackageV2";
  *
@@ -163,7 +162,7 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @example CMAF Endpoint with DASH and Low-Latency HLS
+ * **Example:** CMAF Endpoint with DASH and Low-Latency HLS
  * ```typescript
  * const endpoint = yield* MediaPackageV2.OriginEndpoint("Playback", {
  *   channelGroupName: group.channelGroupName,
@@ -175,8 +174,8 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @section Startover Window
- * @example Allow viewers to catch up on the last hour
+ * ### Startover Window
+ * **Example:** Allow viewers to catch up on the last hour
  * ```typescript
  * const endpoint = yield* MediaPackageV2.OriginEndpoint("Playback", {
  *   channelGroupName: group.channelGroupName,
@@ -187,8 +186,8 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @section Resource Policy
- * @example Restrict playback to a CDN principal
+ * ### Resource Policy
+ * **Example:** Restrict playback to a CDN principal
  * ```typescript
  * const endpoint = yield* MediaPackageV2.OriginEndpoint("Playback", {
  *   channelGroupName: group.channelGroupName,
@@ -207,28 +206,22 @@ export interface OriginEndpoint extends Resource<
  * });
  * ```
  *
- * @section Playback URLs
- * @example Read the served manifest URLs
+ * ### Playback URLs
+ * **Example:** Read the served manifest URLs
  * ```typescript
  * const playbackUrl = endpoint.hlsManifests.map((m) => m.url);
  * ```
+ *
+ * @resource
  */
-export const OriginEndpoint = Resource<OriginEndpoint>(
-  "AWS.MediaPackageV2.OriginEndpoint",
-);
+export const OriginEndpoint = Resource<OriginEndpoint>("AWS.MediaPackageV2.OriginEndpoint");
 
 export const OriginEndpointProvider = () =>
   Provider.effect(
     OriginEndpoint,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { originEndpointName?: string },
-      ) {
-        return (
-          props.originEndpointName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { originEndpointName?: string }) {
+        return props.originEndpointName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const manifestRefs = (
@@ -273,11 +266,7 @@ export const OriginEndpointProvider = () =>
             ChannelName: channelName,
             OriginEndpointName: originEndpointName,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -308,24 +297,16 @@ export const OriginEndpointProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const channelGroupName =
-            output?.channelGroupName ?? olds?.channelGroupName;
+          const channelGroupName = output?.channelGroupName ?? olds?.channelGroupName;
           const channelName = output?.channelName ?? olds?.channelName;
           if (channelGroupName === undefined || channelName === undefined) {
             return undefined;
           }
-          const name =
-            output?.originEndpointName ?? (yield* createName(id, olds ?? {}));
-          const endpoint = yield* getEndpoint(
-            channelGroupName,
-            channelName,
-            name,
-          );
+          const name = output?.originEndpointName ?? (yield* createName(id, olds ?? {}));
+          const endpoint = yield* getEndpoint(channelGroupName, channelName, name);
           if (endpoint === undefined) return undefined;
           const attrs = toAttrs(endpoint);
-          return (yield* hasAlchemyTags(id, toMpTagRecord(endpoint.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toMpTagRecord(endpoint.Tags))) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -335,15 +316,10 @@ export const OriginEndpointProvider = () =>
           const channelName = news.channelName;
           // The wire field is whole seconds.
           const startoverWindowSeconds = toWireSeconds(news.startoverWindow);
-          const name =
-            output?.originEndpointName ?? (yield* createName(id, news));
+          const name = output?.originEndpointName ?? (yield* createName(id, news));
 
           // 1. Observe — cloud state is authoritative; output is an id cache.
-          let endpoint = yield* getEndpoint(
-            channelGroupName,
-            channelName,
-            name,
-          );
+          let endpoint = yield* getEndpoint(channelGroupName, channelName, name);
 
           // 2. Ensure — create if missing; a Conflict means a peer created it
           //    concurrently, so fall through to observing the winner.
@@ -361,8 +337,7 @@ export const OriginEndpointProvider = () =>
                 LowLatencyHlsManifests: news.lowLatencyHlsManifests,
                 DashManifests: news.dashManifests,
                 MssManifests: news.mssManifests,
-                ForceEndpointErrorConfiguration:
-                  news.forceEndpointErrorConfiguration,
+                ForceEndpointErrorConfiguration: news.forceEndpointErrorConfiguration,
                 UriSeparator: news.uriSeparator,
                 Tags: desiredTags,
               })
@@ -389,8 +364,7 @@ export const OriginEndpointProvider = () =>
               LowLatencyHlsManifests: news.lowLatencyHlsManifests ?? [],
               DashManifests: news.dashManifests ?? [],
               MssManifests: news.mssManifests ?? [],
-              ForceEndpointErrorConfiguration:
-                news.forceEndpointErrorConfiguration,
+              ForceEndpointErrorConfiguration: news.forceEndpointErrorConfiguration,
               UriSeparator: news.uriSeparator,
             };
             const observed = {
@@ -401,8 +375,7 @@ export const OriginEndpointProvider = () =>
               LowLatencyHlsManifests: endpoint.LowLatencyHlsManifests ?? [],
               DashManifests: endpoint.DashManifests ?? [],
               MssManifests: endpoint.MssManifests ?? [],
-              ForceEndpointErrorConfiguration:
-                endpoint.ForceEndpointErrorConfiguration,
+              ForceEndpointErrorConfiguration: endpoint.ForceEndpointErrorConfiguration,
               UriSeparator: endpoint.UriSeparator,
             };
             if (!matchesDesired(desired, observed)) {
@@ -418,19 +391,14 @@ export const OriginEndpointProvider = () =>
                 LowLatencyHlsManifests: news.lowLatencyHlsManifests,
                 DashManifests: news.dashManifests,
                 MssManifests: news.mssManifests,
-                ForceEndpointErrorConfiguration:
-                  news.forceEndpointErrorConfiguration,
+                ForceEndpointErrorConfiguration: news.forceEndpointErrorConfiguration,
                 UriSeparator: news.uriSeparator,
               });
             }
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
-          yield* syncMpTags(
-            endpoint.Arn,
-            toMpTagRecord(endpoint.Tags),
-            desiredTags,
-          );
+          yield* syncMpTags(endpoint.Arn, toMpTagRecord(endpoint.Tags), desiredTags);
 
           // 3c. Sync the resource policy — observe the live policy (absent
           //     policy is the typed not-found) and apply only the delta.
@@ -448,9 +416,7 @@ export const OriginEndpointProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () =>
                 Effect.succeed({
                   policy: undefined as string | undefined,
-                  cdnAuth: undefined as
-                    | mediapackagev2.CdnAuthConfiguration
-                    | undefined,
+                  cdnAuth: undefined as mediapackagev2.CdnAuthConfiguration | undefined,
                 }),
               ),
             );
@@ -458,14 +424,8 @@ export const OriginEndpointProvider = () =>
             const cdnDrift =
               news.cdnAuthConfiguration === undefined
                 ? observedPolicy.cdnAuth !== undefined
-                : !matchesDesired(
-                    news.cdnAuthConfiguration,
-                    observedPolicy.cdnAuth,
-                  );
-            if (
-              !policiesEqual(observedPolicy.policy, news.policy) ||
-              cdnDrift
-            ) {
+                : !matchesDesired(news.cdnAuthConfiguration, observedPolicy.cdnAuth);
+            if (!policiesEqual(observedPolicy.policy, news.policy) || cdnDrift) {
               yield* mediapackagev2.putOriginEndpointPolicy({
                 ChannelGroupName: channelGroupName,
                 ChannelName: channelName,
@@ -511,11 +471,7 @@ export const OriginEndpointProvider = () =>
             ).pipe(Effect.map((nested) => nested.flat()));
             const items = yield* Effect.forEach(
               channels,
-              (channel) =>
-                listChannelEndpoints(
-                  channel.ChannelGroupName,
-                  channel.ChannelName,
-                ),
+              (channel) => listChannelEndpoints(channel.ChannelGroupName, channel.ChannelName),
               { concurrency: 5 },
             ).pipe(Effect.map((nested) => nested.flat()));
             // Hydrate each item via get so the attributes carry the manifest
@@ -523,11 +479,7 @@ export const OriginEndpointProvider = () =>
             const endpoints = yield* Effect.forEach(
               items,
               (item) =>
-                getEndpoint(
-                  item.ChannelGroupName,
-                  item.ChannelName,
-                  item.OriginEndpointName,
-                ).pipe(
+                getEndpoint(item.ChannelGroupName, item.ChannelName, item.OriginEndpointName).pipe(
                   Effect.map((endpoint) =>
                     endpoint === undefined ? undefined : toAttrs(endpoint),
                   ),

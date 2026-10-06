@@ -66,16 +66,15 @@ export interface Topic extends Resource<
  * available through the `attributes` prop so the full core pub/sub surface can
  * be configured without waiting on additional typed wrappers. A topic name is
  * auto-generated unless you provide one explicitly.
- * @resource
- * @section Creating Topics
- * @example Standard Topic
+ * ### Creating Topics
+ * **Example:** Standard Topic
  * ```typescript
  * import * as SNS from "alchemy/AWS/SNS";
  *
  * const topic = yield* SNS.Topic("OrdersTopic");
  * ```
  *
- * @example Topic with Display Name
+ * **Example:** Topic with Display Name
  * ```typescript
  * const topic = yield* SNS.Topic("NotificationsTopic", {
  *   attributes: {
@@ -84,7 +83,7 @@ export interface Topic extends Resource<
  * });
  * ```
  *
- * @example FIFO Topic
+ * **Example:** FIFO Topic
  * ```typescript
  * const topic = yield* SNS.Topic("OrdersFifoTopic", {
  *   fifo: true,
@@ -94,11 +93,11 @@ export interface Topic extends Resource<
  * });
  * ```
  *
- * @section Runtime Publishing
+ * ### Runtime Publishing
  * Bind publish operations in the init phase and use them in runtime
  * handlers.
  *
- * @example Publish from a handler
+ * **Example:** Publish from a handler
  * ```typescript
  * // init
  * const publish = yield* SNS.Publish(topic);
@@ -115,12 +114,12 @@ export interface Topic extends Resource<
  * };
  * ```
  *
- * @section Subscriptions
+ * ### Subscriptions
  * Subscribe a Lambda function to process messages published to the
  * topic. The subscription and invoke permissions are created
  * automatically.
  *
- * @example Process topic notifications
+ * **Example:** Process topic notifications
  * ```typescript
  * // init
  * yield* SNS.consumeTopicNotifications(topic, (stream) =>
@@ -131,6 +130,8 @@ export interface Topic extends Resource<
  *   ),
  * );
  * ```
+ *
+ * @resource
  */
 export const Topic = Resource<Topic>("AWS.SNS.Topic");
 
@@ -165,13 +166,10 @@ export const TopicProvider = () =>
         { concurrency: 10 },
       );
 
-      return rows.filter(
-        (row): row is NonNullable<typeof row> => row !== undefined,
-      );
+      return rows.filter((row): row is NonNullable<typeof row> => row !== undefined);
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
-      const topicName =
-        output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
+      const topicName = output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
 
       const state = yield* readTopic({
         id,
@@ -195,14 +193,11 @@ export const TopicProvider = () =>
         return { action: "replace" } as const;
       }
 
-      if (
-        olds.dataProtectionPolicy !== undefined &&
-        news.dataProtectionPolicy === undefined
-      ) {
+      if (olds.dataProtectionPolicy !== undefined && news.dataProtectionPolicy === undefined) {
         return { action: "replace" } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news = {}, olds, output, session }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, olds, session }) {
       const topicName = yield* toTopicName(id, news);
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };
@@ -229,9 +224,7 @@ export const TopicProvider = () =>
       // the delta.
       const observedState = yield* sns
         .getTopicAttributes({ TopicArn: topicArn })
-        .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       const observedAttributes = toAttributeMap(observedState?.Attributes);
 
       for (const [name, value] of Object.entries(desiredAttributes)) {
@@ -290,17 +283,11 @@ export const TopicProvider = () =>
       // getDataProtectionPolicy on FIFO topics, so we skip it there.
       let observedPolicy: string | undefined;
       if (!isFifo) {
-        observedPolicy = yield* sns
-          .getDataProtectionPolicy({ ResourceArn: topicArn })
-          .pipe(
-            Effect.map((r) => r.DataProtectionPolicy),
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InvalidParameterException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        observedPolicy = yield* sns.getDataProtectionPolicy({ ResourceArn: topicArn }).pipe(
+          Effect.map((r) => r.DataProtectionPolicy),
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
+        );
       }
       if (
         !isFifo &&
@@ -383,7 +370,6 @@ const findTopicArnByName = Effect.fn(function* (topicName: string) {
 });
 
 const readTopic = Effect.fn(function* ({
-  id,
   topicArn,
   topicName,
 }: {
@@ -417,16 +403,12 @@ const readTopic = Effect.fn(function* ({
     { concurrency: "unbounded" },
   ).pipe(
     Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidParameterException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
     // `list()` hydrates every topic in the account, so a topic deleted by a
     // parallel test between enumeration and hydration surfaces here —
     // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
     // vanished topic as "not present" rather than failing the whole listing.
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
   if (!topicState) {

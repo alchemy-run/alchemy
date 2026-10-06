@@ -15,9 +15,8 @@ export interface PublishToEndpointRequest extends Omit<
  * {@link PlatformApplication}: pass the device `TargetArn` returned by
  * `CreatePlatformEndpoint`.
  * Provide the `PublishToEndpointHttp` layer on the Function to implement the binding.
- * @binding
- * @section Mobile Push
- * @example Push to a Device
+ * ### Mobile Push
+ * **Example:** Push to a Device
  * ```typescript
  * const publishToEndpoint = yield* SNS.PublishToEndpoint(app);
  * yield* publishToEndpoint({
@@ -25,6 +24,8 @@ export interface PublishToEndpointRequest extends Omit<
  *   Message: "hello",
  * });
  * ```
+ *
+ * @binding
  */
 export interface PublishToEndpoint extends Binding.Service<
   PublishToEndpoint,
@@ -32,12 +33,8 @@ export interface PublishToEndpoint extends Binding.Service<
   (
     application: PlatformApplication,
   ) => Effect.Effect<
-    (
-      request: PublishToEndpointRequest,
-    ) => Effect.Effect<sns.PublishResponse, sns.PublishError>
+    (request: PublishToEndpointRequest) => Effect.Effect<sns.PublishResponse, sns.PublishError>
   >
 > {}
 
-export const PublishToEndpoint = Binding.Service<PublishToEndpoint>(
-  "AWS.SNS.PublishToEndpoint",
-);
+export const PublishToEndpoint = Binding.Service<PublishToEndpoint>("AWS.SNS.PublishToEndpoint");

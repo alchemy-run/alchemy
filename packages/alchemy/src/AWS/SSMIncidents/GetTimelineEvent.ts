@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * account-level (`Resource: "*"`).
  * Provide the implementation with
  * `Effect.provide(AWS.SSMIncidents.GetTimelineEventHttp)`.
- * @binding
- * @section Timeline Events
- * @example Read A Timeline Event
+ * ### Timeline Events
+ * **Example:** Read A Timeline Event
  * ```typescript
  * // init
  * const getTimelineEvent = yield* AWS.SSMIncidents.GetTimelineEvent();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { event } = yield* getTimelineEvent({ incidentRecordArn, eventId });
  * ```
+ *
+ * @binding
  */
 export interface GetTimelineEvent extends Binding.Service<
   GetTimelineEvent,
@@ -27,10 +28,7 @@ export interface GetTimelineEvent extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.GetTimelineEventInput,
-    ) => Effect.Effect<
-      incidents.GetTimelineEventOutput,
-      incidents.GetTimelineEventError
-    >
+    ) => Effect.Effect<incidents.GetTimelineEventOutput, incidents.GetTimelineEventError>
   >
 > {}
 export const GetTimelineEvent = Binding.Service<GetTimelineEvent>(

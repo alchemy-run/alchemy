@@ -85,9 +85,8 @@ export interface Bot extends Resource<
  * intents, and slot types; conversations run against an alias of a built
  * version.
  *
- * @resource
- * @section Creating a Bot
- * @example Basic Bot
+ * ### Creating a Bot
+ * **Example:** Basic Bot
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -109,7 +108,7 @@ export interface Bot extends Resource<
  * });
  * ```
  *
- * @example Bot with Session and Privacy Settings
+ * **Example:** Bot with Session and Privacy Settings
  * ```typescript
  * const bot = yield* AWS.LexV2.Bot("KidsBot", {
  *   roleArn: role.roleArn,
@@ -119,8 +118,8 @@ export interface Bot extends Resource<
  * });
  * ```
  *
- * @section Building the Conversation Graph
- * @example Locale, Intent, and Alias
+ * ### Building the Conversation Graph
+ * **Example:** Locale, Intent, and Alias
  * ```typescript
  * const locale = yield* AWS.LexV2.BotLocale("En", {
  *   botId: bot.botId,
@@ -140,6 +139,8 @@ export interface Bot extends Resource<
  *   botVersion: version.botVersion,
  * });
  * ```
+ *
+ * @resource
  */
 export const Bot = Resource<Bot>("AWS.LexV2.Bot");
 
@@ -152,11 +153,7 @@ const createBotName = (id: string, props: { botName?: string | undefined }) =>
 const describeBot = Effect.fn(function* (botId: string) {
   return yield* lexm
     .describeBot({ botId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
 /** Find a bot by exact name. The physical name embeds app/stage/id. */
@@ -199,9 +196,7 @@ export const BotProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* lexm.listBots
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lexm.listBots.pages({}).pipe(Stream.runCollect);
             const ids = Array.from(pages)
               .flatMap((page) => page.botSummaries ?? [])
               .map((bot) => bot.botId)
@@ -210,9 +205,7 @@ export const BotProvider = () =>
               ids,
               (id) =>
                 Effect.flatMap(describeBot(id), (bot) =>
-                  bot === undefined
-                    ? Effect.succeed(undefined)
-                    : attributesOf(bot),
+                  bot === undefined ? Effect.succeed(undefined) : attributesOf(bot),
                 ),
               { concurrency: 5 },
             );
@@ -226,9 +219,7 @@ export const BotProvider = () =>
               : yield* findBotByName(yield* createBotName(id, olds ?? {}));
           if (observed === undefined) return undefined;
           const attrs = yield* attributesOf(observed);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         // All bot props are mutable via UpdateBot — no replacement triggers.
@@ -244,10 +235,7 @@ export const BotProvider = () =>
           const desiredTtl = toWireSeconds(news.idleSessionTTL) ?? 300;
 
           // 1. OBSERVE — output.botId is only a cache; fall back to name.
-          let observed =
-            output?.botId !== undefined
-              ? yield* describeBot(output.botId)
-              : undefined;
+          let observed = output?.botId !== undefined ? yield* describeBot(output.botId) : undefined;
           if (observed === undefined) {
             observed = yield* findBotByName(botName);
           }
@@ -271,9 +259,7 @@ export const BotProvider = () =>
                 ),
               );
             if (created === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to create Lex bot ${botName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to create Lex bot ${botName}`));
             }
             observed = yield* waitForBotSettled(created);
           }
@@ -284,11 +270,9 @@ export const BotProvider = () =>
           if (
             observed.botName !== botName ||
             observed.roleArn !== news.roleArn ||
-            (observed.description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (observed.description ?? undefined) !== (news.description ?? undefined) ||
             observed.idleSessionTTLInSeconds !== desiredTtl ||
-            (observed.dataPrivacy?.childDirected ?? false) !==
-              desiredDataPrivacy.childDirected
+            (observed.dataPrivacy?.childDirected ?? false) !== desiredDataPrivacy.childDirected
           ) {
             yield* retryWhileConflict(
               lexm.updateBot({
@@ -320,9 +304,7 @@ export const BotProvider = () =>
               botId: output.botId,
               skipResourceInUseCheck: true,
             }),
-          ).pipe(
-            Effect.catchTag("PreconditionFailedException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("PreconditionFailedException", () => Effect.void));
         }),
       };
     }),

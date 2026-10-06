@@ -9,24 +9,14 @@ import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
  * Deployment stage of an Amplify branch.
  */
-export type BranchStage =
-  | "PRODUCTION"
-  | "BETA"
-  | "DEVELOPMENT"
-  | "EXPERIMENTAL"
-  | "PULL_REQUEST";
+export type BranchStage = "PRODUCTION" | "BETA" | "DEVELOPMENT" | "EXPERIMENTAL" | "PULL_REQUEST";
 
 export interface BranchProps {
   /**
@@ -123,9 +113,8 @@ export interface Branch extends Resource<
  * manual-deploy pipeline: stage a zip with `CreateDeployment`, upload it to
  * the pre-signed URL, and release it with `StartDeployment`.
  *
- * @resource
- * @section Creating Branches
- * @example Manual-Deploy Branch
+ * ### Creating Branches
+ * **Example:** Manual-Deploy Branch
  * ```typescript
  * const app = yield* App("MySite", { platform: "WEB" });
  * const branch = yield* Branch("Main", {
@@ -136,7 +125,7 @@ export interface Branch extends Resource<
  * });
  * ```
  *
- * @example Password-Protected Branch with Content TTL
+ * **Example:** Password-Protected Branch with Content TTL
  * ```typescript
  * const branch = yield* Branch("Preview", {
  *   appId: app.appId,
@@ -148,6 +137,8 @@ export interface Branch extends Resource<
  *   basicAuthCredentials: Redacted.make(credentials),
  * });
  * ```
+ *
+ * @resource
  */
 export const Branch = Resource<Branch>("AWS.Amplify.Branch");
 
@@ -157,10 +148,7 @@ export const Branch = Resource<Branch>("AWS.Amplify.Branch");
 // (e.g. a mass delete) can keep the bucket exhausted for most of a minute, so
 // spread bounded retries evenly across ~80s instead of front-loading an
 // exponential that spends its whole budget in the first few seconds.
-const amplifyWriteRetrySchedule = Schedule.max([
-  Schedule.spaced("8 seconds"),
-  Schedule.recurs(10),
-]);
+const amplifyWriteRetrySchedule = Schedule.max([Schedule.spaced("8 seconds"), Schedule.recurs(10)]);
 
 export const BranchProvider = () =>
   Provider.effect(
@@ -223,18 +211,13 @@ export const BranchProvider = () =>
             branchArn: branch.branchArn,
             tags: tagRecord(branch.tags),
           };
-          return (yield* hasAlchemyTags(id, branch.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, branch.tags)) ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const branchName = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          const ttl =
-            news.ttl === undefined
-              ? undefined
-              : String(toWireSeconds(news.ttl));
+          const ttl = news.ttl === undefined ? undefined : String(toWireSeconds(news.ttl));
 
           const settings = {
             description: news.description,
@@ -278,8 +261,7 @@ export const BranchProvider = () =>
               Effect.retry({
                 while: (e): boolean =>
                   e._tag === "TimeoutException" ||
-                  (e._tag === "BadRequestException" &&
-                    (e.message ?? "").includes("Rate exceeded")),
+                  (e._tag === "BadRequestException" && (e.message ?? "").includes("Rate exceeded")),
                 schedule: amplifyWriteRetrySchedule,
               }),
             );
@@ -301,11 +283,7 @@ export const BranchProvider = () =>
                   schedule: amplifyWriteRetrySchedule,
                 }),
               );
-            yield* syncTags(
-              updated.branch.branchArn,
-              desiredTags,
-              tagRecord(branch.tags),
-            );
+            yield* syncTags(updated.branch.branchArn, desiredTags, tagRecord(branch.tags));
             branch = updated.branch;
           }
 
@@ -321,9 +299,7 @@ export const BranchProvider = () =>
           Effect.gen(function* () {
             const apps = yield* amplify.listApps.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.apps ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.apps ?? [])),
             );
             const branches: Array<{
               appId: string;
@@ -332,14 +308,10 @@ export const BranchProvider = () =>
               tags: Record<string, string>;
             }> = [];
             for (const app of apps) {
-              const appBranches = yield* amplify.listBranches
-                .pages({ appId: app.appId })
-                .pipe(
-                  Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.branches ?? []),
-                  ),
-                );
+              const appBranches = yield* amplify.listBranches.pages({ appId: app.appId }).pipe(
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.branches ?? [])),
+              );
               for (const branch of appBranches) {
                 branches.push({
                   appId: app.appId,
@@ -365,8 +337,7 @@ export const BranchProvider = () =>
               Effect.retry({
                 while: (e): boolean =>
                   e._tag === "TimeoutException" ||
-                  (e._tag === "BadRequestException" &&
-                    (e.message ?? "").includes("Rate exceeded")),
+                  (e._tag === "BadRequestException" && (e.message ?? "").includes("Rate exceeded")),
                 schedule: amplifyWriteRetrySchedule,
               }),
               Effect.catchTag("NotFoundException", () => Effect.void),

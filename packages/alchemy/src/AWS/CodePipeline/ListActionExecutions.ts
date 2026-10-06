@@ -12,9 +12,8 @@ export interface ListActionExecutionsRequest extends Omit<
  * Runtime binding for `codepipeline:ListActionExecutions` — enumerates the
  * action-level execution history of the pipeline, optionally filtered to a
  * single execution.
- * @binding
- * @section Observing Pipelines
- * @example List Action Executions For One Run
+ * ### Observing Pipelines
+ * **Example:** List Action Executions For One Run
  * ```typescript
  * const listActions = yield* AWS.CodePipeline.ListActionExecutions(pipeline);
  *
@@ -22,6 +21,8 @@ export interface ListActionExecutionsRequest extends Omit<
  *   filter: { pipelineExecutionId: executionId },
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListActionExecutions extends Binding.Service<
   ListActionExecutions,
@@ -31,10 +32,7 @@ export interface ListActionExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListActionExecutionsRequest,
-    ) => Effect.Effect<
-      SVC.ListActionExecutionsOutput,
-      SVC.ListActionExecutionsError
-    >
+    ) => Effect.Effect<SVC.ListActionExecutionsOutput, SVC.ListActionExecutionsError>
   >
 > {}
 export const ListActionExecutions = Binding.Service<ListActionExecutions>(

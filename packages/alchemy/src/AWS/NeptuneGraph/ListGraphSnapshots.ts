@@ -9,14 +9,15 @@ import type { Graph } from "./Graph.ts";
  *
  * Lists the snapshots of the bound graph. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.ListGraphSnapshotsHttp)`.
- * @binding
- * @section Managing Snapshots
- * @example List a graph's snapshots
+ * ### Managing Snapshots
+ * **Example:** List a graph's snapshots
  * ```typescript
  * const listSnapshots = yield* NeptuneGraph.ListGraphSnapshots(graph);
  *
  * const { graphSnapshots } = yield* listSnapshots();
  * ```
+ *
+ * @binding
  */
 export interface ListGraphSnapshots extends Binding.Service<
   ListGraphSnapshots,
@@ -26,10 +27,7 @@ export interface ListGraphSnapshots extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<neptunegraph.ListGraphSnapshotsInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.ListGraphSnapshotsOutput,
-      neptunegraph.ListGraphSnapshotsError
-    >
+    ) => Effect.Effect<neptunegraph.ListGraphSnapshotsOutput, neptunegraph.ListGraphSnapshotsError>
   >
 > {}
 export const ListGraphSnapshots = Binding.Service<ListGraphSnapshots>(

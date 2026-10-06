@@ -2,10 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  BucketNotification,
-  NotificationsProps,
-} from "./BucketNotifications.ts";
+import type { BucketNotification, NotificationsProps } from "./BucketNotifications.ts";
 import type { S3EventType } from "./S3Event.ts";
 
 /**
@@ -14,9 +11,8 @@ import type { S3EventType } from "./S3Event.ts";
  * `consumeBucketEvents` helper, which provisions the bucket-notification
  * subscription at deploy time and registers the stream handler at runtime.
  * Provide the implementation with `Effect.provide(Lambda.BucketEventSource)`.
- * @binding
- * @section Consuming Bucket Events
- * @example Process Object-Created Events
+ * ### Consuming Bucket Events
+ * **Example:** Process Object-Created Events
  * ```typescript
  * export default MyFunction.make(
  *   { main: import.meta.url },
@@ -50,6 +46,33 @@ import type { S3EventType } from "./S3Event.ts";
  *   ),
  * );
  * ```
+ *
+ * ### Reading the Event's Object Version
+ * **Example:** Read the version that triggered a creation event
+ * ```typescript
+ * const getObject = yield* AWS.S3.GetObject(bucket);
+ * yield* AWS.S3.consumeBucketEvents(
+ *   bucket,
+ *   { events: ["s3:ObjectCreated:*"], prefix: "incoming/" },
+ *   (events) => events.pipe(
+ *     Stream.runForEach((event) =>
+ *       getObject({ Key: event.key, VersionId: event.versionId }).pipe(
+ *         Effect.flatMap(({ Body }) => Stream.runDrain(Body!)),
+ *         Effect.orDie,
+ *       ),
+ *     ),
+ *   ),
+ * );
+ * // Provide Lambda.BucketEventSource and AWS.S3.GetObjectHttp on the function.
+ * ```
+ *
+ * Passing `event.versionId` reads the triggering data version even if the key
+ * has since been overwritten. Unversioned events omit it and read the current
+ * object. Removal events can identify a delete marker or an already-deleted
+ * version; they may omit `size` and `eTag` and are not object-read signals.
+ * `sequencer`, when present, orders events only for the same object key.
+ *
+ * @binding
  */
 export interface BucketEventSource extends Binding.Service<
   BucketEventSource,
@@ -57,9 +80,7 @@ export interface BucketEventSource extends Binding.Service<
   BucketEventSourceService
 > {}
 
-export const BucketEventSource = Binding.Service<BucketEventSource>(
-  "BucketNotificationStream",
-);
+export const BucketEventSource = Binding.Service<BucketEventSource>("BucketNotificationStream");
 
 export type BucketEventSourceService = <
   Events extends S3EventType[],

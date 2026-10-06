@@ -39,9 +39,8 @@ export interface ResourcePolicy extends Resource<
  * the workspace's data plane (remote-write, query). A workspace has at most
  * one.
  *
- * @resource
- * @section Creating a Resource Policy
- * @example Allow Another Account to Query the Workspace
+ * ### Creating a Resource Policy
+ * **Example:** Allow Another Account to Query the Workspace
  * ```typescript
  * const workspace = yield* AMP.Workspace("Metrics", {});
  * const policy = yield* AMP.ResourcePolicy("Sharing", {
@@ -59,10 +58,10 @@ export interface ResourcePolicy extends Resource<
  *   }),
  * });
  * ```
+ *
+ * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.AMP.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.AMP.ResourcePolicy");
 
 /** Order-insensitive canonical form of a JSON policy document. */
 const canonicalJson = (document: string): string => {
@@ -91,11 +90,7 @@ export const ResourcePolicyProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         return yield* amp
           .describeResourcePolicy({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const toAttrs = (
@@ -137,8 +132,7 @@ export const ResourcePolicyProvider = () =>
           // call it only when the canonical document drifts.
           const policy =
             existing !== undefined &&
-            canonicalJson(existing.policyDocument) ===
-              canonicalJson(news!.policyDocument)
+            canonicalJson(existing.policyDocument) === canonicalJson(news!.policyDocument)
               ? existing
               : yield* amp.putResourcePolicy({
                   workspaceId,
@@ -151,18 +145,13 @@ export const ResourcePolicyProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* amp
-            .deleteResourcePolicy({ workspaceId: output.workspaceId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* amp.deleteResourcePolicy({ workspaceId: output.workspaceId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         // Singleton sub-resource keyed by its parent workspace.

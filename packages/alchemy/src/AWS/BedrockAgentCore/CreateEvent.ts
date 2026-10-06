@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Memory } from "./Memory.ts";
 
-export interface CreateEventRequest extends Omit<
-  agentcore.CreateEventInput,
-  "memoryId"
-> {}
+export interface CreateEventRequest extends Omit<agentcore.CreateEventInput, "memoryId"> {}
 
 /**
  * Records an interaction event into a memory's short-term store.
@@ -16,14 +13,13 @@ export interface CreateEventRequest extends Omit<
  * Provide `AgentCore.CreateEventHttp` on the Function effect to implement
  * the binding over the AgentCore data-plane API.
  *
- * @binding
- * @section Recording Events
- * @example Record a Conversational Turn from a Lambda Function
+ * ### Recording Events
+ * **Example:** Record a Conversational Turn from a Lambda Function
  * ```typescript
  * import * as AgentCore from "alchemy/AWS/BedrockAgentCore";
  *
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const memory = yield* AgentCore.Memory("AgentMemory", {
  *       eventExpiryDuration: "30 days",
@@ -54,6 +50,8 @@ export interface CreateEventRequest extends Omit<
  *   }).pipe(Effect.provide(AgentCore.CreateEventHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface CreateEvent extends Binding.Service<
   CreateEvent,
@@ -66,6 +64,4 @@ export interface CreateEvent extends Binding.Service<
     ) => Effect.Effect<agentcore.CreateEventOutput, agentcore.CreateEventError>
   >
 > {}
-export const CreateEvent = Binding.Service<CreateEvent>(
-  "AWS.BedrockAgentCore.CreateEvent",
-);
+export const CreateEvent = Binding.Service<CreateEvent>("AWS.BedrockAgentCore.CreateEvent");

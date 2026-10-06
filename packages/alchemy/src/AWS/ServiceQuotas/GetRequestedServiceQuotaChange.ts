@@ -8,9 +8,8 @@ import * as Binding from "../../Binding.ts";
  * poll a request submitted with
  * {@link RequestServiceQuotaIncrease | RequestServiceQuotaIncrease}).
  *
- * @binding
- * @section Quota Increase Requests
- * @example Poll a quota increase request
+ * ### Quota Increase Requests
+ * **Example:** Poll a quota increase request
  * ```typescript
  * // init
  * const getRequestedServiceQuotaChange =
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const status = RequestedQuota?.Status; // PENDING | APPROVED | ...
  * ```
+ *
+ * @binding
  */
 export interface GetRequestedServiceQuotaChange extends Binding.Service<
   GetRequestedServiceQuotaChange,
@@ -35,7 +36,6 @@ export interface GetRequestedServiceQuotaChange extends Binding.Service<
     >
   >
 > {}
-export const GetRequestedServiceQuotaChange =
-  Binding.Service<GetRequestedServiceQuotaChange>(
-    "AWS.ServiceQuotas.GetRequestedServiceQuotaChange",
-  );
+export const GetRequestedServiceQuotaChange = Binding.Service<GetRequestedServiceQuotaChange>(
+  "AWS.ServiceQuotas.GetRequestedServiceQuotaChange",
+);

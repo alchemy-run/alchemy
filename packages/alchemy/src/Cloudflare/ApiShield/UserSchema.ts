@@ -2,7 +2,6 @@ import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -64,13 +63,7 @@ export interface UserSchemaAttributes {
   createdAt: string;
 }
 
-export type UserSchema = Resource<
-  TypeId,
-  UserSchemaProps,
-  UserSchemaAttributes,
-  never,
-  Providers
->;
+export type UserSchema = Resource<TypeId, UserSchemaProps, UserSchemaAttributes, never, Providers>;
 
 /**
  * A Cloudflare API Shield user schema — an OpenAPI v3 document uploaded to
@@ -83,11 +76,8 @@ export type UserSchema = Resource<
  *
  * For current zone-level schema validation (v2), prefer the
  * `Cloudflare.SchemaValidation` resources.
- * @resource
- * @product API Shield
- * @category Application Security
- * @section Uploading a Schema
- * @example Upload an OpenAPI v3 schema
+ * ### Uploading a Schema
+ * **Example:** Upload an OpenAPI v3 schema
  * ```typescript
  * const fs = yield* FileSystem.FileSystem;
  * const source = yield* fs.readFileString("./openapi.json");
@@ -100,7 +90,7 @@ export type UserSchema = Resource<
  * // schema.schemaId is the Cloudflare-assigned UUID
  * ```
  *
- * @example Upload and enable validation
+ * **Example:** Upload and enable validation
  * ```typescript
  * yield* Cloudflare.ApiShield.UserSchema("PetstoreSchema", {
  *   zoneId: zone.zoneId,
@@ -110,6 +100,10 @@ export type UserSchema = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
+ *
+ * @resource
+ * @product API Shield
+ * @category Application Security
  */
 export const UserSchema = Resource<UserSchema>(TypeId);
 
@@ -146,11 +140,7 @@ export const UserSchemaProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -182,9 +172,7 @@ export const UserSchemaProvider = () =>
 
       // 1. Observe — the schema id cached on `output` is a hint, not a
       //    guarantee: a missing schema falls through to ensure.
-      let observed = output?.schemaId
-        ? yield* getSchema(zoneId, output.schemaId)
-        : undefined;
+      let observed = output?.schemaId ? yield* getSchema(zoneId, output.schemaId) : undefined;
 
       // An adopted (or drifted) schema whose stored source no longer
       // matches the desired one cannot be updated in place — converge by
@@ -199,9 +187,7 @@ export const UserSchemaProvider = () =>
       // 2. Ensure — upload when missing. Names are not unique, so there is
       //    no AlreadyExists race to tolerate.
       if (!observed) {
-        const file = yield* Effect.sync(
-          () => new File([news.schema], `${name}.json`),
-        );
+        const file = yield* Effect.sync(() => new File([news.schema], `${name}.json`));
         const created = yield* apiGateway.createUserSchema({
           zoneId,
           file,
@@ -250,21 +236,15 @@ export const UserSchemaProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((schema) =>
-                  toAttributes(schema, zone.id),
-                ),
+                (page.result ?? []).map((schema) => toAttributes(schema, zone.id)),
               ),
             ),
             // Zones without the API Shield entitlement reject the listing
             // route; skip them rather than failing the whole enumeration.
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as UserSchemaAttributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as UserSchemaAttributes[])),
             // A zone purged (deleted) out-of-band mid-enumeration — it was in
             // the zone list but no longer exists; drop it.
-            Effect.catchTag("ZonePurged", () =>
-              Effect.succeed([] as UserSchemaAttributes[]),
-            ),
+            Effect.catchTag("ZonePurged", () => Effect.succeed([] as UserSchemaAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -297,8 +277,7 @@ const findByName = (zoneId: string, name: string) =>
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk).find(
-        (schema): schema is ObservedSchema & typeof schema =>
-          schema.name === name,
+        (schema): schema is ObservedSchema & typeof schema => schema.name === name,
       ),
     ),
   );
@@ -312,10 +291,7 @@ const createSchemaName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  schema: ObservedSchema,
-  zoneId: string,
-): UserSchemaAttributes => ({
+const toAttributes = (schema: ObservedSchema, zoneId: string): UserSchemaAttributes => ({
   schemaId: schema.schemaId,
   zoneId,
   name: schema.name,

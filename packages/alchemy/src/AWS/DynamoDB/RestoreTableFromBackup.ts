@@ -16,9 +16,8 @@ export interface RestoreTableFromBackupRequest extends Omit<
  * backups (by `BackupArn`) into the target, automatically injecting the
  * target table name. Provide the `RestoreTableFromBackupHttp` layer on the
  * Function to satisfy the binding.
- * @binding
- * @section Backup and Restore
- * @example Restore a Backup into the Target Table
+ * ### Backup and Restore
+ * **Example:** Restore a Backup into the Target Table
  * ```typescript
  * const restoreTableFromBackup = yield* AWS.DynamoDB.RestoreTableFromBackup(
  *   sourceTable,
@@ -28,6 +27,8 @@ export interface RestoreTableFromBackupRequest extends Omit<
  * const response = yield* restoreTableFromBackup({ BackupArn: backupArn });
  * const status = response.TableDescription?.TableStatus;
  * ```
+ *
+ * @binding
  */
 export interface RestoreTableFromBackup extends Binding.Service<
   RestoreTableFromBackup,
@@ -38,10 +39,7 @@ export interface RestoreTableFromBackup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RestoreTableFromBackupRequest,
-    ) => Effect.Effect<
-      DynamoDB.RestoreTableFromBackupOutput,
-      DynamoDB.RestoreTableFromBackupError
-    >
+    ) => Effect.Effect<DynamoDB.RestoreTableFromBackupOutput, DynamoDB.RestoreTableFromBackupError>
   >
 > {}
 export const RestoreTableFromBackup = Binding.Service<RestoreTableFromBackup>(

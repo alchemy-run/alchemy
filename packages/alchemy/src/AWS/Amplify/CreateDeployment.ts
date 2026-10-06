@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface CreateDeploymentRequest extends Omit<
-  amplify.CreateDeploymentRequest,
-  "appId"
-> {}
+export interface CreateDeploymentRequest extends Omit<amplify.CreateDeploymentRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:CreateDeployment`.
@@ -18,9 +15,8 @@ export interface CreateDeploymentRequest extends Omit<
  * upload the content there, then release it with {@link StartDeployment}.
  * Provide the implementation with
  * `Effect.provide(AWS.Amplify.CreateDeploymentHttp)`.
- * @binding
- * @section Manual Deployments
- * @example Stage a Zip Deployment
+ * ### Manual Deployments
+ * **Example:** Stage a Zip Deployment
  * ```typescript
  * // init — bind the operation to the app
  * const createDeployment = yield* AWS.Amplify.CreateDeployment(app);
@@ -31,6 +27,8 @@ export interface CreateDeploymentRequest extends Omit<
  * });
  * // PUT the site zip to `zipUploadUrl`, then start the deployment with jobId
  * ```
+ *
+ * @binding
  */
 export interface CreateDeployment extends Binding.Service<
   CreateDeployment,
@@ -40,13 +38,8 @@ export interface CreateDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateDeploymentRequest,
-    ) => Effect.Effect<
-      amplify.CreateDeploymentResult,
-      amplify.CreateDeploymentError
-    >
+    ) => Effect.Effect<amplify.CreateDeploymentResult, amplify.CreateDeploymentError>
   >
 > {}
 
-export const CreateDeployment = Binding.Service<CreateDeployment>(
-  "AWS.Amplify.CreateDeployment",
-);
+export const CreateDeployment = Binding.Service<CreateDeployment>("AWS.Amplify.CreateDeployment");

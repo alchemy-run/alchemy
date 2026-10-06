@@ -4,10 +4,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface GetMediaRequest extends Omit<
-  kvm.GetMediaInput,
-  "StreamName" | "StreamARN"
-> {}
+export interface GetMediaRequest extends Omit<kvm.GetMediaInput, "StreamName" | "StreamARN"> {}
 
 /**
  * Runtime binding for `kinesisvideo:GetMedia` (media data plane).
@@ -16,9 +13,8 @@ export interface GetMediaRequest extends Omit<
  * callable that resolves the per-stream data endpoint (`GetDataEndpoint`)
  * and opens a media stream starting at the requested selector. The
  * response `Payload` is a streaming body of MKV-packaged media.
- * @binding
- * @section Reading Media
- * @example Read Media from the Earliest Fragment
+ * ### Reading Media
+ * **Example:** Read Media from the Earliest Fragment
  * ```typescript
  * // init
  * const getMedia = yield* AWS.KinesisVideo.GetMedia(stream);
@@ -29,12 +25,12 @@ export interface GetMediaRequest extends Omit<
  * });
  * ```
  *
- * @example Wire into a Lambda Function
+ * **Example:** Wire into a Lambda Function
  * ```typescript
  * // Provide the GetMediaHttp layer on the Function's init Effect; merge
  * // with the other KinesisVideo layers when using several bindings.
  * export default MediaFunction.make(
- *   { main: import.meta.url, url: true, timeout: Duration.seconds(30) },
+ *   { main: import.meta.url, functionUrl: true, timeout: Duration.seconds(30) },
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.KinesisVideo.Stream("Camera", {
  *       mediaType: "video/h264",
@@ -46,6 +42,8 @@ export interface GetMediaRequest extends Omit<
  *   }).pipe(Effect.provide(AWS.KinesisVideo.GetMediaHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetMedia extends Binding.Service<
   GetMedia,
@@ -55,10 +53,7 @@ export interface GetMedia extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetMediaRequest,
-    ) => Effect.Effect<
-      kvm.GetMediaOutput,
-      kvm.GetMediaError | kv.GetDataEndpointError
-    >
+    ) => Effect.Effect<kvm.GetMediaOutput, kvm.GetMediaError | kv.GetDataEndpointError>
   >
 > {}
 

@@ -3,9 +3,10 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
-import * as Sql from "effect/unstable/sql/SqlClient";
+import * as Sql from "effect/sql/SqlClient";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
+import { resolveConnectionOptions } from "./PostgresTls.ts";
 
 /**
  * Options for {@link Postgres}: `@effect/sql-pg`'s pool configuration, with
@@ -13,16 +14,15 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * string, which resolves from the Worker environment at runtime).
  */
 export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
-  readonly url:
-    | Redacted.Redacted<string>
-    | Effect.Effect<Redacted.Redacted<string>, E, R>;
+  readonly url: Redacted.Redacted<string> | Effect.Effect<Redacted.Redacted<string>, E, R>;
 };
 
 /**
  * Open an `@effect/sql-pg` client (a connection pool) from a connection URL.
  *
  * Accepts a plain `Redacted` URL or an Effect of one — e.g.
- * `Cloudflare.Hyperdrive.Connect(...)`'s `connectionString` — and returns a
+ * `Cloudflare.Hyperdrive.Connect(...)` or `Fly.ConnectPostgres(...)`'s
+ * `connectionString` — and returns a
  * `PgClient` (which implements the generic `SqlClient` interface) wrapped in
  * a chainable Proxy, so it can be resolved once at init and used from any
  * handler:
@@ -54,7 +54,10 @@ export const Postgres = <E = never, R = never>(config: PostgresConfig<E, R>) =>
         const { url, ...pool } = config;
         const resolved = Effect.isEffect(url) ? yield* url : url;
         const pgCtx = yield* Layer.build(
-          PgClient.layer({ ...pool, url: resolved }),
+          PgClient.layer({
+            ...pool,
+            ...resolveConnectionOptions(resolved, pool.ssl),
+          }),
         );
         return Context.get(pgCtx, PgClient.PgClient);
       }),
@@ -78,9 +81,7 @@ export const Postgres = <E = never, R = never>(config: PostgresConfig<E, R>) =>
  * The layer itself builds synchronously at init; the underlying pool is
  * created lazily per execution (see {@link Postgres}).
  */
-export const PostgresLayer = <E = never, R = never>(
-  config: PostgresConfig<E, R>,
-) =>
+export const PostgresLayer = <E = never, R = never>(config: PostgresConfig<E, R>) =>
   // Derive SqlClient from the single PgClient build so both tags share one
   // per-execution pool.
   Layer.effect(

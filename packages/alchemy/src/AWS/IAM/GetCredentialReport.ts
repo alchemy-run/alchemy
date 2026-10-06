@@ -14,9 +14,8 @@ import * as Binding from "../../Binding.ts";
  * grants `iam:GetCredentialReport` on `*`. Provide the implementation with
  * `Effect.provide(AWS.IAM.GetCredentialReportHttp)`.
  *
- * @binding
- * @section Credential Reports
- * @example Retrieve the Credential Report
+ * ### Credential Reports
+ * **Example:** Retrieve the Credential Report
  * ```typescript
  * // init
  * const getCredentialReport = yield* IAM.GetCredentialReport();
@@ -29,6 +28,8 @@ import * as Binding from "../../Binding.ts";
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetCredentialReport extends Binding.Service<
   GetCredentialReport,
@@ -36,10 +37,7 @@ export interface GetCredentialReport extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iam.GetCredentialReportRequest,
-    ) => Effect.Effect<
-      iam.GetCredentialReportResponse,
-      iam.GetCredentialReportError
-    >
+    ) => Effect.Effect<iam.GetCredentialReportResponse, iam.GetCredentialReportError>
   >
 > {}
 export const GetCredentialReport = Binding.Service<GetCredentialReport>(

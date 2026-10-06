@@ -3,15 +3,15 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
-import * as route53 from "@distilled.cloud/aws/route-53";
 import type { Region } from "@distilled.cloud/aws/Region";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
@@ -28,7 +28,6 @@ import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
 import type { Credentials } from "../Credentials.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
 import {
   SecurityGroup,
   type SecurityGroupId,
@@ -36,11 +35,6 @@ import {
 } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { VpcId } from "../EC2/Vpc.ts";
-import type { ListenerAction, ListenerRuleCondition } from "../ELBv2/common.ts";
-import { Listener } from "../ELBv2/Listener.ts";
-import { ListenerRule } from "../ELBv2/ListenerRule.ts";
-import { LoadBalancer } from "../ELBv2/LoadBalancer.ts";
-import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import {
   makeBunBootstrap,
   makeImageSource,
@@ -49,9 +43,16 @@ import {
   type ImageSourceLike,
   type RegistryImageSource,
 } from "../ECR/ImageSource.ts";
+import type { ListenerAction, ListenerRuleCondition } from "../ELBv2/common.ts";
+import { Listener } from "../ELBv2/Listener.ts";
+import { ListenerRule } from "../ELBv2/ListenerRule.ts";
+import { LoadBalancer } from "../ELBv2/LoadBalancer.ts";
+import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
-import type { RegionID } from "../Region.ts";
 import type { Providers } from "../Providers.ts";
+import type { RegionID } from "../Region.ts";
+import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
+import { Record as Route53Record } from "../Route53/Record.ts";
 import type { ClusterArn } from "./Cluster.ts";
 import {
   attachTaskBindings,
@@ -70,8 +71,7 @@ import {
 } from "./Task.ts";
 
 export type ServiceName = string;
-export type ServiceArn =
-  `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
+export type ServiceArn = `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
 
 export const isService = (value: any): value is Service => {
   return (
@@ -98,16 +98,9 @@ export type ServiceNetworkProtocol = "tcp" | "udp" | "tcp_udp" | "tls";
  * Network Load Balancer. Mixing the two families in one service is a typed
  * error ({@link MixedLoadBalancerProtocols}).
  */
-export type ServiceListenerProtocol =
-  | ServiceApplicationProtocol
-  | ServiceNetworkProtocol;
+export type ServiceListenerProtocol = ServiceApplicationProtocol | ServiceNetworkProtocol;
 
-const NETWORK_PROTOCOLS: ReadonlySet<string> = new Set([
-  "tcp",
-  "udp",
-  "tcp_udp",
-  "tls",
-]);
+const NETWORK_PROTOCOLS: ReadonlySet<string> = new Set(["tcp", "udp", "tcp_udp", "tls"]);
 
 /** A `"80/http"`-style port/protocol spec. */
 export type ServiceListenSpec = `${number}/${ServiceListenerProtocol}`;
@@ -270,62 +263,48 @@ export interface ServiceManagedIngress {
 }
 
 /** Owned `"80/http"` listen strings mixed with shared `ELBv2.Listener` references in one service. */
-export class MixedListenerOwnership extends Data.TaggedError(
-  "MixedListenerOwnership",
-)<{
+export class MixedListenerOwnership extends Data.TaggedError("MixedListenerOwnership")<{
   readonly serviceId: string;
   readonly message: string;
 }> {}
 
 /** A rule declared both `forward` and `redirect` (mutually exclusive). */
-export class ServiceRuleActionConflict extends Data.TaggedError(
-  "ServiceRuleActionConflict",
-)<{
+export class ServiceRuleActionConflict extends Data.TaggedError("ServiceRuleActionConflict")<{
   readonly serviceId: string;
   readonly ruleIndex: number;
   readonly message: string;
 }> {}
 
 /** A `listen`/`forward`/`redirect` spec used a protocol outside the supported set. */
-export class UnsupportedListenerProtocol extends Data.TaggedError(
-  "UnsupportedListenerProtocol",
-)<{
+export class UnsupportedListenerProtocol extends Data.TaggedError("UnsupportedListenerProtocol")<{
   readonly serviceId: string;
   readonly spec: string;
   readonly message: string;
 }> {}
 
 /** An owned `https` listener was requested without a `certificateArn`. */
-export class MissingListenerCertificate extends Data.TaggedError(
-  "MissingListenerCertificate",
-)<{
+export class MissingListenerCertificate extends Data.TaggedError("MissingListenerCertificate")<{
   readonly serviceId: string;
   readonly spec: string;
   readonly message: string;
 }> {}
 
 /** An owned-only option (e.g. `public`) was set while sharing a foreign listener. */
-export class OwnedOnlyLoadBalancerOption extends Data.TaggedError(
-  "OwnedOnlyLoadBalancerOption",
-)<{
+export class OwnedOnlyLoadBalancerOption extends Data.TaggedError("OwnedOnlyLoadBalancerOption")<{
   readonly serviceId: string;
   readonly option: string;
   readonly message: string;
 }> {}
 
 /** A rule has neither its own `listen` nor a config-level default `listener`. */
-export class MissingRuleListener extends Data.TaggedError(
-  "MissingRuleListener",
-)<{
+export class MissingRuleListener extends Data.TaggedError("MissingRuleListener")<{
   readonly serviceId: string;
   readonly ruleIndex: number;
   readonly message: string;
 }> {}
 
 /** Application (`http`/`https`) and network (`tcp`/`udp`/`tls`/`tcp_udp`) protocols mixed in one service. */
-export class MixedLoadBalancerProtocols extends Data.TaggedError(
-  "MixedLoadBalancerProtocols",
-)<{
+export class MixedLoadBalancerProtocols extends Data.TaggedError("MixedLoadBalancerProtocols")<{
   readonly serviceId: string;
   readonly message: string;
 }> {}
@@ -340,18 +319,14 @@ export class NetworkListenerRuleUnsupported extends Data.TaggedError(
 }> {}
 
 /** No public Route 53 hosted zone matches the requested `domain`. */
-export class ServiceHostedZoneNotFound extends Data.TaggedError(
-  "ServiceHostedZoneNotFound",
-)<{
+export class ServiceHostedZoneNotFound extends Data.TaggedError("ServiceHostedZoneNotFound")<{
   readonly serviceId: string;
   readonly domainName: string;
   readonly message: string;
 }> {}
 
 /** A `health` key matched none of the service's composed target groups. */
-export class ServiceHealthTargetNotFound extends Data.TaggedError(
-  "ServiceHealthTargetNotFound",
-)<{
+export class ServiceHealthTargetNotFound extends Data.TaggedError("ServiceHealthTargetNotFound")<{
   readonly serviceId: string;
   readonly key: string;
   readonly message: string;
@@ -366,9 +341,7 @@ export class RequestCountScalingRequiresLoadBalancer extends Data.TaggedError(
 }> {}
 
 /** An ECS service did not converge to the requested deployment before timeout. */
-export class ServiceDidNotStabilize extends Data.TaggedError(
-  "ServiceDidNotStabilize",
-)<{
+export class ServiceDidNotStabilize extends Data.TaggedError("ServiceDidNotStabilize")<{
   readonly clusterArn: string;
   readonly serviceName: string;
   readonly expectedTaskDefinitionArn: string | undefined;
@@ -816,9 +789,7 @@ export interface TaskReferenceServiceProps extends ServicePropsBase {
  * {@link TaskDefinitionConfig} surface.
  */
 export interface ImageOwningServicePropsBase
-  extends
-    ServicePropsBase,
-    Omit<TaskDefinitionConfig, "placementConstraints" | "volumes"> {
+  extends ServicePropsBase, Omit<TaskDefinitionConfig, "placementConstraints" | "volumes"> {
   /**
    * Task definition placement constraints (`memberOf` expressions) for the
    * synthesized task definition. (`placementConstraints` on the service
@@ -858,14 +829,12 @@ export interface ImageOwningServicePropsBase
 }
 
 /** Bundle an inline Effect program (`main`) into the service's image. */
-export interface BundledServiceProps
-  extends ImageOwningServicePropsBase, BundledImageSource {}
+export interface BundledServiceProps extends ImageOwningServicePropsBase, BundledImageSource {}
 /** Build the user's own Dockerfile into the service's image. */
 export interface DockerfileServiceProps
   extends ImageOwningServicePropsBase, DockerfileImageSource {}
 /** Run a pre-built registry image, mirrored into ECR. */
-export interface ImageServiceProps
-  extends ImageOwningServicePropsBase, RegistryImageSource {}
+export interface ImageServiceProps extends ImageOwningServicePropsBase, RegistryImageSource {}
 
 /**
  * Service props — either reference an existing task definition (`task:`) or
@@ -979,11 +948,7 @@ export interface Service extends Resource<
   Providers
 > {}
 
-export type ServiceServices =
-  | Credentials
-  | Region
-  | ServerHost
-  | AWSEnvironment;
+export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
 
 /**
  * The impl shape for an effectful `Service`: a long-running server returning
@@ -1019,9 +984,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * `cluster`, launchType↔capacityProviderStrategy switch, `deploymentController`
  * type, `schedulingStrategy`, `enableECSManagedTags`, `role` — replace the
  * service.
- * @resource
- * @section Creating Services
- * @example Remote Image Behind a Load Balancer
+ * ### Creating Services
+ * **Example:** Remote Image Behind a Load Balancer
  * ```typescript
  * const nginx = yield* Service("Edge", {
  *   cluster,
@@ -1033,7 +997,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * nginx.url; // http://<alb-dns-name>
  * ```
  *
- * @example Run an Existing Task's Definition
+ * **Example:** Run an Existing Task's Definition
  * ```typescript
  * const api = yield* Service("Api", {
  *   cluster,
@@ -1043,7 +1007,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Inline Effect Server
+ * **Example:** Inline Effect Server
  * ```typescript
  * const api = yield* Service(
  *   "Api",
@@ -1059,17 +1023,14 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * @section Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * ### Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * @example Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -1079,18 +1040,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * @example Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -1098,8 +1048,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * @section Shared Load Balancers
- * @example Two Services Sharing One Listener
+ * ### Shared Load Balancers
+ * **Example:** Two Services Sharing One Listener
  * ```typescript
  * // The ALB + listener are stack-level resources owned by neither service.
  * const lb = yield* AWS.ELBv2.LoadBalancer("Alb", {
@@ -1131,7 +1081,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Catch-All on a Shared Listener
+ * **Example:** Catch-All on a Shared Listener
  * ```typescript
  * // A bare listener reference adds a single `path: "/*"` rule.
  * const svc = yield* Service("Svc", {
@@ -1142,7 +1092,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Owned ALB with Routing Rules and an HTTP → HTTPS Redirect
+ * **Example:** Owned ALB with Routing Rules and an HTTP → HTTPS Redirect
  * ```typescript
  * // `"80/http"`-style `listen` strings mean the service OWNS the ALB and
  * // these listeners (mixing them with shared listener references is a
@@ -1161,8 +1111,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Custom Domains
- * @example Domain with a Composed Certificate
+ * ### Custom Domains
+ * **Example:** Domain with a Composed Certificate
  * ```typescript
  * // Looks up the matching Route 53 hosted zone, composes a DNS-validated
  * // ACM certificate in the service's region, wires it to the HTTPS
@@ -1176,7 +1126,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Domain with an Existing Certificate
+ * **Example:** Domain with an Existing Certificate
  * ```typescript
  * const svc = yield* Service("Api", {
  *   cluster,
@@ -1188,8 +1138,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Network Load Balancers
- * @example TCP Service Behind an NLB
+ * ### Network Load Balancers
+ * **Example:** TCP Service Behind an NLB
  * ```typescript
  * // tcp/udp/tls/tcp_udp listen protocols compose a Network Load Balancer;
  * // each rule's action becomes its listener's default forward (NLB
@@ -1202,8 +1152,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Health Checks
- * @example Per-Target-Group Health Overrides
+ * ### Health Checks
+ * **Example:** Per-Target-Group Health Overrides
  * ```typescript
  * const svc = yield* Service("Api", {
  *   cluster,
@@ -1223,7 +1173,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Container Health Check
+ * **Example:** Container Health Check
  * ```typescript
  * const svc = yield* Service("Api", {
  *   cluster,
@@ -1237,8 +1187,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Autoscaling
- * @example Target-Tracking Autoscaling
+ * ### Autoscaling
+ * **Example:** Target-Tracking Autoscaling
  * ```typescript
  * // Composes a ScalableTarget (min/max) plus one target-tracking policy
  * // per metric. Redeploys stop pinning desiredCount while scaling is set.
@@ -1257,8 +1207,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Secrets & Logging
- * @example Inject SSM / Secrets Manager Secrets
+ * ### Secrets & Logging
+ * **Example:** Inject SSM / Secrets Manager Secrets
  * ```typescript
  * // Values are ARNs; the container gets them as env vars via `valueFrom`
  * // and the execution role is granted read on exactly these ARNs.
@@ -1274,8 +1224,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Service Discovery
- * @example Register in a Cloud Map Namespace
+ * ### Service Discovery
+ * **Example:** Register in a Cloud Map Namespace
  * ```typescript
  * const namespace = yield* AWS.CloudMap.PrivateDnsNamespace("AppNs", {
  *   name: "internal.example.com",
@@ -1289,8 +1239,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Volumes
- * @example Mount an EFS File System
+ * ### Volumes
+ * **Example:** Mount an EFS File System
  * ```typescript
  * const svc = yield* Service("Api", {
  *   cluster,
@@ -1300,8 +1250,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Capacity
- * @example Fargate Spot
+ * ### Capacity
+ * **Example:** Fargate Spot
  * ```typescript
  * // The cluster must have the Fargate capacity providers associated:
  * // Cluster("C", { capacityProviders: ["FARGATE", "FARGATE_SPOT"] }).
@@ -1312,8 +1262,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Load Balancing
- * @example Manual (User-Supplied) Target Group
+ * ### Load Balancing
+ * **Example:** Manual (User-Supplied) Target Group
  * ```typescript
  * const service = yield* Service("ApiService", {
  *   cluster,
@@ -1330,8 +1280,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Capacity & Placement
- * @example FARGATE_SPOT Capacity Provider Strategy
+ * ### Capacity & Placement
+ * **Example:** FARGATE_SPOT Capacity Provider Strategy
  * ```typescript
  * const service = yield* Service("WorkerService", {
  *   cluster,
@@ -1346,8 +1296,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Deployment
- * @example Rolling Update with Circuit Breaker
+ * ### Deployment
+ * **Example:** Rolling Update with Circuit Breaker
  * ```typescript
  * const service = yield* Service("ApiService", {
  *   cluster,
@@ -1364,30 +1314,28 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *   healthCheckGracePeriod: "30 seconds",
  * });
  * ```
+ *
+ * @resource
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("AWS.ECS.Service", {
-  createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
-    id: string,
-  ) => ServiceRuntimeContext,
-  // Compose the managed load balancer (owned ALB/listeners or shared-listener
-  // rules + target groups) as REAL namespaced child resources before the core
-  // service resource is declared.
-  transformProps: (id, props) => transformServiceProps(id, props),
-  // Autoscaling references the service's own Output attributes (cluster/name/
-  // target-group ARNs), so it composes AFTER the resource exists.
-  onCreate: (resource, props) =>
-    composeServiceScaling(
-      resource as Service,
-      props as ServiceProps,
-      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-      // surface through the deploy like any resource-construction error.
-    ) as Effect.Effect<void, never, any>,
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("AWS.ECS.Service", {
+    createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
+      id: string,
+    ) => ServiceRuntimeContext,
+    // Compose the managed load balancer (owned ALB/listeners or shared-listener
+    // rules + target groups) as REAL namespaced child resources before the core
+    // service resource is declared.
+    transformProps: (id, props) => transformServiceProps(id, props),
+    // Autoscaling references the service's own Output attributes (cluster/name/
+    // target-group ARNs), so it composes AFTER the resource exists.
+    onCreate: (resource, props) =>
+      composeServiceScaling(
+        resource as Service,
+        props as ServiceProps,
+        // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
+        // surface through the deploy like any resource-construction error.
+      ) as Effect.Effect<void, never, any>,
+  });
 
 /** The BYO task reference, when the props use the `task:` form. */
 const taskRefOf = (props: ServiceProps | undefined) =>
@@ -1484,42 +1432,11 @@ const lookupDefaultNetwork = Effect.gen(function* () {
   return { vpcId: vpc.VpcId, subnets: subnetIds };
 });
 
-/**
- * Find the most specific PUBLIC Route 53 hosted zone containing
- * `domainName`, walking up its labels (`svc.api.example.com` →
- * `api.example.com` → `example.com`). Returns the bare zone id (no
- * `/hostedzone/` prefix), or undefined when no zone matches.
- */
-const findHostedZoneId = Effect.fn(function* (domainName: string) {
-  const labels = domainName
-    .replace(/\.$/, "")
-    .split(".")
-    .filter((label) => label.length > 0);
-  for (let i = 0; i < labels.length - 1; i++) {
-    const candidate = `${labels.slice(i).join(".")}.`;
-    const listed = yield* route53.listHostedZonesByName({
-      DNSName: candidate,
-      MaxItems: 1,
-    });
-    const zone = listed.HostedZones?.[0];
-    if (
-      zone?.Id !== undefined &&
-      zone.Name === candidate &&
-      zone.Config?.PrivateZone !== true
-    ) {
-      return zone.Id.replace(/^\/hostedzone\//, "");
-    }
-  }
-  return undefined;
-});
-
 const toValuesArray = (value: string | string[] | undefined) =>
   value === undefined ? undefined : Array.isArray(value) ? value : [value];
 
 /** Flat rule conditions → the `ELBv2.ListenerRule` condition shape. */
-const ruleConditionsOf = (
-  rule: ServiceLoadBalancerRule,
-): ListenerRuleCondition[] => {
+const ruleConditionsOf = (rule: ServiceLoadBalancerRule): ListenerRuleCondition[] => {
   const conditions: ListenerRuleCondition[] = [];
   const path = toValuesArray(rule.path);
   if (path) conditions.push({ pathPattern: { values: path } });
@@ -1536,11 +1453,7 @@ const ruleConditionsOf = (
 
 /** IP protocols a listener protocol admits through the managed security group. */
 const sgProtocolsOf = (protocol: string): string[] =>
-  protocol === "udp"
-    ? ["udp"]
-    : protocol === "tcp_udp"
-      ? ["tcp", "udp"]
-      : ["tcp"];
+  protocol === "udp" ? ["udp"] : protocol === "tcp_udp" ? ["tcp", "udp"] : ["tcp"];
 
 interface ManagedSgPort {
   port: number;
@@ -1671,15 +1584,12 @@ const transformServiceProps = (
       next = {
         ...next,
         capacityProviderStrategy:
-          next.capacityProviderStrategy ??
-          capacityProviderStrategyOf(next.capacity),
+          next.capacityProviderStrategy ?? capacityProviderStrategyOf(next.capacity),
         capacity: undefined,
       };
     }
     const lbProp =
-      next.loadBalancer !== undefined
-        ? next.loadBalancer
-        : ((next.public ?? false) as boolean);
+      next.loadBalancer !== undefined ? next.loadBalancer : ((next.public ?? false) as boolean);
     const wantsIngress = lbProp !== false && lbProp !== undefined;
     if (!wantsIngress && next.serviceRegistry === undefined) {
       return next;
@@ -1706,20 +1616,13 @@ const composeManagedIngress = (
 ) =>
   Effect.gen(function* () {
     const config: ServiceLoadBalancerConfig =
-      lbProp === true
-        ? {}
-        : isELBv2Listener(lbProp)
-          ? { listener: lbProp }
-          : lbProp;
+      lbProp === true ? {} : isELBv2Listener(lbProp) ? { listener: lbProp } : lbProp;
     const rules = config.rules ?? (config.listener !== undefined ? [{}] : []);
 
     // ── classify ownership ───────────────────────────────────────────────
     const hasSharedRefs =
-      config.listener !== undefined ||
-      rules.some((rule) => isELBv2Listener(rule.listen));
-    const hasOwnedStrings = rules.some(
-      (rule) => typeof rule.listen === "string",
-    );
+      config.listener !== undefined || rules.some((rule) => isELBv2Listener(rule.listen));
+    const hasOwnedStrings = rules.some((rule) => typeof rule.listen === "string");
     if (hasSharedRefs && hasOwnedStrings) {
       return yield* Effect.fail(
         new MixedListenerOwnership({
@@ -1753,9 +1656,7 @@ const composeManagedIngress = (
       for (const [spec, kind] of specs) {
         if (typeof spec === "string") {
           const parsed = yield* parseListenSpec(id, spec, kind);
-          families.add(
-            NETWORK_PROTOCOLS.has(parsed.protocol) ? "network" : "application",
-          );
+          families.add(NETWORK_PROTOCOLS.has(parsed.protocol) ? "network" : "application");
         }
       }
     }
@@ -1767,9 +1668,7 @@ const composeManagedIngress = (
         }),
       );
     }
-    const lbType: "application" | "network" = families.has("network")
-      ? "network"
-      : "application";
+    const lbType: "application" | "network" = families.has("network") ? "network" : "application";
     if (lbType === "network") {
       // NLB listeners route by port alone: no rule conditions, no redirect
       // actions, no attaching rules to shared listeners, and exactly one
@@ -1797,10 +1696,7 @@ const composeManagedIngress = (
           );
         }
         if (rule.redirect !== undefined) {
-          return yield* failNetworkRule(
-            index,
-            "sets `redirect` — NLB listeners cannot redirect",
-          );
+          return yield* failNetworkRule(index, "sets `redirect` — NLB listeners cannot redirect");
         }
         if (
           rule.path !== undefined ||
@@ -1841,12 +1737,11 @@ const composeManagedIngress = (
       );
     }
     let certificateArn: string | undefined = props.certificateArn;
-    const domainNames =
-      domain !== undefined ? [domain.name, ...(domain.aliases ?? [])] : [];
+    const domainNames = domain !== undefined ? [domain.name, ...(domain.aliases ?? [])] : [];
     const domainZones = new Map<string, string>();
     if (domain !== undefined) {
       for (const name of domainNames) {
-        const zoneId = yield* findHostedZoneId(name);
+        const zoneId = yield* findPublicHostedZoneId(name);
         if (zoneId === undefined) {
           return yield* Effect.fail(
             new ServiceHostedZoneNotFound({
@@ -1878,9 +1773,7 @@ const composeManagedIngress = (
     // ── normalize rules + target-group specs ────────────────────────────
     const byoTask = taskRefOf(props);
     const defaultContainerPort: unknown =
-      byoTask !== undefined
-        ? byoTask.port
-        : ((props as { port?: number }).port ?? 3000);
+      byoTask !== undefined ? byoTask.port : ((props as { port?: number }).port ?? 3000);
 
     interface TgSpec {
       key: string;
@@ -2058,9 +1951,7 @@ const composeManagedIngress = (
           : [],
       ),
     ];
-    const usesDefaultPort = [...tgSpecs.values()].some(
-      (spec) => spec.forwardPort === undefined,
-    );
+    const usesDefaultPort = [...tgSpecs.values()].some((spec) => spec.forwardPort === undefined);
     const managedSg = props.securityGroups
       ? undefined
       : yield* SecurityGroup("SecurityGroup", {
@@ -2079,21 +1970,17 @@ const composeManagedIngress = (
     // type's default protocol for the default target group.
     const healthOverrides = config.health ?? {};
     const healthKeyOf = (spec: TgSpec): string | undefined => {
-      const protocol =
-        spec.forwardProtocol ?? (lbType === "network" ? "tcp" : "http");
+      const protocol = spec.forwardProtocol ?? (lbType === "network" ? "tcp" : "http");
       const port =
         spec.forwardPort ??
-        (typeof defaultContainerPort === "number"
-          ? defaultContainerPort
-          : undefined);
+        (typeof defaultContainerPort === "number" ? defaultContainerPort : undefined);
       return port === undefined ? undefined : `${port}/${protocol}`;
     };
     const matchedHealthKeys = new Set<string>();
     const targetGroups = new Map<string, TargetGroup>();
     for (const spec of tgSpecs.values()) {
       const healthKey = healthKeyOf(spec);
-      const health =
-        healthKey !== undefined ? healthOverrides[healthKey] : undefined;
+      const health = healthKey !== undefined ? healthOverrides[healthKey] : undefined;
       if (healthKey !== undefined && health !== undefined) {
         matchedHealthKeys.add(healthKey);
       }
@@ -2104,8 +1991,7 @@ const composeManagedIngress = (
         spec.protocol === "TLS";
       // A path/successCodes override on a network target group opts its
       // health check into HTTP; otherwise NLB targets get TCP checks.
-      const wantsHttpCheck =
-        health?.path !== undefined || health?.successCodes !== undefined;
+      const wantsHttpCheck = health?.path !== undefined || health?.successCodes !== undefined;
       targetGroups.set(
         spec.key,
         yield* TargetGroup(spec.logicalId, {
@@ -2118,8 +2004,7 @@ const composeManagedIngress = (
               ? (health?.path ?? "/")
               : undefined
             : (health?.path ?? props.healthCheckPath ?? "/"),
-          healthCheckProtocol:
-            isNetworkTg && wantsHttpCheck ? "HTTP" : undefined,
+          healthCheckProtocol: isNetworkTg && wantsHttpCheck ? "HTTP" : undefined,
           // Fast-converge defaults: targets go healthy in ~20s instead of
           // the AWS default ~150s, and drain in 30s instead of 300s.
           healthCheckInterval: health?.interval ?? "10 seconds",
@@ -2127,9 +2012,7 @@ const composeManagedIngress = (
           healthyThresholdCount: health?.healthyThreshold ?? 2,
           unhealthyThresholdCount: health?.unhealthyThreshold ?? 2,
           matcher:
-            health?.successCodes !== undefined
-              ? { HttpCode: health.successCodes }
-              : undefined,
+            health?.successCodes !== undefined ? { HttpCode: health.successCodes } : undefined,
           attributes: { "deregistration_delay.timeout_seconds": "30" },
           tags: props.tags,
         }),
@@ -2150,9 +2033,7 @@ const composeManagedIngress = (
       }
     }
 
-    const actionToListenerAction = (
-      action: NormalizedAction,
-    ): ListenerAction =>
+    const actionToListenerAction = (action: NormalizedAction): ListenerAction =>
       action.type === "redirect"
         ? {
             type: "redirect",
@@ -2230,9 +2111,7 @@ const composeManagedIngress = (
               | "TCP_UDP"
               | "TLS",
             certificateArn:
-              spec.protocol === "https" || spec.protocol === "tls"
-                ? certificateArn
-                : undefined,
+              spec.protocol === "https" || spec.protocol === "tls" ? certificateArn : undefined,
             defaultActions,
           }),
         );
@@ -2270,16 +2149,13 @@ const composeManagedIngress = (
       // A conditionless rule still needs at least one ELBv2 condition — use
       // the catch-all path (this is also the bare-listener default rule).
       const conditions =
-        r.conditions.length > 0
-          ? r.conditions
-          : [{ pathPattern: { values: ["/*"] } }];
+        r.conditions.length > 0 ? r.conditions : [{ pathPattern: { values: ["/*"] } }];
       const ruleListener = owned
         ? ownedListeners.get(ownedPortOf(r))!
         : isELBv2Listener(r.listen)
           ? r.listen
           : config.listener!;
-      const priority =
-        r.rule.priority ?? deriveRulePriority(`${namespacePrefix}/${ruleId}`);
+      const priority = r.rule.priority ?? deriveRulePriority(`${namespacePrefix}/${ruleId}`);
       yield* ListenerRule(ruleId, {
         listenerArn: ruleListener.listenerArn as any,
         priority,
@@ -2293,8 +2169,7 @@ const composeManagedIngress = (
     const primary = owned
       ? (() => {
           const spec =
-            ownedListenSpecs.get(defaultOwnedListen.port) ??
-            [...ownedListenSpecs.values()][0];
+            ownedListenSpecs.get(defaultOwnedListen.port) ?? [...ownedListenSpecs.values()][0];
           const listener = ownedListeners.get(spec.port)!;
           return {
             listenerArn: listener.listenerArn,
@@ -2305,8 +2180,7 @@ const composeManagedIngress = (
         })()
       : (() => {
           const ref =
-            config.listener ??
-            (normalized.map((r) => r.listen).find(isELBv2Listener) as Listener);
+            config.listener ?? (normalized.map((r) => r.listen).find(isELBv2Listener) as Listener);
           return {
             listenerArn: ref.listenerArn,
             loadBalancerArn: ref.loadBalancerArn,
@@ -2324,8 +2198,7 @@ const composeManagedIngress = (
       securityGroupId: managedSg?.groupId as unknown as string | undefined,
       domain: domain?.name,
       targets: [...tgSpecs.values()].map((spec) => ({
-        targetGroupArn: targetGroups.get(spec.key)!
-          .targetGroupArn as unknown as string,
+        targetGroupArn: targetGroups.get(spec.key)!.targetGroupArn as unknown as string,
         containerPort: spec.forwardPort,
         container: spec.container,
       })),
@@ -2435,8 +2308,7 @@ const composeServiceScaling = (
         // halves parsed from the managed-ingress ARNs on the service.
         const loadBalancerPart = Output.map(
           service.loadBalancerArn as unknown as Output.Output<string>,
-          (arn) =>
-            arn.slice(arn.indexOf("loadbalancer/") + "loadbalancer/".length),
+          (arn) => arn.slice(arn.indexOf("loadbalancer/") + "loadbalancer/".length),
         );
         const targetGroupPart = Output.map(
           service.targetGroupArn as unknown as Output.Output<string>,
@@ -2487,9 +2359,7 @@ const syncTaskSecretsPolicy = Effect.fn(function* ({
   }
   const serviceOf = (arn: string) => arn.split(":")[2];
   const ssmArns = secretArns.filter((arn) => serviceOf(arn) === "ssm");
-  const secretsManagerArns = secretArns.filter(
-    (arn) => serviceOf(arn) === "secretsmanager",
-  );
+  const secretsManagerArns = secretArns.filter((arn) => serviceOf(arn) === "secretsmanager");
   yield* iam.putRolePolicy({
     RoleName: roleName,
     PolicyName: SECRETS_POLICY_NAME,
@@ -2521,8 +2391,8 @@ const syncTaskSecretsPolicy = Effect.fn(function* ({
 
 /** CloudWatch Logs' allowed retention values, in days, ascending. */
 const LOG_RETENTION_DAYS = [
-  1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827,
-  2192, 2557, 2922, 3288, 3653,
+  1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288,
+  3653,
 ];
 
 /**
@@ -2569,18 +2439,15 @@ const resolveServiceVolumes = (
   for (const [index, volume] of (volumes ?? []).entries()) {
     if ("efs" in volume) {
       const efs = volume.efs;
-      const fileSystemId =
-        "fileSystemId" in efs ? efs.fileSystemId : efs.fileSystem.fileSystemId;
-      const accessPointId =
-        "fileSystemId" in efs ? undefined : efs.accessPoint?.accessPointId;
+      const fileSystemId = "fileSystemId" in efs ? efs.fileSystemId : efs.fileSystem.fileSystemId;
+      const accessPointId = "fileSystemId" in efs ? undefined : efs.accessPoint?.accessPointId;
       const name = `efs-${index}`;
       resolved.push({
         name,
         efsVolumeConfiguration: {
           fileSystemId,
           transitEncryption: "ENABLED",
-          authorizationConfig:
-            accessPointId !== undefined ? { accessPointId } : undefined,
+          authorizationConfig: accessPointId !== undefined ? { accessPointId } : undefined,
         },
       });
       mountPoints.push({ sourceVolume: name, containerPath: volume.path });
@@ -2613,6 +2480,7 @@ const observeServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
   expectedTaskDefinitionArn?: string;
+  expectedDeploymentId?: string;
   mode: ServiceConvergenceMode;
 }): Effect.Effect<
   ServiceConvergenceSnapshot,
@@ -2625,15 +2493,9 @@ const observeServiceConvergence = (input: {
         cluster: input.clusterArn,
         services: [input.serviceName],
       })
-      .pipe(
-        Effect.catchTag("ClusterNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
     const service = described?.services?.find(
-      (candidate) =>
-        candidate.serviceName === input.serviceName &&
-        candidate.status !== "INACTIVE",
+      (candidate) => candidate.serviceName === input.serviceName && candidate.status !== "INACTIVE",
     );
 
     if (service === undefined) {
@@ -2689,16 +2551,13 @@ const observeServiceConvergence = (input: {
           runningCount === 0 &&
           pendingCount === 0 &&
           targetGroups.every(
-            (targetGroup) =>
-              targetGroup.missing || targetGroup.states.length === 0,
+            (targetGroup) => targetGroup.missing || targetGroup.states.length === 0,
           ),
       };
     }
 
     const deployments = service.deployments ?? [];
-    const primary = deployments.find(
-      (deployment) => deployment.status === "PRIMARY",
-    );
+    const primary = deployments.find((deployment) => deployment.status === "PRIMARY");
     const deploymentController = service.deploymentController?.type ?? "ECS";
     const countsConverged =
       service.schedulingStrategy === "DAEMON"
@@ -2707,11 +2566,11 @@ const observeServiceConvergence = (input: {
     const deploymentConverged =
       deployments.length === 1 &&
       primary !== undefined &&
+      (input.expectedDeploymentId === undefined || primary.id === input.expectedDeploymentId) &&
       primary.taskDefinition === input.expectedTaskDefinitionArn &&
       (deploymentController === "ECS"
         ? primary.rolloutState === "COMPLETED"
-        : primary.rolloutState === undefined ||
-          primary.rolloutState === "COMPLETED");
+        : primary.rolloutState === undefined || primary.rolloutState === "COMPLETED");
     const targetsConverged = targetGroups.every(
       (targetGroup) =>
         !targetGroup.missing &&
@@ -2735,33 +2594,32 @@ const waitForServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
   expectedTaskDefinitionArn?: string;
+  expectedDeploymentId?: string;
   mode: ServiceConvergenceMode;
   timeout?: Duration.Input;
 }): Effect.Effect<
   ServiceConvergenceSnapshot,
-  | ecs.DescribeServicesError
-  | elbv2.DescribeTargetHealthError
-  | ServiceDidNotStabilize,
+  ecs.DescribeServicesError | elbv2.DescribeTargetHealthError | ServiceDidNotStabilize,
   ServiceConvergenceDependencies
 > => {
   const pollIntervalMillis = 5_000;
-  const timeoutMillis = Math.min(
-    toMillis(input.timeout ?? "10 minutes")!,
-    30 * 60 * 1_000,
-  );
+  const timeoutMillis = Math.min(toMillis(input.timeout ?? "10 minutes")!, 30 * 60 * 1_000);
   const attempts = Math.max(1, Math.ceil(timeoutMillis / pollIntervalMillis));
+  const expectedDeploymentFailed = (snapshot: ServiceConvergenceSnapshot) =>
+    input.mode === "stable" &&
+    snapshot.service?.deployments?.some(
+      (deployment) =>
+        (input.expectedDeploymentId !== undefined
+          ? deployment.id === input.expectedDeploymentId
+          : deployment.status === "PRIMARY" &&
+            deployment.taskDefinition === input.expectedTaskDefinitionArn) &&
+        deployment.rolloutState === "FAILED",
+    ) === true;
 
   return observeServiceConvergence(input).pipe(
     Effect.repeat({
-      schedule: Schedule.max([
-        Schedule.spaced(pollIntervalMillis),
-        Schedule.recurs(attempts),
-      ]),
-      until: (snapshot) =>
-        snapshot.converged ||
-        snapshot.service?.deployments?.some(
-          (deployment) => deployment.rolloutState === "FAILED",
-        ) === true,
+      schedule: Schedule.max([Schedule.spaced(pollIntervalMillis), Schedule.recurs(attempts)]),
+      until: (snapshot) => snapshot.converged || expectedDeploymentFailed(snapshot),
     }),
     Effect.flatMap((snapshot) => {
       if (snapshot.converged) {
@@ -2792,12 +2650,9 @@ const waitForServiceConvergence = (input: {
           pendingCount: service?.pendingCount,
           deploymentCount: service?.deployments?.length ?? 0,
           unhealthyTargetCount,
-          message:
-            service?.deployments?.some(
-              (deployment) => deployment.rolloutState === "FAILED",
-            ) === true
-              ? `ECS service ${input.serviceName} reported a failed deployment`
-              : `ECS service ${input.serviceName} did not become ${input.mode} before timeout`,
+          message: expectedDeploymentFailed(snapshot)
+            ? `ECS service ${input.serviceName} reported a failed deployment`
+            : `ECS service ${input.serviceName} did not become ${input.mode} before timeout`,
         }),
       );
     }),
@@ -2827,17 +2682,13 @@ export const ServiceProvider = () =>
       ): ClusterArn | undefined =>
         typeof cluster === "string"
           ? (cluster as ClusterArn)
-          : typeof (cluster as { clusterArn?: unknown } | undefined)
-                ?.clusterArn === "string"
+          : typeof (cluster as { clusterArn?: unknown } | undefined)?.clusterArn === "string"
             ? ((cluster as { clusterArn: string }).clusterArn as ClusterArn)
             : undefined;
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({ key, value }));
 
-      const toServiceName = (
-        id: string,
-        props: { serviceName?: string } = {},
-      ) =>
+      const toServiceName = (id: string, props: { serviceName?: string } = {}) =>
         props.serviceName
           ? Effect.succeed(props.serviceName)
           : createPhysicalName({
@@ -2881,15 +2732,11 @@ export const ServiceProvider = () =>
        * shared) load balancer's DNS name and combine it with the primary
        * listener's protocol/port. Returns undefined when not derivable.
        */
-      const deriveIngressUrl = Effect.fn(function* (
-        ingress: ServiceManagedIngress | undefined,
-      ) {
+      const deriveIngressUrl = Effect.fn(function* (ingress: ServiceManagedIngress | undefined) {
         // A custom domain wins: it aliases the load balancer and carries
         // the listener's protocol/port.
         if (ingress?.domain !== undefined) {
-          const domainProtocol = (
-            ingress.listenerProtocol ?? "HTTPS"
-          ).toLowerCase();
+          const domainProtocol = (ingress.listenerProtocol ?? "HTTPS").toLowerCase();
           const domainPort = ingress.listenerPort;
           const isWellKnownPort =
             domainPort === undefined ||
@@ -2904,15 +2751,15 @@ export const ServiceProvider = () =>
           .describeLoadBalancers({
             LoadBalancerArns: [ingress.loadBalancerArn],
           })
-          .pipe(
-            Effect.catchTag("LoadBalancerNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)));
         const dnsName = described?.LoadBalancers?.[0]?.DNSName;
         if (!dnsName) {
           return undefined;
         }
+        // Works unchanged against the local emulator: floci's ALB DNS
+        // (`*.elb.localhost.floci.io`) resolves to 127.0.0.1 and its data
+        // plane serves each listener on the listener's own port, which
+        // `ensureFloci` publishes on the managed container (80/443).
         const protocol = (ingress.listenerProtocol ?? "HTTP").toLowerCase();
         const port = ingress.listenerPort;
         const isDefaultPort =
@@ -2955,55 +2802,38 @@ export const ServiceProvider = () =>
         if (output.listenerArn) {
           yield* elbv2
             .deleteListener({ ListenerArn: output.listenerArn })
-            .pipe(
-              Effect.catchTag("ListenerNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.void));
         }
         if (output.targetGroupArn) {
-          yield* elbv2
-            .deleteTargetGroup({ TargetGroupArn: output.targetGroupArn })
-            .pipe(
-              Effect.retry({
-                while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(8),
-                ]),
-              }),
-              Effect.catch(() => Effect.void),
-            );
+          yield* elbv2.deleteTargetGroup({ TargetGroupArn: output.targetGroupArn }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ResourceInUseException",
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
+            }),
+            Effect.catch(() => Effect.void),
+          );
         }
         if (output.loadBalancerArn) {
           yield* elbv2
             .deleteLoadBalancer({ LoadBalancerArn: output.loadBalancerArn })
-            .pipe(
-              Effect.catchTag(
-                "LoadBalancerNotFoundException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void));
         }
         if (output.securityGroupId) {
           // The old ALB/service ENIs release the group asynchronously; retry
           // bounded, then give up with a note rather than fail the migration
           // deploy.
-          yield* ec2
-            .deleteSecurityGroup({ GroupId: output.securityGroupId })
-            .pipe(
-              Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "DependencyViolation",
-                schedule: Schedule.max([
-                  Schedule.spaced("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
-              }),
-              Effect.catchTag("DependencyViolation", () =>
-                session.note(
-                  "Legacy ingress security group still has attached ENIs; leaving it to release asynchronously",
-                ),
+          yield* ec2.deleteSecurityGroup({ GroupId: output.securityGroupId }).pipe(
+            Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "DependencyViolation",
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(24)]),
+            }),
+            Effect.catchTag("DependencyViolation", () =>
+              session.note(
+                "Legacy ingress security group still has attached ENIs; leaving it to release asynchronously",
               ),
-            );
+            ),
+          );
         }
       });
 
@@ -3068,8 +2898,7 @@ export const ServiceProvider = () =>
           }));
 
         const taskRoleArn =
-          output?.taskRoleArn ??
-          (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
+          output?.taskRoleArn ?? (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
 
         // `taskRoleManagedPolicyArns` is part of the inherited
         // `TaskDefinitionConfig` surface — attach it like the standalone
@@ -3122,8 +2951,7 @@ export const ServiceProvider = () =>
         });
 
         const logGroupArn =
-          output?.logGroupArn ??
-          (yield* ensureTaskLogGroup({ id, logGroupName }));
+          output?.logGroupArn ?? (yield* ensureTaskLogGroup({ id, logGroupName }));
         yield* syncLogGroupRetention({
           logGroupName,
           retention: news.logging?.retention,
@@ -3149,8 +2977,9 @@ export const ServiceProvider = () =>
         // Desugar `{ efs, path }` volumes into task volumes + primary
         // container mount points, then fold the secrets / container health
         // check sugar into the primary-container overrides.
-        const { volumes: resolvedVolumes, mountPoints: efsMountPoints } =
-          resolveServiceVolumes(news.volumes);
+        const { volumes: resolvedVolumes, mountPoints: efsMountPoints } = resolveServiceVolumes(
+          news.volumes,
+        );
         const containerOverrides: Partial<ecs.ContainerDefinition> = {
           ...news.container,
           ...(secretEntries.length > 0
@@ -3177,10 +3006,7 @@ export const ServiceProvider = () =>
             : {}),
           ...(efsMountPoints.length > 0
             ? {
-                mountPoints: [
-                  ...(news.container?.mountPoints ?? []),
-                  ...efsMountPoints,
-                ],
+                mountPoints: [...(news.container?.mountPoints ?? []), ...efsMountPoints],
               }
             : {}),
         };
@@ -3212,8 +3038,7 @@ export const ServiceProvider = () =>
           tags,
         });
 
-        const containerName =
-          taskDefinition.containerDefinitions?.[0]?.name ?? family;
+        const containerName = taskDefinition.containerDefinitions?.[0]?.name ?? family;
         return {
           taskDefinitionArn: taskDefinition.taskDefinitionArn!,
           taskFamily: family,
@@ -3254,13 +3079,11 @@ export const ServiceProvider = () =>
         news: ServiceProps,
         task: { containerName: string; port: number },
       ): ecs.LoadBalancer[] | undefined => {
-        const managed: ecs.LoadBalancer[] = (news.ingress?.targets ?? []).map(
-          (target) => ({
-            targetGroupArn: target.targetGroupArn,
-            containerName: target.container ?? task.containerName,
-            containerPort: target.containerPort ?? task.port,
-          }),
-        );
+        const managed: ecs.LoadBalancer[] = (news.ingress?.targets ?? []).map((target) => ({
+          targetGroupArn: target.targetGroupArn,
+          containerName: target.container ?? task.containerName,
+          containerPort: target.containerPort ?? task.port,
+        }));
         const all = [...(news.loadBalancers ?? []), ...managed];
         return all.length > 0 ? all : undefined;
       };
@@ -3275,9 +3098,7 @@ export const ServiceProvider = () =>
         taskDefinition: task.taskDefinitionArn,
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
-        healthCheckGracePeriodSeconds: toWireSeconds(
-          news.healthCheckGracePeriod,
-        ),
+        healthCheckGracePeriodSeconds: toWireSeconds(news.healthCheckGracePeriod),
         networkConfiguration: networkConfigurationOf(network, securityGroups),
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,
@@ -3289,9 +3110,7 @@ export const ServiceProvider = () =>
         volumeConfigurations: news.volumeConfigurations,
         // launchType and capacityProviderStrategy are mutually exclusive;
         // only send launchType when no strategy is provided.
-        launchType: news.capacityProviderStrategy
-          ? undefined
-          : (news.launchType ?? "FARGATE"),
+        launchType: news.capacityProviderStrategy ? undefined : (news.launchType ?? "FARGATE"),
       });
 
       return {
@@ -3299,10 +3118,7 @@ export const ServiceProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
           // serviceName change → delete-first replace (name is the identity).
-          if (
-            (yield* toServiceName(id, olds ?? {})) !==
-            (yield* toServiceName(id, news ?? {}))
-          ) {
+          if ((yield* toServiceName(id, olds ?? {})) !== (yield* toServiceName(id, news ?? {}))) {
             return { action: "replace", deleteFirst: true } as const;
           }
           // cluster change → replace (a service can't move clusters). Only
@@ -3329,16 +3145,14 @@ export const ServiceProvider = () =>
                 // launchType ↔ capacityProviderStrategy switch is immutable.
                 usesStrategy: !!olds.capacityProviderStrategy,
                 schedulingStrategy: olds.schedulingStrategy ?? "REPLICA",
-                deploymentControllerType:
-                  olds.deploymentController?.type ?? "ECS",
+                deploymentControllerType: olds.deploymentController?.type ?? "ECS",
                 enableECSManagedTags: olds.enableECSManagedTags ?? true,
                 role: olds.role,
               },
               {
                 usesStrategy: !!news.capacityProviderStrategy,
                 schedulingStrategy: news.schedulingStrategy ?? "REPLICA",
-                deploymentControllerType:
-                  news.deploymentController?.type ?? "ECS",
+                deploymentControllerType: news.deploymentController?.type ?? "ECS",
                 enableECSManagedTags: news.enableECSManagedTags ?? true,
                 role: news.role,
               },
@@ -3376,19 +3190,14 @@ export const ServiceProvider = () =>
             // reconcile converges on any half-created service by name.
             return undefined;
           }
-          const serviceName =
-            output?.serviceName ?? (yield* toServiceName(id, olds ?? {}));
+          const serviceName = output?.serviceName ?? (yield* toServiceName(id, olds ?? {}));
           const described = yield* ecs
             .describeServices({
               cluster: clusterArn,
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(
-              Effect.catchTag("ClusterNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
           const service = described?.services?.[0];
           if (!service?.serviceArn) {
             return undefined;
@@ -3409,28 +3218,22 @@ export const ServiceProvider = () =>
             // describeServices (which accepts up to 10 services per call).
             const clusterArns = yield* ecs.listClusters.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.clusterArns ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusterArns ?? [])),
             );
 
             const perCluster = yield* Effect.forEach(
               clusterArns,
               (clusterArn) =>
                 Effect.gen(function* () {
-                  const serviceArns = yield* ecs.listServices
-                    .pages({ cluster: clusterArn })
-                    .pipe(
-                      Stream.runCollect,
-                      Effect.map((chunk) =>
-                        Array.from(chunk).flatMap(
-                          (page) => page.serviceArns ?? [],
-                        ),
-                      ),
-                      Effect.catchTag("ClusterNotFoundException", () =>
-                        Effect.succeed([] as string[]),
-                      ),
-                    );
+                  const serviceArns = yield* ecs.listServices.pages({ cluster: clusterArn }).pipe(
+                    Stream.runCollect,
+                    Effect.map((chunk) =>
+                      Array.from(chunk).flatMap((page) => page.serviceArns ?? []),
+                    ),
+                    Effect.catchTag("ClusterNotFoundException", () =>
+                      Effect.succeed([] as string[]),
+                    ),
+                  );
                   if (serviceArns.length === 0) {
                     return [] as Service["Attributes"][];
                   }
@@ -3443,14 +3246,12 @@ export const ServiceProvider = () =>
                   const described = yield* Effect.forEach(
                     batches,
                     (services) =>
-                      ecs
-                        .describeServices({ cluster: clusterArn, services })
-                        .pipe(
-                          Effect.map((res) => res.services ?? []),
-                          Effect.catchTag("ClusterNotFoundException", () =>
-                            Effect.succeed([] as ecs.Service[]),
-                          ),
+                      ecs.describeServices({ cluster: clusterArn, services }).pipe(
+                        Effect.map((res) => res.services ?? []),
+                        Effect.catchTag("ClusterNotFoundException", () =>
+                          Effect.succeed([] as ecs.Service[]),
                         ),
+                      ),
                     { concurrency: 4 },
                   );
 
@@ -3473,14 +3274,7 @@ export const ServiceProvider = () =>
 
             return perCluster.flat();
           }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          olds,
-          output,
-          bindings,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, output, bindings, session }) {
           const serviceName = yield* toServiceName(id, news);
           const clusterArn = clusterArnOf(news.cluster) as ClusterArn;
           const desiredTags = {
@@ -3495,10 +3289,7 @@ export const ServiceProvider = () =>
             byoTask === undefined
               ? yield* synthesizeTaskDefinition({
                   id,
-                  news: news as
-                    | BundledServiceProps
-                    | DockerfileServiceProps
-                    | ImageServiceProps,
+                  news: news as BundledServiceProps | DockerfileServiceProps | ImageServiceProps,
                   output,
                   bindings,
                   tags: desiredTags,
@@ -3532,16 +3323,10 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(
-              Effect.catchTag("ClusterNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
           const observed = described?.services?.find(
             (s) =>
-              s.serviceName === serviceName &&
-              s.status !== "INACTIVE" &&
-              s.status !== "DRAINING",
+              s.serviceName === serviceName && s.status !== "INACTIVE" && s.status !== "DRAINING",
           );
 
           // Managed-ingress attributes: derived from the composed (or
@@ -3591,17 +3376,16 @@ export const ServiceProvider = () =>
             });
             const service = created.service;
             if (!service?.serviceArn) {
-              return yield* Effect.die(
-                new Error("createService returned no service"),
-              );
+              return yield* Effect.die(new Error("createService returned no service"));
             }
-            yield* session.note(
-              `Waiting for ECS service ${serviceName} to stabilize`,
-            );
+            yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);
             const stable = yield* waitForServiceConvergence({
               clusterArn,
               serviceName,
               expectedTaskDefinitionArn: task.taskDefinitionArn,
+              expectedDeploymentId: service.deployments?.find(
+                (deployment) => deployment.status === "PRIMARY",
+              )?.id,
               mode: "stable",
               timeout: news.deploymentStabilizationTimeout,
             });
@@ -3633,16 +3417,13 @@ export const ServiceProvider = () =>
           // Sync — apply in-place mutable fields via updateService. Force a new
           // deployment so a changed task definition (same revision-less ARN) or
           // load-balancer wiring rolls out.
-          yield* ecs
+          const updated = yield* ecs
             .updateService({
               ...mutableInput(news, task, network, securityGroups),
               // While autoscaling manages the desired count, leave it
               // unchanged on updates (undefined on the wire) so redeploys
               // don't fight the autoscaler's decisions.
-              desiredCount:
-                news.scaling !== undefined
-                  ? undefined
-                  : (news.desiredCount ?? 1),
+              desiredCount: news.scaling !== undefined ? undefined : (news.desiredCount ?? 1),
               service: serviceName,
               cluster: clusterArn,
               // `undefined` means "leave unchanged" on the wire, so pass an
@@ -3667,19 +3448,17 @@ export const ServiceProvider = () =>
               // bounded.
               Effect.retry({
                 while: (e) => e._tag === "ServiceNotActiveException",
-                schedule: Schedule.max([
-                  Schedule.spaced("5 seconds"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
               }),
             );
-          yield* session.note(
-            `Waiting for ECS service ${serviceName} to stabilize`,
-          );
+          yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);
           const stable = yield* waitForServiceConvergence({
             clusterArn,
             serviceName,
             expectedTaskDefinitionArn: task.taskDefinitionArn,
+            expectedDeploymentId: updated.service?.deployments?.find(
+              (deployment) => deployment.status === "PRIMARY",
+            )?.id,
             mode: "stable",
             timeout: news.deploymentStabilizationTimeout,
           });
@@ -3694,10 +3473,7 @@ export const ServiceProvider = () =>
               )
               .map((t) => [t.key, t.value]),
           );
-          const { removed: removedTags, upsert: upsertTags } = diffTags(
-            observedTags,
-            desiredTags,
-          );
+          const { removed: removedTags, upsert: upsertTags } = diffTags(observedTags, desiredTags);
           if (upsertTags.length > 0) {
             yield* ecs.tagResource({
               resourceArn: observed.serviceArn,
@@ -3748,20 +3524,17 @@ export const ServiceProvider = () =>
               desiredCount: 0,
             })
             .pipe(
-              Effect.retry({
-                while: (error) => error._tag === "ServiceNotActiveException",
-                schedule: Schedule.max([
-                  Schedule.spaced("5 seconds"),
-                  Schedule.recurs(8),
-                ]),
-              }),
+              // `ServiceNotActiveException` means the service is DRAINING or
+              // INACTIVE — an earlier, interrupted delete already issued
+              // `deleteService`. Neither status ever returns to ACTIVE, so
+              // there is nothing to scale: fall through to the drain/delete
+              // waits below, which treat both as progress toward "gone".
+              Effect.catchTag("ServiceNotActiveException", () => Effect.void),
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
 
-          yield* session.note(
-            `Waiting for ECS service ${output.serviceName} to drain`,
-          );
+          yield* session.note(`Waiting for ECS service ${output.serviceName} to drain`);
           yield* waitForServiceConvergence({
             clusterArn: output.clusterArn,
             serviceName: output.serviceName,
@@ -3797,12 +3570,7 @@ export const ServiceProvider = () =>
                 .deleteListener({
                   ListenerArn: output.listenerArn,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ListenerNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.void));
             }
             if (output.targetGroupArn) {
               yield* elbv2
@@ -3816,12 +3584,7 @@ export const ServiceProvider = () =>
                 .deleteLoadBalancer({
                   LoadBalancerArn: output.loadBalancerArn,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "LoadBalancerNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void));
             }
 
             // Owned ingress security group: the ALB/service ENIs release it
@@ -3840,9 +3603,7 @@ export const ServiceProvider = () =>
                       Schedule.recurs(24),
                     ]).pipe(
                       Schedule.tap(() =>
-                        session.note(
-                          "Waiting for ENIs to release the ingress security group...",
-                        ),
+                        session.note("Waiting for ENIs to release the ingress security group..."),
                       ),
                     ),
                   }),

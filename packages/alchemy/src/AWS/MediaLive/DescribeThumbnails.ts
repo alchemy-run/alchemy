@@ -14,9 +14,8 @@ import type { Channel } from "./Channel.ts";
  * `BadRequestException` tag. The channel id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.MediaLive.DescribeThumbnailsHttp)`.
- * @binding
- * @section Observing Channels
- * @example Fetch the Latest Preview Thumbnail
+ * ### Observing Channels
+ * **Example:** Fetch the Latest Preview Thumbnail
  * ```typescript
  * // init — bind the operation to the channel
  * const describeThumbnails = yield* AWS.MediaLive.DescribeThumbnails(channel);
@@ -27,6 +26,8 @@ import type { Channel } from "./Channel.ts";
  *   ThumbnailType: "CURRENT_ACTIVE",
  * });
  * ```
+ *
+ * @binding
  */
 export interface DescribeThumbnails extends Binding.Service<
   DescribeThumbnails,
@@ -36,10 +37,7 @@ export interface DescribeThumbnails extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<medialive.DescribeThumbnailsRequest, "ChannelId">,
-    ) => Effect.Effect<
-      medialive.DescribeThumbnailsResponse,
-      medialive.DescribeThumbnailsError
-    >
+    ) => Effect.Effect<medialive.DescribeThumbnailsResponse, medialive.DescribeThumbnailsError>
   >
 > {}
 export const DescribeThumbnails = Binding.Service<DescribeThumbnails>(

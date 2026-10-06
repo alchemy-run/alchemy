@@ -2,7 +2,6 @@ import * as cloudforceOne from "@distilled.cloud/cloudflare/cloudforce-one";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -54,13 +53,7 @@ export type ScanConfigAttributes = {
   ports: string[];
 };
 
-export type ScanConfig = Resource<
-  TypeId,
-  ScanConfigProps,
-  ScanConfigAttributes,
-  never,
-  Providers
->;
+export type ScanConfig = Resource<TypeId, ScanConfigProps, ScanConfigAttributes, never, Providers>;
 
 /**
  * A Cloudforce One attack-surface scan configuration.
@@ -74,11 +67,8 @@ export type ScanConfig = Resource<
  * Requires the `cfone.port_scan` entitlement (Cloudforce One subscription) —
  * accounts without it receive an `Unauthorized` error for every scan-config
  * operation.
- * @resource
- * @product Cloudforce One
- * @category Observability & Analytics
- * @section Creating a Scan Config
- * @example One-off scan of a single address
+ * ### Creating a Scan Config
+ * **Example:** One-off scan of a single address
  * ```typescript
  * const scan = yield* Cloudflare.CloudforceOne.ScanConfig("edge-scan", {
  *   ips: ["203.0.113.7/32"],
@@ -86,7 +76,7 @@ export type ScanConfig = Resource<
  * });
  * ```
  *
- * @example Weekly scan of a CIDR block on specific ports
+ * **Example:** Weekly scan of a CIDR block on specific ports
  * ```typescript
  * const scan = yield* Cloudflare.CloudforceOne.ScanConfig("perimeter", {
  *   ips: ["203.0.113.0/24"],
@@ -95,8 +85,8 @@ export type ScanConfig = Resource<
  * });
  * ```
  *
- * @section Updating
- * @example Change the schedule and port list in place
+ * ### Updating
+ * **Example:** Change the schedule and port list in place
  * ```typescript
  * const scan = yield* Cloudflare.CloudforceOne.ScanConfig("perimeter", {
  *   ips: ["203.0.113.0/24"],
@@ -106,6 +96,10 @@ export type ScanConfig = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/security-center/intel-apis/attack-surface-scans/
+ *
+ * @resource
+ * @product Cloudforce One
+ * @category Observability & Analytics
  */
 export const ScanConfig = Resource<ScanConfig>(TypeId);
 
@@ -148,9 +142,7 @@ export const ScanConfigProvider = () =>
         ),
         // Accounts without the cfone.port_scan entitlement reject every
         // scan-config call with the typed Unauthorized — treat as "none".
-        Effect.catchTag("Unauthorized", () =>
-          Effect.succeed<ScanConfigAttributes[]>([]),
-        ),
+        Effect.catchTag("Unauthorized", () => Effect.succeed<ScanConfigAttributes[]>([])),
       );
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -178,8 +170,7 @@ export const ScanConfigProvider = () =>
       // call entirely on a no-op.
       const dirty =
         !sameList(observed.ips, news.ips) ||
-        (news.frequency !== undefined &&
-          observed.frequency !== news.frequency) ||
+        (news.frequency !== undefined && observed.frequency !== news.frequency) ||
         (news.ports !== undefined && !sameList(observed.ports, news.ports));
 
       if (!dirty) {
@@ -242,10 +233,7 @@ const sameList = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
-const toAttributes = (
-  config: ObservedScanConfig,
-  accountId: string,
-): ScanConfigAttributes => ({
+const toAttributes = (config: ObservedScanConfig, accountId: string): ScanConfigAttributes => ({
   configId: config.id,
   accountId,
   ips: [...config.ips],

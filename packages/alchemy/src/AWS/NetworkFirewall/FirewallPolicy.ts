@@ -60,9 +60,8 @@ export interface FirewallPolicy extends Resource<
  * behavior as a collection of stateless and stateful
  * {@link RuleGroup | rule group} references plus default actions. One policy
  * can be shared by multiple {@link Firewall | firewalls}.
- * @resource
- * @section Creating Policies
- * @example Pass-everything Policy
+ * ### Creating Policies
+ * **Example:** Pass-everything Policy
  * ```typescript
  * import * as NetworkFirewall from "alchemy/AWS/NetworkFirewall";
  *
@@ -74,7 +73,7 @@ export interface FirewallPolicy extends Resource<
  * });
  * ```
  *
- * @example Policy referencing Rule Groups
+ * **Example:** Policy referencing Rule Groups
  * ```typescript
  * const stateless = yield* NetworkFirewall.RuleGroup("Stateless", {
  *   type: "STATELESS",
@@ -92,77 +91,49 @@ export interface FirewallPolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const FirewallPolicy = Resource<FirewallPolicy>(
-  "AWS.NetworkFirewall.FirewallPolicy",
-);
+export const FirewallPolicy = Resource<FirewallPolicy>("AWS.NetworkFirewall.FirewallPolicy");
 
 export const FirewallPolicyProvider = () =>
   Provider.effect(
     FirewallPolicy,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { firewallPolicyName?: string },
-      ) {
-        return (
-          props.firewallPolicyName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { firewallPolicyName?: string }) {
+        return props.firewallPolicyName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      const toAttrs = (
-        response: NFW.FirewallPolicyResponse,
-      ): FirewallPolicy["Attributes"] => ({
+      const toAttrs = (response: NFW.FirewallPolicyResponse): FirewallPolicy["Attributes"] => ({
         firewallPolicyName: response.FirewallPolicyName,
         firewallPolicyArn: response.FirewallPolicyArn,
         firewallPolicyId: response.FirewallPolicyId,
       });
 
       return FirewallPolicy.Provider.of({
-        stables: [
-          "firewallPolicyName",
-          "firewallPolicyArn",
-          "firewallPolicyId",
-        ],
+        stables: ["firewallPolicyName", "firewallPolicyArn", "firewallPolicyId"],
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* nfw.listFirewallPolicies
-              .pages({})
-              .pipe(Stream.runCollect);
-            const metas = Array.from(pages).flatMap(
-              (page) => page.FirewallPolicies ?? [],
-            );
+            const pages = yield* nfw.listFirewallPolicies.pages({}).pipe(Stream.runCollect);
+            const metas = Array.from(pages).flatMap((page) => page.FirewallPolicies ?? []);
             const items = yield* Effect.forEach(
               metas,
               (meta) =>
-                nfw
-                  .describeFirewallPolicy({ FirewallPolicyArn: meta.Arn })
-                  .pipe(
-                    Effect.map((r) => toAttrs(r.FirewallPolicyResponse)),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
-                  ),
+                nfw.describeFirewallPolicy({ FirewallPolicyArn: meta.Arn }).pipe(
+                  Effect.map((r) => toAttrs(r.FirewallPolicyResponse)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                ),
               { concurrency: 5 },
             );
-            return items.filter(
-              (item): item is FirewallPolicy["Attributes"] =>
-                item !== undefined,
-            );
+            return items.filter((item): item is FirewallPolicy["Attributes"] => item !== undefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.firewallPolicyName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.firewallPolicyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* nfw
             .describeFirewallPolicy({ FirewallPolicyName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found.FirewallPolicyResponse);
           const tags = nfwTagsToRecord(found.FirewallPolicyResponse.Tags);
@@ -179,8 +150,7 @@ export const FirewallPolicyProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.firewallPolicyName ?? (yield* createName(id, news));
+          const name = output?.firewallPolicyName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags: Record<string, string> = {
             ...news.tags,
@@ -190,11 +160,7 @@ export const FirewallPolicyProvider = () =>
           // 1. Observe — cloud state is authoritative.
           let observed = yield* nfw
             .describeFirewallPolicy({ FirewallPolicyName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // 2. Ensure — create if missing.
           if (observed === undefined) {
@@ -210,25 +176,21 @@ export const FirewallPolicyProvider = () =>
           }
 
           // 3. Sync definition — compare desired against OBSERVED state.
-          const observedDescription =
-            observed.FirewallPolicyResponse.Description;
+          const observedDescription = observed.FirewallPolicyResponse.Description;
           const definitionDiffers =
             !deepEqual(news.firewallPolicy, observed.FirewallPolicy) ||
             (news.description ?? undefined) !== observedDescription;
           if (definitionDiffers) {
             yield* nfw.updateFirewallPolicy({
               UpdateToken: observed.UpdateToken,
-              FirewallPolicyArn:
-                observed.FirewallPolicyResponse.FirewallPolicyArn,
+              FirewallPolicyArn: observed.FirewallPolicyResponse.FirewallPolicyArn,
               FirewallPolicy: news.firewallPolicy,
               Description: news.description,
             });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
-          const observedTags = nfwTagsToRecord(
-            observed.FirewallPolicyResponse.Tags,
-          );
+          const observedTags = nfwTagsToRecord(observed.FirewallPolicyResponse.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           const arn = observed.FirewallPolicyResponse.FirewallPolicyArn;
           if (upsert.length > 0) {

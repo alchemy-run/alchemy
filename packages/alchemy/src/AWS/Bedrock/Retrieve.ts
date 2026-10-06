@@ -7,10 +7,7 @@ import type { KnowledgeBase } from "./KnowledgeBase.ts";
  * The `Retrieve` request with the binding-injected `knowledgeBaseId` removed —
  * it is supplied automatically from the bound {@link KnowledgeBase}.
  */
-export interface RetrieveRequest extends Omit<
-  bedrock.RetrieveRequest,
-  "knowledgeBaseId"
-> {}
+export interface RetrieveRequest extends Omit<bedrock.RetrieveRequest, "knowledgeBaseId"> {}
 
 /**
  * Runtime binding for `bedrock-agent-runtime:Retrieve` — query a
@@ -23,9 +20,8 @@ export interface RetrieveRequest extends Omit<
  * retrieved chunks (to build your own prompt); use {@link RetrieveAndGenerate}
  * for a fully managed RAG answer.
  *
- * @binding
- * @section Retrieving Passages
- * @example Retrieve Relevant Chunks
+ * ### Retrieving Passages
+ * **Example:** Retrieve Relevant Chunks
  * ```typescript
  * // init
  * const retrieve = yield* Bedrock.Retrieve(knowledgeBase);
@@ -39,6 +35,8 @@ export interface RetrieveRequest extends Omit<
  * });
  * const passages = result.retrievalResults.map((r) => r.content?.text);
  * ```
+ *
+ * @binding
  */
 export interface Retrieve extends Binding.Service<
   Retrieve,
@@ -46,9 +44,7 @@ export interface Retrieve extends Binding.Service<
   <K extends KnowledgeBase>(
     knowledgeBase: K,
   ) => Effect.Effect<
-    (
-      request: RetrieveRequest,
-    ) => Effect.Effect<bedrock.RetrieveResponse, bedrock.RetrieveError>
+    (request: RetrieveRequest) => Effect.Effect<bedrock.RetrieveResponse, bedrock.RetrieveError>
   >
 > {}
 export const Retrieve = Binding.Service<Retrieve>("AWS.Bedrock.Retrieve");

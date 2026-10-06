@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Memory } from "./Memory.ts";
 
-export interface ListEventsRequest extends Omit<
-  agentcore.ListEventsInput,
-  "memoryId"
-> {}
+export interface ListEventsRequest extends Omit<agentcore.ListEventsInput, "memoryId"> {}
 
 /**
  * Lists the events of an actor's session in a memory's short-term store.
@@ -15,9 +12,8 @@ export interface ListEventsRequest extends Omit<
  * events recorded with `CreateEvent`. Provide `AgentCore.ListEventsHttp` on
  * the Function effect to implement the binding.
  *
- * @binding
- * @section Listing Events
- * @example List a Session's Events
+ * ### Listing Events
+ * **Example:** List a Session's Events
  * ```typescript
  * // init
  * const listEvents = yield* AgentCore.ListEvents(memory);
@@ -33,6 +29,8 @@ export interface ListEventsRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface ListEvents extends Binding.Service<
   ListEvents,
@@ -45,6 +43,4 @@ export interface ListEvents extends Binding.Service<
     ) => Effect.Effect<agentcore.ListEventsOutput, agentcore.ListEventsError>
   >
 > {}
-export const ListEvents = Binding.Service<ListEvents>(
-  "AWS.BedrockAgentCore.ListEvents",
-);
+export const ListEvents = Binding.Service<ListEvents>("AWS.BedrockAgentCore.ListEvents");

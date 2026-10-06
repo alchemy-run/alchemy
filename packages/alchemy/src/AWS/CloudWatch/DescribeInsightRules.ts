@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeInsightRulesRequest
-  extends cloudwatch.DescribeInsightRulesInput {}
+export interface DescribeInsightRulesRequest extends cloudwatch.DescribeInsightRulesInput {}
 
 /**
  * Runtime binding for `cloudwatch:DescribeInsightRules` — list the
@@ -11,9 +10,8 @@ export interface DescribeInsightRulesRequest
  *
  * Provide `CloudWatch.DescribeInsightRulesHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Reading Insight Rules
- * @example List Contributor Insights Rules
+ * ### Reading Insight Rules
+ * **Example:** List Contributor Insights Rules
  * ```typescript
  * // init — grants cloudwatch:DescribeInsightRules
  * const describeInsightRules = yield* AWS.CloudWatch.DescribeInsightRules();
@@ -22,6 +20,8 @@ export interface DescribeInsightRulesRequest
  * const result = yield* describeInsightRules();
  * const names = (result.InsightRules ?? []).map((rule) => rule.Name);
  * ```
+ *
+ * @binding
  */
 export interface DescribeInsightRules extends Binding.Service<
   DescribeInsightRules,
@@ -29,10 +29,7 @@ export interface DescribeInsightRules extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeInsightRulesRequest,
-    ) => Effect.Effect<
-      cloudwatch.DescribeInsightRulesOutput,
-      cloudwatch.DescribeInsightRulesError
-    >
+    ) => Effect.Effect<cloudwatch.DescribeInsightRulesOutput, cloudwatch.DescribeInsightRulesError>
   >
 > {}
 

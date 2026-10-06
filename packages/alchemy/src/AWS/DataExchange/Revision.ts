@@ -64,9 +64,8 @@ export interface Revision extends Resource<
  * assets. Providers import assets into a revision (via DataExchange jobs) and
  * then finalize it to make the snapshot available to subscribers.
  *
- * @resource
- * @section Creating Revisions
- * @example Revision with a comment
+ * ### Creating Revisions
+ * **Example:** Revision with a comment
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -80,12 +79,12 @@ export interface Revision extends Resource<
  * });
  * ```
  *
- * @section Finalizing
+ * ### Finalizing
  * Once assets have been imported into the revision (via a DataExchange
  * import job), flip `finalized` to publish it. Finalizing an empty revision
  * fails.
  *
- * @example Finalize a revision that has assets
+ * **Example:** Finalize a revision that has assets
  * ```typescript
  * const revision = yield* AWS.DataExchange.Revision("PricesV1", {
  *   dataSetId: dataSet.dataSetId,
@@ -93,6 +92,8 @@ export interface Revision extends Resource<
  *   finalized: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Revision = Resource<Revision>("AWS.DataExchange.Revision");
 
@@ -101,17 +102,10 @@ export const RevisionProvider = () =>
     Revision,
     Effect.gen(function* () {
       /** Get a revision by ids; typed not-found → undefined. */
-      const getById = Effect.fn(function* (
-        dataSetId: string,
-        revisionId: string,
-      ) {
+      const getById = Effect.fn(function* (dataSetId: string, revisionId: string) {
         return yield* dataexchange
           .getRevision({ DataSetId: dataSetId, RevisionId: revisionId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       /**
@@ -120,24 +114,18 @@ export const RevisionProvider = () =>
        * (state-persistence failure) goes through per-revision tag inspection.
        */
       const findByTags = Effect.fn(function* (id: string, dataSetId: string) {
-        return yield* dataexchange.listDataSetRevisions
-          .items({ DataSetId: dataSetId })
-          .pipe(
-            Stream.mapEffect(
-              Effect.fn(function* (entry) {
-                const tags = yield* readDataExchangeTags(entry.Arn);
-                return (yield* hasAlchemyTags(id, tags)) ? entry : undefined;
-              }),
-            ),
-            Stream.filter((entry) => entry !== undefined),
-            Stream.runHead,
-            Effect.map((head) =>
-              head._tag === "Some" ? head.value : undefined,
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* dataexchange.listDataSetRevisions.items({ DataSetId: dataSetId }).pipe(
+          Stream.mapEffect(
+            Effect.fn(function* (entry) {
+              const tags = yield* readDataExchangeTags(entry.Arn);
+              return (yield* hasAlchemyTags(id, tags)) ? entry : undefined;
+            }),
+          ),
+          Stream.filter((entry) => entry !== undefined),
+          Stream.runHead,
+          Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       return {
@@ -227,10 +215,7 @@ export const RevisionProvider = () =>
               // Asset deletions inside the revision can transiently conflict.
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );

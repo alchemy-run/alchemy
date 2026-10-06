@@ -81,8 +81,8 @@ export interface FindingEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Findings
- * @example Alert on High-Severity Sensitive Data
+ * ### Consuming Findings
+ * **Example:** Alert on High-Severity Sensitive Data
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -120,9 +120,7 @@ export const consumeFindings = <StreamReq = never, Req = never>(
         ? {
             detail: {
               ...(props.types !== undefined ? { type: [...props.types] } : {}),
-              ...(props.categories !== undefined
-                ? { category: [...props.categories] }
-                : {}),
+              ...(props.categories !== undefined ? { category: [...props.categories] } : {}),
               ...(props.severities !== undefined
                 ? { severity: { description: [...props.severities] } }
                 : {}),

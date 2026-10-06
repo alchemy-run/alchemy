@@ -2,10 +2,10 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CachePolicyProps {
@@ -95,9 +95,8 @@ export interface CachePolicy extends Resource<
  * For AWS-managed policies (CachingOptimized, CachingDisabled,
  * AllViewerExceptHostHeader) reference them by ID via the constants in
  * {@link ManagedPolicies} instead of creating a custom policy.
- * @resource
- * @section Creating Cache Policies
- * @example Cache by query string and Authorization header
+ * ### Creating Cache Policies
+ * **Example:** Cache by query string and Authorization header
  * ```typescript
  * const cachePolicy = yield* CachePolicy("ApiCachePolicy", {
  *   comment: "Cache GETs by query string + Authorization",
@@ -116,6 +115,8 @@ export interface CachePolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const CachePolicy = Resource<CachePolicy>("AWS.CloudFront.CachePolicy");
 
@@ -126,11 +127,7 @@ export const CachePolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getCachePolicyConfig({ Id: id })
-          .pipe(
-            Effect.catchTag("NoSuchCachePolicy", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchCachePolicy", () => Effect.succeed(undefined)));
         if (!config?.CachePolicyConfig) return undefined;
         return { config: config.CachePolicyConfig, etag: config.ETag };
       });
@@ -142,9 +139,7 @@ export const CachePolicyProvider = () =>
         );
         if (!summary?.CachePolicy?.Id) return undefined;
         return yield* getById(summary.CachePolicy.Id).pipe(
-          Effect.map((found) =>
-            found ? { id: summary.CachePolicy.Id, ...found } : undefined,
-          ),
+          Effect.map((found) => (found ? { id: summary.CachePolicy.Id, ...found } : undefined)),
         );
       });
 
@@ -157,8 +152,7 @@ export const CachePolicyProvider = () =>
         MinTTL: toWireSeconds(props.minTTL)!,
         DefaultTTL: toWireSeconds(props.defaultTTL),
         MaxTTL: toWireSeconds(props.maxTTL),
-        ParametersInCacheKeyAndForwardedToOrigin:
-          props.parametersInCacheKeyAndForwardedToOrigin,
+        ParametersInCacheKeyAndForwardedToOrigin: props.parametersInCacheKeyAndForwardedToOrigin,
       });
 
       const toAttrs = (
@@ -173,26 +167,21 @@ export const CachePolicyProvider = () =>
         minTTL: config.MinTTL,
         defaultTTL: config.DefaultTTL,
         maxTTL: config.MaxTTL,
-        parametersInCacheKeyAndForwardedToOrigin:
-          config.ParametersInCacheKeyAndForwardedToOrigin,
+        parametersInCacheKeyAndForwardedToOrigin: config.ParametersInCacheKeyAndForwardedToOrigin,
       });
 
       return {
         stables: ["cachePolicyId"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.cachePolicyId) {
             const found = yield* getById(output.cachePolicyId);
-            if (found)
-              return toAttrs(output.cachePolicyId, found.config, found.etag);
+            if (found) return toAttrs(output.cachePolicyId, found.config, found.etag);
           }
           const name = yield* createName(id, olds ?? {});
           const found = yield* getByName(name);
@@ -233,9 +222,7 @@ export const CachePolicyProvider = () =>
           // name. Trust observed cloud state, not stale `olds`.
           let observed = output?.cachePolicyId
             ? yield* getById(output.cachePolicyId).pipe(
-                Effect.map((found) =>
-                  found ? { id: output.cachePolicyId, ...found } : undefined,
-                ),
+                Effect.map((found) => (found ? { id: output.cachePolicyId, ...found } : undefined)),
               )
             : undefined;
           if (!observed) {
@@ -274,9 +261,7 @@ export const CachePolicyProvider = () =>
                 ),
               );
             if (!created.CachePolicy?.Id) {
-              return yield* Effect.fail(
-                new Error("createCachePolicy returned no identifier"),
-              );
+              return yield* Effect.fail(new Error("createCachePolicy returned no identifier"));
             }
             yield* session.note(created.CachePolicy.Id);
             return toAttrs(
@@ -295,9 +280,7 @@ export const CachePolicyProvider = () =>
             CachePolicyConfig: desired,
           });
           if (!updated.CachePolicy?.Id) {
-            return yield* Effect.fail(
-              new Error("updateCachePolicy returned no identifier"),
-            );
+            return yield* Effect.fail(new Error("updateCachePolicy returned no identifier"));
           }
           yield* session.note(observed.id);
           return toAttrs(

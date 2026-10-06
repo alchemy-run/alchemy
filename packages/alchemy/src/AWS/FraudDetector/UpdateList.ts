@@ -8,10 +8,7 @@ import type { List } from "./List.ts";
  * supplies the elements and the `updateMode` (`APPEND`, `REMOVE`, or
  * `REPLACE`).
  */
-export interface UpdateListRequest extends Omit<
-  frauddetector.UpdateListRequest,
-  "name"
-> {}
+export interface UpdateListRequest extends Omit<frauddetector.UpdateListRequest, "name"> {}
 
 /**
  * Mutate the elements of a bound Amazon Fraud Detector list at runtime — the
@@ -22,14 +19,13 @@ export interface UpdateListRequest extends Omit<
  * deploy (a `REPLACE` update), so elements appended at runtime are removed by
  * the next deploy unless they are also added to the resource's props.
  *
- * @binding
- * @section Updating List Elements
+ * ### Updating List Elements
  * Provide the `UpdateListHttp` implementation layer on the Function effect,
  * bind the list in the init phase, then call the returned client at runtime.
  * The binding grants `frauddetector:UpdateList` on the list and injects its
  * `name` automatically.
  *
- * @example Append from a Lambda
+ * **Example:** Append from a Lambda
  * ```typescript
  * // init
  * const updateList = yield* FraudDetector.UpdateList(blockedIps);
@@ -44,6 +40,8 @@ export interface UpdateListRequest extends Omit<
  * // on the Function effect:
  * // .pipe(Effect.provide(FraudDetector.UpdateListHttp))
  * ```
+ *
+ * @binding
  */
 export interface UpdateList extends Binding.Service<
   UpdateList,
@@ -53,12 +51,7 @@ export interface UpdateList extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateListRequest,
-    ) => Effect.Effect<
-      frauddetector.UpdateListResult,
-      frauddetector.UpdateListError
-    >
+    ) => Effect.Effect<frauddetector.UpdateListResult, frauddetector.UpdateListError>
   >
 > {}
-export const UpdateList = Binding.Service<UpdateList>(
-  "AWS.FraudDetector.UpdateList",
-);
+export const UpdateList = Binding.Service<UpdateList>("AWS.FraudDetector.UpdateList");

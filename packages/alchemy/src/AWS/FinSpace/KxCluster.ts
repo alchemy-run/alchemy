@@ -20,8 +20,7 @@ export type CodeConfiguration = finspace.CodeConfiguration;
 export type KxCommandLineArgument = finspace.KxCommandLineArgument;
 export type KxDatabaseConfiguration = finspace.KxDatabaseConfiguration;
 export type KxCacheStorageConfiguration = finspace.KxCacheStorageConfiguration;
-export type KxSavedownStorageConfiguration =
-  finspace.KxSavedownStorageConfiguration;
+export type KxSavedownStorageConfiguration = finspace.KxSavedownStorageConfiguration;
 export type KxScalingGroupConfiguration = finspace.KxScalingGroupConfiguration;
 export type TickerplantLogConfiguration = finspace.TickerplantLogConfiguration;
 
@@ -200,9 +199,8 @@ export interface KxCluster extends Resource<
  * while it exists. Live lifecycle tests are gated behind
  * `AWS_TEST_FINSPACE=1`.
  * :::
- * @resource
- * @section Creating kdb Clusters
- * @example HDB Cluster on Dedicated Capacity
+ * ### Creating kdb Clusters
+ * **Example:** HDB Cluster on Dedicated Capacity
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -222,31 +220,21 @@ export interface KxCluster extends Resource<
  *   databases: [{ databaseName: db.databaseName }],
  * });
  * ```
+ *
+ * @resource
  */
 export const KxCluster = Resource<KxCluster>("AWS.FinSpace.KxCluster");
 
-const createClusterName = (
-  id: string,
-  props: { clusterName?: string | undefined },
-) =>
-  props.clusterName
-    ? Effect.succeed(props.clusterName)
-    : createPhysicalName({ id, maxLength: 63 });
+const createClusterName = (id: string, props: { clusterName?: string | undefined }) =>
+  props.clusterName ? Effect.succeed(props.clusterName) : createPhysicalName({ id, maxLength: 63 });
 
 const isGone = (status: KxClusterStatus | undefined) =>
   status === "DELETED" || status === "DELETING";
 
-const readCluster = Effect.fn(function* (
-  environmentId: string,
-  clusterName: string,
-) {
+const readCluster = Effect.fn(function* (environmentId: string, clusterName: string) {
   const response = yield* finspace
     .getKxCluster({ environmentId, clusterName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!response || isGone(response.status)) return undefined;
   return response;
 });
@@ -277,9 +265,7 @@ class KxClusterNotReady extends Data.TaggedError("KxClusterNotReady")<{
  * A cluster whose asynchronous provisioning converged to a terminal failure
  * status (`CREATE_FAILED` / `DELETE_FAILED`).
  */
-export class KxClusterProvisioningFailed extends Data.TaggedError(
-  "KxClusterProvisioningFailed",
-)<{
+export class KxClusterProvisioningFailed extends Data.TaggedError("KxClusterProvisioningFailed")<{
   readonly clusterName: string;
   readonly status: string | undefined;
   readonly statusReason: string | undefined;
@@ -296,10 +282,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "KxClusterNotReady",
     // Cluster provisioning is slow (tens of minutes); poll every 20s up to
     // ~40 min.
-    schedule: Schedule.max([
-      Schedule.spaced("20 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(120)]),
   });
 
 const waitForClusterStatus = (
@@ -311,11 +294,7 @@ const waitForClusterStatus = (
     Effect.gen(function* () {
       const response = yield* finspace
         .getKxCluster({ environmentId, clusterName })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       const status = response?.status;
       if (target === "DELETED") {
         if (response === undefined || status === "DELETED") return;
@@ -328,9 +307,7 @@ const waitForClusterStatus = (
             }),
           );
         }
-        return yield* Effect.fail(
-          new KxClusterNotReady({ clusterName, status }),
-        );
+        return yield* Effect.fail(new KxClusterNotReady({ clusterName, status }));
       }
       if (status === "RUNNING") return;
       if (status === "CREATE_FAILED") {
@@ -363,8 +340,7 @@ export const KxClusterProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const environmentId = output?.environmentId ?? olds?.environmentId;
           if (environmentId === undefined) return undefined;
-          const clusterName =
-            output?.clusterName ?? (yield* createClusterName(id, olds ?? {}));
+          const clusterName = output?.clusterName ?? (yield* createClusterName(id, olds ?? {}));
           const cluster = yield* readCluster(environmentId, clusterName);
           if (!cluster) return undefined;
           // Clusters have no tag-read surface (no ARN in Get/List responses)
@@ -387,28 +363,14 @@ export const KxClusterProvider = () =>
             olds.availabilityZoneId !== news.availabilityZoneId ||
             !sameJson(olds.vpcConfiguration, news.vpcConfiguration) ||
             !sameJson(olds.capacityConfiguration, news.capacityConfiguration) ||
+            !sameJson(olds.scalingGroupConfiguration, news.scalingGroupConfiguration) ||
             !sameJson(
-              olds.scalingGroupConfiguration,
-              news.scalingGroupConfiguration,
+              olds.autoScalingConfiguration && toWireAutoScaling(olds.autoScalingConfiguration),
+              news.autoScalingConfiguration && toWireAutoScaling(news.autoScalingConfiguration),
             ) ||
-            !sameJson(
-              olds.autoScalingConfiguration &&
-                toWireAutoScaling(olds.autoScalingConfiguration),
-              news.autoScalingConfiguration &&
-                toWireAutoScaling(news.autoScalingConfiguration),
-            ) ||
-            !sameJson(
-              olds.savedownStorageConfiguration,
-              news.savedownStorageConfiguration,
-            ) ||
-            !sameJson(
-              olds.cacheStorageConfigurations,
-              news.cacheStorageConfigurations,
-            ) ||
-            !sameJson(
-              olds.tickerplantLogConfiguration,
-              news.tickerplantLogConfiguration,
-            ) ||
+            !sameJson(olds.savedownStorageConfiguration, news.savedownStorageConfiguration) ||
+            !sameJson(olds.cacheStorageConfigurations, news.cacheStorageConfigurations) ||
+            !sameJson(olds.tickerplantLogConfiguration, news.tickerplantLogConfiguration) ||
             olds.executionRole !== news.executionRole
           ) {
             return { action: "replace" } as const;
@@ -416,13 +378,10 @@ export const KxClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("FinSpace KxCluster requires props"),
-            );
+            return yield* Effect.fail(new Error("FinSpace KxCluster requires props"));
           }
           const environmentId = news.environmentId;
-          const clusterName =
-            output?.clusterName ?? (yield* createClusterName(id, news));
+          const clusterName = output?.clusterName ?? (yield* createClusterName(id, news));
           const internalTags = yield* createInternalTags(id);
           // One idempotency token per reconcile.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
@@ -446,8 +405,7 @@ export const KxClusterProvider = () =>
                 capacityConfiguration: news.capacityConfiguration,
                 scalingGroupConfiguration: news.scalingGroupConfiguration,
                 autoScalingConfiguration:
-                  news.autoScalingConfiguration &&
-                  toWireAutoScaling(news.autoScalingConfiguration),
+                  news.autoScalingConfiguration && toWireAutoScaling(news.autoScalingConfiguration),
                 savedownStorageConfiguration: news.savedownStorageConfiguration,
                 databases: news.databases,
                 cacheStorageConfigurations: news.cacheStorageConfigurations,
@@ -459,11 +417,7 @@ export const KxClusterProvider = () =>
                 executionRole: news.executionRole,
                 tags: { ...internalTags, ...news.tags },
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             yield* session.note(`Creating kdb cluster ${clusterName}...`);
             yield* waitForClusterStatus(environmentId, clusterName, "RUNNING");
             cluster = yield* readCluster(environmentId, clusterName);
@@ -479,12 +433,8 @@ export const KxClusterProvider = () =>
           if (
             news.code !== undefined &&
             (!sameJson(news.code, cluster.code) ||
-              (news.initializationScript ?? "") !==
-                (cluster.initializationScript ?? "") ||
-              !sameJson(
-                news.commandLineArguments,
-                cluster.commandLineArguments,
-              ))
+              (news.initializationScript ?? "") !== (cluster.initializationScript ?? "") ||
+              !sameJson(news.commandLineArguments, cluster.commandLineArguments))
           ) {
             yield* finspace.updateKxClusterCodeConfiguration({
               environmentId,
@@ -500,19 +450,14 @@ export const KxClusterProvider = () =>
 
           // Sync mounted databases — only when the caller manages them and
           // the observed set drifted.
-          if (
-            news.databases !== undefined &&
-            !sameJson(news.databases, cluster.databases)
-          ) {
+          if (news.databases !== undefined && !sameJson(news.databases, cluster.databases)) {
             yield* finspace.updateKxClusterDatabases({
               environmentId,
               clusterName,
               clientToken,
               databases: news.databases,
             });
-            yield* session.note(
-              `Updated databases on kdb cluster ${clusterName}`,
-            );
+            yield* session.note(`Updated databases on kdb cluster ${clusterName}`);
             yield* waitForClusterStatus(environmentId, clusterName, "RUNNING");
           }
 
@@ -532,14 +477,8 @@ export const KxClusterProvider = () =>
               environmentId: output.environmentId,
               clusterName: output.clusterName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
-          yield* waitForClusterStatus(
-            output.environmentId,
-            output.clusterName,
-            "DELETED",
-          );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* waitForClusterStatus(output.environmentId, output.clusterName, "DELETED");
         }),
       };
     }),

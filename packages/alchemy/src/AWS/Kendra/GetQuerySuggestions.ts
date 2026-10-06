@@ -20,14 +20,15 @@ export interface GetQuerySuggestionsRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.GetQuerySuggestionsHttp)`.
  *
- * @binding
- * @section Query Suggestions
- * @example Typeahead Suggestions
+ * ### Query Suggestions
+ * **Example:** Typeahead Suggestions
  * ```typescript
  * const suggest = yield* AWS.Kendra.GetQuerySuggestions(index);
  *
  * const { Suggestions } = yield* suggest({ QueryText: "how to conf" });
  * ```
+ *
+ * @binding
  */
 export interface GetQuerySuggestions extends Binding.Service<
   GetQuerySuggestions,
@@ -37,10 +38,7 @@ export interface GetQuerySuggestions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetQuerySuggestionsRequest,
-    ) => Effect.Effect<
-      kendra.GetQuerySuggestionsResponse,
-      kendra.GetQuerySuggestionsError
-    >
+    ) => Effect.Effect<kendra.GetQuerySuggestionsResponse, kendra.GetQuerySuggestionsError>
   >
 > {}
 export const GetQuerySuggestions = Binding.Service<GetQuerySuggestions>(

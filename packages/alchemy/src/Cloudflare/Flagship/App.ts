@@ -57,24 +57,21 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * apps that map to your projects or services; the app's `appId` is what a
  * Worker's `Flagship` binding points at and what every evaluation call is
  * scoped to. The name is mutable in place; the app id never changes.
- * @resource
- * @product Flagship
- * @category Developer Platform
- * @section Creating an App
- * @example App with a generated name
+ * ### Creating an App
+ * **Example:** App with a generated name
  * ```typescript
  * const app = yield* Cloudflare.Flagship.App("Flags", {});
  * ```
  *
- * @example App with an explicit name
+ * **Example:** App with an explicit name
  * ```typescript
  * const app = yield* Cloudflare.Flagship.App("Flags", {
  *   name: "my-service-flags",
  * });
  * ```
  *
- * @section Using the App
- * @example Define flags in the app
+ * ### Using the App
+ * **Example:** Define flags in the app
  * ```typescript
  * const app = yield* Cloudflare.Flagship.App("Flags", {});
  *
@@ -86,8 +83,8 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Effect-style Worker (recommended)
+ * ### Binding to a Worker
+ * **Example:** Effect-style Worker (recommended)
  * `Cloudflare.Flagship.ReadFlags(app)` attaches the binding to the surrounding
  * Worker and returns the runtime client for evaluating flags. Every `Flagship`
  * method is mirrored as an Effect, so no `Effect.tryPromise` wrapping is needed.
@@ -111,7 +108,7 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * );
  * ```
  *
- * @example Declare the binding on `env`
+ * **Example:** Declare the binding on `env`
  * Declaring the app on a Worker's `env` maps it to the native `Flagship`
  * runtime binding via `InferEnv`.
  * ```typescript
@@ -126,7 +123,7 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * //   { FLAGS: Flagship }
  * ```
  *
- * @example Async-style worker with the raw runtime binding
+ * **Example:** Async-style worker with the raw runtime binding
  * ```typescript
  * import type { WorkerEnv } from "../alchemy.run.ts";
  *
@@ -142,14 +139,17 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  *
  * @see https://developers.cloudflare.com/flagship/
  * @see https://developers.cloudflare.com/api/resources/flagship/
+ *
+ * @resource
+ * @product Flagship
+ * @category Developer Platform
  */
 export const App = Resource<App>(TypeId);
 
 /**
  * Returns true if the given value is a Flagship App resource.
  */
-export const isApp = (value: unknown): value is App =>
-  isResourceOfType(value, TypeId);
+export const isApp = (value: unknown): value is App => isResourceOfType(value, TypeId);
 
 export const AppProvider = () =>
   Provider.succeed(App, {
@@ -220,17 +220,13 @@ export const AppProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const listed = yield* flagship.listApps.pages({ accountId }).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.result ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
       );
       const rows = yield* Effect.forEach(
         listed,
         (app) =>
           getApp(accountId, app.id).pipe(
-            Effect.map((observed) =>
-              observed ? toAttributes(observed, accountId) : undefined,
-            ),
+            Effect.map((observed) => (observed ? toAttributes(observed, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
@@ -244,9 +240,7 @@ export const AppProvider = () =>
 const getApp = (accountId: string, appId: string) =>
   flagship
     .getApp({ accountId, appId })
-    .pipe(
-      Effect.catchTag("FlagshipAppNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find an app by exact name. If several apps carry the same name, pick the
@@ -269,10 +263,7 @@ const createAppName = (id: string, name: string | undefined) =>
   });
 
 const toAttributes = (
-  app:
-    | flagship.GetAppResponse
-    | flagship.CreateAppResponse
-    | flagship.UpdateAppResponse,
+  app: flagship.GetAppResponse | flagship.CreateAppResponse | flagship.UpdateAppResponse,
   accountId: string,
 ): AppAttributes => ({
   appId: app.id,

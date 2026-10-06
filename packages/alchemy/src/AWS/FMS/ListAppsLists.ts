@@ -12,9 +12,8 @@ export interface ListAppsListsRequest extends fms.ListAppsListsRequest {}
  *
  * Returns an array of `AppsListDataSummary` objects for the applications lists in the administrator's account. Provide the
  * implementation with `Effect.provide(AWS.FMS.ListAppsListsHttp)`.
- * @binding
- * @section Applications Lists
- * @example List Applications Lists
+ * ### Applications Lists
+ * **Example:** List Applications Lists
  * ```typescript
  * // init — account-level binding takes no resource
  * const listAppsLists = yield* AWS.FMS.ListAppsLists();
@@ -23,6 +22,8 @@ export interface ListAppsListsRequest extends fms.ListAppsListsRequest {}
  * const result = yield* listAppsLists({ MaxResults: 25 });
  * console.log(result.AppsLists?.length);
  * ```
+ *
+ * @binding
  */
 export interface ListAppsLists extends Binding.Service<
   ListAppsLists,
@@ -34,6 +35,4 @@ export interface ListAppsLists extends Binding.Service<
   >
 > {}
 
-export const ListAppsLists = Binding.Service<ListAppsLists>(
-  "AWS.FMS.ListAppsLists",
-);
+export const ListAppsLists = Binding.Service<ListAppsLists>("AWS.FMS.ListAppsLists");

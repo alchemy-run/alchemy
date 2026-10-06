@@ -7,23 +7,19 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
  * Request for {@link ListQueuedMessages}. The bound device's id is injected
  * automatically.
  */
-export interface ListQueuedMessagesRequest extends Omit<
-  iotw.ListQueuedMessagesRequest,
-  "Id"
-> {}
+export interface ListQueuedMessagesRequest extends Omit<iotw.ListQueuedMessagesRequest, "Id"> {}
 
 /**
  * Runtime binding for `iotwireless:ListQueuedMessages` — list the downlink
  * messages queued for the bound wireless device from a deployed Lambda or
  * Task.
  *
- * @binding
- * @section Inspecting the Downlink Queue
+ * ### Inspecting the Downlink Queue
  * Provide the `ListQueuedMessagesHttp` implementation layer on the Function
  * effect, bind the device in the init phase, then call the returned client
  * at runtime.
  *
- * @example Count Pending Downlinks
+ * **Example:** Count Pending Downlinks
  * ```typescript
  * // init
  * const listQueued = yield* AWS.IoTWireless.ListQueuedMessages(device);
@@ -34,6 +30,8 @@ export interface ListQueuedMessagesRequest extends Omit<
  * // on the Function effect:
  * // .pipe(Effect.provide(AWS.IoTWireless.ListQueuedMessagesHttp))
  * ```
+ *
+ * @binding
  */
 export interface ListQueuedMessages extends Binding.Service<
   ListQueuedMessages,
@@ -43,10 +41,7 @@ export interface ListQueuedMessages extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListQueuedMessagesRequest,
-    ) => Effect.Effect<
-      iotw.ListQueuedMessagesResponse,
-      iotw.ListQueuedMessagesError
-    >
+    ) => Effect.Effect<iotw.ListQueuedMessagesResponse, iotw.ListQueuedMessagesError>
   >
 > {}
 export const ListQueuedMessages = Binding.Service<ListQueuedMessages>(

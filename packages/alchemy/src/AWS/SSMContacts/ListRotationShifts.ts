@@ -10,9 +10,8 @@ import type { Rotation } from "./Rotation.ts";
  * be) on call and when. The rotation's ARN is injected as `RotationId`.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ListRotationShiftsHttp)`.
- * @binding
- * @section Managing On-Call Rotations
- * @example Who Is On Call This Week
+ * ### Managing On-Call Rotations
+ * **Example:** Who Is On Call This Week
  * ```typescript
  * const listRotationShifts = yield* AWS.SSMContacts.ListRotationShifts(rotation);
  *
@@ -20,6 +19,8 @@ import type { Rotation } from "./Rotation.ts";
  *   EndTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListRotationShifts extends Binding.Service<
   ListRotationShifts,
@@ -29,10 +30,7 @@ export interface ListRotationShifts extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.ListRotationShiftsRequest, "RotationId">,
-    ) => Effect.Effect<
-      ssm.ListRotationShiftsResult,
-      ssm.ListRotationShiftsError
-    >
+    ) => Effect.Effect<ssm.ListRotationShiftsResult, ssm.ListRotationShiftsError>
   >
 > {}
 export const ListRotationShifts = Binding.Service<ListRotationShifts>(

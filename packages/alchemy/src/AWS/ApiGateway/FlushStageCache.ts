@@ -12,9 +12,8 @@ import type { ApiGatewayStage } from "./Stage.ts";
  * `ApiGateway.FlushStageCacheHttp` on the Function effect to implement the
  * binding.
  *
- * @binding
- * @section Flushing caches
- * @example Invalidate the stage cache after a write
+ * ### Flushing caches
+ * **Example:** Invalidate the stage cache after a write
  * ```typescript
  * // init
  * const flushStageCache = yield* ApiGateway.FlushStageCache(stage);
@@ -22,16 +21,14 @@ import type { ApiGatewayStage } from "./Stage.ts";
  * // runtime
  * yield* flushStageCache();
  * ```
+ *
+ * @binding
  */
 export interface FlushStageCache extends Binding.Service<
   FlushStageCache,
   "AWS.ApiGateway.FlushStageCache",
   <S extends ApiGatewayStage>(
     stage: S,
-  ) => Effect.Effect<
-    () => Effect.Effect<ag.FlushStageCacheResponse, ag.FlushStageCacheError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<ag.FlushStageCacheResponse, ag.FlushStageCacheError>>
 > {}
-export const FlushStageCache = Binding.Service<FlushStageCache>(
-  "AWS.ApiGateway.FlushStageCache",
-);
+export const FlushStageCache = Binding.Service<FlushStageCache>("AWS.ApiGateway.FlushStageCache");

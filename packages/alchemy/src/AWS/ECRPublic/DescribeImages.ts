@@ -16,9 +16,8 @@ export interface DescribeImagesRequest extends Omit<
  * bound {@link PublicRepository}. Provide the implementation with
  * `Effect.provide(AWS.ECRPublic.DescribeImagesHttp)`.
  *
- * @binding
- * @section Reading Images
- * @example List Images In A Public Repository
+ * ### Reading Images
+ * **Example:** List Images In A Public Repository
  * ```typescript
  * // init
  * const describeImages = yield* AWS.ECRPublic.DescribeImages(repository);
@@ -27,6 +26,8 @@ export interface DescribeImagesRequest extends Omit<
  * const result = yield* describeImages();
  * const digests = (result.imageDetails ?? []).map((i) => i.imageDigest);
  * ```
+ *
+ * @binding
  */
 export interface DescribeImages extends Binding.Service<
   DescribeImages,
@@ -36,13 +37,8 @@ export interface DescribeImages extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeImagesRequest,
-    ) => Effect.Effect<
-      ecrpublic.DescribeImagesResponse,
-      ecrpublic.DescribeImagesError
-    >
+    ) => Effect.Effect<ecrpublic.DescribeImagesResponse, ecrpublic.DescribeImagesError>
   >
 > {}
 
-export const DescribeImages = Binding.Service<DescribeImages>(
-  "AWS.ECRPublic.DescribeImages",
-);
+export const DescribeImages = Binding.Service<DescribeImages>("AWS.ECRPublic.DescribeImages");

@@ -15,14 +15,15 @@ export interface GetAnalyzedResourceRequest extends Omit<
  * Retrieves the analysis status and sharing summary for a resource the
  * analyzer has scanned. Provide the implementation with
  * `Effect.provide(AWS.AccessAnalyzer.GetAnalyzedResourceHttp)`.
- * @binding
- * @section Scanning Resources
- * @example Inspect an Analyzed Resource
+ * ### Scanning Resources
+ * **Example:** Inspect an Analyzed Resource
  * ```typescript
  * const getResource =
  *   yield* AWS.AccessAnalyzer.GetAnalyzedResource(analyzer);
  * const analyzed = yield* getResource({ resourceArn: bucket.bucketArn });
  * ```
+ *
+ * @binding
  */
 export interface GetAnalyzedResource extends Binding.Service<
   GetAnalyzedResource,
@@ -32,10 +33,7 @@ export interface GetAnalyzedResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAnalyzedResourceRequest,
-    ) => Effect.Effect<
-      aa.GetAnalyzedResourceResponse,
-      aa.GetAnalyzedResourceError
-    >
+    ) => Effect.Effect<aa.GetAnalyzedResourceResponse, aa.GetAnalyzedResourceError>
   >
 > {}
 

@@ -6,19 +6,15 @@ import type { QApp } from "./QApp.ts";
 /**
  * Request for {@link PredictQApp} — `instanceId` is injected from the bound Q App.
  */
-export interface PredictQAppRequest extends Omit<
-  qapps.PredictQAppInput,
-  "instanceId"
-> {}
+export interface PredictQAppRequest extends Omit<qapps.PredictQAppInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:PredictQApp`.
  *
  * Generates a Q App definition from a natural-language problem statement or a Q Business conversation. Provide the implementation with
  * `Effect.provide(AWS.QApps.PredictQAppHttp)`.
- * @binding
- * @section Generation
- * @example Generate an App Definition from a Prompt
+ * ### Generation
+ * **Example:** Generate an App Definition from a Prompt
  * ```typescript
  * // init — bind the operation to the Q App
  * const predictQApp = yield* AWS.QApps.PredictQApp(app);
@@ -31,6 +27,8 @@ export interface PredictQAppRequest extends Omit<
  * });
  * console.log(predicted.app.title);
  * ```
+ *
+ * @binding
  */
 export interface PredictQApp extends Binding.Service<
   PredictQApp,
@@ -38,12 +36,8 @@ export interface PredictQApp extends Binding.Service<
   (
     app: QApp,
   ) => Effect.Effect<
-    (
-      request?: PredictQAppRequest,
-    ) => Effect.Effect<qapps.PredictQAppOutput, qapps.PredictQAppError>
+    (request?: PredictQAppRequest) => Effect.Effect<qapps.PredictQAppOutput, qapps.PredictQAppError>
   >
 > {}
 
-export const PredictQApp = Binding.Service<PredictQApp>(
-  "AWS.QApps.PredictQApp",
-);
+export const PredictQApp = Binding.Service<PredictQApp>("AWS.QApps.PredictQApp");

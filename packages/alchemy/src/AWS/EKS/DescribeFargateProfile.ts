@@ -10,9 +10,8 @@ import type { Cluster } from "./Cluster.ts";
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeFargateProfile` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeFargateProfileHttp)`.
- * @binding
- * @section Inspecting Compute
- * @example Read a Fargate Profile
+ * ### Inspecting Compute
+ * **Example:** Read a Fargate Profile
  * ```typescript
  * // init
  * const describeFargateProfile = yield* AWS.EKS.DescribeFargateProfile(cluster);
@@ -22,6 +21,8 @@ import type { Cluster } from "./Cluster.ts";
  *   fargateProfileName: "default",
  * });
  * ```
+ *
+ * @binding
  */
 export interface DescribeFargateProfile extends Binding.Service<
   DescribeFargateProfile,
@@ -31,10 +32,7 @@ export interface DescribeFargateProfile extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<eks.DescribeFargateProfileRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.DescribeFargateProfileResponse,
-      eks.DescribeFargateProfileError
-    >
+    ) => Effect.Effect<eks.DescribeFargateProfileResponse, eks.DescribeFargateProfileError>
   >
 > {}
 export const DescribeFargateProfile = Binding.Service<DescribeFargateProfile>(

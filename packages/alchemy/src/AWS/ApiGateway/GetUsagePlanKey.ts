@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
-export interface GetUsagePlanKeyRequest extends Omit<
-  ag.GetUsagePlanKeyRequest,
-  "usagePlanId"
-> {}
+export interface GetUsagePlanKeyRequest extends Omit<ag.GetUsagePlanKeyRequest, "usagePlanId"> {}
 
 /**
  * Runtime binding for reading a single API key enrolled in a
@@ -15,9 +12,8 @@ export interface GetUsagePlanKeyRequest extends Omit<
  * Provide `ApiGateway.GetUsagePlanKeyHttp` on the Function effect to
  * implement the binding.
  *
- * @binding
- * @section Managing plan keys
- * @example Check a key's enrollment
+ * ### Managing plan keys
+ * **Example:** Check a key's enrollment
  * ```typescript
  * // init
  * const getUsagePlanKey = yield* ApiGateway.GetUsagePlanKey(plan);
@@ -28,6 +24,8 @@ export interface GetUsagePlanKeyRequest extends Omit<
  *   Effect.catchTag("NotFoundException", () => Effect.succeed(false)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetUsagePlanKey extends Binding.Service<
   GetUsagePlanKey,
@@ -35,11 +33,7 @@ export interface GetUsagePlanKey extends Binding.Service<
   <P extends UsagePlan>(
     usagePlan: P,
   ) => Effect.Effect<
-    (
-      request: GetUsagePlanKeyRequest,
-    ) => Effect.Effect<ag.UsagePlanKey, ag.GetUsagePlanKeyError>
+    (request: GetUsagePlanKeyRequest) => Effect.Effect<ag.UsagePlanKey, ag.GetUsagePlanKeyError>
   >
 > {}
-export const GetUsagePlanKey = Binding.Service<GetUsagePlanKey>(
-  "AWS.ApiGateway.GetUsagePlanKey",
-);
+export const GetUsagePlanKey = Binding.Service<GetUsagePlanKey>("AWS.ApiGateway.GetUsagePlanKey");

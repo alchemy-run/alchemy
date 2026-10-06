@@ -110,9 +110,8 @@ export interface ScalableTarget extends Resource<
  * any part of the triple replaces the target. Deregistering a scalable
  * target deletes the scaling policies and scheduled actions associated
  * with it.
- * @resource
- * @section Creating Scalable Targets
- * @example Scale an ECS Service
+ * ### Creating Scalable Targets
+ * **Example:** Scale an ECS Service
  * ```typescript
  * const target = yield* ScalableTarget("ApiScaling", {
  *   serviceNamespace: "ecs",
@@ -123,7 +122,7 @@ export interface ScalableTarget extends Resource<
  * });
  * ```
  *
- * @example Scale DynamoDB Read Capacity
+ * **Example:** Scale DynamoDB Read Capacity
  * ```typescript
  * const target = yield* ScalableTarget("TableReadScaling", {
  *   serviceNamespace: "dynamodb",
@@ -134,8 +133,8 @@ export interface ScalableTarget extends Resource<
  * });
  * ```
  *
- * @section Suspending Scaling
- * @example Suspend Dynamic Scale-In
+ * ### Suspending Scaling
+ * **Example:** Suspend Dynamic Scale-In
  * ```typescript
  * yield* ScalableTarget("ApiScaling", {
  *   serviceNamespace: "ecs",
@@ -146,10 +145,10 @@ export interface ScalableTarget extends Resource<
  *   suspendedState: { DynamicScalingInSuspended: true },
  * });
  * ```
+ *
+ * @resource
  */
-export const ScalableTarget = Resource<ScalableTarget>(
-  "AWS.ApplicationAutoScaling.ScalableTarget",
-);
+export const ScalableTarget = Resource<ScalableTarget>("AWS.ApplicationAutoScaling.ScalableTarget");
 
 export const ScalableTargetProvider = () =>
   Provider.effect(
@@ -176,9 +175,7 @@ export const ScalableTargetProvider = () =>
             ),
           );
 
-      const toAttributes = (
-        target: aas.ScalableTarget,
-      ): ScalableTarget["Attributes"] => ({
+      const toAttributes = (target: aas.ScalableTarget): ScalableTarget["Attributes"] => ({
         serviceNamespace: target.ServiceNamespace,
         resourceId: target.ResourceId,
         scalableDimension: target.ScalableDimension,
@@ -216,11 +213,9 @@ export const ScalableTargetProvider = () =>
           | undefined,
         props: Partial<ScalableTargetProps> | undefined,
       ) => {
-        const serviceNamespace =
-          output?.serviceNamespace ?? props?.serviceNamespace;
+        const serviceNamespace = output?.serviceNamespace ?? props?.serviceNamespace;
         const resourceId = output?.resourceId ?? props?.resourceId;
-        const scalableDimension =
-          output?.scalableDimension ?? props?.scalableDimension;
+        const scalableDimension = output?.scalableDimension ?? props?.scalableDimension;
         return serviceNamespace !== undefined &&
           resourceId !== undefined &&
           scalableDimension !== undefined
@@ -229,12 +224,7 @@ export const ScalableTargetProvider = () =>
       };
 
       return {
-        stables: [
-          "serviceNamespace",
-          "resourceId",
-          "scalableDimension",
-          "scalableTargetArn",
-        ],
+        stables: ["serviceNamespace", "resourceId", "scalableDimension", "scalableTargetArn"],
 
         // Account/region-wide enumeration. The describe API requires a
         // `ServiceNamespace` filter, so union the per-namespace pages over
@@ -243,16 +233,14 @@ export const ScalableTargetProvider = () =>
           Effect.forEach(
             SERVICE_NAMESPACES,
             (namespace) =>
-              aas.describeScalableTargets
-                .pages({ ServiceNamespace: namespace })
-                .pipe(
-                  Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) =>
-                      (page.ScalableTargets ?? []).map(toAttributes),
-                    ),
+              aas.describeScalableTargets.pages({ ServiceNamespace: namespace }).pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.ScalableTargets ?? []).map(toAttributes),
                   ),
                 ),
+              ),
             { concurrency: 4 },
           ).pipe(Effect.map((groups) => groups.flat())),
 
@@ -261,17 +249,9 @@ export const ScalableTargetProvider = () =>
           // The identity triple is immutable — any change replaces the
           // target. Only compare sides that are actually known: a
           // half-created state row may have lost Output-valued props.
-          for (const key of [
-            "serviceNamespace",
-            "resourceId",
-            "scalableDimension",
-          ] as const) {
+          for (const key of ["serviceNamespace", "resourceId", "scalableDimension"] as const) {
             const oldValue = olds?.[key];
-            if (
-              oldValue !== undefined &&
-              isResolved(oldValue) &&
-              oldValue !== news[key]
-            ) {
+            if (oldValue !== undefined && isResolved(oldValue) && oldValue !== news[key]) {
               return { action: "replace" } as const;
             }
           }
@@ -283,9 +263,7 @@ export const ScalableTargetProvider = () =>
           const found = yield* describe(identity);
           if (!found) return undefined;
           const attrs = toAttributes(found);
-          const tags = found.ScalableTargetARN
-            ? yield* observedTags(found.ScalableTargetARN)
-            : {};
+          const tags = found.ScalableTargetARN ? yield* observedTags(found.ScalableTargetARN) : {};
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -320,8 +298,7 @@ export const ScalableTargetProvider = () =>
           // Re-observe to pick up the generated ARN and the service-linked
           // role AWS resolved.
           const found = yield* describe(identity);
-          const scalableTargetArn =
-            found?.ScalableTargetARN ?? existing?.ScalableTargetARN;
+          const scalableTargetArn = found?.ScalableTargetARN ?? existing?.ScalableTargetARN;
 
           // Sync tags — diff observed cloud tags against desired.
           if (scalableTargetArn) {
@@ -330,9 +307,7 @@ export const ScalableTargetProvider = () =>
             if (upsert.length > 0) {
               yield* aas.tagResource({
                 ResourceARN: scalableTargetArn,
-                Tags: Object.fromEntries(
-                  upsert.map((t) => [t.Key, t.Value] as const),
-                ),
+                Tags: Object.fromEntries(upsert.map((t) => [t.Key, t.Value] as const)),
               });
             }
             if (removed.length > 0) {
@@ -343,9 +318,7 @@ export const ScalableTargetProvider = () =>
             }
           }
 
-          yield* session.note(
-            `${identity.serviceNamespace}/${identity.resourceId}`,
-          );
+          yield* session.note(`${identity.serviceNamespace}/${identity.resourceId}`);
 
           return {
             serviceNamespace: identity.serviceNamespace,
@@ -369,9 +342,7 @@ export const ScalableTargetProvider = () =>
               ResourceId: output.resourceId,
               ScalableDimension: output.scalableDimension,
             })
-            .pipe(
-              Effect.catchTag("ObjectNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ObjectNotFoundException", () => Effect.void));
         }),
       };
     }),

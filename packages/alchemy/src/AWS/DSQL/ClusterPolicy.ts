@@ -50,9 +50,8 @@ export interface ClusterPolicy extends Resource<
  * `dsql:DbConnect` / `dsql:DbConnectAdmin` behind VPC or Organization
  * conditions). A cluster has at most one.
  *
- * @resource
- * @section Creating a Cluster Policy
- * @example Block Connections from Outside a VPC
+ * ### Creating a Cluster Policy
+ * **Example:** Block Connections from Outside a VPC
  * ```typescript
  * const cluster = yield* DSQL.Cluster("AppDb", {});
  * const policy = yield* DSQL.ClusterPolicy("VpcOnly", {
@@ -72,7 +71,7 @@ export interface ClusterPolicy extends Resource<
  * });
  * ```
  *
- * @example Restrict Access to an AWS Organization
+ * **Example:** Restrict Access to an AWS Organization
  * ```typescript
  * const policy = yield* DSQL.ClusterPolicy("OrgOnly", {
  *   clusterId: cluster.clusterId,
@@ -92,6 +91,8 @@ export interface ClusterPolicy extends Resource<
  *   }),
  * });
  * ```
+ *
+ * @resource
  */
 export const ClusterPolicy = Resource<ClusterPolicy>("AWS.DSQL.ClusterPolicy");
 
@@ -122,18 +123,14 @@ export const ClusterPolicyProvider = () =>
       const readPolicy = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getClusterPolicy({ identifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
-      const toAttrs = (
-        clusterId: string,
-        policy: string,
-        policyVersion: string,
-      ) => ({ clusterId, policy, policyVersion });
+      const toAttrs = (clusterId: string, policy: string, policyVersion: string) => ({
+        clusterId,
+        policy,
+        policyVersion,
+      });
 
       return {
         stables: ["clusterId"],
@@ -176,8 +173,7 @@ export const ClusterPolicyProvider = () =>
           const updated = yield* dsql.putClusterPolicy({
             identifier: clusterId,
             policy: news!.policy,
-            bypassPolicyLockoutSafetyCheck:
-              news!.bypassPolicyLockoutSafetyCheck,
+            bypassPolicyLockoutSafetyCheck: news!.bypassPolicyLockoutSafetyCheck,
             expectedPolicyVersion: observed?.policyVersion,
           });
 
@@ -186,18 +182,13 @@ export const ClusterPolicyProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* dsql
-            .deleteClusterPolicy({ identifier: output.clusterId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* dsql.deleteClusterPolicy({ identifier: output.clusterId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         // Singleton sub-resource keyed by its parent cluster.

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface SetTopicAttributesRequest extends Omit<
-  sns.SetTopicAttributesInput,
-  "TopicArn"
-> {}
+export interface SetTopicAttributesRequest extends Omit<sns.SetTopicAttributesInput, "TopicArn"> {}
 
 /**
  * Runtime binding for `sns:SetTopicAttributes`.
@@ -15,9 +12,8 @@ export interface SetTopicAttributesRequest extends Omit<
  * single topic attribute by name. The binding grants the host function
  * `sns:SetTopicAttributes` on the topic. Provide the
  * `SetTopicAttributesHttp` layer on the Function to implement the binding.
- * @binding
- * @section Updating Topic Attributes
- * @example Set a Topic's Display Name
+ * ### Updating Topic Attributes
+ * **Example:** Set a Topic's Display Name
  * ```typescript
  * // init (provide SNS.SetTopicAttributesHttp on the Function)
  * const setTopicAttributes = yield* SNS.SetTopicAttributes(topic);
@@ -28,6 +24,8 @@ export interface SetTopicAttributesRequest extends Omit<
  *   AttributeValue: "order-events",
  * });
  * ```
+ *
+ * @binding
  */
 export interface SetTopicAttributes extends Binding.Service<
   SetTopicAttributes,
@@ -37,13 +35,8 @@ export interface SetTopicAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetTopicAttributesRequest,
-    ) => Effect.Effect<
-      sns.SetTopicAttributesResponse,
-      sns.SetTopicAttributesError
-    >
+    ) => Effect.Effect<sns.SetTopicAttributesResponse, sns.SetTopicAttributesError>
   >
 > {}
 
-export const SetTopicAttributes = Binding.Service<SetTopicAttributes>(
-  "AWS.SNS.SetTopicAttributes",
-);
+export const SetTopicAttributes = Binding.Service<SetTopicAttributes>("AWS.SNS.SetTopicAttributes");

@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * The binding takes no arguments and grants the action on `*` (the action
  * has no resource-level IAM for the pre-trained model).
  *
- * @binding
- * @section Real-Time Analysis
- * @example Detect Named Entities
+ * ### Real-Time Analysis
+ * **Example:** Detect Named Entities
  * ```typescript
  * // init
  * const detectEntities = yield* AWS.Comprehend.DetectEntities();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * // result.Entities: [{ Type: "PERSON", Text: "Bob" }, { Type: "LOCATION", Text: "Seattle" }, …]
  * ```
+ *
+ * @binding
  */
 export interface DetectEntities extends Binding.Service<
   DetectEntities,
@@ -32,12 +33,7 @@ export interface DetectEntities extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.DetectEntitiesRequest,
-    ) => Effect.Effect<
-      comprehend.DetectEntitiesResponse,
-      comprehend.DetectEntitiesError
-    >
+    ) => Effect.Effect<comprehend.DetectEntitiesResponse, comprehend.DetectEntitiesError>
   >
 > {}
-export const DetectEntities = Binding.Service<DetectEntities>(
-  "AWS.Comprehend.DetectEntities",
-);
+export const DetectEntities = Binding.Service<DetectEntities>("AWS.Comprehend.DetectEntities");

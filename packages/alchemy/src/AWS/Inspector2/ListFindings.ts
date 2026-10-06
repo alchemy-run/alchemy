@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.ListFindingsHttp)`.
- * @binding
- * @section Querying Findings
- * @example List Critical Findings
+ * ### Querying Findings
+ * **Example:** List Critical Findings
  * ```typescript
  * // init
  * const listFindings = yield* AWS.Inspector2.ListFindings();
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   filterCriteria: { severity: [{ comparison: "EQUALS", value: "CRITICAL" }] },
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListFindings extends Binding.Service<
   ListFindings,
@@ -28,12 +29,7 @@ export interface ListFindings extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListFindingsRequest,
-    ) => Effect.Effect<
-      inspector2.ListFindingsResponse,
-      inspector2.ListFindingsError
-    >
+    ) => Effect.Effect<inspector2.ListFindingsResponse, inspector2.ListFindingsError>
   >
 > {}
-export const ListFindings = Binding.Service<ListFindings>(
-  "AWS.Inspector2.ListFindings",
-);
+export const ListFindings = Binding.Service<ListFindings>("AWS.Inspector2.ListFindings");

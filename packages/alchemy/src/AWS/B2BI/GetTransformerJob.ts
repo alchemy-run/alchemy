@@ -15,9 +15,8 @@ export interface GetTransformerJobRequest extends Omit<
  * {@link StartTransformerJob} — `status` progresses from `running` to
  * `succeeded` (with `outputFiles`) or `failed` (with `message`). Provide the
  * implementation with `Effect.provide(AWS.B2BI.GetTransformerJobHttp)`.
- * @binding
- * @section Running Transformer Jobs
- * @example Poll a Transformer Job Until It Finishes
+ * ### Running Transformer Jobs
+ * **Example:** Poll a Transformer Job Until It Finishes
  * ```typescript
  * // init — grants b2bi:GetTransformerJob on the transformer
  * const getTransformerJob = yield* AWS.B2BI.GetTransformerJob(transformer);
@@ -31,6 +30,8 @@ export interface GetTransformerJobRequest extends Omit<
  *   }),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetTransformerJob extends Binding.Service<
   GetTransformerJob,
@@ -40,12 +41,7 @@ export interface GetTransformerJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetTransformerJobRequest,
-    ) => Effect.Effect<
-      b2bi.GetTransformerJobResponse,
-      b2bi.GetTransformerJobError
-    >
+    ) => Effect.Effect<b2bi.GetTransformerJobResponse, b2bi.GetTransformerJobError>
   >
 > {}
-export const GetTransformerJob = Binding.Service<GetTransformerJob>(
-  "AWS.B2BI.GetTransformerJob",
-);
+export const GetTransformerJob = Binding.Service<GetTransformerJob>("AWS.B2BI.GetTransformerJob");

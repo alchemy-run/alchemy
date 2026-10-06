@@ -8,19 +8,15 @@ import type { BotAlias } from "./BotAlias.ts";
  * `botAliasId` removed. `localeId` selects the conversation language and
  * `sessionId` identifies the conversation — both remain caller-supplied.
  */
-export interface GetSessionRequest extends Omit<
-  lexr.GetSessionRequest,
-  "botId" | "botAliasId"
-> {}
+export interface GetSessionRequest extends Omit<lexr.GetSessionRequest, "botId" | "botAliasId"> {}
 
 /**
  * Runtime binding for `lex:GetSession` — read the session state (active
  * intent, slots, session attributes, interpretations) of a conversation
  * with an Amazon Lex V2 bot alias.
  *
- * @binding
- * @section Managing Sessions
- * @example Inspect a User's Session
+ * ### Managing Sessions
+ * **Example:** Inspect a User's Session
  * ```typescript
  * // init
  * const getSession = yield* AWS.LexV2.GetSession(alias);
@@ -32,6 +28,8 @@ export interface GetSessionRequest extends Omit<
  * });
  * const intent = session.sessionState?.intent?.name;
  * ```
+ *
+ * @binding
  */
 export interface GetSession extends Binding.Service<
   GetSession,
@@ -39,9 +37,7 @@ export interface GetSession extends Binding.Service<
   (
     alias: BotAlias,
   ) => Effect.Effect<
-    (
-      request: GetSessionRequest,
-    ) => Effect.Effect<lexr.GetSessionResponse, lexr.GetSessionError>
+    (request: GetSessionRequest) => Effect.Effect<lexr.GetSessionResponse, lexr.GetSessionError>
   >
 > {}
 

@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.GetLabelDetectionHttp)`.
  *
- * @binding
- * @section Video Analysis
- * @example Poll Label Detection Results
+ * ### Video Analysis
+ * **Example:** Poll Label Detection Results
  * ```typescript
  * // init
  * const getLabelDetection = yield* AWS.Rekognition.GetLabelDetection();
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  *   // consume the detections
  * }
  * ```
+ *
+ * @binding
  */
 export interface GetLabelDetection extends Binding.Service<
   GetLabelDetection,
@@ -31,10 +32,7 @@ export interface GetLabelDetection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetLabelDetectionRequest,
-    ) => Effect.Effect<
-      rekognition.GetLabelDetectionResponse,
-      rekognition.GetLabelDetectionError
-    >
+    ) => Effect.Effect<rekognition.GetLabelDetectionResponse, rekognition.GetLabelDetectionError>
   >
 > {}
 export const GetLabelDetection = Binding.Service<GetLabelDetection>(

@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -202,13 +201,7 @@ export interface SinkAttributes {
   modifiedAt: string;
 }
 
-export type Sink = Resource<
-  TypeId,
-  SinkProps,
-  SinkAttributes,
-  never,
-  Providers
->;
+export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>;
 
 /**
  * A Cloudflare Pipelines sink — the destination of the Pipelines product.
@@ -222,11 +215,8 @@ export type Sink = Resource<
  * sink gets a fresh name before the old one is deleted); with an
  * explicit `name` the create-before-delete replacement collides, so
  * prefer generated names.
- * @resource
- * @product Pipelines
- * @category Storage & Databases
- * @section Creating a Sink
- * @example R2 sink with JSON output
+ * ### Creating a Sink
+ * **Example:** R2 sink with JSON output
  * The S3-compatible credentials are derived from a Cloudflare API token:
  * the access key id is the token id and the secret is the SHA-256 hex
  * digest of the token value.
@@ -238,8 +228,8 @@ export type Sink = Resource<
  *   config: {
  *     bucket: bucket.bucketName,
  *     credentials: {
- *       accessKeyId: yield* Config.redacted("R2_ACCESS_KEY_ID"),
- *       secretAccessKey: yield* Config.redacted("R2_SECRET_ACCESS_KEY"),
+ *       accessKeyId: yield* Config.Redacted("R2_ACCESS_KEY_ID"),
+ *       secretAccessKey: yield* Config.Redacted("R2_SECRET_ACCESS_KEY"),
  *     },
  *     path: "ingest",
  *     rollingPolicy: { intervalSeconds: 30 },
@@ -247,7 +237,7 @@ export type Sink = Resource<
  * });
  * ```
  *
- * @example Parquet output
+ * **Example:** Parquet output
  * ```typescript
  * const sink = yield* Cloudflare.Pipelines.Sink("parquet-sink", {
  *   type: "r2",
@@ -256,8 +246,8 @@ export type Sink = Resource<
  * });
  * ```
  *
- * @section R2 Data Catalog
- * @example Iceberg table sink
+ * ### R2 Data Catalog
+ * **Example:** Iceberg table sink
  * ```typescript
  * const sink = yield* Cloudflare.Pipelines.Sink("iceberg-sink", {
  *   type: "r2_data_catalog",
@@ -265,12 +255,16 @@ export type Sink = Resource<
  *     bucket: bucket.bucketName,
  *     tableName: "events",
  *     namespace: "default",
- *     token: yield* Config.redacted("CATALOG_TOKEN"),
+ *     token: yield* Config.Redacted("CATALOG_TOKEN"),
  *   },
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/pipelines/
+ *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  */
 export const Sink = Resource<Sink>(TypeId);
 
@@ -348,10 +342,7 @@ export const SinkProvider = () =>
         // race a `SinkAlreadyExists` against the dying sink.
         yield* getSink(accountId, observed.id).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
             until: (s) => s === undefined,
           }),
         );
@@ -374,9 +365,7 @@ export const SinkProvider = () =>
           .pipe(
             Effect.catchTag("SinkAlreadyExists", (error) =>
               findSinkByName(accountId, name).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
+                Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
               ),
             ),
           );
@@ -459,10 +448,7 @@ const deleteSink = (accountId: string, sinkId: string) =>
   pipelines.deleteSink({ accountId, sinkId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "SinkInUse",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
     }),
     Effect.catchTag("SinkNotFound", () => Effect.void),
     Effect.catchTag("InvalidSinkId", () => Effect.void),
@@ -499,9 +485,7 @@ const sinkDrifted = (observed: ObservedSink, news: SinkProps): boolean => {
 const findSinkByName = (accountId: string, name: string) =>
   pipelines.listSinks.items({ accountId }).pipe(
     Stream.runCollect,
-    Effect.map((chunk): ObservedSink | undefined =>
-      Array.from(chunk).find((s) => s.name === name),
-    ),
+    Effect.map((chunk): ObservedSink | undefined => Array.from(chunk).find((s) => s.name === name)),
   );
 
 /**
@@ -549,9 +533,7 @@ const normalizeProps = (props: SinkProps): unknown => {
         ...props.config,
         credentials: {
           accessKeyId: Redacted.value(props.config.credentials.accessKeyId),
-          secretAccessKey: Redacted.value(
-            props.config.credentials.secretAccessKey,
-          ),
+          secretAccessKey: Redacted.value(props.config.credentials.secretAccessKey),
         },
       },
     };
@@ -570,33 +552,25 @@ const normalizeProps = (props: SinkProps): unknown => {
  * Key-order-insensitive structural equality for plain JSON-ish prop
  * values.
  */
-const stableEquals = (a: unknown, b: unknown): boolean =>
-  stableStringify(a) === stableStringify(b);
+const stableEquals = (a: unknown, b: unknown): boolean => stableStringify(a) === stableStringify(b);
 
 const stableStringify = (value: unknown): string =>
   JSON.stringify(value, (_key, v) =>
     v !== null && typeof v === "object" && !Array.isArray(v)
       ? Object.fromEntries(
-          Object.entries(v as Record<string, unknown>).sort(([x], [y]) =>
-            x.localeCompare(y),
-          ),
+          Object.entries(v as Record<string, unknown>).sort(([x], [y]) => x.localeCompare(y)),
         )
       : v,
   ) ?? "undefined";
 
-const toAttributes = (
-  observed: ObservedSink,
-  accountId: string,
-): SinkAttributes => ({
+const toAttributes = (observed: ObservedSink, accountId: string): SinkAttributes => ({
   sinkId: observed.id,
   accountId,
   name: observed.name,
   type: observed.type as "r2" | "r2_data_catalog",
   bucket: observed.config?.bucket ?? "",
   path:
-    observed.config && "path" in observed.config
-      ? (observed.config.path ?? undefined)
-      : undefined,
+    observed.config && "path" in observed.config ? (observed.config.path ?? undefined) : undefined,
   createdAt: observed.createdAt,
   modifiedAt: observed.modifiedAt,
 });

@@ -143,9 +143,8 @@ export interface SecurityConfig extends Resource<
  * data {@link AccessPolicy} references as a `Principal` to grant the federated
  * identities index- and collection-level permissions.
  *
- * @resource
- * @section SAML Authentication
- * @example Federate Dashboards with a SAML Identity Provider
+ * ### SAML Authentication
+ * **Example:** Federate Dashboards with a SAML Identity Provider
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -161,8 +160,8 @@ export interface SecurityConfig extends Resource<
  * // Reference saml.configId as a Principal in a data access policy
  * ```
  *
- * @section IAM Federation
- * @example Map Session Attributes to Identities
+ * ### IAM Federation
+ * **Example:** Map Session Attributes to Identities
  * ```typescript
  * const federation = yield* AWS.OpenSearchServerless.SecurityConfig("Federation", {
  *   configName: "my-federation",
@@ -173,10 +172,10 @@ export interface SecurityConfig extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const SecurityConfig = Resource<SecurityConfig>(
-  "AWS.OpenSearchServerless.SecurityConfig",
-);
+export const SecurityConfig = Resource<SecurityConfig>("AWS.OpenSearchServerless.SecurityConfig");
 
 export const SecurityConfigProvider = () =>
   Provider.effect(
@@ -187,8 +186,7 @@ export const SecurityConfigProvider = () =>
         props: { configName?: string | undefined },
       ) {
         return (
-          props.configName ??
-          (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
+          props.configName ?? (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
         );
       });
 
@@ -222,9 +220,7 @@ export const SecurityConfigProvider = () =>
       const observe = Effect.fn(function* (configId: string) {
         return yield* aoss.getSecurityConfig({ id: configId }).pipe(
           Effect.map((r) => r.securityConfigDetail),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -233,11 +229,7 @@ export const SecurityConfigProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const types: SecurityConfigType[] = [
-              "saml",
-              "iamidentitycenter",
-              "iamfederation",
-            ];
+            const types: SecurityConfigType[] = ["saml", "iamidentitycenter", "iamfederation"];
             const results: {
               configId: string;
               configName: string;
@@ -246,16 +238,10 @@ export const SecurityConfigProvider = () =>
               description?: string;
             }[] = [];
             for (const type of types) {
-              const pages = yield* aoss.listSecurityConfigs
-                .pages({ type })
-                .pipe(Stream.runCollect);
+              const pages = yield* aoss.listSecurityConfigs.pages({ type }).pipe(Stream.runCollect);
               for (const page of pages) {
                 for (const s of page.securityConfigSummaries ?? []) {
-                  if (
-                    s.id !== undefined &&
-                    s.type !== undefined &&
-                    s.configVersion !== undefined
-                  ) {
+                  if (s.id !== undefined && s.type !== undefined && s.configVersion !== undefined) {
                     results.push({
                       configId: s.id,
                       configName: toName(s.id),
@@ -276,8 +262,7 @@ export const SecurityConfigProvider = () =>
             return undefined;
           }
           const configId =
-            output?.configId ??
-            (yield* computeConfigId(type, yield* createName(id, olds ?? {})));
+            output?.configId ?? (yield* computeConfigId(type, yield* createName(id, olds ?? {})));
           const detail = yield* observe(configId);
           if (detail?.id === undefined) {
             return undefined;
@@ -303,8 +288,7 @@ export const SecurityConfigProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const type = news.type;
           const name = output?.configName ?? (yield* createName(id, news));
-          const configId =
-            output?.configId ?? (yield* computeConfigId(type, name));
+          const configId = output?.configId ?? (yield* computeConfigId(type, name));
           const desiredSaml = toWireSamlOptions(news.samlOptions);
 
           // 1. OBSERVE
@@ -330,13 +314,10 @@ export const SecurityConfigProvider = () =>
             const samlDrift =
               desiredSaml !== undefined &&
               (desiredSaml.metadata !== detail.samlOptions?.metadata ||
-                desiredSaml.userAttribute !==
-                  detail.samlOptions?.userAttribute ||
-                desiredSaml.groupAttribute !==
-                  detail.samlOptions?.groupAttribute ||
+                desiredSaml.userAttribute !== detail.samlOptions?.userAttribute ||
+                desiredSaml.groupAttribute !== detail.samlOptions?.groupAttribute ||
                 (desiredSaml.sessionTimeout !== undefined &&
-                  desiredSaml.sessionTimeout !==
-                    detail.samlOptions?.sessionTimeout));
+                  desiredSaml.sessionTimeout !== detail.samlOptions?.sessionTimeout));
             const federationDrift =
               news.iamFederationOptions !== undefined &&
               (news.iamFederationOptions.userAttribute !==
@@ -350,14 +331,8 @@ export const SecurityConfigProvider = () =>
                 news.iamIdentityCenterOptions.groupAttribute !==
                   detail.iamIdentityCenterOptions?.groupAttribute);
             const descriptionDrift =
-              news.description !== undefined &&
-              news.description !== detail.description;
-            if (
-              samlDrift ||
-              federationDrift ||
-              identityCenterDrift ||
-              descriptionDrift
-            ) {
+              news.description !== undefined && news.description !== detail.description;
+            if (samlDrift || federationDrift || identityCenterDrift || descriptionDrift) {
               detail = yield* aoss
                 .updateSecurityConfig({
                   id: detail.id,
@@ -366,15 +341,11 @@ export const SecurityConfigProvider = () =>
                   samlOptions: samlDrift ? desiredSaml : undefined,
                   iamIdentityCenterOptionsUpdates: identityCenterDrift
                     ? {
-                        userAttribute:
-                          news.iamIdentityCenterOptions?.userAttribute,
-                        groupAttribute:
-                          news.iamIdentityCenterOptions?.groupAttribute,
+                        userAttribute: news.iamIdentityCenterOptions?.userAttribute,
+                        groupAttribute: news.iamIdentityCenterOptions?.groupAttribute,
                       }
                     : undefined,
-                  iamFederationOptions: federationDrift
-                    ? news.iamFederationOptions
-                    : undefined,
+                  iamFederationOptions: federationDrift ? news.iamFederationOptions : undefined,
                 })
                 .pipe(Effect.map((r) => r.securityConfigDetail));
             }
@@ -392,9 +363,7 @@ export const SecurityConfigProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* retryWhileConflict(
-            aoss.deleteSecurityConfig({ id: output.configId }),
-          ).pipe(
+          yield* retryWhileConflict(aoss.deleteSecurityConfig({ id: output.configId })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
         }),

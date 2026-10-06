@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * `GetLendingAnalysisSummary`. The caller needs `s3:GetObject` on the
  * input bucket.
  *
- * @binding
- * @section Asynchronous Lending Analysis
- * @example Start a Lending Analysis Job
+ * ### Asynchronous Lending Analysis
+ * **Example:** Start a Lending Analysis Job
  * ```typescript
  * // init
  * const startLendingAnalysis = yield* AWS.Textract.StartLendingAnalysis();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   DocumentLocation: { S3Object: { Bucket: bucketName, Name: "loan.pdf" } },
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartLendingAnalysis extends Binding.Service<
   StartLendingAnalysis,
@@ -29,10 +30,7 @@ export interface StartLendingAnalysis extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.StartLendingAnalysisRequest,
-    ) => Effect.Effect<
-      textract.StartLendingAnalysisResponse,
-      textract.StartLendingAnalysisError
-    >
+    ) => Effect.Effect<textract.StartLendingAnalysisResponse, textract.StartLendingAnalysisError>
   >
 > {}
 export const StartLendingAnalysis = Binding.Service<StartLendingAnalysis>(

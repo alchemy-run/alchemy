@@ -2,8 +2,7 @@ import type * as Firehose from "@distilled.cloud/aws/firehose";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListDeliveryStreamsRequest
-  extends Firehose.ListDeliveryStreamsInput {}
+export interface ListDeliveryStreamsRequest extends Firehose.ListDeliveryStreamsInput {}
 
 /**
  * Runtime binding for `firehose:ListDeliveryStreams`.
@@ -13,15 +12,16 @@ export interface ListDeliveryStreamsRequest
  * `ExclusiveStartDeliveryStreamName` + `HasMoreDeliveryStreams`). Provide
  * the `ListDeliveryStreamsHttp` layer on the Function to satisfy the
  * binding.
- * @binding
- * @section Stream Metadata
- * @example List Delivery Streams in the Region
+ * ### Stream Metadata
+ * **Example:** List Delivery Streams in the Region
  * ```typescript
  * const listDeliveryStreams = yield* AWS.Firehose.ListDeliveryStreams();
  *
  * const response = yield* listDeliveryStreams();
  * const names = response.DeliveryStreamNames;
  * ```
+ *
+ * @binding
  */
 export interface ListDeliveryStreams extends Binding.Service<
   ListDeliveryStreams,
@@ -29,10 +29,7 @@ export interface ListDeliveryStreams extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListDeliveryStreamsRequest,
-    ) => Effect.Effect<
-      Firehose.ListDeliveryStreamsOutput,
-      Firehose.ListDeliveryStreamsError
-    >
+    ) => Effect.Effect<Firehose.ListDeliveryStreamsOutput, Firehose.ListDeliveryStreamsError>
   >
 > {}
 

@@ -10,9 +10,8 @@ import type { Secret } from "./Secret.ts";
  * metadata (name, description, rotation config, version stages) without
  * exposing its value. Provide the implementation with
  * `Effect.provide(AWS.SecretsManager.DescribeSecretHttp)`.
- * @binding
- * @section Inspecting Secrets
- * @example Read a Secret's Metadata
+ * ### Inspecting Secrets
+ * **Example:** Read a Secret's Metadata
  * ```typescript
  * // init — bind the operation to the secret
  * const describeSecret = yield* AWS.SecretsManager.DescribeSecret(secret);
@@ -22,6 +21,8 @@ import type { Secret } from "./Secret.ts";
  * const arn = info.ARN;
  * const description = info.Description;
  * ```
+ *
+ * @binding
  */
 export interface DescribeSecret extends Binding.Service<
   DescribeSecret,
@@ -29,13 +30,8 @@ export interface DescribeSecret extends Binding.Service<
   (
     secret: Secret,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      secretsmanager.DescribeSecretResponse,
-      secretsmanager.DescribeSecretError
-    >
+    () => Effect.Effect<secretsmanager.DescribeSecretResponse, secretsmanager.DescribeSecretError>
   >
 > {}
 
-export const DescribeSecret = Binding.Service<DescribeSecret>(
-  "AWS.SecretsManager.DescribeSecret",
-);
+export const DescribeSecret = Binding.Service<DescribeSecret>("AWS.SecretsManager.DescribeSecret");

@@ -12,9 +12,8 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type PrefixListId<ID extends string = string> = `pl-${ID}`;
-export const PrefixListId = <ID extends string>(
-  id: ID,
-): ID & PrefixListId<ID> => `pl-${id}` as ID & PrefixListId<ID>;
+export const PrefixListId = <ID extends string>(id: ID): ID & PrefixListId<ID> =>
+  `pl-${id}` as ID & PrefixListId<ID>;
 
 export type PrefixListArn<ID extends PrefixListId = PrefixListId> =
   `arn:aws:ec2:${RegionID}:${AccountID}:prefix-list/${ID}`;
@@ -122,9 +121,8 @@ export interface PrefixList extends Resource<
  * only grow it, never shrink it, in place). `addressFamily` fixes whether the
  * list holds IPv4 or IPv6 CIDRs and is immutable.
  *
- * @resource
- * @section Creating a Prefix List
- * @example Basic IPv4 Prefix List
+ * ### Creating a Prefix List
+ * **Example:** Basic IPv4 Prefix List
  * ```typescript
  * const corpNetworks = yield* AWS.EC2.PrefixList("CorpNetworks", {
  *   maxEntries: 10,
@@ -137,7 +135,7 @@ export interface PrefixList extends Resource<
  * Creates a prefix list with two IPv4 CIDRs. The resulting `prefixListId`
  * (prefixed `pl-`) can be referenced from security group rules and routes.
  *
- * @example IPv6 Prefix List
+ * **Example:** IPv6 Prefix List
  * ```typescript
  * const ipv6List = yield* AWS.EC2.PrefixList("Ipv6List", {
  *   addressFamily: "IPv6",
@@ -148,8 +146,8 @@ export interface PrefixList extends Resource<
  * `addressFamily: "IPv6"` makes the list accept IPv6 CIDRs. Because the family
  * is intrinsic to the list, changing it later replaces the resource.
  *
- * @section Referencing a Prefix List from a Security Group Rule
- * @example Allow Inbound from a Prefix List
+ * ### Referencing a Prefix List from a Security Group Rule
+ * **Example:** Allow Inbound from a Prefix List
  * ```typescript
  * const corpNetworks = yield* AWS.EC2.PrefixList("CorpNetworks", {
  *   maxEntries: 10,
@@ -167,6 +165,8 @@ export interface PrefixList extends Resource<
  * ```
  * The rule allows HTTPS from every CIDR in the list. Editing the list's
  * `entries` updates what the rule permits without touching the rule itself.
+ *
+ * @resource
  */
 export const PrefixList = Resource<PrefixList>("AWS.EC2.PrefixList");
 
@@ -179,10 +179,7 @@ export const PrefixListProvider = () =>
   Provider.effect(
     PrefixList,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -193,18 +190,14 @@ export const PrefixListProvider = () =>
       const describePrefixList = (prefixListId: string) =>
         ec2.describeManagedPrefixLists({ PrefixListIds: [prefixListId] }).pipe(
           Effect.map((r) => r.PrefixLists?.[0]),
-          Effect.catchTag("InvalidPrefixListID.NotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.succeed(undefined)),
         );
 
       // Poll until the list leaves any "-in-progress" state.
       const waitStable = (prefixListId: string) =>
         describePrefixList(prefixListId).pipe(
           Effect.flatMap((pl) =>
-            isStableState(pl?.State)
-              ? Effect.succeed(pl)
-              : Effect.fail(new PrefixListNotStable()),
+            isStableState(pl?.State) ? Effect.succeed(pl) : Effect.fail(new PrefixListNotStable()),
           ),
           Effect.retry({
             while: (e) => e instanceof PrefixListNotStable,
@@ -213,14 +206,10 @@ export const PrefixListProvider = () =>
         );
 
       const getEntries = (prefixListId: string) =>
-        ec2.getManagedPrefixListEntries
-          .pages({ PrefixListId: prefixListId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Entries ?? []),
-            ),
-          );
+        ec2.getManagedPrefixListEntries.pages({ PrefixListId: prefixListId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Entries ?? [])),
+        );
 
       const toAttrs = (pl: ec2.ManagedPrefixList) =>
         AWSEnvironment.current.pipe(
@@ -298,8 +287,7 @@ export const PrefixListProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredTags = yield* createTags(id, news.tags);
-          const desiredName =
-            news.prefixListName ?? output?.prefixListName ?? id;
+          const desiredName = news.prefixListName ?? output?.prefixListName ?? id;
           const desiredFamily = news.addressFamily ?? "IPv4";
           const desiredEntries = news.entries ?? [];
 
@@ -328,9 +316,7 @@ export const PrefixListProvider = () =>
               ],
             });
             const created = result.PrefixList!;
-            yield* session.note(
-              `Managed prefix list created: ${created.PrefixListId}`,
-            );
+            yield* session.note(`Managed prefix list created: ${created.PrefixListId}`);
             pl = yield* waitStable(created.PrefixListId!);
           }
 
@@ -340,9 +326,7 @@ export const PrefixListProvider = () =>
           // changing size and entries in the same call).
           pl = yield* waitStable(prefixListId);
           if ((pl?.MaxEntries ?? 0) < news.maxEntries) {
-            yield* session.note(
-              `Increasing prefix list max entries to ${news.maxEntries}...`,
-            );
+            yield* session.note(`Increasing prefix list max entries to ${news.maxEntries}...`);
             yield* ec2.modifyManagedPrefixList({
               PrefixListId: prefixListId,
               CurrentVersion: pl!.Version,
@@ -353,18 +337,13 @@ export const PrefixListProvider = () =>
 
           // Sync entries + name — diff observed entries against desired.
           const currentEntries = yield* getEntries(prefixListId);
-          const currentByCidr = new Map(
-            currentEntries.map((e) => [e.Cidr!, e.Description ?? ""]),
-          );
-          const desiredByCidr = new Map(
-            desiredEntries.map((e) => [e.cidr, e.description ?? ""]),
-          );
+          const currentByCidr = new Map(currentEntries.map((e) => [e.Cidr!, e.Description ?? ""]));
+          const desiredByCidr = new Map(desiredEntries.map((e) => [e.cidr, e.description ?? ""]));
 
           const addEntries = desiredEntries
             .filter(
               (e) =>
-                !currentByCidr.has(e.cidr) ||
-                currentByCidr.get(e.cidr) !== (e.description ?? ""),
+                !currentByCidr.has(e.cidr) || currentByCidr.get(e.cidr) !== (e.description ?? ""),
             )
             .map((e) => ({ Cidr: e.cidr, Description: e.description }));
           const removeEntries = currentEntries
@@ -372,20 +351,14 @@ export const PrefixListProvider = () =>
             .map((e) => ({ Cidr: e.Cidr! }));
           const nameChanged = (pl?.PrefixListName ?? "") !== desiredName;
 
-          if (
-            addEntries.length > 0 ||
-            removeEntries.length > 0 ||
-            nameChanged
-          ) {
+          if (addEntries.length > 0 || removeEntries.length > 0 || nameChanged) {
             yield* session.note("Updating managed prefix list entries...");
             yield* ec2.modifyManagedPrefixList({
               PrefixListId: prefixListId,
               CurrentVersion: pl!.Version,
               ...(nameChanged ? { PrefixListName: desiredName } : {}),
               ...(addEntries.length > 0 ? { AddEntries: addEntries } : {}),
-              ...(removeEntries.length > 0
-                ? { RemoveEntries: removeEntries }
-                : {}),
+              ...(removeEntries.length > 0 ? { RemoveEntries: removeEntries } : {}),
             });
             pl = yield* waitStable(prefixListId);
           }
@@ -402,9 +375,10 @@ export const PrefixListProvider = () =>
               .pipe(
                 Effect.map(
                   (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                    Object.fromEntries(r.Tags?.map((t) => [t.Key!, t.Value!]) ?? []) as Record<
+                      string,
+                      string
+                    >,
                 ),
               )) ?? {};
           const { removed, upsert } = diffTags(currentTags, desiredTags);
@@ -425,24 +399,15 @@ export const PrefixListProvider = () =>
         delete: Effect.fn(function* ({ output, session }) {
           const prefixListId = output.prefixListId;
           yield* session.note(`Deleting managed prefix list: ${prefixListId}`);
-          yield* ec2
-            .deleteManagedPrefixList({ PrefixListId: prefixListId })
-            .pipe(
-              Effect.catchTag(
-                "InvalidPrefixListID.NotFound",
-                () => Effect.void,
-              ),
-              // Routes / SG rules still referencing the list surface as a
-              // DependencyViolation while they tear down.
-              Effect.retry({
-                while: (e: { _tag: string }) =>
-                  e._tag === "DependencyViolation",
-                schedule: Schedule.max([
-                  Schedule.fixed(5000),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* ec2.deleteManagedPrefixList({ PrefixListId: prefixListId }).pipe(
+            Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.void),
+            // Routes / SG rules still referencing the list surface as a
+            // DependencyViolation while they tear down.
+            Effect.retry({
+              while: (e: { _tag: string }) => e._tag === "DependencyViolation",
+              schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(20)]),
+            }),
+          );
         }),
       };
     }),

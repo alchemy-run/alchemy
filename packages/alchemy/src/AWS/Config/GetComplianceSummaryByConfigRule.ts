@@ -8,9 +8,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide `Config.GetComplianceSummaryByConfigRuleHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Reading Compliance
- * @example Summarize Rule Compliance
+ * ### Reading Compliance
+ * **Example:** Summarize Rule Compliance
  * ```typescript
  * // init — grants config:GetComplianceSummaryByConfigRule
  * const getComplianceSummaryByConfigRule = yield* AWS.Config.GetComplianceSummaryByConfigRule();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * const result = yield* getComplianceSummaryByConfigRule();
  * console.log(result.ComplianceSummary?.NonCompliantResourceCount);
  * ```
+ *
+ * @binding
  */
 export interface GetComplianceSummaryByConfigRule extends Binding.Service<
   GetComplianceSummaryByConfigRule,
@@ -33,7 +34,6 @@ export interface GetComplianceSummaryByConfigRule extends Binding.Service<
   >
 > {}
 
-export const GetComplianceSummaryByConfigRule =
-  Binding.Service<GetComplianceSummaryByConfigRule>(
-    "AWS.Config.GetComplianceSummaryByConfigRule",
-  );
+export const GetComplianceSummaryByConfigRule = Binding.Service<GetComplianceSummaryByConfigRule>(
+  "AWS.Config.GetComplianceSummaryByConfigRule",
+);

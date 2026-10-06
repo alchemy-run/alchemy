@@ -8,9 +8,8 @@ import * as Binding from "../../Binding.ts";
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:GetMedicalScribeJob` on `*`.
  *
- * @binding
- * @section Medical Scribe Jobs
- * @example Poll a Medical Scribe Job
+ * ### Medical Scribe Jobs
+ * **Example:** Poll a Medical Scribe Job
  * ```typescript
  * // init
  * const getMedicalScribeJob = yield* AWS.Transcribe.GetMedicalScribeJob();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  *   MedicalScribeJobName: "my-visit",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetMedicalScribeJob extends Binding.Service<
   GetMedicalScribeJob,
@@ -27,10 +28,7 @@ export interface GetMedicalScribeJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.GetMedicalScribeJobRequest,
-    ) => Effect.Effect<
-      transcribe.GetMedicalScribeJobResponse,
-      transcribe.GetMedicalScribeJobError
-    >
+    ) => Effect.Effect<transcribe.GetMedicalScribeJobResponse, transcribe.GetMedicalScribeJobError>
   >
 > {}
 export const GetMedicalScribeJob = Binding.Service<GetMedicalScribeJob>(

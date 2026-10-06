@@ -2,7 +2,6 @@ import * as iam from "@distilled.cloud/cloudflare/iam";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -85,11 +84,8 @@ export type ResourceGroup = Resource<
  *
  * Account-scoped IAM (resource groups, user groups) is an Enterprise
  * feature.
- * @resource
- * @product IAM
- * @category Account & Identity
- * @section Creating a Resource Group
- * @example Scope a group to the whole account
+ * ### Creating a Resource Group
+ * **Example:** Scope a group to the whole account
  * ```typescript
  * const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
  * const group = yield* Cloudflare.Iam.ResourceGroup("AllResources", {
@@ -100,7 +96,7 @@ export type ResourceGroup = Resource<
  * });
  * ```
  *
- * @example Scope a group to a single zone
+ * **Example:** Scope a group to a single zone
  * ```typescript
  * const group = yield* Cloudflare.Iam.ResourceGroup("ZoneOnly", {
  *   name: "my-zone-resources",
@@ -113,8 +109,8 @@ export type ResourceGroup = Resource<
  * });
  * ```
  *
- * @section Using with User Groups
- * @example Attach to a user group policy
+ * ### Using with User Groups
+ * **Example:** Attach to a user group policy
  * ```typescript
  * yield* Cloudflare.Iam.UserGroup("Readers", {
  *   policies: [
@@ -128,6 +124,10 @@ export type ResourceGroup = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/scoped-roles/
+ *
+ * @resource
+ * @product IAM
+ * @category Account & Identity
  */
 export const ResourceGroup = Resource<ResourceGroup>(TypeId);
 
@@ -188,9 +188,7 @@ export const ResourceGroupProvider = () =>
       // 3. Sync — diff observed name/scope against desired; the update is
       //    a PUT, so send the full body, but skip the call on a no-op.
       const observedScope = parseScope(observed.scope);
-      const dirty =
-        (observed.name ?? "") !== name ||
-        !sameScope(observedScope, desiredScope);
+      const dirty = (observed.name ?? "") !== name || !sameScope(observedScope, desiredScope);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -240,7 +238,7 @@ export const ResourceGroupProvider = () =>
 type ObservedResourceGroup = {
   id: string;
   name?: string | null;
-  scope: iam.ResourceGroupsListResultItemScopeList;
+  scope: iam.ResourceGroupsListResultItemScope;
 };
 
 /**
@@ -270,9 +268,7 @@ const findByName = (accountId: string, name: string) =>
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk)
-        .filter(
-          (g): g is ObservedResourceGroup & { name: string } => g.name === name,
-        )
+        .filter((g): g is ObservedResourceGroup & { name: string } => g.name === name)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),
@@ -295,16 +291,11 @@ const resolveScope = (scope: ResourceGroupScopeInput): ResourceGroupScope => ({
  * resource group.
  */
 const parseScope = (scope: unknown): ResourceGroupScope => {
-  const key =
-    Predicate.hasProperty(scope, "key") && typeof scope.key === "string"
-      ? scope.key
-      : "";
+  const key = Predicate.hasProperty(scope, "key") && typeof scope.key === "string" ? scope.key : "";
   const objects =
     Predicate.hasProperty(scope, "objects") && Array.isArray(scope.objects)
       ? scope.objects.flatMap((o: unknown) =>
-          Predicate.hasProperty(o, "key") && typeof o.key === "string"
-            ? [{ key: o.key }]
-            : [],
+          Predicate.hasProperty(o, "key") && typeof o.key === "string" ? [{ key: o.key }] : [],
         )
       : [];
   return { key, objects };

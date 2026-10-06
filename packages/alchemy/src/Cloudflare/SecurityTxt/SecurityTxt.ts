@@ -1,7 +1,6 @@
 import * as securityTxt from "@distilled.cloud/cloudflare/security-txt";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -109,11 +108,8 @@ export type SecurityTxt = Resource<TypeId, Props, Attributes, never, Providers>;
  *
  * Cloudflare requires the RFC 9116 mandatory fields — `contact` and
  * `expires` — on every write.
- * @resource
- * @product Security.txt
- * @category Application Security
- * @section Publishing a security.txt
- * @example Minimal security.txt
+ * ### Publishing a security.txt
+ * **Example:** Minimal security.txt
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
@@ -124,7 +120,7 @@ export type SecurityTxt = Resource<TypeId, Props, Attributes, never, Providers>;
  * });
  * ```
  *
- * @example Full security.txt with policy and acknowledgments
+ * **Example:** Full security.txt with policy and acknowledgments
  * ```typescript
  * yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
  *   zoneId: zone.zoneId,
@@ -137,8 +133,8 @@ export type SecurityTxt = Resource<TypeId, Props, Attributes, never, Providers>;
  * });
  * ```
  *
- * @section Pausing without deleting
- * @example Keep the configuration but stop serving the file
+ * ### Pausing without deleting
+ * **Example:** Keep the configuration but stop serving the file
  * ```typescript
  * yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
  *   zoneId: zone.zoneId,
@@ -149,6 +145,10 @@ export type SecurityTxt = Resource<TypeId, Props, Attributes, never, Providers>;
  * ```
  *
  * @see https://developers.cloudflare.com/security-center/infrastructure/security-file/
+ *
+ * @resource
+ * @product Security.txt
+ * @category Application Security
  */
 export const SecurityTxt = Resource<SecurityTxt>(TypeId, {
   aliases: ["Cloudflare.SecurityTxt"],
@@ -179,9 +179,7 @@ export const SecurityTxtProvider = () =>
             .getSecurityTxt({ zoneId })
             .pipe(
               Effect.map((observed) =>
-                typeof observed === "string"
-                  ? undefined
-                  : toAttributes(zoneId, observed),
+                typeof observed === "string" ? undefined : toAttributes(zoneId, observed),
               ),
             ),
         { concurrency: 10 },
@@ -193,13 +191,8 @@ export const SecurityTxtProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -274,8 +267,7 @@ const desiredAttributes = (zoneId: string, news: Props): Attributes => ({
   encryption: nonEmpty(news.encryption),
   hiring: nonEmpty(news.hiring),
   policy: nonEmpty(news.policy),
-  preferredLanguages:
-    news.preferredLanguages === "" ? undefined : news.preferredLanguages,
+  preferredLanguages: news.preferredLanguages === "" ? undefined : news.preferredLanguages,
 });
 
 /** Normalize the observed GET response into the Attributes shape. */
@@ -294,23 +286,14 @@ const toAttributes = (
   // Cloudflare echoes an empty string for an unset Preferred-Languages.
   policy: nonEmpty(observed.policy),
   preferredLanguages:
-    observed.preferredLanguages === ""
-      ? undefined
-      : (observed.preferredLanguages ?? undefined),
+    observed.preferredLanguages === "" ? undefined : (observed.preferredLanguages ?? undefined),
 });
 
 /** Null/empty list fields normalize to `undefined` (not configured). */
-const nonEmpty = (
-  values: readonly string[] | null | undefined,
-): string[] | undefined =>
-  values === null || values === undefined || values.length === 0
-    ? undefined
-    : [...values];
+const nonEmpty = (values: readonly string[] | null | undefined): string[] | undefined =>
+  values === null || values === undefined || values.length === 0 ? undefined : [...values];
 
-const listEquals = (
-  a: string[] | undefined,
-  b: string[] | undefined,
-): boolean => {
+const listEquals = (a: string[] | undefined, b: string[] | undefined): boolean => {
   if (a === undefined || b === undefined) return a === b;
   return a.length === b.length && a.every((v, i) => v === b[i]);
 };

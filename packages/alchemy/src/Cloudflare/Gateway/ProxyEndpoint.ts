@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -90,11 +89,8 @@ export type ProxyEndpoint = Resource<
  * Zero Trust plans. The kind is immutable; name and `ips` converge in
  * place. Accounts are limited to a small number of proxy endpoints, so
  * prefer reusing one per account.
- * @resource
- * @product Gateway
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Proxy Endpoint
- * @example Identity-based endpoint (all plans)
+ * ### Creating a Proxy Endpoint
+ * **Example:** Identity-based endpoint (all plans)
  * ```typescript
  * const proxy = yield* Cloudflare.Gateway.ProxyEndpoint("UserProxy", {
  *   kind: "identity",
@@ -103,7 +99,7 @@ export type ProxyEndpoint = Resource<
  * const host = `${proxy.subdomain}.proxy.cloudflare-gateway.com`;
  * ```
  *
- * @example IP allowlist endpoint (Enterprise)
+ * **Example:** IP allowlist endpoint (Enterprise)
  * ```typescript
  * const proxy = yield* Cloudflare.Gateway.ProxyEndpoint("OfficeProxy", {
  *   kind: "ip",
@@ -112,6 +108,10 @@ export type ProxyEndpoint = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/agentless/pac-files/
+ *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  */
 export const ProxyEndpoint = Resource<ProxyEndpoint>(TypeId);
 
@@ -132,8 +132,7 @@ export const ProxyEndpointProvider = () =>
         return { action: "replace" } as const;
       }
       // The endpoint kind is immutable on Cloudflare's side.
-      const oldKind =
-        output?.kind ?? (olds as ProxyEndpointProps).kind ?? undefined;
+      const oldKind = output?.kind ?? (olds as ProxyEndpointProps).kind ?? undefined;
       if (oldKind !== undefined && oldKind !== (news.kind ?? "ip")) {
         return { action: "replace" } as const;
       }
@@ -192,9 +191,7 @@ export const ProxyEndpointProvider = () =>
       const observedIps = observedIpsOf(observed);
       const dirty =
         observed.name !== name ||
-        (kind === "ip" &&
-          news.ips !== undefined &&
-          !arrayEqualsUnordered(observedIps, news.ips));
+        (kind === "ip" && news.ips !== undefined && !arrayEqualsUnordered(observedIps, news.ips));
       if (dirty) {
         observed = yield* zeroTrust.patchGatewayProxyEndpoint({
           accountId,
@@ -224,13 +221,11 @@ export const ProxyEndpointProvider = () =>
     // the `read` Attributes shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listGatewayProxyEndpoints
-        .items({ accountId })
-        .pipe(
-          Stream.map((e) => toAttributes(e as ObservedEndpoint, accountId)),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-        );
+      return yield* zeroTrust.listGatewayProxyEndpoints.items({ accountId }).pipe(
+        Stream.map((e) => toAttributes(e as ObservedEndpoint, accountId)),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
     }),
   });
 
@@ -275,10 +270,7 @@ const resolveName = (id: string, name: string | undefined) =>
 const observedIpsOf = (endpoint: ObservedEndpoint): string[] =>
   "ips" in endpoint && Array.isArray(endpoint.ips) ? [...endpoint.ips] : [];
 
-const toAttributes = (
-  endpoint: ObservedEndpoint,
-  accountId: string,
-): ProxyEndpointAttributes => ({
+const toAttributes = (endpoint: ObservedEndpoint, accountId: string): ProxyEndpointAttributes => ({
   proxyEndpointId: endpoint.id ?? "",
   accountId,
   name: endpoint.name,

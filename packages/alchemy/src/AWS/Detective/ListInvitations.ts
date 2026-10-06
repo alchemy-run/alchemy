@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * that auto-accepts invitations from the security account.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.ListInvitationsHttp)`.
- * @binding
- * @section Responding to Invitations
- * @example List Pending Invitations
+ * ### Responding to Invitations
+ * **Example:** List Pending Invitations
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listInvitations = yield* AWS.Detective.ListInvitations();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { Invitations } = yield* listInvitations();
  * ```
+ *
+ * @binding
  */
 export interface ListInvitations extends Binding.Service<
   ListInvitations,
@@ -27,12 +28,7 @@ export interface ListInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: detective.ListInvitationsRequest,
-    ) => Effect.Effect<
-      detective.ListInvitationsResponse,
-      detective.ListInvitationsError
-    >
+    ) => Effect.Effect<detective.ListInvitationsResponse, detective.ListInvitationsError>
   >
 > {}
-export const ListInvitations = Binding.Service<ListInvitations>(
-  "AWS.Detective.ListInvitations",
-);
+export const ListInvitations = Binding.Service<ListInvitations>("AWS.Detective.ListInvitations");

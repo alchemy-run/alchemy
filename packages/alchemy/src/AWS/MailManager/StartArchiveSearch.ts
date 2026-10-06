@@ -10,9 +10,8 @@ import type { Archive } from "./Archive.ts";
  * with optional filters, returning a `SearchId` to poll. The archive id
  * is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.MailManager.StartArchiveSearchHttp)`.
- * @binding
- * @section Searching the Archive
- * @example Search the Last 24 Hours
+ * ### Searching the Archive
+ * **Example:** Search the Last 24 Hours
  * ```typescript
  * const startSearch = yield* MailManager.StartArchiveSearch(archive);
  *
@@ -23,6 +22,8 @@ import type { Archive } from "./Archive.ts";
  *   MaxResults: 100,
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartArchiveSearch extends Binding.Service<
   StartArchiveSearch,
@@ -32,10 +33,7 @@ export interface StartArchiveSearch extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.StartArchiveSearchRequest, "ArchiveId">,
-    ) => Effect.Effect<
-      mm.StartArchiveSearchResponse,
-      mm.StartArchiveSearchError
-    >
+    ) => Effect.Effect<mm.StartArchiveSearchResponse, mm.StartArchiveSearchError>
   >
 > {}
 export const StartArchiveSearch = Binding.Service<StartArchiveSearch>(

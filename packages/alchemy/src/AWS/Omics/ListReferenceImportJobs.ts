@@ -15,15 +15,16 @@ export interface ListReferenceImportJobsRequest extends Omit<
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.ListReferenceImportJobsHttp)`.
- * @binding
- * @section References
- * @example Bind ListReferenceImportJobs to a ReferenceStore
+ * ### References
+ * **Example:** Bind ListReferenceImportJobs to a ReferenceStore
  * ```typescript
  * // init
  * const listReferenceImportJobs = yield* AWS.Omics.ListReferenceImportJobs(store);
  * // runtime
  * const result = yield* listReferenceImportJobs({});
  * ```
+ *
+ * @binding
  */
 export interface ListReferenceImportJobs extends Binding.Service<
   ListReferenceImportJobs,
@@ -33,10 +34,7 @@ export interface ListReferenceImportJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListReferenceImportJobsRequest,
-    ) => Effect.Effect<
-      omics.ListReferenceImportJobsResponse,
-      omics.ListReferenceImportJobsError
-    >
+    ) => Effect.Effect<omics.ListReferenceImportJobsResponse, omics.ListReferenceImportJobsError>
   >
 > {}
 

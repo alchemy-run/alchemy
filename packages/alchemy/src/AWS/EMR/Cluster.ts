@@ -208,9 +208,8 @@ export interface Cluster extends Resource<
  * instance-hour while they exist. Each cluster needs an EMR service role and
  * an EC2 instance profile (job-flow role); destroy clusters you are not
  * using, or set `autoTerminationPolicy` as a safety net.
- * @resource
- * @section Creating a Cluster
- * @example Spark Cluster in a Default-VPC Subnet
+ * ### Creating a Cluster
+ * **Example:** Spark Cluster in a Default-VPC Subnet
  * ```typescript
  * const cluster = yield* Cluster("Analytics", {
  *   releaseLabel: "emr-7.5.0",
@@ -227,7 +226,7 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
- * @example Cluster with an Auto-Termination Safety Net
+ * **Example:** Cluster with an Auto-Termination Safety Net
  * ```typescript
  * const cluster = yield* Cluster("Batch", {
  *   releaseLabel: "emr-7.5.0",
@@ -239,8 +238,8 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
- * @section Applying a Security Configuration
- * @example Cluster with Encryption Settings
+ * ### Applying a Security Configuration
+ * **Example:** Cluster with Encryption Settings
  * ```typescript
  * const config = yield* SecurityConfiguration("Encryption", {
  *   securityConfiguration: {
@@ -257,23 +256,16 @@ export interface Cluster extends Resource<
  *   securityConfiguration: config.securityConfigurationName,
  * });
  * ```
+ *
+ * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.EMR.Cluster");
 
 // States in which a cluster is (still) a live, converging resource.
-const ACTIVE_STATES = [
-  "STARTING",
-  "BOOTSTRAPPING",
-  "RUNNING",
-  "WAITING",
-] as const;
+const ACTIVE_STATES = ["STARTING", "BOOTSTRAPPING", "RUNNING", "WAITING"] as const;
 
 // Terminal states: the cluster is gone or irreversibly going away.
-const TERMINAL_STATES = new Set([
-  "TERMINATING",
-  "TERMINATED",
-  "TERMINATED_WITH_ERRORS",
-]);
+const TERMINAL_STATES = new Set(["TERMINATING", "TERMINATED", "TERMINATED_WITH_ERRORS"]);
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
@@ -335,9 +327,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (clusterId: string) {
         const response = yield* emr
           .describeCluster({ ClusterId: clusterId })
-          .pipe(
-            Effect.catchTag("ClusterNotFound", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("ClusterNotFound", () => Effect.succeed(undefined)));
         const cluster = response?.Cluster;
         if (!cluster?.Id) return undefined;
         if (TERMINAL_STATES.has(cluster.Status?.State ?? "")) return undefined;
@@ -348,13 +338,11 @@ export const ClusterProvider = () =>
       // is. Find the live (non-terminal) cluster carrying our name — used
       // when state was lost and we only know the derived name.
       const findClusterByName = Effect.fn(function* (name: string) {
-        const summary = yield* emr.listClusters
-          .items({ ClusterStates: [...ACTIVE_STATES] })
-          .pipe(
-            Stream.filter((summary) => summary.Name === name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-          );
+        const summary = yield* emr.listClusters.items({ ClusterStates: [...ACTIVE_STATES] }).pipe(
+          Stream.filter((summary) => summary.Name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
         return summary?.Id ? yield* readCluster(summary.Id) : undefined;
       });
 
@@ -362,10 +350,7 @@ export const ClusterProvider = () =>
       // WAITING in 10-15 minutes; budget ~30 min (90 * 20s). A terminal
       // state stops the wait immediately (non-retryable).
       const waitForReady = Effect.fn(function* (clusterId: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("20 seconds"),
-          Schedule.recurs(90),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("20 seconds"), Schedule.recurs(90)]);
         return yield* emr.describeCluster({ ClusterId: clusterId }).pipe(
           Effect.flatMap((response) => {
             const cluster = response.Cluster;
@@ -381,16 +366,13 @@ export const ClusterProvider = () =>
             }
             if (state !== "WAITING" && state !== "RUNNING") {
               return Effect.fail(
-                new Error(
-                  `EMR cluster '${clusterId}' not ready (state: ${state})`,
-                ),
+                new Error(`EMR cluster '${clusterId}' not ready (state: ${state})`),
               );
             }
             return Effect.succeed(cluster!);
           }),
           Effect.retry({
-            while: (e) =>
-              e instanceof Error && !e.message.includes("terminal state"),
+            while: (e) => e instanceof Error && !e.message.includes("terminal state"),
             schedule: policy,
           }),
         );
@@ -439,22 +421,13 @@ export const ClusterProvider = () =>
           if ((n.logUri ?? undefined) !== (o.logUri ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.securityConfiguration ?? undefined) !==
-            (o.securityConfiguration ?? undefined)
-          ) {
+          if ((n.securityConfiguration ?? undefined) !== (o.securityConfiguration ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            JSON.stringify(n.configurations ?? []) !==
-            JSON.stringify(o.configurations ?? [])
-          ) {
+          if (JSON.stringify(n.configurations ?? []) !== JSON.stringify(o.configurations ?? [])) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.ebsRootVolumeSize ?? undefined) !==
-            (o.ebsRootVolumeSize ?? undefined)
-          ) {
+          if ((n.ebsRootVolumeSize ?? undefined) !== (o.ebsRootVolumeSize ?? undefined)) {
             return { action: "replace" } as const;
           }
           if ((n.customAmiId ?? undefined) !== (o.customAmiId ?? undefined)) {
@@ -464,24 +437,16 @@ export const ClusterProvider = () =>
           const ni = n.instances ?? {};
           const oi = o.instances ?? {};
           if (
-            (ni.masterInstanceType ?? "m5.xlarge") !==
-              (oi.masterInstanceType ?? "m5.xlarge") ||
-            (ni.coreInstanceType ?? "m5.xlarge") !==
-              (oi.coreInstanceType ?? "m5.xlarge") ||
+            (ni.masterInstanceType ?? "m5.xlarge") !== (oi.masterInstanceType ?? "m5.xlarge") ||
+            (ni.coreInstanceType ?? "m5.xlarge") !== (oi.coreInstanceType ?? "m5.xlarge") ||
             (ni.ec2SubnetId ?? undefined) !== (oi.ec2SubnetId ?? undefined) ||
             (ni.ec2KeyName ?? undefined) !== (oi.ec2KeyName ?? undefined) ||
             (ni.emrManagedMasterSecurityGroup ?? undefined) !==
               (oi.emrManagedMasterSecurityGroup ?? undefined) ||
             (ni.emrManagedSlaveSecurityGroup ?? undefined) !==
               (oi.emrManagedSlaveSecurityGroup ?? undefined) ||
-            !sameStringSet(
-              ni.additionalMasterSecurityGroups,
-              oi.additionalMasterSecurityGroups,
-            ) ||
-            !sameStringSet(
-              ni.additionalSlaveSecurityGroups,
-              oi.additionalSlaveSecurityGroups,
-            )
+            !sameStringSet(ni.additionalMasterSecurityGroups, oi.additionalMasterSecurityGroups) ||
+            !sameStringSet(ni.additionalSlaveSecurityGroups, oi.additionalSlaveSecurityGroups)
           ) {
             return { action: "replace" } as const;
           }
@@ -500,9 +465,7 @@ export const ClusterProvider = () =>
             : yield* findClusterByName(yield* toName(id, olds ?? {}));
           if (!cluster) return undefined;
           const attrs = yield* toAttrs(cluster);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -532,18 +495,13 @@ export const ClusterProvider = () =>
                 InstanceGroups: buildInstanceGroups(props.instances),
                 Ec2SubnetId: instances.ec2SubnetId,
                 Ec2KeyName: instances.ec2KeyName,
-                KeepJobFlowAliveWhenNoSteps:
-                  instances.keepJobFlowAliveWhenNoSteps ?? true,
+                KeepJobFlowAliveWhenNoSteps: instances.keepJobFlowAliveWhenNoSteps ?? true,
                 TerminationProtected: instances.terminationProtected ?? false,
                 UnhealthyNodeReplacement: instances.unhealthyNodeReplacement,
-                EmrManagedMasterSecurityGroup:
-                  instances.emrManagedMasterSecurityGroup,
-                EmrManagedSlaveSecurityGroup:
-                  instances.emrManagedSlaveSecurityGroup,
-                AdditionalMasterSecurityGroups:
-                  instances.additionalMasterSecurityGroups,
-                AdditionalSlaveSecurityGroups:
-                  instances.additionalSlaveSecurityGroups,
+                EmrManagedMasterSecurityGroup: instances.emrManagedMasterSecurityGroup,
+                EmrManagedSlaveSecurityGroup: instances.emrManagedSlaveSecurityGroup,
+                AdditionalMasterSecurityGroups: instances.additionalMasterSecurityGroups,
+                AdditionalSlaveSecurityGroups: instances.additionalSlaveSecurityGroups,
               },
               ServiceRole: props.serviceRole,
               JobFlowRole: props.jobFlowRole,
@@ -556,9 +514,7 @@ export const ClusterProvider = () =>
               StepConcurrencyLevel: props.stepConcurrencyLevel,
               AutoTerminationPolicy: props.autoTerminationPolicy
                 ? {
-                    IdleTimeout: toWireSeconds(
-                      props.autoTerminationPolicy.idleTimeout,
-                    ),
+                    IdleTimeout: toWireSeconds(props.autoTerminationPolicy.idleTimeout),
                   }
                 : undefined,
               Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
@@ -588,8 +544,7 @@ export const ClusterProvider = () =>
             });
           }
 
-          const desiredKeepAlive =
-            props.instances?.keepJobFlowAliveWhenNoSteps ?? true;
+          const desiredKeepAlive = props.instances?.keepJobFlowAliveWhenNoSteps ?? true;
           const observedKeepAlive = !(observed.AutoTerminate ?? false);
           if (observedKeepAlive !== desiredKeepAlive) {
             yield* emr.setKeepJobFlowAliveWhenNoSteps({
@@ -631,16 +586,12 @@ export const ClusterProvider = () =>
           }
 
           // Auto-termination policy: observe, then put/remove the delta.
-          const observedPolicy = yield* emr
-            .getAutoTerminationPolicy({ ClusterId: clusterId })
-            .pipe(
-              Effect.map((r) => r.AutoTerminationPolicy),
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
+          const observedPolicy = yield* emr.getAutoTerminationPolicy({ ClusterId: clusterId }).pipe(
+            Effect.map((r) => r.AutoTerminationPolicy),
+            Effect.catch(() => Effect.succeed(undefined)),
+          );
           if (props.autoTerminationPolicy !== undefined) {
-            const desiredIdleTimeout = toWireSeconds(
-              props.autoTerminationPolicy.idleTimeout,
-            );
+            const desiredIdleTimeout = toWireSeconds(props.autoTerminationPolicy.idleTimeout);
             if (observedPolicy?.IdleTimeout !== desiredIdleTimeout) {
               yield* emr.putAutoTerminationPolicy({
                 ClusterId: clusterId,
@@ -656,22 +607,15 @@ export const ClusterProvider = () =>
           // Core instance-group resize (in place between non-zero counts).
           const desiredCore = props.instances?.coreInstanceCount ?? 1;
           if (desiredCore > 0) {
-            const core = yield* emr.listInstanceGroups
-              .items({ ClusterId: clusterId })
-              .pipe(
-                Stream.filter((g) => g.InstanceGroupType === "CORE"),
-                Stream.runHead,
-                Effect.map(Option.getOrUndefined),
-              );
-            if (
-              core?.Id !== undefined &&
-              (core.RequestedInstanceCount ?? 0) !== desiredCore
-            ) {
+            const core = yield* emr.listInstanceGroups.items({ ClusterId: clusterId }).pipe(
+              Stream.filter((g) => g.InstanceGroupType === "CORE"),
+              Stream.runHead,
+              Effect.map(Option.getOrUndefined),
+            );
+            if (core?.Id !== undefined && (core.RequestedInstanceCount ?? 0) !== desiredCore) {
               yield* emr.modifyInstanceGroups({
                 ClusterId: clusterId,
-                InstanceGroups: [
-                  { InstanceGroupId: core.Id, InstanceCount: desiredCore },
-                ],
+                InstanceGroups: [{ InstanceGroupId: core.Id, InstanceCount: desiredCore }],
               });
             }
           }
@@ -718,17 +662,12 @@ export const ClusterProvider = () =>
               return TERMINAL_STATES.has(state)
                 ? Effect.void
                 : Effect.fail(
-                    new Error(
-                      `EMR cluster '${clusterId}' still active (state: ${state})`,
-                    ),
+                    new Error(`EMR cluster '${clusterId}' still active (state: ${state})`),
                   );
             }),
             Effect.catchTag("ClusterNotFound", () => Effect.void),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.fixed("10 seconds"),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
             }),
           );
         }),
@@ -737,9 +676,7 @@ export const ClusterProvider = () =>
           emr.listClusters.items({ ClusterStates: [...ACTIVE_STATES] }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((summary) =>
-                summary.Id ? [summary.Id] : [],
-              ),
+              Array.from(chunk).flatMap((summary) => (summary.Id ? [summary.Id] : [])),
             ),
             Effect.flatMap(
               Effect.forEach((clusterId) => readCluster(clusterId), {
@@ -747,9 +684,7 @@ export const ClusterProvider = () =>
               }),
             ),
             Effect.map((clusters) =>
-              clusters.flatMap((cluster) =>
-                cluster === undefined ? [] : [cluster],
-              ),
+              clusters.flatMap((cluster) => (cluster === undefined ? [] : [cluster])),
             ),
             Effect.flatMap(
               Effect.forEach((cluster) => toAttrs(cluster), {

@@ -153,9 +153,8 @@ export interface Workflow extends Resource<
  * Each update to the definition or configuration creates a new workflow
  * version; MWAA Serverless keeps only the latest version actively
  * scheduled.
- * @resource
- * @section Creating a Workflow
- * @example Basic Workflow
+ * ### Creating a Workflow
+ * **Example:** Basic Workflow
  * ```typescript
  * import * as MWAAServerless from "alchemy/AWS/MWAAServerless";
  * import * as IAM from "alchemy/AWS/IAM";
@@ -180,7 +179,7 @@ export interface Workflow extends Resource<
  * });
  * ```
  *
- * @example Workflow with Logging and Tags
+ * **Example:** Workflow with Logging and Tags
  * ```typescript
  * const workflow = yield* MWAAServerless.Workflow("Etl", {
  *   definitionS3Location: {
@@ -193,6 +192,8 @@ export interface Workflow extends Resource<
  *   tags: { team: "data" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Workflow = Resource<Workflow>("AWS.MWAAServerless.Workflow");
 
@@ -210,8 +211,7 @@ const retryWhileRolePropagates = <A, R>(
 ): Effect.Effect<A, mwaa.CreateWorkflowError, R> =>
   Effect.retry(self, {
     while: (e) =>
-      (e._tag === "ValidationException" ||
-        e._tag === "AccessDeniedException") &&
+      (e._tag === "ValidationException" || e._tag === "AccessDeniedException") &&
       /role/i.test(e.message ?? ""),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
   });
@@ -220,35 +220,22 @@ export const WorkflowProvider = () =>
   Provider.effect(
     Workflow,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<WorkflowProps, "name">,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: Pick<WorkflowProps, "name">) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const observeByArn = (arn: string) =>
         mwaa
           .getWorkflow({ WorkflowArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findArnByName = (name: string) =>
         mwaa.listWorkflows.items({}).pipe(
           Stream.runCollect,
-          Effect.map(
-            (items) =>
-              Array.from(items).find((w) => w.Name === name)?.WorkflowArn,
-          ),
+          Effect.map((items) => Array.from(items).find((w) => w.Name === name)?.WorkflowArn),
         );
 
-      const observe = Effect.fn(function* (
-        name: string,
-        arnHint: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, arnHint: string | undefined) {
         if (arnHint !== undefined) {
           const found = yield* observeByArn(arnHint);
           if (found !== undefined) return found;
@@ -286,8 +273,7 @@ export const WorkflowProvider = () =>
         live !== undefined &&
         live.Bucket === desired.bucket &&
         live.ObjectKey === desired.objectKey &&
-        (desired.versionId === undefined ||
-          live.VersionId === desired.versionId);
+        (desired.versionId === undefined || live.VersionId === desired.versionId);
 
       const sameNetwork = (
         live: mwaa.NetworkConfiguration | undefined,
@@ -315,9 +301,7 @@ export const WorkflowProvider = () =>
         stables: ["name", "workflowArn"],
         list: () =>
           Effect.gen(function* () {
-            const items = yield* mwaa.listWorkflows
-              .items({})
-              .pipe(Stream.runCollect);
+            const items = yield* mwaa.listWorkflows.items({}).pipe(Stream.runCollect);
             const workflows: {
               name: string;
               workflowArn: string;
@@ -385,9 +369,7 @@ export const WorkflowProvider = () =>
             live = yield* mwaa
               .createWorkflow({
                 Name: name,
-                DefinitionS3Location: toDefinitionS3Location(
-                  news.definitionS3Location,
-                ),
+                DefinitionS3Location: toDefinitionS3Location(news.definitionS3Location),
                 RoleArn: news.roleArn,
                 Description: news.description,
                 EncryptionConfiguration:
@@ -408,8 +390,7 @@ export const WorkflowProvider = () =>
                   news.networkConfiguration === undefined
                     ? undefined
                     : {
-                        SecurityGroupIds:
-                          news.networkConfiguration.securityGroupIds,
+                        SecurityGroupIds: news.networkConfiguration.securityGroupIds,
                         SubnetIds: news.networkConfiguration.subnetIds,
                       },
                 TriggerMode: news.triggerMode,
@@ -421,9 +402,7 @@ export const WorkflowProvider = () =>
                 Effect.catchTag("ConflictException", (error) =>
                   observe(name, undefined).pipe(
                     Effect.flatMap((existing) =>
-                      existing === undefined
-                        ? Effect.fail(error)
-                        : Effect.succeed(existing),
+                      existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
                     ),
                   ),
                 ),
@@ -438,31 +417,20 @@ export const WorkflowProvider = () =>
           //    update creates a new workflow version — skip on no-op).
           if (live !== undefined && arn !== undefined) {
             const drifted =
-              !sameDefinition(
-                live.DefinitionS3Location,
-                news.definitionS3Location,
-              ) ||
+              !sameDefinition(live.DefinitionS3Location, news.definitionS3Location) ||
               live.RoleArn !== news.roleArn ||
-              (news.description !== undefined &&
-                live.Description !== news.description) ||
+              (news.description !== undefined && live.Description !== news.description) ||
               (news.loggingConfiguration !== undefined &&
                 live.LoggingConfiguration?.LogGroupName !==
                   news.loggingConfiguration.logGroupName) ||
-              (news.engineVersion !== undefined &&
-                live.EngineVersion !== news.engineVersion) ||
+              (news.engineVersion !== undefined && live.EngineVersion !== news.engineVersion) ||
               (news.networkConfiguration !== undefined &&
-                !sameNetwork(
-                  live.NetworkConfiguration,
-                  news.networkConfiguration,
-                )) ||
-              (news.triggerMode !== undefined &&
-                live.TriggerMode !== news.triggerMode);
+                !sameNetwork(live.NetworkConfiguration, news.networkConfiguration)) ||
+              (news.triggerMode !== undefined && live.TriggerMode !== news.triggerMode);
             if (drifted) {
               yield* mwaa.updateWorkflow({
                 WorkflowArn: arn,
-                DefinitionS3Location: toDefinitionS3Location(
-                  news.definitionS3Location,
-                ),
+                DefinitionS3Location: toDefinitionS3Location(news.definitionS3Location),
                 RoleArn: news.roleArn,
                 Description: news.description,
                 LoggingConfiguration:
@@ -476,8 +444,7 @@ export const WorkflowProvider = () =>
                   news.networkConfiguration === undefined
                     ? undefined
                     : {
-                        SecurityGroupIds:
-                          news.networkConfiguration.securityGroupIds,
+                        SecurityGroupIds: news.networkConfiguration.securityGroupIds,
                         SubnetIds: news.networkConfiguration.subnetIds,
                       },
                 TriggerMode: news.triggerMode,
@@ -519,9 +486,7 @@ export const WorkflowProvider = () =>
           // Omitting WorkflowVersion deletes the workflow and all versions.
           yield* mwaa
             .deleteWorkflow({ WorkflowArn: output.workflowArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           // MWAA Serverless auto-creates a per-workflow log group named
           // `/aws/mwaa-serverless/{name}-{id}/` (the ARN's resource id,
@@ -541,9 +506,7 @@ export const WorkflowProvider = () =>
             const logGroupName = `/aws/mwaa-serverless/${workflowId}/`;
             const reapLogGroup = logs
               .deleteLogGroup({ logGroupName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             const observed = yield* logs
               .describeLogStreams({
                 logGroupName,
@@ -566,8 +529,7 @@ export const WorkflowProvider = () =>
             const now = yield* Effect.sync(() => Date.now());
             const quiescent =
               observed.exists &&
-              (observed.lastIngestion === undefined ||
-                now - observed.lastIngestion > 120_000);
+              (observed.lastIngestion === undefined || now - observed.lastIngestion > 120_000);
             if (quiescent) {
               yield* reapLogGroup;
             } else {

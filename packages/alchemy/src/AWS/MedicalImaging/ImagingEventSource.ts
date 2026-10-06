@@ -74,8 +74,8 @@ export interface ImagingEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming HealthImaging Events
- * @example React To Finished Imports
+ * ### Consuming HealthImaging Events
+ * **Example:** React To Finished Imports
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -106,9 +106,7 @@ export const consumeImagingEvents = <StreamReq = never, Req = never>(
     props.id ?? "MedicalImagingEvents",
     {
       source: ["aws.medical-imaging"],
-      ...(props.detailTypes !== undefined
-        ? { "detail-type": [...props.detailTypes] }
-        : {}),
+      ...(props.detailTypes !== undefined ? { "detail-type": [...props.detailTypes] } : {}),
       ...(props.datastoreIds !== undefined
         ? { detail: { datastoreId: [...props.datastoreIds] } }
         : {}),

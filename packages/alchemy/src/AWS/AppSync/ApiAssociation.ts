@@ -39,16 +39,15 @@ export interface AppSyncApiAssociation extends Resource<
 /**
  * Associates a GraphQL API with a custom {@link DomainName}
  * (existence-only resource — a domain serves exactly one API).
- * @resource
- * @section Associating an API
- * @example Serve an API at a custom domain
+ * ### Associating an API
+ * **Example:** Serve an API at a custom domain
  * ```typescript
  * yield* AppSync.ApiAssociation("Assoc", { domain, api });
  * ```
+ *
+ * @resource
  */
-export const ApiAssociationResource = Resource<AppSyncApiAssociation>(
-  "AWS.AppSync.ApiAssociation",
-);
+export const ApiAssociationResource = Resource<AppSyncApiAssociation>("AWS.AppSync.ApiAssociation");
 
 export interface ApiAssociationInputProps {
   /** The `DomainName` resource (preferred). Alternatively pass `domainName`. */
@@ -68,9 +67,7 @@ export const ApiAssociation = (id: string, props: ApiAssociationInputProps) =>
     const domainName = props.domainName ?? props.domain?.domainName;
     const apiId = props.apiId ?? props.api?.apiId;
     if (!domainName || !apiId) {
-      return yield* Effect.die(
-        "ApiAssociation requires `domain`/`domainName` and `api`/`apiId`.",
-      );
+      return yield* Effect.die("ApiAssociation requires `domain`/`domainName` and `api`/`apiId`.");
     }
     return yield* ApiAssociationResource(id, { domainName, apiId } as any);
   });
@@ -91,8 +88,7 @@ export const ApiAssociationProvider = () =>
           Effect.repeat({
             schedule: Schedule.fixed("2 seconds"),
             until: (association) =>
-              association === undefined ||
-              association.associationStatus !== "PROCESSING",
+              association === undefined || association.associationStatus !== "PROCESSING",
             times: 30,
           }),
         );
@@ -116,10 +112,7 @@ export const ApiAssociationProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            news.domainName !== olds.domainName ||
-            news.apiId !== olds.apiId
-          ) {
+          if (news.domainName !== olds.domainName || news.apiId !== olds.apiId) {
             return { action: "replace" } as const;
           }
         }),
@@ -136,9 +129,7 @@ export const ApiAssociationProvider = () =>
               }),
             );
             yield* waitForSettled(news.domainName);
-            yield* session.note(
-              `Associated ${news.apiId} with ${news.domainName}`,
-            );
+            yield* session.note(`Associated ${news.apiId} with ${news.domainName}`);
           }
           return { domainName: news.domainName, apiId: news.apiId };
         }),

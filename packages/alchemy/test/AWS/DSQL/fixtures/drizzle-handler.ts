@@ -1,12 +1,12 @@
-import * as DSQL from "@/AWS/DSQL";
-import * as Lambda from "@/AWS/Lambda";
-import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { eq, sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import path from "pathe";
+import * as DSQL from "@/AWS/DSQL";
+import * as Lambda from "@/AWS/Lambda";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { Db } from "./db.ts";
 import { Widgets } from "./schema.ts";
 
@@ -25,7 +25,7 @@ export class DsqlDrizzleFunction extends Lambda.Function<Lambda.Function>()(
 export default DsqlDrizzleFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
     // `pg` is CommonJS and Rolldown's bundled interop turns its Client export
     // into a namespace object under Node. Install it intact in the Lambda
@@ -38,9 +38,7 @@ export default DsqlDrizzleFunction.make(
     // `proxyChain` defers the connect to the first query, so the pool (and
     // the IAM token backing it) is built inside the invocation, per
     // execution — a fresh token can never outlive its pool.
-    const db = yield* Drizzle.Postgres(
-      conn.pipe(Effect.map((info) => info.url)),
-    );
+    const db = yield* Drizzle.Postgres(conn.pipe(Effect.map((info) => info.url)));
 
     return {
       fetch: Effect.gen(function* () {

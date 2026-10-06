@@ -4,10 +4,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createAlchemyTagFilters,
@@ -23,12 +22,10 @@ import type { AllocationId } from "./EIP.ts";
 import type { SubnetId } from "./Subnet.ts";
 
 export type NatGatewayId<ID extends string = string> = `nat-${ID}`;
-export const NatGatewayId = <ID extends string>(
-  id: ID,
-): ID & NatGatewayId<ID> => `nat-${id}` as ID & NatGatewayId<ID>;
+export const NatGatewayId = <ID extends string>(id: ID): ID & NatGatewayId<ID> =>
+  `nat-${id}` as ID & NatGatewayId<ID>;
 
-export type NatGatewayArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${NatGatewayId}`;
+export type NatGatewayArn = `arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${NatGatewayId}`;
 
 export interface NatGatewayProps {
   /**
@@ -173,12 +170,11 @@ export interface NatGateway extends Resource<
  * `connectivityType`, `allocationId`) are immutable, so changing them replaces
  * the gateway.
  *
- * @resource
- * @section Public NAT Gateways
+ * ### Public NAT Gateways
  * Public gateways translate private addresses to a stable public IP, so they
  * must be placed in a public subnet (one with a route to an internet gateway)
  * and given an Elastic IP allocation.
- * @example Public NAT Gateway with an Elastic IP
+ * **Example:** Public NAT Gateway with an Elastic IP
  * ```typescript
  * const eip = yield* AWS.EC2.EIP("NatEip", {});
  *
@@ -194,10 +190,10 @@ export interface NatGateway extends Resource<
  * omitted; this is the standard way to give private instances outbound internet
  * access.
  *
- * @section Private NAT Gateways
+ * ### Private NAT Gateways
  * Private gateways have no public IP and route traffic between VPCs or to
  * on-premises networks without exposing it to the internet.
- * @example Private NAT Gateway with a Fixed Private IP
+ * **Example:** Private NAT Gateway with a Fixed Private IP
  * ```typescript
  * const natGateway = yield* AWS.EC2.NatGateway("PrivateNat", {
  *   subnetId: privateSubnet.subnetId,
@@ -209,7 +205,7 @@ export interface NatGateway extends Resource<
  * gateway with no public address; `privateIpAddress` pins it to a specific
  * address in the subnet instead of letting AWS choose one automatically.
  *
- * @example Private NAT Gateway with Secondary Addresses
+ * **Example:** Private NAT Gateway with Secondary Addresses
  * ```typescript
  * const natGateway = yield* AWS.EC2.NatGateway("ScaledNat", {
  *   subnetId: privateSubnet.subnetId,
@@ -222,8 +218,8 @@ export interface NatGateway extends Resource<
  * of simultaneous connections a private gateway can sustain to busy
  * destinations, which is only valid for private gateways.
  *
- * @section Routing Private Traffic
- * @example Default Route Through the NAT Gateway
+ * ### Routing Private Traffic
+ * **Example:** Default Route Through the NAT Gateway
  * ```typescript
  * const natRoute = yield* AWS.EC2.Route("NatRoute", {
  *   routeTableId: privateRouteTable.routeTableId,
@@ -234,6 +230,8 @@ export interface NatGateway extends Resource<
  * Without a route the gateway is inert; this entry sends all outbound traffic
  * from the private subnet's route table through the gateway so private instances
  * can reach the internet.
+ *
+ * @resource
  */
 export const NatGateway = Resource<NatGateway>("AWS.EC2.NatGateway");
 
@@ -241,10 +239,7 @@ export const NatGatewayProvider = () =>
   Provider.effect(
     NatGateway,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -265,8 +260,7 @@ export const NatGatewayProvider = () =>
       const toAttrs = Effect.fn(function* (gw: ec2.NatGateway) {
         const { accountId, region } = yield* AWSEnvironment.current;
         const primaryAddress =
-          gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??
-          gw.NatGatewayAddresses?.[0];
+          gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ?? gw.NatGatewayAddresses?.[0];
         return {
           natGatewayId: gw.NatGatewayId as NatGatewayId,
           natGatewayArn:
@@ -315,9 +309,7 @@ export const NatGatewayProvider = () =>
         read: Effect.fn(function* ({ id, output }) {
           if (output) {
             // We have the NAT Gateway ID, use it directly
-            return yield* toAttrs(
-              yield* describeNatGateway(output.natGatewayId),
-            );
+            return yield* toAttrs(yield* describeNatGateway(output.natGatewayId));
           }
 
           // No output - try to find by tags (recovery from incomplete create)
@@ -334,9 +326,7 @@ export const NatGatewayProvider = () =>
           Effect.gen(function* () {
             // describeNatGateways enumerates every NAT gateway in the
             // account/region; paginate exhaustively and drop deleted ones.
-            const pages = yield* ec2.describeNatGateways
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* ec2.describeNatGateways.pages({}).pipe(Stream.runCollect);
             const gateways = Array.from(pages).flatMap((page) =>
               (page.NatGateways ?? []).filter(
                 (gw): gw is ec2.NatGateway & { NatGatewayId: string } =>
@@ -371,9 +361,7 @@ export const NatGatewayProvider = () =>
             const lookup = yield* ec2
               .describeNatGateways({ NatGatewayIds: [output.natGatewayId] })
               .pipe(
-                Effect.catchTag("NatGatewayNotFound", () =>
-                  Effect.succeed({ NatGateways: [] }),
-                ),
+                Effect.catchTag("NatGatewayNotFound", () => Effect.succeed({ NatGateways: [] })),
               );
             gw = lookup.NatGateways?.[0];
           } else {
@@ -381,12 +369,7 @@ export const NatGatewayProvider = () =>
           }
 
           // Treat a deleted/deleting NAT as if it doesn't exist so we recreate.
-          if (
-            gw &&
-            (gw.State === "deleted" ||
-              gw.State === "deleting" ||
-              gw.State === "failed")
-          ) {
+          if (gw && (gw.State === "deleted" || gw.State === "deleting" || gw.State === "failed")) {
             gw = undefined;
           }
 
@@ -398,12 +381,9 @@ export const NatGatewayProvider = () =>
               AllocationId: news.allocationId as string | undefined,
               ConnectivityType: news.connectivityType ?? "public",
               PrivateIpAddress: news.privateIpAddress,
-              SecondaryAllocationIds: news.secondaryAllocationIds as
-                | string[]
-                | undefined,
+              SecondaryAllocationIds: news.secondaryAllocationIds as string[] | undefined,
               SecondaryPrivateIpAddresses: news.secondaryPrivateIpAddresses,
-              SecondaryPrivateIpAddressCount:
-                news.secondaryPrivateIpAddressCount,
+              SecondaryPrivateIpAddressCount: news.secondaryPrivateIpAddressCount,
               TagSpecifications: [
                 {
                   ResourceType: "natgateway",
@@ -431,9 +411,10 @@ export const NatGatewayProvider = () =>
               .pipe(
                 Effect.map(
                   (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                    Object.fromEntries(r.Tags?.map((t) => [t.Key!, t.Value!]) ?? []) as Record<
+                      string,
+                      string
+                    >,
                 ),
               )) ?? {};
           const { removed, upsert } = diffTags(currentTags, desiredTags);
@@ -499,10 +480,7 @@ class NatGatewayNotFound extends Data.TaggedError("NatGatewayNotFound")<{
 /**
  * Wait for NAT Gateway to be in available state
  */
-const waitForNatGatewayAvailable = (
-  natGatewayId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForNatGatewayAvailable = (natGatewayId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeNatGateways({
       NatGatewayIds: [natGatewayId],
@@ -533,9 +511,7 @@ const waitForNatGatewayAvailable = (
       while: (e) => e._tag === "NatGatewayPending",
       schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(
-            `Waiting for NAT Gateway to be available... (${attempt * 5}s)`,
-          ),
+          session.note(`Waiting for NAT Gateway to be available... (${attempt * 5}s)`),
         ),
       ),
     }),
@@ -550,18 +526,11 @@ class NatGatewayDeleting extends Data.TaggedError("NatGatewayDeleting")<{
 /**
  * Wait for NAT Gateway to be deleted
  */
-const waitForNatGatewayDeleted = (
-  natGatewayId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForNatGatewayDeleted = (natGatewayId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeNatGateways({ NatGatewayIds: [natGatewayId] })
-      .pipe(
-        Effect.catchTag("NatGatewayNotFound", () =>
-          Effect.succeed({ NatGateways: [] }),
-        ),
-      );
+      .pipe(Effect.catchTag("NatGatewayNotFound", () => Effect.succeed({ NatGateways: [] })));
 
     const gw = result.NatGateways?.[0];
 

@@ -10,14 +10,9 @@ import type { Queue } from "./Queue.ts";
  * which the sink assigns per API call. Callers stay in control of
  * `MessageBody`, `MessageGroupId`, `MessageDeduplicationId`, attributes, etc.
  */
-export interface QueueSinkEntry extends Omit<
-  sqs.SendMessageBatchRequestEntry,
-  "Id"
-> {}
+export interface QueueSinkEntry extends Omit<sqs.SendMessageBatchRequestEntry, "Id"> {}
 
-export type QueueSinkError =
-  | sqs.SendMessageBatchError
-  | BatchRetryExhaustedError<QueueSinkEntry>;
+export type QueueSinkError = sqs.SendMessageBatchError | BatchRetryExhaustedError<QueueSinkEntry>;
 
 /**
  * A batching sink over SQS `SendMessageBatch` (10 entries / 256 KiB per
@@ -30,9 +25,8 @@ export type QueueSinkError =
  * `sqs:SendMessageBatch` on the queue. Provide the `QueueSinkHttp` layer
  * (which itself needs `SendMessageBatchHttp`) on the Function to implement
  * the binding.
- * @binding
- * @section Streaming Messages into a Queue
- * @example Run a Stream into a Queue
+ * ### Streaming Messages into a Queue
+ * **Example:** Run a Stream into a Queue
  * ```typescript
  * // init (provide SQS.QueueSinkHttp + SQS.SendMessageBatchHttp on the Function)
  * const sink = yield* SQS.QueueSink(queue);
@@ -45,7 +39,7 @@ export type QueueSinkError =
  * );
  * ```
  *
- * @example Forward Event-Source Records into a Result Queue
+ * **Example:** Forward Event-Source Records into a Result Queue
  * ```typescript
  * const sink = yield* SQS.QueueSink(resultQueue);
  *
@@ -57,15 +51,15 @@ export type QueueSinkError =
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface QueueSink extends Binding.Service<
   QueueSink,
   "AWS.SQS.QueueSink",
   (
     queue: Queue,
-  ) => Effect.Effect<
-    Sink.Sink<void, QueueSinkEntry, readonly QueueSinkEntry[], QueueSinkError>
-  >
+  ) => Effect.Effect<Sink.Sink<void, QueueSinkEntry, readonly QueueSinkEntry[], QueueSinkError>>
 > {}
 
 export const QueueSink = Binding.Service<QueueSink>("AWS.SQS.QueueSink");

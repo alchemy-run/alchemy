@@ -6,19 +6,15 @@ import type { QApp } from "./QApp.ts";
 /**
  * Request for {@link ListCategories} — `instanceId` is injected from the bound Q App.
  */
-export interface ListCategoriesRequest extends Omit<
-  qapps.ListCategoriesInput,
-  "instanceId"
-> {}
+export interface ListCategoriesRequest extends Omit<qapps.ListCategoriesInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:ListCategories`.
  *
  * Lists the library categories of the bound app's Q Business application environment instance. Provide the implementation with
  * `Effect.provide(AWS.QApps.ListCategoriesHttp)`.
- * @binding
- * @section Categories
- * @example List Categories
+ * ### Categories
+ * **Example:** List Categories
  * ```typescript
  * // init — bind the operation to the Q App
  * const listCategories = yield* AWS.QApps.ListCategories(app);
@@ -27,6 +23,8 @@ export interface ListCategoriesRequest extends Omit<
  * const result = yield* listCategories();
  * console.log(result.categories?.map((c) => c.title));
  * ```
+ *
+ * @binding
  */
 export interface ListCategories extends Binding.Service<
   ListCategories,
@@ -40,6 +38,4 @@ export interface ListCategories extends Binding.Service<
   >
 > {}
 
-export const ListCategories = Binding.Service<ListCategories>(
-  "AWS.QApps.ListCategories",
-);
+export const ListCategories = Binding.Service<ListCategories>("AWS.QApps.ListCategories");

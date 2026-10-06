@@ -7,10 +7,7 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
  * Request for {@link TestWirelessDevice}. The bound device's id is injected
  * automatically, leaving nothing else to supply.
  */
-export interface TestWirelessDeviceRequest extends Omit<
-  iotw.TestWirelessDeviceRequest,
-  "Id"
-> {}
+export interface TestWirelessDeviceRequest extends Omit<iotw.TestWirelessDeviceRequest, "Id"> {}
 
 /**
  * Runtime binding for `iotwireless:TestWirelessDevice` — simulate a
@@ -18,13 +15,12 @@ export interface TestWirelessDeviceRequest extends Omit<
  * of the bound wireless device, from a deployed Lambda or Task. Useful for
  * verifying a destination's routing without radio hardware.
  *
- * @binding
- * @section Simulating an Uplink
+ * ### Simulating an Uplink
  * Provide the `TestWirelessDeviceHttp` implementation layer on the Function
  * effect, bind the device in the init phase, then call the returned client
  * at runtime.
  *
- * @example Send a Test Uplink
+ * **Example:** Send a Test Uplink
  * ```typescript
  * // init
  * const testDevice = yield* AWS.IoTWireless.TestWirelessDevice(device);
@@ -34,6 +30,8 @@ export interface TestWirelessDeviceRequest extends Omit<
  * // on the Function effect:
  * // .pipe(Effect.provide(AWS.IoTWireless.TestWirelessDeviceHttp))
  * ```
+ *
+ * @binding
  */
 export interface TestWirelessDevice extends Binding.Service<
   TestWirelessDevice,
@@ -43,10 +41,7 @@ export interface TestWirelessDevice extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: TestWirelessDeviceRequest,
-    ) => Effect.Effect<
-      iotw.TestWirelessDeviceResponse,
-      iotw.TestWirelessDeviceError
-    >
+    ) => Effect.Effect<iotw.TestWirelessDeviceResponse, iotw.TestWirelessDeviceError>
   >
 > {}
 export const TestWirelessDevice = Binding.Service<TestWirelessDevice>(

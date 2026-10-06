@@ -26,9 +26,8 @@ export interface BatchGetRecordRequest {
  * callable that automatically scopes the batch identifiers to the bound
  * feature group. Unknown identifiers are simply absent from `Records` (they
  * are not errors).
- * @binding
- * @section Reading Records
- * @example Batch-Get Records
+ * ### Reading Records
+ * **Example:** Batch-Get Records
  * ```typescript
  * // init
  * const batchGetRecord = yield* AWS.SageMaker.BatchGetRecord(featureGroup);
@@ -38,6 +37,8 @@ export interface BatchGetRecordRequest {
  *   RecordIdentifiersValueAsString: ["user-1", "user-2"],
  * });
  * ```
+ *
+ * @binding
  */
 export interface BatchGetRecord extends Binding.Service<
   BatchGetRecord,
@@ -47,12 +48,7 @@ export interface BatchGetRecord extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchGetRecordRequest,
-    ) => Effect.Effect<
-      featurestore.BatchGetRecordResponse,
-      featurestore.BatchGetRecordError
-    >
+    ) => Effect.Effect<featurestore.BatchGetRecordResponse, featurestore.BatchGetRecordError>
   >
 > {}
-export const BatchGetRecord = Binding.Service<BatchGetRecord>(
-  "AWS.SageMaker.BatchGetRecord",
-);
+export const BatchGetRecord = Binding.Service<BatchGetRecord>("AWS.SageMaker.BatchGetRecord");

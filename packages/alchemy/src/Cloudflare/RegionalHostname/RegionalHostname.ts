@@ -2,7 +2,6 @@ import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -51,13 +50,7 @@ export interface Attributes {
   createdOn: string;
 }
 
-export type RegionalHostname = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type RegionalHostname = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Regional Hostname restricts which Cloudflare data centers decrypt and
@@ -71,11 +64,8 @@ export type RegionalHostname = Resource<
  *
  * Requires the Data Localization Suite (or Enterprise) entitlement on the
  * zone.
- * @resource
- * @product Regional Hostnames
- * @category Domains & DNS
- * @section Regionalizing a Hostname
- * @example Pin a hostname to the EU
+ * ### Regionalizing a Hostname
+ * **Example:** Pin a hostname to the EU
  * ```typescript
  * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
@@ -84,7 +74,7 @@ export type RegionalHostname = Resource<
  * });
  * ```
  *
- * @example Move it to the US in place
+ * **Example:** Move it to the US in place
  * ```typescript
  * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
@@ -94,6 +84,10 @@ export type RegionalHostname = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/data-localization/regional-services/
+ *
+ * @resource
+ * @product Regional Hostnames
+ * @category Domains & DNS
  */
 export const RegionalHostname = Resource<RegionalHostname>(TypeId, {
   aliases: ["Cloudflare.RegionalHostname"],
@@ -122,24 +116,20 @@ export const RegionalHostnameProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (item): Attributes => ({
-                    zoneId: zone.id,
-                    hostname: item.hostname,
-                    regionKey: item.regionKey,
-                    routing: item.routing ?? undefined,
-                    createdOn: item.createdOn,
-                  }),
-                ),
+                (page.result ?? []).map((item): Attributes => ({
+                  zoneId: zone.id,
+                  hostname: item.hostname,
+                  regionKey: item.regionKey,
+                  routing: item.routing ?? undefined,
+                  createdOn: item.createdOn,
+                })),
               ),
             ),
             // Plan-gated zones (no Data Localization Suite entitlement)
             // reject the route, and zones the ambient token cannot access
             // return a 403 `Forbidden`; skip both rather than failing the
             // whole list.
-            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -175,9 +165,7 @@ export const RegionalHostnameProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       // The hostname is the identifier — cold reads are trivial.
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const hostname = output?.hostname ?? olds?.hostname;
       if (!zoneId || typeof hostname !== "string") return undefined;
       const observed = yield* getHostname(zoneId, hostname);
@@ -223,10 +211,7 @@ export const RegionalHostnameProvider = () =>
           hostname: output.hostname,
         })
         .pipe(
-          Effect.catchTag(
-            ["RegionalHostnameNotFound", "RegionalHostnameEmpty"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["RegionalHostnameNotFound", "RegionalHostnameEmpty"], () => Effect.void),
         );
     }),
   });
@@ -240,9 +225,8 @@ const getHostname = (zoneId: string, hostname: string) =>
   addressing
     .getRegionalHostname({ zoneId, hostname })
     .pipe(
-      Effect.catchTag(
-        ["RegionalHostnameNotFound", "RegionalHostnameEmpty"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["RegionalHostnameNotFound", "RegionalHostnameEmpty"], () =>
+        Effect.succeed(undefined),
       ),
     );
 

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { AlarmResource } from "./binding-common.ts";
 
-export interface SetAlarmStateRequest extends Omit<
-  cloudwatch.SetAlarmStateInput,
-  "AlarmName"
-> {}
+export interface SetAlarmStateRequest extends Omit<cloudwatch.SetAlarmStateInput, "AlarmName"> {}
 
 /**
  * Runtime binding for `cloudwatch:SetAlarmState` — force the bound alarm
@@ -16,9 +13,8 @@ export interface SetAlarmStateRequest extends Omit<
  *
  * Provide `CloudWatch.SetAlarmStateHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Managing Alarm Actions
- * @example Force an Alarm into ALARM to Test Its Actions
+ * ### Managing Alarm Actions
+ * **Example:** Force an Alarm into ALARM to Test Its Actions
  * ```typescript
  * // init — grants cloudwatch:SetAlarmState on the alarm
  * const setAlarmState = yield* AWS.CloudWatch.SetAlarmState(alarm);
@@ -29,6 +25,8 @@ export interface SetAlarmStateRequest extends Omit<
  *   StateReason: "fire-drill: verifying the on-call page",
  * });
  * ```
+ *
+ * @binding
  */
 export interface SetAlarmState extends Binding.Service<
   SetAlarmState,
@@ -38,13 +36,8 @@ export interface SetAlarmState extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetAlarmStateRequest,
-    ) => Effect.Effect<
-      cloudwatch.SetAlarmStateResponse,
-      cloudwatch.SetAlarmStateError
-    >
+    ) => Effect.Effect<cloudwatch.SetAlarmStateResponse, cloudwatch.SetAlarmStateError>
   >
 > {}
 
-export const SetAlarmState = Binding.Service<SetAlarmState>(
-  "AWS.CloudWatch.SetAlarmState",
-);
+export const SetAlarmState = Binding.Service<SetAlarmState>("AWS.CloudWatch.SetAlarmState");

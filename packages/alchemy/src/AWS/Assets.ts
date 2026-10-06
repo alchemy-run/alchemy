@@ -3,10 +3,11 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { AWSEnvironment } from "./Environment.ts";
 
 /**
@@ -32,11 +33,7 @@ export type AssetsError =
 /**
  * Requirements for Assets operations (S3 operations need these).
  */
-export type AssetsRequirements =
-  | Region
-  | Credentials
-  | HttpClient
-  | AWSEnvironment;
+export type AssetsRequirements = Region | Credentials | HttpClient | AWSEnvironment;
 
 export class Assets extends Context.Service<
   Assets,
@@ -65,9 +62,7 @@ export class Assets extends Context.Service<
      * @param hash - The content hash to check
      * @returns true if the asset exists
      */
-    readonly hasAsset: (
-      hash: string,
-    ) => Effect.Effect<boolean, AssetsError, AssetsRequirements>;
+    readonly hasAsset: (hash: string) => Effect.Effect<boolean, AssetsError, AssetsRequirements>;
   }
 >()("AWS::Assets") {
   static BucketName = Assets.use((assets) => assets.bucketName);
@@ -85,11 +80,19 @@ export const AssetsLive = Layer.effect(
       Effect.flatMap(
         Option.match({
           onNone: () =>
-            Effect.die(
-              new Error(
-                "Assets bucket not found. Run 'alchemy aws bootstrap' to create it.",
-              ),
-            ),
+            Effect.gen(function* () {
+              const environment = yield* AWSEnvironment.current;
+              if (!environment.endpoint) {
+                return yield* Effect.die(
+                  new Error(
+                    "Assets bucket not found. Run 'alchemy provider aws bootstrap' to create it.",
+                  ),
+                );
+              }
+              // Local emulator (floci/LocalStack): bootstrap transparently —
+              // the bucket is free, instant, and disposable with the emulator.
+              return yield* createAssetsBucket;
+            }),
           onSome: (bucketName) => Effect.succeed(bucketName),
         }),
       ),
@@ -106,17 +109,13 @@ export const AssetsLive = Layer.effect(
 
         return Effect.gen(function* () {
           // Check if asset already exists
-          const exists = yield* s3
-            .headObject({ Bucket: yield* bucketName, Key: key })
-            .pipe(
-              Effect.map(() => true),
-              Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            );
+          const exists = yield* s3.headObject({ Bucket: yield* bucketName, Key: key }).pipe(
+            Effect.map(() => true),
+            Effect.catchTag("NotFound", () => Effect.succeed(false)),
+          );
 
           if (exists) {
-            yield* Effect.logDebug(
-              `Asset already exists: s3://${yield* bucketName}/${key}`,
-            );
+            yield* Effect.logDebug(`Asset already exists: s3://${yield* bucketName}/${key}`);
             return key;
           }
 
@@ -128,36 +127,28 @@ export const AssetsLive = Layer.effect(
             ContentType: "application/zip",
           });
 
-          yield* Effect.logDebug(
-            `Uploaded asset: s3://${yield* bucketName}/${key}`,
-          );
+          yield* Effect.logDebug(`Uploaded asset: s3://${yield* bucketName}/${key}`);
           return key;
         }).pipe(
-          Effect.mapError(
-            (err): AssetsError => ({
-              _tag: "AssetsUploadError",
-              message: `Failed to upload asset ${key}`,
-              cause: err,
-            }),
-          ),
+          Effect.mapError((err): AssetsError => ({
+            _tag: "AssetsUploadError",
+            message: `Failed to upload asset ${key}`,
+            cause: err,
+          })),
         );
       },
       hasAsset: Effect.fn(function* (hash: string) {
         const key = getLambdaAssetKey(hash);
 
-        return yield* s3
-          .headObject({ Bucket: yield* bucketName, Key: key })
-          .pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.mapError(
-              (err): AssetsError => ({
-                _tag: "AssetsCheckError",
-                message: `Failed to check asset ${key}`,
-                cause: err,
-              }),
-            ),
-          );
+        return yield* s3.headObject({ Bucket: yield* bucketName, Key: key }).pipe(
+          Effect.map(() => true),
+          Effect.catchTag("NotFound", () => Effect.succeed(false)),
+          Effect.mapError((err): AssetsError => ({
+            _tag: "AssetsCheckError",
+            message: `Failed to check asset ${key}`,
+            cause: err,
+          })),
+        );
       }),
     };
   }),
@@ -215,6 +206,45 @@ const getBucketTags = (bucketName: string) =>
       Effect.succeed<Array<{ Key?: string; Value?: string }>>([]),
     ),
   );
+
+/**
+ * Create the tagged assets bucket for the current account+region and wait for
+ * it to be addressable. Idempotent — used by `alchemy provider aws bootstrap` and by
+ * the transparent local-emulator bootstrap in {@link AssetsLive}.
+ */
+export const createAssetsBucket = Effect.gen(function* () {
+  const { accountId, region } = yield* AWSEnvironment.current;
+  const bucketName = createAssetsBucketName(accountId, region);
+  yield* s3
+    .createBucket({
+      Bucket: bucketName,
+      BucketNamespace: "account-regional",
+      CreateBucketConfiguration: {
+        Tags: [{ Key: ASSETS_BUCKET_TAG, Value: "true" }],
+        ...(region === "us-east-1"
+          ? {}
+          : {
+              LocationConstraint: region as s3.BucketLocationConstraint,
+            }),
+      },
+    })
+    .pipe(
+      Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
+      Effect.retry({
+        while: (e): boolean => e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
+        schedule: Schedule.exponential(100),
+      }),
+    );
+
+  yield* s3.headBucket({ Bucket: bucketName }).pipe(
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
+    }),
+  );
+
+  yield* Effect.logInfo(`Created assets bucket: ${bucketName}`);
+  return bucketName;
+});
 
 export const ensureAssetsBucketTags = Effect.fn(function* (bucketName: string) {
   const existingTags = yield* getBucketTags(bucketName);

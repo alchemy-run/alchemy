@@ -67,9 +67,8 @@ export interface RepositoryLink extends Resource<
  *
  * Requires a connection in the `AVAILABLE` state; the connection's OAuth
  * handshake is a one-time **manual** console step.
- * @resource
- * @section Linking a Repository
- * @example Link a GitHub Repository
+ * ### Linking a Repository
+ * **Example:** Link a GitHub Repository
  * ```typescript
  * const link = yield* CodeConnections.RepositoryLink("Repo", {
  *   connectionArn: connection.connectionArn,
@@ -78,7 +77,7 @@ export interface RepositoryLink extends Resource<
  * });
  * ```
  *
- * @example Encrypted Repository Link
+ * **Example:** Encrypted Repository Link
  * ```typescript
  * const link = yield* CodeConnections.RepositoryLink("Repo", {
  *   connectionArn: connection.connectionArn,
@@ -87,10 +86,10 @@ export interface RepositoryLink extends Resource<
  *   encryptionKeyArn: key.keyArn,
  * });
  * ```
+ *
+ * @resource
  */
-export const RepositoryLink = Resource<RepositoryLink>(
-  "AWS.CodeConnections.RepositoryLink",
-);
+export const RepositoryLink = Resource<RepositoryLink>("AWS.CodeConnections.RepositoryLink");
 
 export const RepositoryLinkProvider = () =>
   Provider.effect(
@@ -100,11 +99,7 @@ export const RepositoryLinkProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const response = yield* codeconnections
           .getRepositoryLink({ RepositoryLinkId: id })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.RepositoryLinkInfo;
       });
 
@@ -112,19 +107,13 @@ export const RepositoryLinkProvider = () =>
        * Find a repository link by its identity — owner + repository name
        * (getRepositoryLink only accepts an ID).
        */
-      const findByIdentity = Effect.fn(function* (
-        ownerId: string,
-        repositoryName: string,
-      ) {
+      const findByIdentity = Effect.fn(function* (ownerId: string, repositoryName: string) {
         const links = yield* codeconnections.listRepositoryLinks.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.RepositoryLinks ?? []),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.RepositoryLinks ?? [])),
         );
         return links.find(
-          (link) =>
-            link.OwnerId === ownerId && link.RepositoryName === repositoryName,
+          (link) => link.OwnerId === ownerId && link.RepositoryName === repositoryName,
         );
       });
 
@@ -153,8 +142,7 @@ export const RepositoryLinkProvider = () =>
           // Connection and encryption key are mutable via UpdateRepositoryLink.
           if (
             (news?.ownerId ?? undefined) !== (olds?.ownerId ?? undefined) ||
-            (news?.repositoryName ?? undefined) !==
-              (olds?.repositoryName ?? undefined)
+            (news?.repositoryName ?? undefined) !== (olds?.repositoryName ?? undefined)
           ) {
             return { action: "replace" } as const;
           }
@@ -211,8 +199,7 @@ export const RepositoryLinkProvider = () =>
           // cloud state; skip the API entirely on no-op.
           if (
             observed.ConnectionArn !== news.connectionArn ||
-            (observed.EncryptionKeyArn ?? undefined) !==
-              (news.encryptionKeyArn ?? undefined)
+            (observed.EncryptionKeyArn ?? undefined) !== (news.encryptionKeyArn ?? undefined)
           ) {
             const updated = yield* codeconnections.updateRepositoryLink({
               RepositoryLinkId: observed.RepositoryLinkId,
@@ -238,8 +225,7 @@ export const RepositoryLinkProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: (e): boolean =>
-                  e._tag === "SyncConfigurationStillExistsException",
+                while: (e): boolean => e._tag === "SyncConfigurationStillExistsException",
                 schedule: Schedule.exponential("2 seconds"),
                 times: 8,
               }),

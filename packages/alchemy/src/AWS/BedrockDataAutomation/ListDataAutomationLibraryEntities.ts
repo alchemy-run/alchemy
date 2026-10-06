@@ -20,9 +20,8 @@ export interface ListDataAutomationLibraryEntitiesRequest extends Omit<
  *
  * Provide the implementation with
  * `Effect.provide(AWS.BedrockDataAutomation.ListDataAutomationLibraryEntitiesHttp)`.
- * @binding
- * @section Library Entities
- * @example List Vocabulary Entities
+ * ### Library Entities
+ * **Example:** List Vocabulary Entities
  * ```typescript
  * // deploy time — bind the library
  * const listEntities =
@@ -34,6 +33,8 @@ export interface ListDataAutomationLibraryEntitiesRequest extends Omit<
  *   maxResults: 25,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListDataAutomationLibraryEntities extends Binding.Service<
   ListDataAutomationLibraryEntities,
@@ -49,7 +50,6 @@ export interface ListDataAutomationLibraryEntities extends Binding.Service<
     >
   >
 > {}
-export const ListDataAutomationLibraryEntities =
-  Binding.Service<ListDataAutomationLibraryEntities>(
-    "AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities",
-  );
+export const ListDataAutomationLibraryEntities = Binding.Service<ListDataAutomationLibraryEntities>(
+  "AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities",
+);

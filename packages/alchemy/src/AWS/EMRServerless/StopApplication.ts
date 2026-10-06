@@ -10,9 +10,8 @@ import type { Application } from "./Application.ts";
  * capacity so it stops billing — e.g. a scheduled cost-control function that
  * shuts the application down outside business hours. Provide the
  * implementation with `Effect.provide(AWS.EMRServerless.StopApplicationHttp)`.
- * @binding
- * @section Application Control
- * @example Stop Outside Business Hours
+ * ### Application Control
+ * **Example:** Stop Outside Business Hours
  * ```typescript
  * // init
  * const stopApplication = yield* AWS.EMRServerless.StopApplication(app);
@@ -20,15 +19,15 @@ import type { Application } from "./Application.ts";
  * // runtime
  * yield* stopApplication();
  * ```
+ *
+ * @binding
  */
 export interface StopApplication extends Binding.Service<
   StopApplication,
   "AWS.EMRServerless.StopApplication",
   (
     application: Application,
-  ) => Effect.Effect<
-    () => Effect.Effect<emr.StopApplicationResponse, emr.StopApplicationError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<emr.StopApplicationResponse, emr.StopApplicationError>>
 > {}
 export const StopApplication = Binding.Service<StopApplication>(
   "AWS.EMRServerless.StopApplication",

@@ -11,9 +11,8 @@ import type { CloudControlBindingOptions } from "./BindingOptions.ts";
  * Because Cloud Control invokes the resource type's list handler with the
  * caller's credentials, pass the handler's underlying permissions via
  * {@link CloudControlBindingOptions.handlerPolicyStatements}.
- * @binding
- * @section Reading Resources
- * @example List SSM Parameters
+ * ### Reading Resources
+ * **Example:** List SSM Parameters
  * ```typescript
  * // init — account-level; grant the list handler's permissions too
  * const listResources = yield* CloudControl.ListResources({
@@ -29,6 +28,8 @@ import type { CloudControlBindingOptions } from "./BindingOptions.ts";
  * });
  * const identifiers = (page.ResourceDescriptions ?? []).map((r) => r.Identifier);
  * ```
+ *
+ * @binding
  */
 export interface ListResources extends Binding.Service<
   ListResources,
@@ -38,13 +39,8 @@ export interface ListResources extends Binding.Service<
   ) => Effect.Effect<
     (
       request: cloudcontrol.ListResourcesInput,
-    ) => Effect.Effect<
-      cloudcontrol.ListResourcesOutput,
-      cloudcontrol.ListResourcesError
-    >
+    ) => Effect.Effect<cloudcontrol.ListResourcesOutput, cloudcontrol.ListResourcesError>
   >
 > {}
 
-export const ListResources = Binding.Service<ListResources>(
-  "AWS.CloudControl.ListResources",
-);
+export const ListResources = Binding.Service<ListResources>("AWS.CloudControl.ListResources");

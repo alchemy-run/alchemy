@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -39,13 +38,7 @@ export type SigningKeyAttributes = {
   jwk: Redacted.Redacted<string>;
 };
 
-export type SigningKey = Resource<
-  TypeId,
-  SigningKeyProps,
-  SigningKeyAttributes,
-  never,
-  Providers
->;
+export type SigningKey = Resource<TypeId, SigningKeyProps, SigningKeyAttributes, never, Providers>;
 
 /**
  * A Cloudflare Stream signing key — an RSA key pair used to sign viewer
@@ -59,11 +52,8 @@ export type SigningKey = Resource<
  * attributes.
  *
  * Requires the Stream subscription to be enabled on the account.
- * @resource
- * @product Stream
- * @category Media
- * @section Creating a signing key
- * @example Signing key for signed playback URLs
+ * ### Creating a signing key
+ * **Example:** Signing key for signed playback URLs
  * ```typescript
  * const key = yield* Cloudflare.Stream.SigningKey("PlaybackKey", {});
  *
@@ -73,6 +63,10 @@ export type SigningKey = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/
+ *
+ * @resource
+ * @product Stream
+ * @category Media
  */
 export const SigningKey = Resource<SigningKey>(TypeId);
 
@@ -180,8 +174,4 @@ export const SigningKeyProvider = () =>
 const findKey = (accountId: string, keyId: string) =>
   stream
     .getKey({ accountId })
-    .pipe(
-      Effect.map((response) =>
-        (response.result ?? []).some((key) => key.id === keyId),
-      ),
-    );
+    .pipe(Effect.map((response) => (response.result ?? []).some((key) => key.id === keyId)));

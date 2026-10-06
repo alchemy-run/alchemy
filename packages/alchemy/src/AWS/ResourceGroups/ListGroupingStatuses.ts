@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link ListGroupingStatuses} — the group is injected from the binding. */
-export type ListGroupingStatusesRequest = Omit<
-  resourcegroups.ListGroupingStatusesInput,
-  "Group"
->;
+export type ListGroupingStatusesRequest = Omit<resourcegroups.ListGroupingStatusesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:ListGroupingStatuses`.
@@ -18,9 +15,8 @@ export type ListGroupingStatusesRequest = Omit<
  * `UngroupResources` request to `SUCCESS` or reads the failure reason. The
  * group name is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.ResourceGroups.ListGroupingStatusesHttp)`.
- * @binding
- * @section Enumerating Group Members
- * @example Track A Pending Grouping Action
+ * ### Enumerating Group Members
+ * **Example:** Track A Pending Grouping Action
  * ```typescript
  * // init — bind the operation to the group
  * const listGroupingStatuses = yield* AWS.ResourceGroups.ListGroupingStatuses(group);
@@ -29,6 +25,8 @@ export type ListGroupingStatusesRequest = Omit<
  * const { GroupingStatuses } = yield* listGroupingStatuses();
  * const failed = (GroupingStatuses ?? []).filter((s) => s.Status === "FAILED");
  * ```
+ *
+ * @binding
  */
 export interface ListGroupingStatuses extends Binding.Service<
   ListGroupingStatuses,

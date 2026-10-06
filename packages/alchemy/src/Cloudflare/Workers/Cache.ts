@@ -2,11 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import {
-  Worker,
-  WorkerExecutionContext,
-  type CachePurgeError,
-} from "./Worker.ts";
+import { Worker, WorkerExecutionContext, type CachePurgeError } from "./Worker.ts";
 
 export interface CacheOptions {
   /**
@@ -50,10 +46,7 @@ export interface CacheClient {
  * For async (non-Effect) Workers, set the `cache` prop on the Worker
  * instead.
  *
- * @binding
- * @product Workers
- * @category Workers & Compute
- * @example
+ * **Example:** Example
  * ```typescript
  * Effect.gen(function* () {
  *   // init: enable Workers Cache on this Worker
@@ -76,6 +69,10 @@ export interface CacheClient {
  *   };
  * })
  * ```
+ *
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  */
 export const cache = (
   options?: CacheOptions,

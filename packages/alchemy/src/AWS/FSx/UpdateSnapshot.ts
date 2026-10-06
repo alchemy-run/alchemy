@@ -13,9 +13,8 @@ import * as Binding from "../../Binding.ts";
  * `BadRequest`; the distilled patch carves out the typed tag by message).
  * Provide the implementation with
  * `Effect.provide(AWS.FSx.UpdateSnapshotHttp)`.
- * @binding
- * @section Managing Snapshots at Runtime
- * @example Rename a snapshot after promotion
+ * ### Managing Snapshots at Runtime
+ * **Example:** Rename a snapshot after promotion
  * ```typescript
  * const updateSnapshot = yield* AWS.FSx.UpdateSnapshot();
  *
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  *   Name: "nightly-promoted",
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateSnapshot extends Binding.Service<
   UpdateSnapshot,
@@ -34,6 +35,4 @@ export interface UpdateSnapshot extends Binding.Service<
     ) => Effect.Effect<fsx.UpdateSnapshotResponse, fsx.UpdateSnapshotError>
   >
 > {}
-export const UpdateSnapshot = Binding.Service<UpdateSnapshot>(
-  "AWS.FSx.UpdateSnapshot",
-);
+export const UpdateSnapshot = Binding.Service<UpdateSnapshot>("AWS.FSx.UpdateSnapshot");

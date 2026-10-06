@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Canary } from "./Canary.ts";
 
-export interface GetCanaryRequest extends Omit<
-  synthetics.GetCanaryRequest,
-  "Name"
-> {}
+export interface GetCanaryRequest extends Omit<synthetics.GetCanaryRequest, "Name"> {}
 
 /**
  * Runtime binding for `synthetics:GetCanary` — read the full configuration
@@ -15,9 +12,8 @@ export interface GetCanaryRequest extends Omit<
  *
  * Provide `Synthetics.GetCanaryHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Reading Canary Status
- * @example Read the Canary's Current State
+ * ### Reading Canary Status
+ * **Example:** Read the Canary's Current State
  * ```typescript
  * // init — grants synthetics:GetCanary on the canary
  * const getCanary = yield* AWS.Synthetics.GetCanary(canary);
@@ -26,6 +22,8 @@ export interface GetCanaryRequest extends Omit<
  * const { Canary } = yield* getCanary();
  * const state = Canary?.Status?.State;
  * ```
+ *
+ * @binding
  */
 export interface GetCanary extends Binding.Service<
   GetCanary,

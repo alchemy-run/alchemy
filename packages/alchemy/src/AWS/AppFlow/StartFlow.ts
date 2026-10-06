@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Flow } from "./Flow.ts";
 
-export interface StartFlowRequest extends Omit<
-  appflow.StartFlowRequest,
-  "flowName"
-> {}
+export interface StartFlowRequest extends Omit<appflow.StartFlowRequest, "flowName"> {}
 
 /**
  * Runtime binding for `appflow:StartFlow`.
@@ -17,12 +14,11 @@ export interface StartFlowRequest extends Omit<
  * flows it activates the flow. The flow name is injected automatically and
  * `appflow:StartFlow` is granted on the flow. Provide the implementation with
  * `Effect.provide(AWS.AppFlow.StartFlowHttp)`.
- * @binding
- * @section Running Flows
- * @example Start an On-Demand Flow Run from a Handler
+ * ### Running Flows
+ * **Example:** Start an On-Demand Flow Run from a Handler
  * ```typescript
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const flow = yield* AWS.AppFlow.Flow("CopyFlow", { ... });
  *     // init — bind the operation to the flow
@@ -38,6 +34,8 @@ export interface StartFlowRequest extends Omit<
  *   }).pipe(Effect.provide(AWS.AppFlow.StartFlowHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface StartFlow extends Binding.Service<
   StartFlow,
@@ -45,9 +43,7 @@ export interface StartFlow extends Binding.Service<
   (
     flow: Flow,
   ) => Effect.Effect<
-    (
-      request?: StartFlowRequest,
-    ) => Effect.Effect<appflow.StartFlowResponse, appflow.StartFlowError>
+    (request?: StartFlowRequest) => Effect.Effect<appflow.StartFlowResponse, appflow.StartFlowError>
   >
 > {}
 

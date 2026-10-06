@@ -9,15 +9,16 @@ import type { Graph } from "./Graph.ts";
  *
  * Restarts the bound graph after it was stopped — m-NCU billing resumes and the graph transitions back to `AVAILABLE`. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.StartGraphHttp)`.
- * @binding
- * @section Starting and Stopping a Graph
- * @example Start a stopped graph
+ * ### Starting and Stopping a Graph
+ * **Example:** Start a stopped graph
  * ```typescript
  * const startGraph = yield* NeptuneGraph.StartGraph(graph);
  *
  * const result = yield* startGraph();
  * // result.status → transitioning toward AVAILABLE
  * ```
+ *
+ * @binding
  */
 export interface StartGraph extends Binding.Service<
   StartGraph,
@@ -25,12 +26,7 @@ export interface StartGraph extends Binding.Service<
   (
     graph: Graph,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      neptunegraph.StartGraphOutput,
-      neptunegraph.StartGraphError
-    >
+    () => Effect.Effect<neptunegraph.StartGraphOutput, neptunegraph.StartGraphError>
   >
 > {}
-export const StartGraph = Binding.Service<StartGraph>(
-  "AWS.NeptuneGraph.StartGraph",
-);
+export const StartGraph = Binding.Service<StartGraph>("AWS.NeptuneGraph.StartGraph");

@@ -10,9 +10,8 @@ import type { Cluster } from "./Cluster.ts";
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:ListFargateProfiles` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.ListFargateProfilesHttp)`.
- * @binding
- * @section Inspecting Compute
- * @example List Fargate Profiles
+ * ### Inspecting Compute
+ * **Example:** List Fargate Profiles
  * ```typescript
  * // init
  * const listFargateProfiles = yield* AWS.EKS.ListFargateProfiles(cluster);
@@ -20,6 +19,8 @@ import type { Cluster } from "./Cluster.ts";
  * // runtime
  * const { fargateProfileNames } = yield* listFargateProfiles();
  * ```
+ *
+ * @binding
  */
 export interface ListFargateProfiles extends Binding.Service<
   ListFargateProfiles,
@@ -29,10 +30,7 @@ export interface ListFargateProfiles extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<eks.ListFargateProfilesRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.ListFargateProfilesResponse,
-      eks.ListFargateProfilesError
-    >
+    ) => Effect.Effect<eks.ListFargateProfilesResponse, eks.ListFargateProfilesError>
   >
 > {}
 export const ListFargateProfiles = Binding.Service<ListFargateProfiles>(

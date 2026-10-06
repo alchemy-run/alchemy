@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { SequenceStore } from "./SequenceStore.ts";
 
-export interface ListReadSetsRequest extends Omit<
-  omics.ListReadSetsRequest,
-  "sequenceStoreId"
-> {}
+export interface ListReadSetsRequest extends Omit<omics.ListReadSetsRequest, "sequenceStoreId"> {}
 
 /**
  * Runtime binding for `omics:ListReadSets`.
@@ -15,15 +12,16 @@ export interface ListReadSetsRequest extends Omit<
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.ListReadSetsHttp)`.
- * @binding
- * @section Read Sets
- * @example Bind ListReadSets to a SequenceStore
+ * ### Read Sets
+ * **Example:** Bind ListReadSets to a SequenceStore
  * ```typescript
  * // init
  * const listReadSets = yield* AWS.Omics.ListReadSets(store);
  * // runtime
  * const result = yield* listReadSets({});
  * ```
+ *
+ * @binding
  */
 export interface ListReadSets extends Binding.Service<
   ListReadSets,
@@ -37,6 +35,4 @@ export interface ListReadSets extends Binding.Service<
   >
 > {}
 
-export const ListReadSets = Binding.Service<ListReadSets>(
-  "AWS.Omics.ListReadSets",
-);
+export const ListReadSets = Binding.Service<ListReadSets>("AWS.Omics.ListReadSets");

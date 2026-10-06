@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListDistributedGrants}.
  */
-export interface ListDistributedGrantsRequest
-  extends licensemanager.ListDistributedGrantsRequest {}
+export interface ListDistributedGrantsRequest extends licensemanager.ListDistributedGrantsRequest {}
 
 /**
  * Runtime binding for `license-manager:ListDistributedGrants` — list the
@@ -14,9 +13,8 @@ export interface ListDistributedGrantsRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.ListDistributedGrantsHttp)`.
- * @binding
- * @section Managing Grants
- * @example List Distributed Grants
+ * ### Managing Grants
+ * **Example:** List Distributed Grants
  * ```typescript
  * // init
  * const listDistributedGrants =
@@ -25,6 +23,8 @@ export interface ListDistributedGrantsRequest
  * // runtime
  * const { Grants } = yield* listDistributedGrants();
  * ```
+ *
+ * @binding
  */
 export interface ListDistributedGrants extends Binding.Service<
   ListDistributedGrants,

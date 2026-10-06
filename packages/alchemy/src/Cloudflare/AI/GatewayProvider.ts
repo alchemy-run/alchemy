@@ -131,11 +131,8 @@ export type GatewayProvider = Resource<
  * Cloudflare imposes a strict naming contract: the gateway must reference a
  * Secrets Store via its `storeId`, and the secret must be scoped to
  * `ai_gateway` and named exactly `{gatewayId}_{providerSlug}_{alias}`.
- * @resource
- * @product AI Gateway
- * @category AI
- * @section Creating a Provider Config
- * @example Bring your own OpenAI key
+ * ### Creating a Provider Config
+ * **Example:** Bring your own OpenAI key
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("Store");
  *
@@ -149,7 +146,7 @@ export type GatewayProvider = Resource<
  * const secret = yield* Cloudflare.SecretsStore.Secret("OpenAiKey", {
  *   store,
  *   name: "my-gateway_openai_default",
- *   value: yield* Config.redacted("OPENAI_API_KEY"),
+ *   value: yield* Config.Redacted("OPENAI_API_KEY"),
  *   scopes: ["ai_gateway"],
  * });
  *
@@ -162,7 +159,7 @@ export type GatewayProvider = Resource<
  * });
  * ```
  *
- * @example Rate-limit a key
+ * **Example:** Rate-limit a key
  * ```typescript
  * const byok = yield* Cloudflare.AI.GatewayProvider("OpenAi", {
  *   gatewayId: gateway.gatewayId,
@@ -175,6 +172,10 @@ export type GatewayProvider = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/
+ *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  */
 export const GatewayProvider = Resource<GatewayProvider>(TypeId, {
   aliases: ["Cloudflare.AiGateway.ProviderConfig"],
@@ -189,7 +190,7 @@ export const isGatewayProvider = (value: unknown): value is GatewayProvider =>
 export const GatewayProviderProvider = () =>
   Provider.succeed(GatewayProvider, {
     stables: ["providerConfigId", "accountId", "gatewayId"],
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -219,8 +220,7 @@ export const GatewayProviderProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const gatewayId =
-        output?.gatewayId ?? (olds?.gatewayId as string | undefined);
+      const gatewayId = output?.gatewayId ?? (olds?.gatewayId as string | undefined);
       if (gatewayId === undefined) return undefined;
 
       const configs = yield* listProviderConfigs(acct, gatewayId);
@@ -230,9 +230,7 @@ export const GatewayProviderProvider = () =>
           // deterministic alias.
           yield* Effect.gen(function* () {
             const alias = yield* createAlias(id, olds?.alias);
-            return configs.find(
-              (c) => c.alias === alias && c.providerSlug === olds?.providerSlug,
-            );
+            return configs.find((c) => c.alias === alias && c.providerSlug === olds?.providerSlug);
           });
       return match ? toAttributes(match, acct) : undefined;
     }),
@@ -244,8 +242,7 @@ export const GatewayProviderProvider = () =>
       // Absent that, prefer the deployed alias: regenerating would target a
       // different resource if the generator's output for this id ever
       // drifts.
-      const alias =
-        news.alias ?? output?.alias ?? (yield* createAlias(id, undefined));
+      const alias = news.alias ?? output?.alias ?? (yield* createAlias(id, undefined));
       return yield* reconcileProviderConfig({
         accountId,
         gatewayId: news.gatewayId as string,
@@ -279,16 +276,12 @@ export const GatewayProviderProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const gatewayIds = yield* aiGateway.listAiGateways
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((gateway) => gateway.id),
-            ),
-          ),
-        );
+      const gatewayIds = yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => (page.result ?? []).map((gateway) => gateway.id)),
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         gatewayIds,
@@ -297,9 +290,7 @@ export const GatewayProviderProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((config) =>
-                  toAttributes(config, accountId),
-                ),
+                (page.result ?? []).map((config) => toAttributes(config, accountId)),
               ),
             ),
           ),

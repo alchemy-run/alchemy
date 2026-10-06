@@ -7,10 +7,7 @@ import type { Volume } from "./Volume.ts";
  * `CreateSnapshot` request with `VolumeId` injected from the bound
  * {@link Volume}.
  */
-export interface CreateSnapshotRequest extends Omit<
-  ec2.CreateSnapshotRequest,
-  "VolumeId"
-> {}
+export interface CreateSnapshotRequest extends Omit<ec2.CreateSnapshotRequest, "VolumeId"> {}
 
 /**
  * Runtime binding for the `CreateSnapshot` operation scoped to the bound
@@ -22,9 +19,8 @@ export interface CreateSnapshotRequest extends Omit<
  * takes an application-consistent backup before a risky migration. The
  * snapshot is created `pending` and completes asynchronously. Provide the
  * implementation with `Effect.provide(AWS.EC2.CreateSnapshotHttp)`.
- * @binding
- * @section Volume Backups
- * @example Snapshot the bound volume
+ * ### Volume Backups
+ * **Example:** Snapshot the bound volume
  * ```typescript
  * // init — bind the operation to the volume
  * const createSnapshot = yield* AWS.EC2.CreateSnapshot(volume);
@@ -35,6 +31,8 @@ export interface CreateSnapshotRequest extends Omit<
  * });
  * console.log(snapshot.SnapshotId, snapshot.State);
  * ```
+ *
+ * @binding
  */
 export interface CreateSnapshot extends Binding.Service<
   CreateSnapshot,
@@ -42,12 +40,8 @@ export interface CreateSnapshot extends Binding.Service<
   (
     volume: Volume,
   ) => Effect.Effect<
-    (
-      request?: CreateSnapshotRequest,
-    ) => Effect.Effect<ec2.Snapshot, ec2.CreateSnapshotError>
+    (request?: CreateSnapshotRequest) => Effect.Effect<ec2.Snapshot, ec2.CreateSnapshotError>
   >
 > {}
 
-export const CreateSnapshot = Binding.Service<CreateSnapshot>(
-  "AWS.EC2.CreateSnapshot",
-);
+export const CreateSnapshot = Binding.Service<CreateSnapshot>("AWS.EC2.CreateSnapshot");

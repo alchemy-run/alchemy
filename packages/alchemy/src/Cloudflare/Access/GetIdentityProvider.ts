@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type {
-  IdentityProviderAttributes,
-  IdentityProviderType,
-} from "./IdentityProvider.ts";
+import type { IdentityProviderAttributes, IdentityProviderType } from "./IdentityProvider.ts";
 
 /**
  * Filters for looking up an existing Access identity provider. At least
@@ -51,9 +48,8 @@ export type FindIdentityProviderOptions = {
  * {@link AccountApiToken} with the `Access: Organizations, Identity
  * Providers, and Groups Read` permission and binds it into the Worker so
  * the lookup can run at runtime.
- * @binding
- * @section Looking Up Identity Providers
- * @example Restrict an Access application to the managed WARP IdP
+ * ### Looking Up Identity Providers
+ * **Example:** Restrict an Access application to the managed WARP IdP
  * ```typescript
  * const warpIdp = Cloudflare.Access.getIdentityProvider({
  *   type: "cloudflare",
@@ -64,11 +60,11 @@ export type FindIdentityProviderOptions = {
  *   allowedIdps: [warpIdp.identityProviderId.as<string>()],
  * });
  * ```
- * @example Look up an IdP by display name
+ * **Example:** Look up an IdP by display name
  * ```typescript
  * const okta = Cloudflare.Access.getIdentityProvider({ name: "Okta SSO" });
  * ```
- * @example Look up an IdP at runtime inside a Worker
+ * **Example:** Look up an IdP at runtime inside a Worker
  * ```typescript
  * // init — bind the lookup
  * const findWarpIdp = yield* Cloudflare.Access.GetIdentityProvider({
@@ -78,6 +74,8 @@ export type FindIdentityProviderOptions = {
  * // runtime — resolve the IdP
  * const warp = yield* findWarpIdp();
  * ```
+ *
+ * @binding
  */
 export interface GetIdentityProvider extends Binding.Service<
   GetIdentityProvider,
@@ -87,8 +85,7 @@ export interface GetIdentityProvider extends Binding.Service<
   ) => Effect.Effect<
     () => Effect.Effect<
       IdentityProviderAttributes | undefined,
-      | zeroTrust.ListIdentityProvidersForAccountError
-      | zeroTrust.ListIdentityProvidersForZoneError,
+      zeroTrust.ListIdentityProvidersForAccountError | zeroTrust.ListIdentityProvidersForZoneError,
       RuntimeContext
     >,
     never,

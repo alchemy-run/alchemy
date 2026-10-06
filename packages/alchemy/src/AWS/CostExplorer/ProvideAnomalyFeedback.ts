@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ProvideAnomalyFeedback}.
  */
-export interface ProvideAnomalyFeedbackRequest
-  extends ce.ProvideAnomalyFeedbackRequest {}
+export interface ProvideAnomalyFeedbackRequest extends ce.ProvideAnomalyFeedbackRequest {}
 
 /**
  * Runtime binding for `ce:ProvideAnomalyFeedback`.
@@ -16,9 +15,8 @@ export interface ProvideAnomalyFeedbackRequest
  * addressed by id; per the `ce` service authorization reference the action
  * supports no resource types, so this is an account-level binding. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.ProvideAnomalyFeedbackHttp)`.
- * @binding
- * @section Anomaly Detection at Runtime
- * @example Mark an Anomaly as Expected
+ * ### Anomaly Detection at Runtime
+ * **Example:** Mark an Anomaly as Expected
  * ```typescript
  * // init — account-level binding takes no resource
  * const provideAnomalyFeedback = yield* AWS.CostExplorer.ProvideAnomalyFeedback();
@@ -29,6 +27,8 @@ export interface ProvideAnomalyFeedbackRequest
  *   Feedback: "PLANNED_ACTIVITY",
  * });
  * ```
+ *
+ * @binding
  */
 export interface ProvideAnomalyFeedback extends Binding.Service<
   ProvideAnomalyFeedback,
@@ -36,10 +36,7 @@ export interface ProvideAnomalyFeedback extends Binding.Service<
   () => Effect.Effect<
     (
       request: ProvideAnomalyFeedbackRequest,
-    ) => Effect.Effect<
-      ce.ProvideAnomalyFeedbackResponse,
-      ce.ProvideAnomalyFeedbackError
-    >
+    ) => Effect.Effect<ce.ProvideAnomalyFeedbackResponse, ce.ProvideAnomalyFeedbackError>
   >
 > {}
 

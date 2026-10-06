@@ -63,9 +63,8 @@ export interface LoggingConfiguration extends Resource<
  * has at most one logging configuration; deleting this resource disables
  * logging.
  *
- * @resource
- * @section Configuring Logging
- * @example Log to CloudWatch Logs
+ * ### Configuring Logging
+ * **Example:** Log to CloudWatch Logs
  * ```typescript
  * const logGroup = yield* AWS.Logs.LogGroup("WafLogs", {
  *   logGroupName: "aws-waf-logs-my-firewall",
@@ -77,7 +76,7 @@ export interface LoggingConfiguration extends Resource<
  * });
  * ```
  *
- * @example Redact Headers and Filter to Blocked Requests
+ * **Example:** Redact Headers and Filter to Blocked Requests
  * ```typescript
  * yield* AWS.WAFv2.LoggingConfiguration("Logging", {
  *   resourceArn: acl.webAclArn,
@@ -95,6 +94,8 @@ export interface LoggingConfiguration extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const LoggingConfiguration = Resource<LoggingConfiguration>(
   "AWS.WAFv2.LoggingConfiguration",
@@ -112,8 +113,7 @@ const scopeOfArn = (arn: string): WafScope =>
  * WAF rejects CloudWatch Logs log group ARNs with the `:*` suffix that IAM
  * policies (and the Logs API) use — strip it.
  */
-const normalizeDestination = (arn: string): string =>
-  arn.endsWith(":*") ? arn.slice(0, -2) : arn;
+const normalizeDestination = (arn: string): string => (arn.endsWith(":*") ? arn.slice(0, -2) : arn);
 
 /**
  * The first PutLoggingConfiguration in an account creates the WAF
@@ -139,18 +139,11 @@ export const LoggingConfigurationProvider = () =>
           scope,
           wafv2
             .getLoggingConfiguration({ ResourceArn: resourceArn })
-            .pipe(
-              Effect.catchTag("WAFNonexistentItemException", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+            .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined))),
         );
       });
 
-      const toAttrs = (
-        resourceArn: string,
-        destinations: readonly string[],
-      ) => ({
+      const toAttrs = (resourceArn: string, destinations: readonly string[]) => ({
         resourceArn,
         scope: scopeOfArn(resourceArn),
         logDestinationConfigs: [...destinations],
@@ -184,8 +177,7 @@ export const LoggingConfigurationProvider = () =>
           const scope = scopeOfArn(news.resourceArn);
           const desired: WAFV2.LoggingConfiguration = {
             ResourceArn: news.resourceArn,
-            LogDestinationConfigs:
-              news.logDestinationConfigs.map(normalizeDestination),
+            LogDestinationConfigs: news.logDestinationConfigs.map(normalizeDestination),
             RedactedFields: news.redactedFields,
             LoggingFilter: news.loggingFilter,
           };
@@ -232,12 +224,7 @@ export const LoggingConfigurationProvider = () =>
               .deleteLoggingConfiguration({
                 ResourceArn: output.resourceArn,
               })
-              .pipe(
-                Effect.catchTag(
-                  "WAFNonexistentItemException",
-                  () => Effect.void,
-                ),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
           );
         }),
       });

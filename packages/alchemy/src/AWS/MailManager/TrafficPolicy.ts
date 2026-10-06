@@ -5,11 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readMailManagerTags,
@@ -69,9 +65,8 @@ export interface TrafficPolicy extends Resource<
  *
  * All aspects (name, statements, default action, size cap, tags) update in
  * place.
- * @resource
- * @section Creating Traffic Policies
- * @example Deny-by-Default with an Allowed CIDR
+ * ### Creating Traffic Policies
+ * **Example:** Deny-by-Default with an Allowed CIDR
  * ```typescript
  * import * as MailManager from "alchemy/AWS/MailManager";
  *
@@ -94,40 +89,30 @@ export interface TrafficPolicy extends Resource<
  * });
  * ```
  *
- * @example Allow All with a Size Cap
+ * **Example:** Allow All with a Size Cap
  * ```typescript
  * const policy = yield* MailManager.TrafficPolicy("Edge", {
  *   defaultAction: "ALLOW",
  *   maxMessageSizeBytes: 10 * 1024 * 1024,
  * });
  * ```
+ *
+ * @resource
  */
-export const TrafficPolicy = Resource<TrafficPolicy>(
-  "AWS.MailManager.TrafficPolicy",
-);
+export const TrafficPolicy = Resource<TrafficPolicy>("AWS.MailManager.TrafficPolicy");
 
 export const TrafficPolicyProvider = () =>
   Provider.effect(
     TrafficPolicy,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { trafficPolicyName?: string },
-      ) {
-        return (
-          props.trafficPolicyName ??
-          (yield* createPhysicalName({ id, maxLength: 63 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { trafficPolicyName?: string }) {
+        return props.trafficPolicyName ?? (yield* createPhysicalName({ id, maxLength: 63 }));
       });
 
       const getById = (trafficPolicyId: string) =>
         mm
           .getTrafficPolicy({ TrafficPolicyId: trafficPolicyId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findByName = (name: string) =>
         mm.listTrafficPolicies.pages({}).pipe(
@@ -152,9 +137,7 @@ export const TrafficPolicyProvider = () =>
         return yield* getById(summary.TrafficPolicyId);
       });
 
-      const toAttrs = Effect.fn(function* (
-        policy: mm.GetTrafficPolicyResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (policy: mm.GetTrafficPolicyResponse) {
         if (policy.TrafficPolicyArn === undefined) {
           return yield* Effect.fail(
             new Error(
@@ -179,9 +162,7 @@ export const TrafficPolicyProvider = () =>
               Effect.forEach(
                 Array.from(chunk)
                   .flatMap((page) => page.TrafficPolicies ?? [])
-                  .flatMap((p) =>
-                    p.TrafficPolicyId !== undefined ? [p.TrafficPolicyId] : [],
-                  ),
+                  .flatMap((p) => (p.TrafficPolicyId !== undefined ? [p.TrafficPolicyId] : [])),
                 (trafficPolicyId) => getById(trafficPolicyId),
               ),
             ),
@@ -194,8 +175,7 @@ export const TrafficPolicyProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.trafficPolicyName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.trafficPolicyName ?? (yield* createName(id, olds ?? {}));
           const policy = yield* observe(output, name);
           if (policy === undefined) return undefined;
           const attrs = yield* toAttrs(policy);
@@ -226,11 +206,7 @@ export const TrafficPolicyProvider = () =>
                 MaxMessageSizeBytes: news.maxMessageSizeBytes,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             policy =
               created !== undefined
                 ? yield* getById(created.TrafficPolicyId)
@@ -238,9 +214,7 @@ export const TrafficPolicyProvider = () =>
           }
           if (policy === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Mail Manager traffic policy '${name}' not found after create`,
-              ),
+              new Error(`Mail Manager traffic policy '${name}' not found after create`),
             );
           }
 

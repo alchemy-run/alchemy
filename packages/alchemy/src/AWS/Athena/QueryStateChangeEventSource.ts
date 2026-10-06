@@ -9,12 +9,7 @@ import {
 /**
  * A query execution state, as reported in the EventBridge event detail.
  */
-export type QueryState =
-  | "QUEUED"
-  | "RUNNING"
-  | "SUCCEEDED"
-  | "FAILED"
-  | "CANCELLED";
+export type QueryState = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 
 /**
  * The `detail` payload Athena delivers to EventBridge on every query
@@ -80,8 +75,8 @@ export interface QueryStateChangesProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Query State Changes
- * @example React to Terminal Query Outcomes
+ * ### Consuming Query State Changes
+ * **Example:** React to Terminal Query Outcomes
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -117,9 +112,7 @@ export const consumeQueryStateChanges = <StreamReq = never, Req = never>(
         ? {
             detail: {
               ...(props.states ? { currentState: [...props.states] } : {}),
-              ...(props.workGroups
-                ? { workgroupName: [...props.workGroups] }
-                : {}),
+              ...(props.workGroups ? { workgroupName: [...props.workGroups] } : {}),
             },
           }
         : {}),

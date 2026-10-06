@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -80,9 +75,8 @@ export interface MultiRegionEndpoint extends Resource<
  *
  * There is no update API, so any change to the name or routes replaces the
  * endpoint.
- * @resource
- * @section Creating Endpoints
- * @example Two-Region Endpoint
+ * ### Creating Endpoints
+ * **Example:** Two-Region Endpoint
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -93,7 +87,7 @@ export interface MultiRegionEndpoint extends Resource<
  * });
  * ```
  *
- * @example Three-Region Endpoint
+ * **Example:** Three-Region Endpoint
  * ```typescript
  * // Traffic is split across the primary region plus every listed route.
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
@@ -101,7 +95,7 @@ export interface MultiRegionEndpoint extends Resource<
  * });
  * ```
  *
- * @example Explicit Endpoint Name
+ * **Example:** Explicit Endpoint Name
  * ```typescript
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
  *   endpointName: "acme-global",
@@ -109,8 +103,8 @@ export interface MultiRegionEndpoint extends Resource<
  * });
  * ```
  *
- * @section Waiting for READY
- * @example Poll Until the Endpoint Is Usable
+ * ### Waiting for READY
+ * **Example:** Poll Until the Endpoint Is Usable
  * ```typescript
  * import * as sesv2 from "@distilled.cloud/aws/sesv2";
  * import * as Effect from "effect/Effect";
@@ -132,15 +126,14 @@ export interface MultiRegionEndpoint extends Resource<
  *     }),
  *   );
  * ```
+ *
+ * @resource
  */
-export const MultiRegionEndpoint = Resource<MultiRegionEndpoint>(
-  "AWS.SES.MultiRegionEndpoint",
-);
+export const MultiRegionEndpoint = Resource<MultiRegionEndpoint>("AWS.SES.MultiRegionEndpoint");
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 // getMultiRegionEndpoint returns no ARN, so the ARN listTagsForResource needs
 // is derived from the endpoint NAME (not its id) — verified live.
@@ -164,20 +157,13 @@ export const MultiRegionEndpointProvider = () =>
         id: string,
         props: Pick<MultiRegionEndpointProps, "endpointName">,
       ) {
-        return (
-          props.endpointName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.endpointName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getEndpoint = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getMultiRegionEndpoint({ EndpointName: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       // getMultiRegionEndpoint does not return tags, so ownership costs a
@@ -202,9 +188,7 @@ export const MultiRegionEndpointProvider = () =>
         // Account/region-scoped: enumerate every endpoint so leaked test
         // resources are cleaned by nuke.
         list: Effect.fn(function* () {
-          const pages = yield* sesv2.listMultiRegionEndpoints
-            .pages({})
-            .pipe(Stream.runCollect);
+          const pages = yield* sesv2.listMultiRegionEndpoints.pages({}).pipe(Stream.runCollect);
           return Array.from(pages)
             .flatMap((page) => page.MultiRegionEndpoints ?? [])
             .flatMap((entry) =>
@@ -221,8 +205,7 @@ export const MultiRegionEndpointProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.endpointName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.endpointName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getEndpoint(name);
           if (!found || !found.EndpointId) return undefined;
           const attrs = {
@@ -242,10 +225,7 @@ export const MultiRegionEndpointProvider = () =>
           const newName = yield* createName(id, news ?? {});
           // No update API: a rename or any routing change replaces the
           // endpoint.
-          if (
-            oldName !== newName ||
-            !sameRegions(olds?.regions, news.regions)
-          ) {
+          if (oldName !== newName || !sameRegions(olds?.regions, news.regions)) {
             return { action: "replace" } as const;
           }
         }),
@@ -273,11 +253,7 @@ export const MultiRegionEndpointProvider = () =>
                 },
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
             // The endpoint is not always readable the instant create returns
             // (and on the AlreadyExists race another writer may still be
             // mid-create), so poll briefly rather than failing outright.
@@ -292,9 +268,7 @@ export const MultiRegionEndpointProvider = () =>
 
           if (observed === undefined || !observed.EndpointId) {
             return yield* Effect.fail(
-              new Error(
-                `SES multi-region endpoint ${name} was not found after create`,
-              ),
+              new Error(`SES multi-region endpoint ${name} was not found after create`),
             );
           }
 
@@ -336,18 +310,13 @@ export const MultiRegionEndpointProvider = () =>
           // ("Unable to delete resource in PROVISIONING status"). That is
           // eventual consistency, not a failure — retry on a bounded schedule
           // until the endpoint settles and the delete takes.
-          yield* sesv2
-            .deleteMultiRegionEndpoint({ EndpointName: output.endpointName })
-            .pipe(
-              Effect.retry({
-                while: (e) => e._tag === "ConcurrentModificationException",
-                schedule: Schedule.max([
-                  Schedule.spaced("5 seconds"),
-                  Schedule.recurs(12),
-                ]),
-              }),
-              Effect.catchTag("NotFoundException", () => Effect.void),
-            );
+          yield* sesv2.deleteMultiRegionEndpoint({ EndpointName: output.endpointName }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ConcurrentModificationException",
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
+            }),
+            Effect.catchTag("NotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

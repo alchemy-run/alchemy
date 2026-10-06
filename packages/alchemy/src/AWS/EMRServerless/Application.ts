@@ -11,10 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireMinutes } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  awaitApplicationCreated,
-  awaitApplicationStopped,
-} from "./internal.ts";
+import { awaitApplicationCreated, awaitApplicationStopped } from "./internal.ts";
 
 /**
  * The engine an EMR Serverless application runs. Changing the type replaces
@@ -129,9 +126,8 @@ export interface Application extends Resource<
  * state costs nothing; billing only occurs for workers while the application
  * is started (including any pre-initialized `initialCapacity`).
  *
- * @resource
- * @section Creating Applications
- * @example Spark Application
+ * ### Creating Applications
+ * **Example:** Spark Application
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -141,7 +137,7 @@ export interface Application extends Resource<
  * // app.applicationId is passed to StartJobRun
  * ```
  *
- * @example Hive Application with Auto-Stop Tuning
+ * **Example:** Hive Application with Auto-Stop Tuning
  * ```typescript
  * const app = yield* AWS.EMRServerless.Application("Hive", {
  *   type: "HIVE",
@@ -151,8 +147,8 @@ export interface Application extends Resource<
  * });
  * ```
  *
- * @section Capacity
- * @example Pre-Initialized Capacity for Low-Latency Jobs
+ * ### Capacity
+ * **Example:** Pre-Initialized Capacity for Low-Latency Jobs
  * ```typescript
  * const app = yield* AWS.EMRServerless.Application("Warm", {
  *   releaseLabel: "emr-7.9.0",
@@ -170,8 +166,8 @@ export interface Application extends Resource<
  * });
  * ```
  *
- * @section Networking
- * @example VPC-Connected Application
+ * ### Networking
+ * **Example:** VPC-Connected Application
  * ```typescript
  * const app = yield* AWS.EMRServerless.Application("InVpc", {
  *   releaseLabel: "emr-7.9.0",
@@ -181,14 +177,13 @@ export interface Application extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const Application = Resource<Application>(
-  "AWS.EMRServerless.Application",
-);
+export const Application = Resource<Application>("AWS.EMRServerless.Application");
 
 /** Normalize a possibly-undefined structural prop for drift comparison. */
-const canonical = (value: unknown): string =>
-  value === undefined ? "" : JSON.stringify(value);
+const canonical = (value: unknown): string => (value === undefined ? "" : JSON.stringify(value));
 
 /**
  * Derive a deterministic create token from the resource's instance ID so a
@@ -205,10 +200,7 @@ export const ApplicationProvider = () =>
         id: string,
         props: { applicationName?: string | undefined },
       ) {
-        return (
-          props.applicationName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.applicationName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const toAttributes = (application: emr.Application) => ({
@@ -223,9 +215,7 @@ export const ApplicationProvider = () =>
       const observeById = Effect.fn(function* (applicationId: string) {
         return yield* emr.getApplication({ applicationId }).pipe(
           Effect.map((response) => response.application),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -244,14 +234,8 @@ export const ApplicationProvider = () =>
         return yield* observeById(summary.id);
       });
 
-      const observe = Effect.fn(function* (
-        applicationId: string | undefined,
-        name: string,
-      ) {
-        const byId =
-          applicationId !== undefined
-            ? yield* observeById(applicationId)
-            : undefined;
+      const observe = Effect.fn(function* (applicationId: string | undefined, name: string) {
+        const byId = applicationId !== undefined ? yield* observeById(applicationId) : undefined;
         if (byId !== undefined && byId.state !== "TERMINATED") {
           return byId;
         }
@@ -288,9 +272,7 @@ export const ApplicationProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* emr.listApplications
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* emr.listApplications.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.applications)
               .filter((s) => s.state !== "TERMINATED")
@@ -305,16 +287,13 @@ export const ApplicationProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.applicationName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.applicationName ?? (yield* createName(id, olds ?? {}));
           const application = yield* observe(output?.applicationId, name);
           if (application === undefined) {
             return undefined;
           }
           const attrs = toAttributes(application);
-          return (yield* hasAlchemyTags(id, application.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, application.tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -330,13 +309,7 @@ export const ApplicationProvider = () =>
           // releaseLabel/capacity/autoStart/autoStop/network/tags → update
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const name = output?.applicationName ?? (yield* createName(id, news));
           const type = news.type ?? "SPARK";
           const internalTags = yield* createInternalTags(id);
@@ -367,13 +340,10 @@ export const ApplicationProvider = () =>
               })
               .pipe(
                 // a concurrent reconciler already created it — observe instead
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
               );
             const applicationId =
-              created?.applicationId ??
-              (yield* observeByName(name))?.applicationId;
+              created?.applicationId ?? (yield* observeByName(name))?.applicationId;
             if (applicationId === undefined) {
               return yield* Effect.fail(
                 new emr.ResourceNotFoundException({
@@ -384,33 +354,26 @@ export const ApplicationProvider = () =>
             yield* session.note(`creating application ${name} (async)...`);
             application = yield* awaitApplicationCreated(applicationId);
           } else if (application.state === "CREATING") {
-            application = yield* awaitApplicationCreated(
-              application.applicationId,
-            );
+            application = yield* awaitApplicationCreated(application.applicationId);
           }
 
           // 3. SYNC — diff each mutable aspect (observed vs desired), apply a
           //    single updateApplication carrying only the drifted fields.
           const drift = {
             releaseLabel:
-              news.releaseLabel !== application.releaseLabel
-                ? news.releaseLabel
-                : undefined,
+              news.releaseLabel !== application.releaseLabel ? news.releaseLabel : undefined,
             architecture:
-              news.architecture !== undefined &&
-              news.architecture !== application.architecture
+              news.architecture !== undefined && news.architecture !== application.architecture
                 ? news.architecture
                 : undefined,
             initialCapacity:
               news.initialCapacity !== undefined &&
-              canonical(news.initialCapacity) !==
-                canonical(application.initialCapacity)
+              canonical(news.initialCapacity) !== canonical(application.initialCapacity)
                 ? news.initialCapacity
                 : undefined,
             maximumCapacity:
               news.maximumCapacity !== undefined &&
-              canonical(news.maximumCapacity) !==
-                canonical(application.maximumCapacity)
+              canonical(news.maximumCapacity) !== canonical(application.maximumCapacity)
                 ? news.maximumCapacity
                 : undefined,
             autoStartConfiguration:
@@ -421,24 +384,19 @@ export const ApplicationProvider = () =>
                 : undefined,
             autoStopConfiguration:
               desiredAutoStop !== undefined &&
-              canonical(desiredAutoStop) !==
-                canonical(application.autoStopConfiguration)
+              canonical(desiredAutoStop) !== canonical(application.autoStopConfiguration)
                 ? desiredAutoStop
                 : undefined,
             networkConfiguration:
               news.networkConfiguration !== undefined &&
-              canonical(news.networkConfiguration) !==
-                canonical(application.networkConfiguration)
+              canonical(news.networkConfiguration) !== canonical(application.networkConfiguration)
                 ? news.networkConfiguration
                 : undefined,
           };
           if (Object.values(drift).some((v) => v !== undefined)) {
             // Updates require a CREATED or STOPPED state — stop a started
             // application first (autoStart re-starts it on job submission).
-            if (
-              application.state === "STARTED" ||
-              application.state === "STARTING"
-            ) {
+            if (application.state === "STARTED" || application.state === "STARTING") {
               yield* emr.stopApplication({
                 applicationId: application.applicationId,
               });
@@ -467,32 +425,23 @@ export const ApplicationProvider = () =>
             .getApplication({ applicationId: output.applicationId })
             .pipe(
               Effect.map((response) => response.application),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           if (application === undefined || application.state === "TERMINATED") {
             return;
           }
           // Deletion requires a CREATED or STOPPED state.
-          if (
-            application.state === "STARTED" ||
-            application.state === "STARTING"
-          ) {
+          if (application.state === "STARTED" || application.state === "STARTING") {
             yield* emr.stopApplication({
               applicationId: application.applicationId,
             });
           }
           yield* awaitApplicationStopped(application.applicationId).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
           yield* emr
             .deleteApplication({ applicationId: output.applicationId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

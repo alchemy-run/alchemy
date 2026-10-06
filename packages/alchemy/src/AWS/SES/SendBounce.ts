@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Account-level operation with no resource-level IAM scoping. Provide the
  * implementation with `Effect.provide(AWS.SES.SendBounceHttp)`.
- * @binding
- * @section Bouncing Inbound Mail
- * @example Bounce a Received Message
+ * ### Bouncing Inbound Mail
+ * **Example:** Bounce a Received Message
  * ```typescript
  * // init — account-level binding, no resource argument
  * const sendBounce = yield* SES.SendBounce();
@@ -31,14 +30,14 @@ import * as Binding from "../../Binding.ts";
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface SendBounce extends Binding.Service<
   SendBounce,
   "AWS.SES.SendBounce",
   () => Effect.Effect<
-    (
-      request: ses.SendBounceRequest,
-    ) => Effect.Effect<ses.SendBounceResponse, ses.SendBounceError>
+    (request: ses.SendBounceRequest) => Effect.Effect<ses.SendBounceResponse, ses.SendBounceError>
   >
 > {}
 export const SendBounce = Binding.Service<SendBounce>("AWS.SES.SendBounce");

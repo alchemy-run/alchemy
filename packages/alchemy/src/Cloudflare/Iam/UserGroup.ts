@@ -2,7 +2,6 @@ import * as iam from "@distilled.cloud/cloudflare/iam";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -84,13 +83,7 @@ export interface UserGroupAttributes {
   modifiedOn: string;
 }
 
-export type UserGroup = Resource<
-  TypeId,
-  UserGroupProps,
-  UserGroupAttributes,
-  never,
-  Providers
->;
+export type UserGroup = Resource<TypeId, UserGroupProps, UserGroupAttributes, never, Providers>;
 
 /**
  * A Cloudflare IAM user group — a named set of account members that share
@@ -102,16 +95,13 @@ export type UserGroup = Resource<
  *
  * Account-scoped IAM (resource groups, user groups) is an Enterprise
  * feature.
- * @resource
- * @product IAM
- * @category Account & Identity
- * @section Creating a User Group
- * @example Empty group
+ * ### Creating a User Group
+ * **Example:** Empty group
  * ```typescript
  * const group = yield* Cloudflare.Iam.UserGroup("Operators", {});
  * ```
  *
- * @example Group with a policy
+ * **Example:** Group with a policy
  * ```typescript
  * const readers = yield* Cloudflare.Iam.UserGroup("Readers", {
  *   name: "zone-readers",
@@ -125,8 +115,8 @@ export type UserGroup = Resource<
  * });
  * ```
  *
- * @section Managing Members
- * @example Add an account member to the group
+ * ### Managing Members
+ * **Example:** Add an account member to the group
  * ```typescript
  * yield* Cloudflare.Iam.UserGroupMembership("SamInReaders", {
  *   userGroup: readers.userGroupId,
@@ -135,6 +125,10 @@ export type UserGroup = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/user-groups/
+ *
+ * @resource
+ * @product IAM
+ * @category Account & Identity
  */
 export const UserGroup = Resource<UserGroup>(TypeId);
 
@@ -212,11 +206,7 @@ export const UserGroupProvider = () =>
             name,
             policies: desired.length > 0 ? desired : undefined,
           })
-          .pipe(
-            Effect.catchTag("UserGroupNameInUse", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("UserGroupNameInUse", () => Effect.succeed(undefined)));
         if (created) {
           return toAttributes(created, accountId);
         }
@@ -240,8 +230,7 @@ export const UserGroupProvider = () =>
       //    policy IDs"); the server assigns fresh ids on every update.
       //    Skip the call entirely on a no-op.
       const observedPolicies = parsePolicies(observed.policies);
-      const dirty =
-        observed.name !== name || !samePolicies(observedPolicies, desired);
+      const dirty = observed.name !== name || !samePolicies(observedPolicies, desired);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -306,9 +295,7 @@ const resolvePolicies = (policies: UserGroupPolicyInput[]) =>
     resourceGroups: p.resourceGroups.map((id) => ({ id: id as string })),
   }));
 
-const parsePolicies = (
-  policies: ObservedUserGroup["policies"],
-): UserGroupPolicy[] =>
+const parsePolicies = (policies: ObservedUserGroup["policies"]): UserGroupPolicy[] =>
   (policies ?? []).map((p) => ({
     id: p.id ?? undefined,
     access: p.access === "deny" ? "deny" : "allow",
@@ -330,19 +317,12 @@ const policyKey = (p: {
   return `${p.access}|${ids(p.permissionGroups)}|${ids(p.resourceGroups)}`;
 };
 
-const samePolicies = (
-  observed: UserGroupPolicy[],
-  desired: ReturnType<typeof resolvePolicies>,
-) =>
+const samePolicies = (observed: UserGroupPolicy[], desired: ReturnType<typeof resolvePolicies>) =>
   observed.length === desired.length &&
-  observed.map(policyKey).sort().join(";") ===
-    desired.map(policyKey).sort().join(";");
+  observed.map(policyKey).sort().join(";") === desired.map(policyKey).sort().join(";");
 
 const toAttributes = (
-  group:
-    | iam.GetUserGroupResponse
-    | iam.CreateUserGroupResponse
-    | iam.UpdateUserGroupResponse,
+  group: iam.GetUserGroupResponse | iam.CreateUserGroupResponse | iam.UpdateUserGroupResponse,
   accountId: string,
 ): UserGroupAttributes => ({
   userGroupId: group.id,

@@ -10,9 +10,8 @@ import type { Cluster } from "./Cluster.ts";
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:StartInsightsRefresh` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.StartInsightsRefreshHttp)`.
- * @binding
- * @section Cluster Insights
- * @example Refresh Insights Before an Upgrade Check
+ * ### Cluster Insights
+ * **Example:** Refresh Insights Before an Upgrade Check
  * ```typescript
  * // init
  * const startInsightsRefresh = yield* AWS.EKS.StartInsightsRefresh(cluster);
@@ -20,6 +19,8 @@ import type { Cluster } from "./Cluster.ts";
  * // runtime
  * const { status } = yield* startInsightsRefresh();
  * ```
+ *
+ * @binding
  */
 export interface StartInsightsRefresh extends Binding.Service<
   StartInsightsRefresh,
@@ -29,10 +30,7 @@ export interface StartInsightsRefresh extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<eks.StartInsightsRefreshRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.StartInsightsRefreshResponse,
-      eks.StartInsightsRefreshError
-    >
+    ) => Effect.Effect<eks.StartInsightsRefreshResponse, eks.StartInsightsRefreshError>
   >
 > {}
 export const StartInsightsRefresh = Binding.Service<StartInsightsRefresh>(

@@ -14,9 +14,8 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
  *
  * Provide `CloudWatch.DisableAlarmActionsHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Managing Alarm Actions
- * @example Mute an Alarm During a Deploy
+ * ### Managing Alarm Actions
+ * **Example:** Mute an Alarm During a Deploy
  * ```typescript
  * // init — grants cloudwatch:DisableAlarmActions on the alarm
  * const disableAlarmActions = yield* AWS.CloudWatch.DisableAlarmActions(alarm);
@@ -24,15 +23,15 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
  * // runtime
  * yield* disableAlarmActions();
  * ```
+ *
+ * @binding
  */
 export interface DisableAlarmActions extends Binding.Service<
   DisableAlarmActions,
   "AWS.CloudWatch.DisableAlarmActions",
   (
     ...alarms: AlarmResources
-  ) => Effect.Effect<
-    () => Effect.Effect<cloudwatch.DisableAlarmActionsResponse, any>
-  >
+  ) => Effect.Effect<() => Effect.Effect<cloudwatch.DisableAlarmActionsResponse, any>>
 > {}
 
 export const DisableAlarmActions = Binding.Service<DisableAlarmActions>(

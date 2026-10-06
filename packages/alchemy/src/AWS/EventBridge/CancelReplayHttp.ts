@@ -15,8 +15,6 @@ export const CancelReplayHttp = Layer.effect(
     tag: "AWS.EventBridge.CancelReplay",
     operation: eventbridge.cancelReplay,
     actions: ["events:CancelReplay"],
-    resources: ({ accountId, region }) => [
-      `arn:aws:events:${region}:${accountId}:replay/*`,
-    ],
+    resources: ({ accountId, region }) => [`arn:aws:events:${region}:${accountId}:replay/*`],
   }),
 );

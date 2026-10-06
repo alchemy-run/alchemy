@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
-export interface DeleteLogStreamRequest extends Omit<
-  Logs.DeleteLogStreamRequest,
-  "logGroupName"
-> {}
+export interface DeleteLogStreamRequest extends Omit<Logs.DeleteLogStreamRequest, "logGroupName"> {}
 
 /**
  * Runtime binding for `logs:DeleteLogStream`.
@@ -15,9 +12,8 @@ export interface DeleteLogStreamRequest extends Omit<
  * dynamically-created log streams (e.g. cleaning up per-tenant streams
  * created with `CreateLogStream`), automatically injecting the log group
  * name.
- * @binding
- * @section Writing Logs
- * @example Delete a Per-Tenant Stream
+ * ### Writing Logs
+ * **Example:** Delete a Per-Tenant Stream
  * ```typescript
  * const deleteLogStream = yield* AWS.Logs.DeleteLogStream(logGroup);
  *
@@ -25,6 +21,8 @@ export interface DeleteLogStreamRequest extends Omit<
  *   Effect.catchTag("ResourceNotFoundException", () => Effect.void),
  * );
  * ```
+ *
+ * @binding
  */
 export interface DeleteLogStream extends Binding.Service<
   DeleteLogStream,
@@ -37,6 +35,4 @@ export interface DeleteLogStream extends Binding.Service<
     ) => Effect.Effect<Logs.DeleteLogStreamResponse, Logs.DeleteLogStreamError>
   >
 > {}
-export const DeleteLogStream = Binding.Service<DeleteLogStream>(
-  "AWS.Logs.DeleteLogStream",
-);
+export const DeleteLogStream = Binding.Service<DeleteLogStream>("AWS.Logs.DeleteLogStream");

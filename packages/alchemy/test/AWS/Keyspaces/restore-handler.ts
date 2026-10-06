@@ -1,10 +1,10 @@
-import * as Keyspaces from "@/AWS/Keyspaces";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import path from "pathe";
+import * as Keyspaces from "@/AWS/Keyspaces";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "restore-handler.ts");
 
@@ -15,7 +15,7 @@ export class KeyspacesRestoreTestFunction extends Lambda.Function<Lambda.Functio
 export default KeyspacesRestoreTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(60),
   },
   Effect.gen(function* () {
@@ -51,9 +51,7 @@ export default KeyspacesRestoreTestFunction.make(
             Effect.map((response) => ({
               restoredTableARN: response.restoredTableARN,
             })),
-            Effect.catch((error) =>
-              Effect.succeed({ error: error._tag } as const),
-            ),
+            Effect.catch((error) => Effect.succeed({ error: error._tag } as const)),
           );
           return yield* HttpServerResponse.json(result);
         }

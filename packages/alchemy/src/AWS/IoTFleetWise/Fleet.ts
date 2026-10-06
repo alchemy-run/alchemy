@@ -60,15 +60,16 @@ export interface Fleet extends Resource<
  * Fleets are free, provisioned near-instantly, and only carry a
  * description besides their signal-catalog association. AWS IoT FleetWise
  * is allowlist-gated and offered in `us-east-1`/`eu-central-1` only.
- * @resource
- * @section Creating a Fleet
- * @example Basic Fleet
+ * ### Creating a Fleet
+ * **Example:** Basic Fleet
  * ```typescript
  * const fleet = yield* Fleet("TestFleet", {
  *   signalCatalogArn: catalog.signalCatalogArn,
  *   description: "west-coast pilot vehicles",
  * });
  * ```
+ *
+ * @resource
  */
 export const Fleet = Resource<Fleet>("AWS.IoTFleetWise.Fleet");
 
@@ -77,16 +78,12 @@ export const FleetProvider = () =>
     Fleet,
     Effect.gen(function* () {
       const toId = (id: string, props: { fleetId?: string }) =>
-        props.fleetId
-          ? Effect.succeed(props.fleetId)
-          : createPhysicalName({ id, maxLength: 100 });
+        props.fleetId ? Effect.succeed(props.fleetId) : createPhysicalName({ id, maxLength: 100 });
 
       const readFleet = Effect.fn(function* (fleetId: string) {
         return yield* iotfleetwise.getFleet({ fleetId }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -151,10 +148,7 @@ export const FleetProvider = () =>
           }
 
           // 3. Sync description — the only mutable aspect.
-          if (
-            news.description !== undefined &&
-            news.description !== observed.description
-          ) {
+          if (news.description !== undefined && news.description !== observed.description) {
             yield* iotfleetwise
               .updateFleet({ fleetId, description: news.description })
               .pipe(inFleetWiseRegion);
@@ -170,9 +164,7 @@ export const FleetProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: deleting a missing fleet succeeds (vehicles are
           // detached automatically before deletion).
-          yield* iotfleetwise
-            .deleteFleet({ fleetId: output.fleetId })
-            .pipe(inFleetWiseRegion);
+          yield* iotfleetwise.deleteFleet({ fleetId: output.fleetId }).pipe(inFleetWiseRegion);
         }),
 
         list: () =>

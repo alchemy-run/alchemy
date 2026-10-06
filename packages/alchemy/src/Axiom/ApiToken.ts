@@ -34,11 +34,10 @@ export type ApiToken = Resource<
  * {@link Redacted}) on initial create and persisted in resource state.
  * Treat resource state as sensitive — anyone with read access can recover
  * the token. Pair with a secret store for downstream consumption.
- * @resource
  * @see https://axiom.co/docs/reference/tokens
  *
- * @section Creating an API Token
- * @example Ingest-only token scoped to one dataset
+ * ### Creating an API Token
+ * **Example:** Ingest-only token scoped to one dataset
  * ```typescript
  * const ingest = yield* Axiom.ApiToken("ingest", {
  *   name: "prod-ingest",
@@ -49,7 +48,7 @@ export type ApiToken = Resource<
  * });
  * ```
  *
- * @example Read-only query token
+ * **Example:** Read-only query token
  * ```typescript
  * yield* Axiom.ApiToken("query", {
  *   name: "grafana-reader",
@@ -60,13 +59,16 @@ export type ApiToken = Resource<
  * });
  * ```
  *
- * @section Consuming the Token
- * @example Forward the token via Cloudflare Secrets
+ * ### Consuming the Token
+ * **Example:** Forward the token via Cloudflare Secrets
  * ```typescript
  * const secret = yield* Cloudflare.SecretsStore.Secret("axiom-token", {
  *   value: ingest.token,
  * });
  * ```
+ *
+ * @resource
+ * @product API Token
  */
 export const ApiToken = Resource<ApiToken>("Axiom.ApiToken");
 
@@ -124,9 +126,7 @@ export const ApiTokenProvider = () =>
           // once; capture it into Redacted state for downstream consumers.
           const result = yield* create(news);
           if (!result.token) {
-            return yield* Effect.die(
-              new Error("Axiom did not return a token on create"),
-            );
+            return yield* Effect.die(new Error("Axiom did not return a token on create"));
           }
           return {
             ...result,
@@ -134,9 +134,7 @@ export const ApiTokenProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

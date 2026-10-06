@@ -6,11 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  listInstances,
-  resolveInstance,
-  retryIdentityCenter,
-} from "./common.ts";
+import { listInstances, resolveInstance, retryIdentityCenter } from "./common.ts";
 
 export interface AccountAssignmentProps {
   /**
@@ -60,9 +56,8 @@ export interface AccountAssignment extends Resource<
 /**
  * Assigns an IAM Identity Center permission set to a user or group in an AWS
  * account.
- * @resource
- * @section Creating Assignments
- * @example Assign A Group To A Workload Account
+ * ### Creating Assignments
+ * **Example:** Assign A Group To A Workload Account
  * ```typescript
  * const assignment = yield* AccountAssignment("ProdAdminAssignment", {
  *   permissionSetArn: admin.permissionSetArn,
@@ -71,6 +66,8 @@ export interface AccountAssignment extends Resource<
  *   targetId: prod.accountId,
  * });
  * ```
+ *
+ * @resource
  */
 export const AccountAssignment = Resource<AccountAssignment>(
   "AWS.IdentityCenter.AccountAssignment",
@@ -120,9 +117,7 @@ export const AccountAssignmentProvider = () =>
               (instance) => {
                 const instanceArn = instance.InstanceArn;
                 if (!instanceArn) {
-                  return Effect.succeed(
-                    [] as AccountAssignment["Attributes"][],
-                  );
+                  return Effect.succeed([] as AccountAssignment["Attributes"][]);
                 }
                 return listAssignmentsForInstance(instanceArn);
               },
@@ -177,8 +172,7 @@ export const AccountAssignmentProvider = () =>
             }),
           );
 
-          const requestId =
-            response.AccountAssignmentCreationStatus?.RequestId ?? undefined;
+          const requestId = response.AccountAssignmentCreationStatus?.RequestId ?? undefined;
           if (requestId) {
             yield* waitForAssignmentCreation(instance.InstanceArn!, requestId);
           }
@@ -188,9 +182,7 @@ export const AccountAssignmentProvider = () =>
             instanceArn: instance.InstanceArn,
           });
           if (!created) {
-            return yield* Effect.fail(
-              new Error("account assignment not found after create"),
-            );
+            return yield* Effect.fail(new Error("account assignment not found after create"));
           }
 
           yield* session.note(
@@ -213,15 +205,10 @@ export const AccountAssignmentProvider = () =>
                 TargetId: output.targetId,
                 TargetType: "AWS_ACCOUNT",
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
           );
 
-          const requestId =
-            response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;
+          const requestId = response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;
           if (requestId) {
             yield* waitForAssignmentDeletion(output.instanceArn, requestId);
           }
@@ -232,20 +219,15 @@ export const AccountAssignmentProvider = () =>
 
 const listAssignmentsForInstance = Effect.fn(function* (instanceArn: string) {
   const permissionSetArns = yield* retryIdentityCenter(
-    ssoAdmin.listPermissionSets
-      .items({ InstanceArn: instanceArn, MaxResults: 100 })
-      .pipe(
-        Stream.runCollect,
-        Effect.map((items) => Array.from(items) as string[]),
-      ),
-  ).pipe(
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
-  );
+    ssoAdmin.listPermissionSets.items({ InstanceArn: instanceArn, MaxResults: 100 }).pipe(
+      Stream.runCollect,
+      Effect.map((items) => Array.from(items) as string[]),
+    ),
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])));
 
   const perPermissionSet = yield* Effect.forEach(
     permissionSetArns,
-    (permissionSetArn) =>
-      listAssignmentsForPermissionSet(instanceArn, permissionSetArn),
+    (permissionSetArn) => listAssignmentsForPermissionSet(instanceArn, permissionSetArn),
     { concurrency: 10 },
   );
 
@@ -267,9 +249,7 @@ const listAssignmentsForPermissionSet = Effect.fn(function* (
         Stream.runCollect,
         Effect.map((items) => Array.from(items) as string[]),
       ),
-  ).pipe(
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
-  );
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])));
 
   const perAccount = yield* Effect.forEach(
     accountIds,
@@ -283,38 +263,31 @@ const listAssignmentsForPermissionSet = Effect.fn(function* (
         })
         .pipe(
           Stream.runCollect,
-          Effect.map(
-            (items) => Array.from(items) as ssoAdmin.AccountAssignment[],
-          ),
+          Effect.map((items) => Array.from(items) as ssoAdmin.AccountAssignment[]),
           retryIdentityCenter,
           Effect.map((assignments) =>
-            assignments.flatMap(
-              (assignment): AccountAssignment["Attributes"][] => {
-                if (
-                  !assignment.AccountId ||
-                  !assignment.PermissionSetArn ||
-                  !assignment.PrincipalId ||
-                  (assignment.PrincipalType !== "USER" &&
-                    assignment.PrincipalType !== "GROUP")
-                ) {
-                  return [];
-                }
-                return [
-                  {
-                    instanceArn,
-                    permissionSetArn: assignment.PermissionSetArn,
-                    principalId: assignment.PrincipalId,
-                    principalType: assignment.PrincipalType as "USER" | "GROUP",
-                    targetId: assignment.AccountId,
-                    targetType: "AWS_ACCOUNT",
-                  },
-                ];
-              },
-            ),
+            assignments.flatMap((assignment): AccountAssignment["Attributes"][] => {
+              if (
+                !assignment.AccountId ||
+                !assignment.PermissionSetArn ||
+                !assignment.PrincipalId ||
+                (assignment.PrincipalType !== "USER" && assignment.PrincipalType !== "GROUP")
+              ) {
+                return [];
+              }
+              return [
+                {
+                  instanceArn,
+                  permissionSetArn: assignment.PermissionSetArn,
+                  principalId: assignment.PrincipalId,
+                  principalType: assignment.PrincipalType as "USER" | "GROUP",
+                  targetId: assignment.AccountId,
+                  targetType: "AWS_ACCOUNT",
+                },
+              ];
+            }),
           ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed([]),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
         ),
     { concurrency: 10 },
   );
@@ -329,6 +302,13 @@ const readAssignment = Effect.fn(function* ({
   principalType,
   targetId,
 }: AccountAssignmentProps) {
+  // A `creating` row can serialize without resolved Outputs (`targetId`
+  // from `account.accountId`, etc.). Distilled `ListAccountAssignments`
+  // then fails with `ParseError: Expected string at ["AccountId"]`.
+  if (!targetId || !permissionSetArn || !principalId) {
+    return undefined;
+  }
+
   const instance = yield* resolveInstance(instanceArn);
   const assignments = yield* ssoAdmin.listAccountAssignments
     .items({
@@ -344,8 +324,7 @@ const readAssignment = Effect.fn(function* ({
 
   const match = assignments.find(
     (assignment) =>
-      assignment.PrincipalId === principalId &&
-      assignment.PrincipalType === principalType,
+      assignment.PrincipalId === principalId && assignment.PrincipalType === principalType,
   );
 
   if (!match) {
@@ -390,10 +369,7 @@ const waitForAssignmentCreation = (instanceArn: string, requestId: string) =>
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "AssignmentCreationInProgress",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(120),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(120)]),
     }),
   );
 
@@ -425,9 +401,6 @@ const waitForAssignmentDeletion = (instanceArn: string, requestId: string) =>
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "AssignmentDeletionInProgress",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(120),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(120)]),
     }),
   );

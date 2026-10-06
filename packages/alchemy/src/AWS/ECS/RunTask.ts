@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Task } from "./Task.ts";
 
-export interface RunTaskRequest extends Omit<
-  ECS.RunTaskRequest,
-  "cluster" | "taskDefinition"
-> {}
+export interface RunTaskRequest extends Omit<ECS.RunTaskRequest, "cluster" | "taskDefinition"> {}
 
 /**
  * Runtime binding for `ecs:RunTask`.
@@ -17,13 +14,12 @@ export interface RunTaskRequest extends Omit<
  * definition. The cluster and task definition ARNs are injected automatically;
  * the host is granted `ecs:RunTask` on the task definition plus `iam:PassRole`
  * on the task and execution roles.
- * @binding
- * @section Running Tasks
- * @example Launch a Fargate Task from a handler
+ * ### Running Tasks
+ * **Example:** Launch a Fargate Task from a handler
  * ```typescript
  * const api = yield* AWS.Lambda.Function(
  *   "Api",
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     // init: bind the launch (IAM grants happen here)
  *     const runTask = yield* AWS.ECS.RunTask(cluster, task);
@@ -48,6 +44,8 @@ export interface RunTaskRequest extends Omit<
  *   }),
  * );
  * ```
+ *
+ * @binding
  */
 export interface RunTask extends Binding.Service<
   RunTask,
@@ -56,9 +54,7 @@ export interface RunTask extends Binding.Service<
     cluster: Cluster,
     task: Task,
   ) => Effect.Effect<
-    (
-      request: RunTaskRequest,
-    ) => Effect.Effect<ECS.RunTaskResponse, ECS.RunTaskError>
+    (request: RunTaskRequest) => Effect.Effect<ECS.RunTaskResponse, ECS.RunTaskError>
   >
 > {}
 export const RunTask = Binding.Service<RunTask>("AWS.ECS.RunTask");

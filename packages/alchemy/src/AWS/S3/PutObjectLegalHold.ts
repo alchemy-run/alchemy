@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface PutObjectLegalHoldRequest extends Omit<
-  S3.PutObjectLegalHoldRequest,
-  "Bucket"
-> {}
+export interface PutObjectLegalHoldRequest extends Omit<S3.PutObjectLegalHoldRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:PutObjectLegalHold`.
@@ -17,9 +13,8 @@ export interface PutObjectLegalHoldRequest extends Omit<
  * `s3:PutObjectLegalHold` is granted on the bucket's objects. Requires a
  * bucket created with `objectLockEnabled: true`. Provide the implementation
  * with `Effect.provide(AWS.S3.PutObjectLegalHoldHttp)`.
- * @binding
- * @section Object Lock
- * @example Place and Release a Legal Hold
+ * ### Object Lock
+ * **Example:** Place and Release a Legal Hold
  * ```typescript
  * const putObjectLegalHold = yield* AWS.S3.PutObjectLegalHold(bucket);
  *
@@ -33,6 +28,8 @@ export interface PutObjectLegalHoldRequest extends Omit<
  *   LegalHold: { Status: "OFF" },
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutObjectLegalHold extends Binding.Service<
   PutObjectLegalHold,
@@ -45,6 +42,4 @@ export interface PutObjectLegalHold extends Binding.Service<
     ) => Effect.Effect<S3.PutObjectLegalHoldOutput, S3.PutObjectLegalHoldError>
   >
 > {}
-export const PutObjectLegalHold = Binding.Service<PutObjectLegalHold>(
-  "AWS.S3.PutObjectLegalHold",
-);
+export const PutObjectLegalHold = Binding.Service<PutObjectLegalHold>("AWS.S3.PutObjectLegalHold");

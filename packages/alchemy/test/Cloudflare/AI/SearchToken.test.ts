@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -54,10 +51,7 @@ const expectGone = (accountId: string, id: string) =>
 // must carry the "AI Search Index Engine" permission group, so the test
 // mints a scoped account API token in the same stack and feeds its id +
 // value into the service token.
-const program = (
-  accountId: string,
-  props?: Partial<Cloudflare.AI.SearchTokenProps>,
-) =>
+const program = (accountId: string, props?: Partial<Cloudflare.AI.SearchTokenProps>) =>
   Effect.gen(function* () {
     const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("TokenSource", {
       policies: [
@@ -100,9 +94,7 @@ test.provider(
       expect(live.name).toEqual(initial.token.name);
 
       // Rename in place — the service token id is stable.
-      const updated = yield* stack.deploy(
-        program(accountId, { name: renamed }),
-      );
+      const updated = yield* stack.deploy(program(accountId, { name: renamed }));
 
       expect(updated.token.id).toEqual(initial.token.id);
       expect(updated.token.name).toEqual(renamed);
@@ -121,7 +113,10 @@ test.provider(
       // Destroy again — delete must be idempotent (already gone).
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:apitoken", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -161,7 +156,10 @@ test.provider(
 
       yield* expectGone(accountId, healed.token.id);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:apitoken", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -188,7 +186,10 @@ test.provider(
 
       yield* expectGone(accountId, deployed.token.id);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:apitoken", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -204,7 +205,9 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const { apiToken, token } = yield* program(accountId);
-          const bucket = yield* Cloudflare.R2.Bucket("AiSearchTokenSource", {});
+          const bucket = yield* Cloudflare.R2.Bucket("AiSearchTokenSource", {
+            forceDestroy: true,
+          });
           const instance = yield* Cloudflare.AI.Search("Search", {
             // Pass the Bucket resource (not `bucket.bucketName`) so the
             // construct selects the R2 source path; a bare string is treated
@@ -238,5 +241,14 @@ test.provider(
   // legitimately ride the provider's `InvalidTokenCredentials` propagation
   // window (~2 min under full-suite parallel load) before the deploy even
   // returns — 240s leaves no room for the destroy + gone-poll that follow.
-  { timeout: 360_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 360_000,
+  },
 );

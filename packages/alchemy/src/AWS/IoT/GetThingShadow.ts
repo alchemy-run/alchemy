@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Thing } from "./Thing.ts";
 
-export interface GetThingShadowRequest extends Omit<
-  iotdata.GetThingShadowRequest,
-  "thingName"
-> {}
+export interface GetThingShadowRequest extends Omit<iotdata.GetThingShadowRequest, "thingName"> {}
 
 /**
  * Runtime binding for the IoT data-plane `GetThingShadow` operation (IAM
@@ -16,9 +13,8 @@ export interface GetThingShadowRequest extends Omit<
  * name is injected automatically. The response `payload` is a byte Stream;
  * decode it with `Stream.decodeText` + `Stream.mkString`. Provide the
  * implementation with `Effect.provide(AWS.IoT.GetThingShadowHttp)`.
- * @binding
- * @section Device Shadows
- * @example Read the Classic Shadow
+ * ### Device Shadows
+ * **Example:** Read the Classic Shadow
  * ```typescript
  * const getShadow = yield* AWS.IoT.GetThingShadow(thing);
  *
@@ -29,10 +25,12 @@ export interface GetThingShadowRequest extends Omit<
  * );
  * ```
  *
- * @example Read a Named Shadow
+ * **Example:** Read a Named Shadow
  * ```typescript
  * const result = yield* getShadow({ shadowName: "telemetry" });
  * ```
+ *
+ * @binding
  */
 export interface GetThingShadow extends Binding.Service<
   GetThingShadow,
@@ -42,13 +40,8 @@ export interface GetThingShadow extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetThingShadowRequest,
-    ) => Effect.Effect<
-      iotdata.GetThingShadowResponse,
-      iotdata.GetThingShadowError
-    >
+    ) => Effect.Effect<iotdata.GetThingShadowResponse, iotdata.GetThingShadowError>
   >
 > {}
 
-export const GetThingShadow = Binding.Service<GetThingShadow>(
-  "AWS.IoT.GetThingShadow",
-);
+export const GetThingShadow = Binding.Service<GetThingShadow>("AWS.IoT.GetThingShadow");

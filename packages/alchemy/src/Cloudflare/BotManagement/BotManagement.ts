@@ -1,7 +1,6 @@
 import * as botManagement from "@distilled.cloud/cloudflare/bot-management";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -15,6 +14,19 @@ type TypeId = typeof TypeId;
  * Action for AI scrapers and crawlers.
  */
 export type AiBotsProtection = "block" | "disabled" | "only_on_ad_pages";
+
+/**
+ * Policy for one class of AI crawler (search or agent). `disabled`
+ * allows the class; `block` blocks it; `only_on_ad_pages` blocks it only
+ * on pages that show ads.
+ */
+export type AiCrawlerPolicy = "disabled" | "block" | "only_on_ad_pages";
+
+/**
+ * Policy for AI model-training crawlers. `disallow` adds a robots.txt
+ * disallow without blocking at the edge.
+ */
+export type AiTrainingPolicy = AiCrawlerPolicy | "disallow";
 
 /**
  * Robots Access Control License variant.
@@ -43,6 +55,7 @@ export type SbfmVerifiedBotsAction = "allow" | "block";
  * - **Enterprise with Bot Management add-on** — `autoUpdateModel`,
  *   `bmCookieEnabled`, `suppressSessionScore`
  *
+ * `aiSearch`, `aiUser`, `aiTraining`, `botPreferenceSyncEnabled`,
  * `aiBotsProtection`, `crawlerProtection`, `contentBotsProtection`,
  * `cfRobotsVariant`, `enableJs`, and `isRobotsTxtManaged` are shared
  * across plans (though some accounts reject writes to a subset of them).
@@ -52,8 +65,28 @@ export type SbfmVerifiedBotsAction = "allow" | "block";
  */
 export interface Settings {
   /**
+   * Policy for AI search crawlers.
+   */
+  aiSearch?: AiCrawlerPolicy;
+  /**
+   * Policy for AI assistant and agent crawlers.
+   */
+  aiUser?: AiCrawlerPolicy;
+  /**
+   * Policy for AI model-training crawlers.
+   */
+  aiTraining?: AiTrainingPolicy;
+  /**
+   * Let Cloudflare serve robots.txt content derived from the zone's
+   * `aiSearch`, `aiUser` and `aiTraining` preferences.
+   */
+  botPreferenceSyncEnabled?: boolean;
+  /**
    * Action for AI scrapers and crawlers ("block AI bots"). Note
    * `only_on_ad_pages` is not available for Enterprise zones.
+   *
+   * Cloudflare deprecated this setting in favour of the per-class
+   * `aiSearch`, `aiUser`, and `aiTraining` policies.
    */
   aiBotsProtection?: AiBotsProtection;
   /**
@@ -77,6 +110,9 @@ export interface Settings {
   /**
    * Serve a Cloudflare-managed robots.txt. If the origin already serves
    * one, the managed file is prepended to it.
+   *
+   * Cloudflare deprecated this setting in favour of
+   * `botPreferenceSyncEnabled`.
    */
   isRobotsTxtManaged?: boolean;
   /**
@@ -154,13 +190,7 @@ export interface Attributes extends Settings {
   initialSettings: Settings;
 }
 
-export type BotManagement = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type BotManagement = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * The bot-management configuration of a Cloudflare zone — a zone-scoped
@@ -178,11 +208,8 @@ export type BotManagement = Resource<
  * Fields that were never set by this resource are not touched. Settings
  * changed out-of-band after the snapshot was taken, or fields the zone's
  * plan no longer accepts, cannot be restored.
- * @resource
- * @product Bot Management
- * @category Application Security
- * @section Super Bot Fight Mode
- * @example Challenge definitely automated traffic (Pro and above)
+ * ### Super Bot Fight Mode
+ * **Example:** Challenge definitely automated traffic (Pro and above)
  * ```typescript
  * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
@@ -191,7 +218,7 @@ export type BotManagement = Resource<
  * });
  * ```
  *
- * @example Static resource protection and WordPress optimization
+ * **Example:** Static resource protection and WordPress optimization
  * ```typescript
  * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
@@ -201,8 +228,8 @@ export type BotManagement = Resource<
  * });
  * ```
  *
- * @section AI bot protection
- * @example Block AI scrapers and crawlers
+ * ### AI bot protection
+ * **Example:** Block AI scrapers and crawlers
  * ```typescript
  * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
@@ -211,8 +238,18 @@ export type BotManagement = Resource<
  * });
  * ```
  *
- * @section Bot Fight Mode (Free plans)
- * @example Enable Bot Fight Mode
+ * **Example:** Allow AI search and agent crawlers, disallow training
+ * ```typescript
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
+ *   zoneId: zone.zoneId,
+ *   aiSearch: "disabled",
+ *   aiUser: "disabled",
+ *   aiTraining: "disallow",
+ * });
+ * ```
+ *
+ * ### Bot Fight Mode (Free plans)
+ * **Example:** Enable Bot Fight Mode
  * ```typescript
  * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
@@ -221,6 +258,10 @@ export type BotManagement = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/bots/
+ *
+ * @resource
+ * @product Bot Management
+ * @category Application Security
  */
 export const BotManagement = Resource<BotManagement>(TypeId, {
   aliases: ["Cloudflare.BotManagement"],
@@ -237,6 +278,10 @@ export const isBotManagement = (value: unknown): value is BotManagement =>
  * user props into the only-send-what-is-set PUT body.
  */
 const SETTINGS_KEYS = [
+  "aiSearch",
+  "aiUser",
+  "aiTraining",
+  "botPreferenceSyncEnabled",
   "aiBotsProtection",
   "crawlerProtection",
   "contentBotsProtection",
@@ -290,11 +335,7 @@ export const BotManagementProvider = () =>
       const n = news as Props;
       // zoneId is Input<string>; compare only when both sides are concrete.
       const oldZone = output?.zoneId ?? o.zoneId;
-      if (
-        typeof oldZone === "string" &&
-        typeof n.zoneId === "string" &&
-        oldZone !== n.zoneId
-      ) {
+      if (typeof oldZone === "string" && typeof n.zoneId === "string" && oldZone !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -305,11 +346,7 @@ export const BotManagementProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* observe(zoneId);
       if (!observed) return undefined;
-      return toAttributes(
-        zoneId,
-        observed,
-        output?.initialSettings ?? pickSettings(observed),
-      );
+      return toAttributes(zoneId, observed, output?.initialSettings ?? pickSettings(observed));
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -351,11 +388,7 @@ export const BotManagementProvider = () =>
       const restore: Settings = {};
       for (const key of SETTINGS_KEYS) {
         const snapshot = output.initialSettings?.[key];
-        if (
-          managed[key] !== undefined &&
-          snapshot !== undefined &&
-          current[key] !== snapshot
-        ) {
+        if (managed[key] !== undefined && snapshot !== undefined && current[key] !== snapshot) {
           (restore as Record<SettingsKey, unknown>)[key] = snapshot;
         }
       }
@@ -374,6 +407,10 @@ export const BotManagementProvider = () =>
  * narrowing on the plan.
  */
 interface ObservedBotManagement {
+  readonly aiSearch?: string | null;
+  readonly aiUser?: string | null;
+  readonly aiTraining?: string | null;
+  readonly botPreferenceSyncEnabled?: boolean | null;
   readonly aiBotsProtection?: string | null;
   readonly crawlerProtection?: string | null;
   readonly contentBotsProtection?: string | null;
@@ -401,8 +438,7 @@ const observe = (zoneId: string) =>
     .getBotManagement({ zoneId })
     .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 /**
  * Project any source (observed union member, props, attrs) onto the
@@ -423,9 +459,7 @@ const pickSettings = (source: ObservedBotManagement | Settings): Settings => {
  * desired fields are ignored — they are dashboard/plan-managed.
  */
 const settingsEqual = (desired: Settings, observed: Settings): boolean =>
-  SETTINGS_KEYS.every(
-    (key) => desired[key] === undefined || desired[key] === observed[key],
-  );
+  SETTINGS_KEYS.every((key) => desired[key] === undefined || desired[key] === observed[key]);
 
 const toAttributes = (
   zoneId: string,

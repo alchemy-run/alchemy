@@ -10,9 +10,8 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  * Creates a Kafka topic on the bound cluster through the MSK control plane —
  * no Kafka admin client or VPC connectivity required. Provide the
  * implementation with `Effect.provide(AWS.Kafka.CreateTopicHttp)`.
- * @binding
- * @section Managing Topics
- * @example Create a Topic
+ * ### Managing Topics
+ * **Example:** Create a Topic
  * ```typescript
  * const createTopic = yield* Kafka.CreateTopic(cluster);
  *
@@ -22,6 +21,8 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  * });
  * // topic.TopicArn, topic.Status → "CREATING" | "ACTIVE"
  * ```
+ *
+ * @binding
  */
 export interface CreateTopic extends Binding.Service<
   CreateTopic,
@@ -34,6 +35,4 @@ export interface CreateTopic extends Binding.Service<
     ) => Effect.Effect<kafka.CreateTopicResponse, kafka.CreateTopicError>
   >
 > {}
-export const CreateTopic = Binding.Service<CreateTopic>(
-  "AWS.Kafka.CreateTopic",
-);
+export const CreateTopic = Binding.Service<CreateTopic>("AWS.Kafka.CreateTopic");

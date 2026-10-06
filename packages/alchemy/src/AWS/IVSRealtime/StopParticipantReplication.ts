@@ -16,9 +16,8 @@ export interface StopParticipantReplicationRequest extends Omit<
  * Stop replicating a participant's media from the bound source stage into
  * the bound destination stage.
  *
- * @binding
- * @section Replicating Participants
- * @example Stop a replication
+ * ### Replicating Participants
+ * **Example:** Stop a replication
  * ```typescript
  * // init — bound to (source, destination)
  * const stopParticipantReplication =
@@ -27,6 +26,8 @@ export interface StopParticipantReplicationRequest extends Omit<
  * // runtime
  * yield* stopParticipantReplication({ participantId: "abcDEF123" });
  * ```
+ *
+ * @binding
  */
 export interface StopParticipantReplication extends Binding.Service<
   StopParticipantReplication,
@@ -43,7 +44,6 @@ export interface StopParticipantReplication extends Binding.Service<
     >
   >
 > {}
-export const StopParticipantReplication =
-  Binding.Service<StopParticipantReplication>(
-    "AWS.IVSRealtime.StopParticipantReplication",
-  );
+export const StopParticipantReplication = Binding.Service<StopParticipantReplication>(
+  "AWS.IVSRealtime.StopParticipantReplication",
+);

@@ -1,24 +1,22 @@
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import path from "pathe";
 import * as GeoMaps from "@/AWS/GeoMaps";
 import * as GeoPlaces from "@/AWS/GeoPlaces";
 import * as GeoRoutes from "@/AWS/GeoRoutes";
 import * as Lambda from "@/AWS/Lambda";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class GeoTestFunction extends Lambda.Function<Lambda.Function>()(
-  "GeoTestFunction",
-) {}
+export class GeoTestFunction extends Lambda.Function<Lambda.Function>()("GeoTestFunction") {}
 
 export default GeoTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // Geo calls fan out to upstream providers and can exceed Lambda's 3s default.
     timeout: Duration.seconds(30),
   },

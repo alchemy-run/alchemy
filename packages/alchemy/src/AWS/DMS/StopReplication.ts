@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * provisioned capacity). The serverless counterpart of
  * {@link StopReplicationTask}. Provide the implementation with
  * `Effect.provide(AWS.DMS.StopReplicationHttp)`.
- * @binding
- * @section Orchestrating Serverless Replications
- * @example Stop a Serverless Replication
+ * ### Orchestrating Serverless Replications
+ * **Example:** Stop a Serverless Replication
  * ```typescript
  * // init — account-level, no target resource
  * const stopReplication = yield* AWS.DMS.StopReplication();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   ReplicationConfigArn: configArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface StopReplication extends Binding.Service<
   StopReplication,
@@ -33,6 +34,4 @@ export interface StopReplication extends Binding.Service<
   >
 > {}
 
-export const StopReplication = Binding.Service<StopReplication>(
-  "AWS.DMS.StopReplication",
-);
+export const StopReplication = Binding.Service<StopReplication>("AWS.DMS.StopReplication");

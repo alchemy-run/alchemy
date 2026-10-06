@@ -13,9 +13,8 @@ import type { Task } from "./Task.ts";
  * by `StartTaskExecution`; access is granted on the bound task's
  * executions. Provide the implementation with
  * `Effect.provide(AWS.DataSync.UpdateTaskExecutionHttp)`.
- * @binding
- * @section Running Transfers
- * @example Throttle A Running Transfer
+ * ### Running Transfers
+ * **Example:** Throttle A Running Transfer
  * ```typescript
  * // init — bind the operation to the task
  * const updateTaskExecution = yield* AWS.DataSync.UpdateTaskExecution(task);
@@ -26,6 +25,8 @@ import type { Task } from "./Task.ts";
  *   Options: { BytesPerSecond: 1024 * 1024 },
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateTaskExecution extends Binding.Service<
   UpdateTaskExecution,
@@ -35,10 +36,7 @@ export interface UpdateTaskExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: datasync.UpdateTaskExecutionRequest,
-    ) => Effect.Effect<
-      datasync.UpdateTaskExecutionResponse,
-      datasync.UpdateTaskExecutionError
-    >
+    ) => Effect.Effect<datasync.UpdateTaskExecutionResponse, datasync.UpdateTaskExecutionError>
   >
 > {}
 export const UpdateTaskExecution = Binding.Service<UpdateTaskExecution>(

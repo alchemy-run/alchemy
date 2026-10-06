@@ -7,10 +7,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * Request for {@link GetWhatsAppFlow}. The linked WABA `id` is injected by
  * the binding from the bound {@link LinkedWhatsAppBusinessAccount}.
  */
-export interface GetWhatsAppFlowRequest extends Omit<
-  socialmessaging.GetWhatsAppFlowInput,
-  "id"
-> {}
+export interface GetWhatsAppFlowRequest extends Omit<socialmessaging.GetWhatsAppFlowInput, "id"> {}
 
 /**
  * Runtime binding for `social-messaging:GetWhatsAppFlow`.
@@ -23,9 +20,8 @@ export interface GetWhatsAppFlowRequest extends Omit<
  * into every request.
  * Provide the implementation with
  * `Effect.provide(AWS.SocialMessaging.GetWhatsAppFlowHttp)`.
- * @binding
- * @section Managing WhatsApp Flows
- * @example Read a Flow
+ * ### Managing WhatsApp Flows
+ * **Example:** Read a Flow
  * ```typescript
  * // init — bind the operation to the linked WABA
  * const getFlow = yield* AWS.SocialMessaging.GetWhatsAppFlow(account);
@@ -34,6 +30,8 @@ export interface GetWhatsAppFlowRequest extends Omit<
  * const flow = yield* getFlow({ flowId: "1234567890" });
  * const publishable = flow.validationErrors?.length === 0;
  * ```
+ *
+ * @binding
  */
 export interface GetWhatsAppFlow extends Binding.Service<
   GetWhatsAppFlow,
@@ -43,10 +41,7 @@ export interface GetWhatsAppFlow extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetWhatsAppFlowRequest,
-    ) => Effect.Effect<
-      socialmessaging.GetWhatsAppFlowOutput,
-      socialmessaging.GetWhatsAppFlowError
-    >
+    ) => Effect.Effect<socialmessaging.GetWhatsAppFlowOutput, socialmessaging.GetWhatsAppFlowError>
   >
 > {}
 export const GetWhatsAppFlow = Binding.Service<GetWhatsAppFlow>(

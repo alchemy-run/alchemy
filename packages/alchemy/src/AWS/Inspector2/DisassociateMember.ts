@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.DisassociateMemberHttp)`.
- * @binding
- * @section Organization & Members
- * @example Disassociate a Member Account
+ * ### Organization & Members
+ * **Example:** Disassociate a Member Account
  * ```typescript
  * // init
  * const disassociateMember = yield* AWS.Inspector2.DisassociateMember();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* disassociateMember({ accountId });
  * ```
+ *
+ * @binding
  */
 export interface DisassociateMember extends Binding.Service<
   DisassociateMember,
@@ -26,10 +27,7 @@ export interface DisassociateMember extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.DisassociateMemberRequest,
-    ) => Effect.Effect<
-      inspector2.DisassociateMemberResponse,
-      inspector2.DisassociateMemberError
-    >
+    ) => Effect.Effect<inspector2.DisassociateMemberResponse, inspector2.DisassociateMemberError>
   >
 > {}
 export const DisassociateMember = Binding.Service<DisassociateMember>(

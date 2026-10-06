@@ -134,9 +134,8 @@ export interface EventDataStore extends Resource<
  * (`PENDING_DELETION`); AWS purges it after a seven-day wait period during
  * which it incurs no cost. If a store with the same name is still pending
  * deletion, the reconciler restores it instead of creating a duplicate.
- * @resource
- * @section Creating Event Data Stores
- * @example Basic Event Data Store
+ * ### Creating Event Data Stores
+ * **Example:** Basic Event Data Store
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -146,7 +145,7 @@ export interface EventDataStore extends Resource<
  * });
  * ```
  *
- * @example Single-Region Store with Custom Selectors
+ * **Example:** Single-Region Store with Custom Selectors
  * ```typescript
  * const store = yield* AWS.CloudTrail.EventDataStore("S3DataEvents", {
  *   multiRegionEnabled: false,
@@ -163,10 +162,10 @@ export interface EventDataStore extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
-export const EventDataStore = Resource<EventDataStore>(
-  "AWS.CloudTrail.EventDataStore",
-);
+export const EventDataStore = Resource<EventDataStore>("AWS.CloudTrail.EventDataStore");
 
 /**
  * A just-created or just-restored event data store transitions through
@@ -223,10 +222,7 @@ export const EventDataStoreProvider = () =>
   Provider.effect(
     EventDataStore,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         if (props.name) {
           return props.name;
         }
@@ -251,10 +247,7 @@ export const EventDataStoreProvider = () =>
           .getEventDataStore({ EventDataStore: arn })
           .pipe(
             Effect.catchTag(
-              [
-                "EventDataStoreNotFoundException",
-                "EventDataStoreARNInvalidException",
-              ],
+              ["EventDataStoreNotFoundException", "EventDataStoreARNInvalidException"],
               () => Effect.succeed(undefined),
             ),
           );
@@ -327,18 +320,14 @@ export const EventDataStoreProvider = () =>
             ? yield* getByArn(output.eventDataStoreArn)
             : yield* findByName(name).pipe(
                 Effect.flatMap((s) =>
-                  s?.EventDataStoreArn
-                    ? getByArn(s.EventDataStoreArn)
-                    : Effect.succeed(undefined),
+                  s?.EventDataStoreArn ? getByArn(s.EventDataStoreArn) : Effect.succeed(undefined),
                 ),
               );
 
           // A pending-deletion store still holds the name — restore it and
           // let the sync step converge it to the desired state.
           if (store !== undefined && store.Status === "PENDING_DELETION") {
-            yield* session.note(
-              `Restoring pending-deletion event data store ${store.Name}`,
-            );
+            yield* session.note(`Restoring pending-deletion event data store ${store.Name}`);
             yield* retryWhileSettling(
               cloudtrail.restoreEventDataStore({
                 EventDataStore: store.EventDataStoreArn!,
@@ -410,10 +399,7 @@ export const EventDataStoreProvider = () =>
           if (store.Name !== name) {
             updateDelta.Name = name;
           }
-          if (
-            retentionDays !== undefined &&
-            store.RetentionPeriod !== retentionDays
-          ) {
+          if (retentionDays !== undefined && store.RetentionPeriod !== retentionDays) {
             updateDelta.RetentionPeriod = retentionDays;
           }
           if (
@@ -430,16 +416,11 @@ export const EventDataStoreProvider = () =>
           }
           if (
             news.terminationProtectionEnabled !== undefined &&
-            store.TerminationProtectionEnabled !==
-              news.terminationProtectionEnabled
+            store.TerminationProtectionEnabled !== news.terminationProtectionEnabled
           ) {
-            updateDelta.TerminationProtectionEnabled =
-              news.terminationProtectionEnabled;
+            updateDelta.TerminationProtectionEnabled = news.terminationProtectionEnabled;
           }
-          if (
-            news.billingMode !== undefined &&
-            store.BillingMode !== news.billingMode
-          ) {
+          if (news.billingMode !== undefined && store.BillingMode !== news.billingMode) {
             updateDelta.BillingMode = news.billingMode;
           }
           if (news.kmsKeyId !== undefined && store.KmsKeyId !== news.kmsKeyId) {
@@ -447,8 +428,7 @@ export const EventDataStoreProvider = () =>
           }
           if (
             desiredSelectors !== undefined &&
-            JSON.stringify(store.AdvancedEventSelectors ?? []) !==
-              JSON.stringify(desiredSelectors)
+            JSON.stringify(store.AdvancedEventSelectors ?? []) !== JSON.stringify(desiredSelectors)
           ) {
             updateDelta.AdvancedEventSelectors = desiredSelectors;
           }
@@ -478,10 +458,7 @@ export const EventDataStoreProvider = () =>
                 }),
               );
               store = (yield* getByArn(arn)) ?? store;
-            } else if (
-              !news.ingestionEnabled &&
-              status !== "STOPPED_INGESTION"
-            ) {
+            } else if (!news.ingestionEnabled && status !== "STOPPED_INGESTION") {
               yield* session.note(`Stopping ingestion for ${name}`);
               yield* retryWhileSettling(
                 cloudtrail.stopEventDataStoreIngestion({

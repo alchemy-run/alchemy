@@ -16,9 +16,8 @@ export interface AssociateLibraryItemReviewRequest extends Omit<
  *
  * Upvotes a library item as the calling identity. Provide the implementation with
  * `Effect.provide(AWS.QApps.AssociateLibraryItemReviewHttp)`.
- * @binding
- * @section Library Items
- * @example Upvote a Library Item
+ * ### Library Items
+ * **Example:** Upvote a Library Item
  * ```typescript
  * // init — bind the operation to the Q App
  * const associateLibraryItemReview = yield* AWS.QApps.AssociateLibraryItemReview(app);
@@ -26,6 +25,8 @@ export interface AssociateLibraryItemReviewRequest extends Omit<
  * // runtime
  * yield* associateLibraryItemReview({ libraryItemId });
  * ```
+ *
+ * @binding
  */
 export interface AssociateLibraryItemReview extends Binding.Service<
   AssociateLibraryItemReview,
@@ -42,7 +43,6 @@ export interface AssociateLibraryItemReview extends Binding.Service<
   >
 > {}
 
-export const AssociateLibraryItemReview =
-  Binding.Service<AssociateLibraryItemReview>(
-    "AWS.QApps.AssociateLibraryItemReview",
-  );
+export const AssociateLibraryItemReview = Binding.Service<AssociateLibraryItemReview>(
+  "AWS.QApps.AssociateLibraryItemReview",
+);

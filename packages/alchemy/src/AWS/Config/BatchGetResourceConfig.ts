@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide `Config.BatchGetResourceConfigHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Reading Resource Configurations
- * @example Batch-Read Current Configurations
+ * ### Reading Resource Configurations
+ * **Example:** Batch-Read Current Configurations
  * ```typescript
  * // init — grants config:BatchGetResourceConfig
  * const batchGetResourceConfig = yield* AWS.Config.BatchGetResourceConfig();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * console.log(result.baseConfigurationItems);
  * ```
+ *
+ * @binding
  */
 export interface BatchGetResourceConfig extends Binding.Service<
   BatchGetResourceConfig,
@@ -32,10 +33,7 @@ export interface BatchGetResourceConfig extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.BatchGetResourceConfigRequest,
-    ) => Effect.Effect<
-      config.BatchGetResourceConfigResponse,
-      config.BatchGetResourceConfigError
-    >
+    ) => Effect.Effect<config.BatchGetResourceConfigResponse, config.BatchGetResourceConfigError>
   >
 > {}
 

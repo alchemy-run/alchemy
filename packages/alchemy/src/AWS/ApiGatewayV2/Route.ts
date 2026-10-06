@@ -81,9 +81,7 @@ export interface RouteType extends Resource<
     operationName: string | undefined;
     modelSelectionExpression: string | undefined;
     requestModels: { [key: string]: string | undefined } | undefined;
-    requestParameters:
-      | { [key: string]: agw2.ParameterConstraints | undefined }
-      | undefined;
+    requestParameters: { [key: string]: agw2.ParameterConstraints | undefined } | undefined;
     routeResponseSelectionExpression: string | undefined;
   },
   never,
@@ -93,9 +91,8 @@ export interface RouteType extends Resource<
 /**
  * An API Gateway v2 Route — matches incoming requests (or WebSocket
  * messages) and forwards them to an Integration.
- * @resource
- * @section HTTP API routes
- * @example Catch-all $default route
+ * ### HTTP API routes
+ * **Example:** Catch-all $default route
  * ```typescript
  * yield* ApiGatewayV2.Route("Default", {
  *   api,
@@ -104,7 +101,7 @@ export interface RouteType extends Resource<
  * });
  * ```
  *
- * @example Method + path route
+ * **Example:** Method + path route
  * ```typescript
  * yield* ApiGatewayV2.Route("ListItems", {
  *   api,
@@ -113,8 +110,8 @@ export interface RouteType extends Resource<
  * });
  * ```
  *
- * @section WebSocket routes
- * @example $connect route
+ * ### WebSocket routes
+ * **Example:** $connect route
  * ```typescript
  * yield* ApiGatewayV2.Route("Connect", {
  *   api,
@@ -123,8 +120,8 @@ export interface RouteType extends Resource<
  * });
  * ```
  *
- * @section Securing routes
- * @example JWT-protected route
+ * ### Securing routes
+ * **Example:** JWT-protected route
  * ```typescript
  * yield* ApiGatewayV2.Route("Secure", {
  *   api,
@@ -134,6 +131,8 @@ export interface RouteType extends Resource<
  *   authorizerId: authorizer.authorizerId,
  * });
  * ```
+ *
+ * @resource
  */
 export const RouteResource = Resource<RouteType>("AWS.ApiGatewayV2.Route");
 
@@ -167,9 +166,7 @@ export const Route = (id: string, props: RouteInputProps) =>
     const { api, integration, ...rest } = props;
     const apiId = rest.apiId ?? api?.apiId;
     if (!apiId) {
-      return yield* Effect.die(
-        "Route requires either `api` (preferred) or an explicit `apiId`.",
-      );
+      return yield* Effect.die("Route requires either `api` (preferred) or an explicit `apiId`.");
     }
     const target =
       rest.target ??
@@ -179,10 +176,7 @@ export const Route = (id: string, props: RouteInputProps) =>
     return yield* RouteResource(id, { ...rest, apiId, target } as any);
   });
 
-const snapshotFromRoute = (
-  apiId: string,
-  route: agw2.GetRouteResult,
-): RouteType["Attributes"] => ({
+const snapshotFromRoute = (apiId: string, route: agw2.GetRouteResult): RouteType["Attributes"] => ({
   apiId,
   routeId: route.RouteId!,
   routeKey: route.RouteKey ?? "",
@@ -219,19 +213,11 @@ export const RouteProvider = () =>
       const getRouteSafe = (apiId: string, routeId: string) =>
         agw2
           .getRoute({ ApiId: apiId, RouteId: routeId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       const findRouteByKey = (apiId: string, routeKey: string) =>
-        collectAllPages((NextToken) =>
-          agw2.getRoutes({ ApiId: apiId, NextToken }),
-        ).pipe(
-          Effect.map((routes) =>
-            routes.find((route) => route.RouteKey === routeKey),
-          ),
+        collectAllPages((NextToken) => agw2.getRoutes({ ApiId: apiId, NextToken })).pipe(
+          Effect.map((routes) => routes.find((route) => route.RouteKey === routeKey)),
         );
 
       return RouteResource.Provider.of({
@@ -239,9 +225,7 @@ export const RouteProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const apis = yield* collectAllPages((NextToken) =>
-              agw2.getApis({ NextToken }),
-            );
+            const apis = yield* collectAllPages((NextToken) => agw2.getApis({ NextToken }));
             const perApi = yield* Effect.forEach(
               apis.filter((api) => api.ApiId != null),
               (api) =>
@@ -302,9 +286,7 @@ export const RouteProvider = () =>
                 ),
               ),
             );
-            yield* session.note(
-              `Created route ${news.routeKey} (${observed.RouteId})`,
-            );
+            yield* session.note(`Created route ${news.routeKey} (${observed.RouteId})`);
           }
           const routeId = observed.RouteId!;
           const snapshot = snapshotFromRoute(apiId, observed);
@@ -314,28 +296,19 @@ export const RouteProvider = () =>
           const drift =
             snapshot.routeKey !== desired.RouteKey ||
             snapshot.target !== desired.Target ||
-            (snapshot.authorizationType ?? "NONE") !==
-              (desired.AuthorizationType ?? "NONE") ||
+            (snapshot.authorizationType ?? "NONE") !== (desired.AuthorizationType ?? "NONE") ||
             snapshot.authorizerId !== desired.AuthorizerId ||
             (desired.AuthorizationScopes !== undefined &&
-              !deepEqual(
-                snapshot.authorizationScopes,
-                desired.AuthorizationScopes,
-              )) ||
+              !deepEqual(snapshot.authorizationScopes, desired.AuthorizationScopes)) ||
             (desired.ApiKeyRequired !== undefined &&
               snapshot.apiKeyRequired !== desired.ApiKeyRequired) ||
             snapshot.operationName !== desired.OperationName ||
-            snapshot.modelSelectionExpression !==
-              desired.ModelSelectionExpression ||
+            snapshot.modelSelectionExpression !== desired.ModelSelectionExpression ||
             (desired.RequestModels !== undefined &&
               !deepEqual(snapshot.requestModels, desired.RequestModels)) ||
             (desired.RequestParameters !== undefined &&
-              !deepEqual(
-                snapshot.requestParameters,
-                desired.RequestParameters,
-              )) ||
-            snapshot.routeResponseSelectionExpression !==
-              desired.RouteResponseSelectionExpression;
+              !deepEqual(snapshot.requestParameters, desired.RequestParameters)) ||
+            snapshot.routeResponseSelectionExpression !== desired.RouteResponseSelectionExpression;
           if (drift) {
             const updated = yield* retryOnTooManyRequests(
               agw2.updateRoute({ ApiId: apiId, RouteId: routeId, ...desired }),

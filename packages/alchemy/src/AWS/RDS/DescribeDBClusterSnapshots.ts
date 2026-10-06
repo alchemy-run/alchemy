@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Lists the account's Aurora cluster snapshots — the discovery half of a
  * snapshot-rotation or verification function. Provide the implementation with
  * `Effect.provide(AWS.RDS.DescribeDBClusterSnapshotsHttp)`.
- * @binding
- * @section Managing Cluster Snapshots
- * @example List a Cluster's Manual Snapshots
+ * ### Managing Cluster Snapshots
+ * **Example:** List a Cluster's Manual Snapshots
  * ```typescript
  * const describeDBClusterSnapshots =
  *   yield* AWS.RDS.DescribeDBClusterSnapshots();
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   SnapshotType: "manual",
  * });
  * ```
+ *
+ * @binding
  */
 export interface DescribeDBClusterSnapshots extends Binding.Service<
   DescribeDBClusterSnapshots,
@@ -28,13 +29,9 @@ export interface DescribeDBClusterSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: rds.DescribeDBClusterSnapshotsMessage,
-    ) => Effect.Effect<
-      rds.DBClusterSnapshotMessage,
-      rds.DescribeDBClusterSnapshotsError
-    >
+    ) => Effect.Effect<rds.DBClusterSnapshotMessage, rds.DescribeDBClusterSnapshotsError>
   >
 > {}
-export const DescribeDBClusterSnapshots =
-  Binding.Service<DescribeDBClusterSnapshots>(
-    "AWS.RDS.DescribeDBClusterSnapshots",
-  );
+export const DescribeDBClusterSnapshots = Binding.Service<DescribeDBClusterSnapshots>(
+  "AWS.RDS.DescribeDBClusterSnapshots",
+);

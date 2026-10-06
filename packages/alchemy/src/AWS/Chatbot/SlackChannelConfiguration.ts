@@ -112,9 +112,8 @@ export interface SlackChannelConfiguration extends Resource<
  * console OAuth flow (Chatbot console -> Configure new client -> Slack) —
  * workspace authorization cannot be automated.
  *
- * @resource
- * @section Creating Slack Channel Configurations
- * @example Notify a Slack channel from an SNS topic
+ * ### Creating Slack Channel Configurations
+ * **Example:** Notify a Slack channel from an SNS topic
  * ```typescript
  * import * as Chatbot from "alchemy/AWS/Chatbot";
  * import { Role } from "alchemy/AWS/IAM/Role";
@@ -143,6 +142,8 @@ export interface SlackChannelConfiguration extends Resource<
  *   loggingLevel: "ERROR",
  * });
  * ```
+ *
+ * @resource
  */
 export const SlackChannelConfiguration = Resource<SlackChannelConfiguration>(
   "AWS.Chatbot.SlackChannelConfiguration",
@@ -156,10 +157,7 @@ export const SlackChannelConfigurationProvider = () =>
         id: string,
         props: Pick<SlackChannelConfigurationProps, "configurationName">,
       ) {
-        return (
-          props.configurationName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.configurationName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const configurationArn = Effect.fn(function* (configurationName: string) {
@@ -199,10 +197,9 @@ export const SlackChannelConfigurationProvider = () =>
         stables: ["configurationName", "chatConfigurationArn", "slackTeamId"],
         list: () =>
           Effect.gen(function* () {
-            const configurations =
-              yield* chatbot.describeSlackChannelConfigurations
-                .items({})
-                .pipe(Stream.runCollect);
+            const configurations = yield* chatbot.describeSlackChannelConfigurations
+              .items({})
+              .pipe(Stream.runCollect);
             return Array.from(configurations).map((config) => {
               const arn = config.ChatConfigurationArn;
               return toAttributes(arn.slice(arn.lastIndexOf("/") + 1), config);
@@ -210,11 +207,8 @@ export const SlackChannelConfigurationProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const configurationName =
-            output?.configurationName ??
-            (yield* createConfigurationName(id, olds ?? {}));
-          const arn =
-            output?.chatConfigurationArn ??
-            (yield* configurationArn(configurationName));
+            output?.configurationName ?? (yield* createConfigurationName(id, olds ?? {}));
+          const arn = output?.chatConfigurationArn ?? (yield* configurationArn(configurationName));
           const found = yield* observeConfiguration(arn);
           if (found === undefined) return undefined;
           const attrs = toAttributes(configurationName, found);
@@ -232,11 +226,8 @@ export const SlackChannelConfigurationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const configurationName =
-            output?.configurationName ??
-            (yield* createConfigurationName(id, news));
-          const arn =
-            output?.chatConfigurationArn ??
-            (yield* configurationArn(configurationName));
+            output?.configurationName ?? (yield* createConfigurationName(id, news));
+          const arn = output?.chatConfigurationArn ?? (yield* configurationArn(configurationName));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredTopics = [...(news.snsTopicArns ?? [])].sort();
@@ -266,9 +257,7 @@ export const SlackChannelConfigurationProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.ChannelConfiguration),
-                Effect.catchTag("ConflictException", () =>
-                  observeConfiguration(arn),
-                ),
+                Effect.catchTag("ConflictException", () => observeConfiguration(arn)),
               );
           }
 
@@ -278,16 +267,12 @@ export const SlackChannelConfigurationProvider = () =>
             live !== undefined &&
             live.SlackChannelId === news.slackChannelId &&
             live.IamRoleArn === news.iamRoleArn &&
-            JSON.stringify([...live.SnsTopicArns].sort()) ===
-              JSON.stringify(desiredTopics) &&
+            JSON.stringify([...live.SnsTopicArns].sort()) === JSON.stringify(desiredTopics) &&
             (live.LoggingLevel ?? "NONE") === (news.loggingLevel ?? "NONE") &&
             JSON.stringify(
-              live.GuardrailPolicyArns
-                ? [...live.GuardrailPolicyArns].sort()
-                : undefined,
+              live.GuardrailPolicyArns ? [...live.GuardrailPolicyArns].sort() : undefined,
             ) === JSON.stringify(desiredGuardrails) &&
-            (live.UserAuthorizationRequired ?? false) ===
-              (news.userAuthorizationRequired ?? false);
+            (live.UserAuthorizationRequired ?? false) === (news.userAuthorizationRequired ?? false);
           if (!inSync) {
             live = yield* chatbot
               .updateSlackChannelConfiguration({

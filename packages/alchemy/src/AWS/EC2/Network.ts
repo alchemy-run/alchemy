@@ -103,15 +103,14 @@ export type Network = Effect.Success<ReturnType<typeof Network>>;
  *
  * The helper still returns the underlying canonical resources so callers can
  * keep composing with raw `AWS.EC2.*` APIs when they need more control.
- * @resource
- * @example Minimal network
+ * **Example:** Minimal network
  * ```typescript
  * const network = yield* AWS.EC2.Network("AppNetwork", {
  *   cidrBlock: "10.42.0.0/16",
  * });
  * ```
  *
- * @example ECS-ready network with shared NAT
+ * **Example:** ECS-ready network with shared NAT
  * ```typescript
  * const network = yield* AWS.EC2.Network("AppNetwork", {
  *   cidrBlock: "10.42.0.0/16",
@@ -128,18 +127,15 @@ export type Network = Effect.Success<ReturnType<typeof Network>>;
  *   assignPublicIp: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Network = (id: string, props: NetworkProps) =>
   Namespace.push(
     id,
     Effect.gen(function* () {
-      const availabilityZones = yield* resolveAvailabilityZones(
-        props.availabilityZones,
-      );
-      const subnetCidrs = deriveSubnetCidrs(
-        props.cidrBlock,
-        availabilityZones.length,
-      );
+      const availabilityZones = yield* resolveAvailabilityZones(props.availabilityZones);
+      const subnetCidrs = deriveSubnetCidrs(props.cidrBlock, availabilityZones.length);
       const tags = props.tags;
 
       const vpc = yield* Vpc("Vpc", {
@@ -236,16 +232,13 @@ export const Network = (id: string, props: NetworkProps) =>
           });
           natGateways.push(natGateway);
 
-          const privateRouteTable = yield* RouteTable(
-            `PrivateRouteTable${index + 1}`,
-            {
-              vpcId: vpc.vpcId,
-              tags: {
-                ...tags,
-                Tier: "private",
-              },
+          const privateRouteTable = yield* RouteTable(`PrivateRouteTable${index + 1}`, {
+            vpcId: vpc.vpcId,
+            tags: {
+              ...tags,
+              Tier: "private",
             },
-          );
+          });
           privateRouteTables.push(privateRouteTable);
 
           privateRoutes.push(
@@ -257,13 +250,10 @@ export const Network = (id: string, props: NetworkProps) =>
           );
 
           privateRouteAssociations.push(
-            yield* RouteTableAssociation(
-              `PrivateSubnetAssociation${index + 1}`,
-              {
-                routeTableId: privateRouteTable.routeTableId,
-                subnetId: privateSubnets[index].subnetId,
-              },
-            ),
+            yield* RouteTableAssociation(`PrivateSubnetAssociation${index + 1}`, {
+              routeTableId: privateRouteTable.routeTableId,
+              subnetId: privateSubnets[index].subnetId,
+            }),
           );
         }
       } else {
@@ -302,13 +292,10 @@ export const Network = (id: string, props: NetworkProps) =>
 
         for (const [index, subnet] of privateSubnets.entries()) {
           privateRouteAssociations.push(
-            yield* RouteTableAssociation(
-              `PrivateSubnetAssociation${index + 1}`,
-              {
-                routeTableId: privateRouteTable.routeTableId,
-                subnetId: subnet.subnetId,
-              },
-            ),
+            yield* RouteTableAssociation(`PrivateSubnetAssociation${index + 1}`, {
+              routeTableId: privateRouteTable.routeTableId,
+              subnetId: subnet.subnetId,
+            }),
           );
         }
       }
@@ -328,9 +315,7 @@ export const Network = (id: string, props: NetworkProps) =>
               vpcId: vpc.vpcId,
               serviceName: `com.amazonaws.${region}.${service}`,
               vpcEndpointType: "Gateway",
-              routeTableIds: privateRouteTables.map(
-                (table) => table.routeTableId,
-              ),
+              routeTableIds: privateRouteTables.map((table) => table.routeTableId),
               tags,
             }),
           );
@@ -376,15 +361,11 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
   Effect.gen(function* () {
     if (Array.isArray(input)) {
       if (input.length === 0) {
-        return yield* Effect.fail(
-          new Error("EC2.Network requires at least one availability zone"),
-        );
+        return yield* Effect.fail(new Error("EC2.Network requires at least one availability zone"));
       }
       if (new Set(input).size !== input.length) {
         return yield* Effect.fail(
-          new Error(
-            "EC2.Network availabilityZones must not contain duplicates",
-          ),
+          new Error("EC2.Network availabilityZones must not contain duplicates"),
         );
       }
       return input;
@@ -393,9 +374,7 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
     const desiredCount = input ?? 2;
     if (!Number.isInteger(desiredCount) || desiredCount <= 0) {
       return yield* Effect.fail(
-        new Error(
-          "EC2.Network availabilityZones count must be a positive integer",
-        ),
+        new Error("EC2.Network availabilityZones count must be a positive integer"),
       );
     }
 
@@ -434,9 +413,7 @@ const deriveSubnetCidrs = (cidrBlock: string, azCount: number) => {
   const [baseAddress, prefixText] = cidrBlock.split("/");
   const prefix = Number(prefixText);
   if (!baseAddress || !Number.isInteger(prefix) || prefix < 0 || prefix > 28) {
-    throw new Error(
-      `EC2.Network requires a valid IPv4 CIDR block, got '${cidrBlock}'`,
-    );
+    throw new Error(`EC2.Network requires a valid IPv4 CIDR block, got '${cidrBlock}'`);
   }
 
   const totalSubnets = azCount * 2;
@@ -477,9 +454,7 @@ const ipv4ToNumber = (ip: string) => {
     throw new Error(`Invalid IPv4 address '${ip}'`);
   }
 
-  return (
-    octets[0] * 256 ** 3 + octets[1] * 256 ** 2 + octets[2] * 256 + octets[3]
-  );
+  return octets[0] * 256 ** 3 + octets[1] * 256 ** 2 + octets[2] * 256 + octets[3];
 };
 
 const numberToIpv4 = (value: number) =>
@@ -490,12 +465,8 @@ const numberToIpv4 = (value: number) =>
     value % 256,
   ].join(".");
 
-const toCidr = (value: number, prefix: number) =>
-  `${numberToIpv4(value)}/${prefix}`;
+const toCidr = (value: number, prefix: number) => `${numberToIpv4(value)}/${prefix}`;
 
-const uniqueGatewayEndpoints = (services: NetworkGatewayEndpoint[] = []) => [
-  ...new Set(services),
-];
+const uniqueGatewayEndpoints = (services: NetworkGatewayEndpoint[] = []) => [...new Set(services)];
 
-const toEndpointId = (service: NetworkGatewayEndpoint) =>
-  service === "s3" ? "S3" : "DynamoDb";
+const toEndpointId = (service: NetworkGatewayEndpoint) => (service === "s3" ? "S3" : "DynamoDb");

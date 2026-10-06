@@ -10,9 +10,8 @@ export interface ListReplaysRequest extends eventbridge.ListReplaysRequest {}
  * Bind this operation inside a function runtime to enumerate replays,
  * optionally filtered by name prefix, state, or source archive. Provide the
  * `ListReplaysHttp` layer on the Function to satisfy the binding.
- * @binding
- * @section Replaying Events
- * @example List Running Replays
+ * ### Replaying Events
+ * **Example:** List Running Replays
  * ```typescript
  * // init — bind the operation (provide AWS.EventBridge.ListReplaysHttp on the Function)
  * const listReplays = yield* AWS.EventBridge.ListReplays();
@@ -20,6 +19,8 @@ export interface ListReplaysRequest extends eventbridge.ListReplaysRequest {}
  * // runtime — enumerate replays currently running
  * const { Replays } = yield* listReplays({ State: "RUNNING" });
  * ```
+ *
+ * @binding
  */
 export interface ListReplays extends Binding.Service<
   ListReplays,
@@ -27,12 +28,7 @@ export interface ListReplays extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListReplaysRequest,
-    ) => Effect.Effect<
-      eventbridge.ListReplaysResponse,
-      eventbridge.ListReplaysError
-    >
+    ) => Effect.Effect<eventbridge.ListReplaysResponse, eventbridge.ListReplaysError>
   >
 > {}
-export const ListReplays = Binding.Service<ListReplays>(
-  "AWS.EventBridge.ListReplays",
-);
+export const ListReplays = Binding.Service<ListReplays>("AWS.EventBridge.ListReplays");

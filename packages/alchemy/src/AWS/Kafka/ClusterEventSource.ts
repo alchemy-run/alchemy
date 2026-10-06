@@ -58,9 +58,8 @@ export interface KafkaEventSourceProps {
  * authentication requires, creates an event source mapping on the cluster,
  * and forwards `aws:kafka` records into the handler's `Stream`. Use the
  * {@link consumeKafkaTopic} helper rather than calling the service directly.
- * @binding
- * @section Consuming Topics
- * @example Consume a Topic in a Lambda Function
+ * ### Consuming Topics
+ * **Example:** Consume a Topic in a Lambda Function
  * ```typescript
  * export default MyFunction.make(
  *   { main: import.meta.url },
@@ -81,6 +80,8 @@ export interface KafkaEventSourceProps {
  *   }).pipe(Effect.provide(AWS.Lambda.KafkaEventSource)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface KafkaEventSource extends Binding.Service<
   KafkaEventSource,
@@ -88,16 +89,12 @@ export interface KafkaEventSource extends Binding.Service<
   KafkaEventSourceService
 > {}
 
-export const KafkaEventSource = Binding.Service<KafkaEventSource>(
-  "AWS.Kafka.KafkaEventSource",
-);
+export const KafkaEventSource = Binding.Service<KafkaEventSource>("AWS.Kafka.KafkaEventSource");
 
 export type KafkaEventSourceService = <StreamReq = never, Req = never>(
   cluster: ServerlessCluster,
   props: KafkaEventSourceProps,
-  process: (
-    stream: Stream.Stream<MSKRecord, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<MSKRecord, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
 
 /**
@@ -123,14 +120,8 @@ export type KafkaEventSourceService = <StreamReq = never, Req = never>(
  * );
  * ```
  */
-export const consumeKafkaTopic = <
-  C extends ServerlessCluster,
-  Req = never,
-  StreamReq = never,
->(
+export const consumeKafkaTopic = <C extends ServerlessCluster, Req = never, StreamReq = never>(
   cluster: C,
   props: KafkaEventSourceProps,
-  process: (
-    stream: Stream.Stream<MSKRecord, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<MSKRecord, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) => KafkaEventSource.use((source) => source(cluster, props, process));

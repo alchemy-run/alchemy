@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface GetObjectLegalHoldRequest extends Omit<
-  S3.GetObjectLegalHoldRequest,
-  "Bucket"
-> {}
+export interface GetObjectLegalHoldRequest extends Omit<S3.GetObjectLegalHoldRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:GetObjectLegalHold`.
@@ -17,14 +13,15 @@ export interface GetObjectLegalHoldRequest extends Omit<
  * `s3:GetObjectLegalHold` is granted on the bucket's objects. Requires a
  * bucket created with `objectLockEnabled: true`. Provide the implementation
  * with `Effect.provide(AWS.S3.GetObjectLegalHoldHttp)`.
- * @binding
- * @section Object Lock
- * @example Read an Object's Legal-Hold Status
+ * ### Object Lock
+ * **Example:** Read an Object's Legal-Hold Status
  * ```typescript
  * const getObjectLegalHold = yield* AWS.S3.GetObjectLegalHold(bucket);
  *
  * const { LegalHold } = yield* getObjectLegalHold({ Key: "records/1.json" });
  * ```
+ *
+ * @binding
  */
 export interface GetObjectLegalHold extends Binding.Service<
   GetObjectLegalHold,
@@ -37,6 +34,4 @@ export interface GetObjectLegalHold extends Binding.Service<
     ) => Effect.Effect<S3.GetObjectLegalHoldOutput, S3.GetObjectLegalHoldError>
   >
 > {}
-export const GetObjectLegalHold = Binding.Service<GetObjectLegalHold>(
-  "AWS.S3.GetObjectLegalHold",
-);
+export const GetObjectLegalHold = Binding.Service<GetObjectLegalHold>("AWS.S3.GetObjectLegalHold");

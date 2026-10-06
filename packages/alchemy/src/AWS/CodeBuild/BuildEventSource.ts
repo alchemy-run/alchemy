@@ -74,8 +74,8 @@ export interface BuildEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Build Events
- * @example Alert On Failed Builds
+ * ### Consuming Build Events
+ * **Example:** Alert On Failed Builds
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -98,17 +98,13 @@ export interface BuildEventSourceProps extends EventRouteProps {
  */
 export const consumeBuildEvents = <StreamReq = never, Req = never>(
   props: BuildEventSourceProps,
-  process: (
-    events: Stream.Stream<BuildEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<BuildEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "CodeBuildEvents",
     {
       source: ["aws.codebuild"],
-      "detail-type": (props.kinds ?? (["state"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
+      "detail-type": (props.kinds ?? (["state"] as const)).map((kind) => DETAIL_TYPES[kind]),
       ...(props.projectNames !== undefined
         ? { detail: { "project-name": [...props.projectNames] } }
         : {}),

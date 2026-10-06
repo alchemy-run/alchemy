@@ -77,9 +77,8 @@ export interface Dataset extends Resource<
  * is a cheap metadata operation; bulk imports and training happen through
  * separate import jobs and solutions.
  *
- * @resource
- * @section Creating a Dataset
- * @example Interactions Dataset
+ * ### Creating a Dataset
+ * **Example:** Interactions Dataset
  * ```typescript
  * const dataset = yield* Personalize.Dataset("Interactions", {
  *   schemaArn: schema.schemaArn,
@@ -87,6 +86,8 @@ export interface Dataset extends Resource<
  *   datasetType: "Interactions",
  * });
  * ```
+ *
+ * @resource
  */
 export const Dataset = Resource<Dataset>("AWS.Personalize.Dataset");
 
@@ -101,23 +102,15 @@ export const DatasetProvider = () =>
       const describe = Effect.fn(function* (datasetArn: string) {
         const response = yield* personalize
           .describeDataset({ datasetArn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.dataset;
       });
 
       const waitActive = Effect.fn(function* (datasetArn: string) {
         const dataset = yield* describe(datasetArn).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(40),
-            ]),
-            until: (d) =>
-              d?.status === "ACTIVE" || (d?.status ?? "").includes("FAILED"),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(40)]),
+            until: (d) => d?.status === "ACTIVE" || (d?.status ?? "").includes("FAILED"),
           }),
         );
         if (dataset?.status !== "ACTIVE") {
@@ -131,10 +124,7 @@ export const DatasetProvider = () =>
       });
 
       /** Find an existing dataset's ARN by name within its dataset group. */
-      const findArnByName = Effect.fn(function* (
-        name: string,
-        datasetGroupArn: string,
-      ) {
+      const findArnByName = Effect.fn(function* (name: string, datasetGroupArn: string) {
         const pages = yield* personalize.listDatasets
           .pages({ datasetGroupArn })
           .pipe(Stream.runCollect);
@@ -162,8 +152,7 @@ export const DatasetProvider = () =>
           if (
             oldName !== newName ||
             (olds.schemaArn ?? undefined) !== (news.schemaArn ?? undefined) ||
-            (olds.datasetGroupArn ?? undefined) !==
-              (news.datasetGroupArn ?? undefined) ||
+            (olds.datasetGroupArn ?? undefined) !== (news.datasetGroupArn ?? undefined) ||
             (olds.datasetType ?? undefined) !== (news.datasetType ?? undefined)
           ) {
             return { action: "replace" } as const;
@@ -185,9 +174,7 @@ export const DatasetProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
 
           let dataset =
-            output?.datasetArn !== undefined
-              ? yield* describe(output.datasetArn)
-              : undefined;
+            output?.datasetArn !== undefined ? yield* describe(output.datasetArn) : undefined;
 
           // Ensure — create if missing. A crashed prior run may have left a
           // same-named dataset behind with no persisted state — adopt it by
@@ -209,9 +196,7 @@ export const DatasetProvider = () =>
                 Effect.catchTag("ResourceAlreadyExistsException", (error) =>
                   findArnByName(name, news.datasetGroupArn).pipe(
                     Effect.flatMap((existing) =>
-                      existing === undefined
-                        ? Effect.fail(error)
-                        : Effect.succeed(existing),
+                      existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
                     ),
                   ),
                 ),
@@ -228,27 +213,19 @@ export const DatasetProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* personalize
-            .deleteDataset({ datasetArn: output.datasetArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* personalize.deleteDataset({ datasetArn: output.datasetArn }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ResourceInUseException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
           // Deletion is asynchronous (DELETE PENDING) — wait until the dataset
           // is actually gone so the schema and dataset group it references can
           // delete without exhausting their ResourceInUse retries.
           const remaining = yield* describe(output.datasetArn).pipe(
             Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
               until: (dataset): boolean => dataset === undefined,
             }),
           );
@@ -269,22 +246,14 @@ export const DatasetProvider = () =>
         list: () =>
           personalize.listDatasetGroups.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.datasetGroups ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.datasetGroups ?? [])),
             Effect.flatMap(
               Effect.forEach(
                 (group) =>
-                  personalize.listDatasets
-                    .pages({ datasetGroupArn: group.datasetGroupArn })
-                    .pipe(
-                      Stream.runCollect,
-                      Effect.map((chunk) =>
-                        Array.from(chunk).flatMap(
-                          (page) => page.datasets ?? [],
-                        ),
-                      ),
-                    ),
+                  personalize.listDatasets.pages({ datasetGroupArn: group.datasetGroupArn }).pipe(
+                    Stream.runCollect,
+                    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.datasets ?? [])),
+                  ),
                 { concurrency: 4 },
               ),
             ),

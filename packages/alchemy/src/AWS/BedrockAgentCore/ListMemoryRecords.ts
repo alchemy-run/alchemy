@@ -16,9 +16,8 @@ export interface ListMemoryRecordsRequest extends Omit<
  * extracted into a namespace. Provide `AgentCore.ListMemoryRecordsHttp` on
  * the Function effect to implement the binding.
  *
- * @binding
- * @section Listing Memory Records
- * @example List a Namespace's Records
+ * ### Listing Memory Records
+ * **Example:** List a Namespace's Records
  * ```typescript
  * // init
  * const listMemoryRecords = yield* AgentCore.ListMemoryRecords(memory);
@@ -35,6 +34,8 @@ export interface ListMemoryRecordsRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface ListMemoryRecords extends Binding.Service<
   ListMemoryRecords,
@@ -44,10 +45,7 @@ export interface ListMemoryRecords extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListMemoryRecordsRequest,
-    ) => Effect.Effect<
-      agentcore.ListMemoryRecordsOutput,
-      agentcore.ListMemoryRecordsError
-    >
+    ) => Effect.Effect<agentcore.ListMemoryRecordsOutput, agentcore.ListMemoryRecordsError>
   >
 > {}
 export const ListMemoryRecords = Binding.Service<ListMemoryRecords>(

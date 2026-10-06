@@ -8,10 +8,7 @@ import type { Environment } from "./Environment.ts";
 
 export interface StartDeploymentRequest extends Omit<
   appconfig.StartDeploymentRequest,
-  | "ApplicationId"
-  | "EnvironmentId"
-  | "ConfigurationProfileId"
-  | "DeploymentStrategyId"
+  "ApplicationId" | "EnvironmentId" | "ConfigurationProfileId" | "DeploymentStrategyId"
 > {}
 
 /**
@@ -23,9 +20,8 @@ export interface StartDeploymentRequest extends Omit<
  * Provide `AppConfig.StartDeploymentHttp` on the hosting function's Effect to
  * implement the binding.
  *
- * @binding
- * @section Deploying Configuration at Runtime
- * @example Roll out a configuration version
+ * ### Deploying Configuration at Runtime
+ * **Example:** Roll out a configuration version
  * ```typescript
  * const startDeployment = yield* AppConfig.StartDeployment(
  *   app,
@@ -38,6 +34,8 @@ export interface StartDeploymentRequest extends Omit<
  * });
  * // deployment.DeploymentNumber, deployment.State ("DEPLOYING", ...)
  * ```
+ *
+ * @binding
  */
 export interface StartDeployment extends Binding.Service<
   StartDeployment,
@@ -53,6 +51,4 @@ export interface StartDeployment extends Binding.Service<
     ) => Effect.Effect<appconfig.Deployment, appconfig.StartDeploymentError>
   >
 > {}
-export const StartDeployment = Binding.Service<StartDeployment>(
-  "AWS.AppConfig.StartDeployment",
-);
+export const StartDeployment = Binding.Service<StartDeployment>("AWS.AppConfig.StartDeployment");

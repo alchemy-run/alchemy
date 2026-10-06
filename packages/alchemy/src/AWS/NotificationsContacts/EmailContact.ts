@@ -67,9 +67,8 @@ export interface EmailContact extends Resource<
  * address owner. Contacts are immutable (no update API) — changing the
  * name or address replaces the contact; tags update in place.
  *
- * @resource
- * @section Creating an Email Contact
- * @example Basic email contact
+ * ### Creating an Email Contact
+ * **Example:** Basic email contact
  * ```typescript
  * import * as NotificationsContacts from "alchemy/AWS/NotificationsContacts";
  *
@@ -79,7 +78,7 @@ export interface EmailContact extends Resource<
  * // contact.status === "inactive" until the address owner confirms
  * ```
  *
- * @example Named contact with tags
+ * **Example:** Named contact with tags
  * ```typescript
  * const contact = yield* NotificationsContacts.EmailContact("OnCall", {
  *   name: "platform-oncall",
@@ -87,10 +86,10 @@ export interface EmailContact extends Resource<
  *   tags: { team: "platform" },
  * });
  * ```
+ *
+ * @resource
  */
-export const EmailContact = Resource<EmailContact>(
-  "AWS.NotificationsContacts.EmailContact",
-);
+export const EmailContact = Resource<EmailContact>("AWS.NotificationsContacts.EmailContact");
 
 /** Unwrap distilled `SensitiveString` values into plain strings. */
 const unwrapSensitive = (value: string | Redacted.Redacted<string>): string =>
@@ -129,10 +128,7 @@ export const EmailContactProvider = () =>
   Provider.effect(
     EmailContact,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: EmailContactProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: EmailContactProps) {
         return props.name ?? (yield* createPhysicalName({ id }));
       });
 
@@ -141,9 +137,7 @@ export const EmailContactProvider = () =>
       // reliable identity fallback when the ARN cache is missing.
       const findByAddress = Effect.fn(function* (emailAddress: string) {
         return yield* contacts.listEmailContacts.items({}).pipe(
-          Stream.filter(
-            (contact) => unwrapSensitive(contact.address) === emailAddress,
-          ),
+          Stream.filter((contact) => unwrapSensitive(contact.address) === emailAddress),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
         );
@@ -152,9 +146,7 @@ export const EmailContactProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         return yield* contacts.getEmailContact({ arn }).pipe(
           Effect.map((r) => r.emailContact),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -215,14 +207,8 @@ export const EmailContactProvider = () =>
                 emailAddress: news.emailAddress,
                 tags: news.tags,
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
-            live = created
-              ? yield* getByArn(created.arn)
-              : yield* findByAddress(news.emailAddress);
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+            live = created ? yield* getByArn(created.arn) : yield* findByAddress(news.emailAddress);
           }
           const arn = live!.arn;
 
@@ -237,9 +223,7 @@ export const EmailContactProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* contacts
             .deleteEmailContact({ arn: output.emailContactArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

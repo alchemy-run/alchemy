@@ -1,10 +1,10 @@
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import path from "pathe";
 import * as DAX from "@/AWS/DAX";
 import * as Lambda from "@/AWS/Lambda";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -13,14 +13,12 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // and the typed error decode at zero cost (no cluster is ever created).
 const NONEXISTENT_CLUSTER_NAME = "alchemy-nonexistent-dax-probe";
 
-export class DAXTestFunction extends Lambda.Function<Lambda.Function>()(
-  "DAXTestFunction",
-) {}
+export class DAXTestFunction extends Lambda.Function<Lambda.Function>()("DAXTestFunction") {}
 
 export default DAXTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const describeClusters = yield* DAX.DescribeClusters();
@@ -51,9 +49,7 @@ export default DAXTestFunction.make(
             ClusterNames: [NONEXISTENT_CLUSTER_NAME],
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ClusterNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ClusterNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -73,9 +69,5 @@ export default DAXTestFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(DAX.DescribeClustersHttp, DAX.DescribeEventsHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(DAX.DescribeClustersHttp, DAX.DescribeEventsHttp))),
 );

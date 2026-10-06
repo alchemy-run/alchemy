@@ -2,8 +2,7 @@ import type * as TSW from "@distilled.cloud/aws/timestream-write";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeBatchLoadTaskRequest
-  extends TSW.DescribeBatchLoadTaskRequest {}
+export interface DescribeBatchLoadTaskRequest extends TSW.DescribeBatchLoadTaskRequest {}
 
 /**
  * Runtime binding for `timestream-write:DescribeBatchLoadTask` — poll a bulk
@@ -16,9 +15,8 @@ export interface DescribeBatchLoadTaskRequest
  * Provide `Timestream.DescribeBatchLoadTaskHttp` on the Function to implement
  * the binding.
  *
- * @binding
- * @section Batch Loading
- * @example Poll an import until it finishes
+ * ### Batch Loading
+ * **Example:** Poll an import until it finishes
  * ```typescript
  * // init — account-level binding, no resource argument
  * const describeBatchLoadTask = yield* Timestream.DescribeBatchLoadTask();
@@ -27,6 +25,8 @@ export interface DescribeBatchLoadTaskRequest
  * const described = yield* describeBatchLoadTask({ TaskId: task.TaskId });
  * // described.BatchLoadTaskDescription?.TaskStatus === "SUCCEEDED"
  * ```
+ *
+ * @binding
  */
 export interface DescribeBatchLoadTask extends Binding.Service<
   DescribeBatchLoadTask,

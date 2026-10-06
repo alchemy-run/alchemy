@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface StartTraceRetrievalRequest
-  extends xray.StartTraceRetrievalRequest {}
+export interface StartTraceRetrievalRequest extends xray.StartTraceRetrievalRequest {}
 
 /**
  * Initiate a Transaction Search trace retrieval for the given trace IDs
@@ -14,9 +13,8 @@ export interface StartTraceRetrievalRequest
  * provide the implementation with `Effect.provide(XRay.StartTraceRetrievalHttp)`.
  * The action is account-scoped: X-Ray does not support resource-level
  * permissions for `xray:StartTraceRetrieval`, so the binding grants it on `*`.
- * @binding
- * @section Transaction Search
- * @example Start retrieving traces from Transaction Search
+ * ### Transaction Search
+ * **Example:** Start retrieving traces from Transaction Search
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -32,6 +30,8 @@ export interface StartTraceRetrievalRequest
  * });
  * const token = retrieval.RetrievalToken;
  * ```
+ *
+ * @binding
  */
 export interface StartTraceRetrieval extends Binding.Service<
   StartTraceRetrieval,
@@ -39,10 +39,7 @@ export interface StartTraceRetrieval extends Binding.Service<
   () => Effect.Effect<
     (
       request: StartTraceRetrievalRequest,
-    ) => Effect.Effect<
-      xray.StartTraceRetrievalResult,
-      xray.StartTraceRetrievalError
-    >
+    ) => Effect.Effect<xray.StartTraceRetrievalResult, xray.StartTraceRetrievalError>
   >
 > {}
 export const StartTraceRetrieval = Binding.Service<StartTraceRetrieval>(

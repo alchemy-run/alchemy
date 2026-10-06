@@ -14,15 +14,16 @@ export interface DescribeTimeToLiveRequest extends Omit<
  * Bind this operation to a `Table` inside a function runtime to get a callable
  * that reads the table's TTL configuration. Provide the
  * `DescribeTimeToLiveHttp` layer on the Function to satisfy the binding.
- * @binding
- * @section Time to Live
- * @example Read the TTL Configuration
+ * ### Time to Live
+ * **Example:** Read the TTL Configuration
  * ```typescript
  * const describeTimeToLive = yield* AWS.DynamoDB.DescribeTimeToLive(table);
  *
  * const response = yield* describeTimeToLive();
  * const ttlStatus = response.TimeToLiveDescription?.TimeToLiveStatus;
  * ```
+ *
+ * @binding
  */
 export interface DescribeTimeToLive extends Binding.Service<
   DescribeTimeToLive,
@@ -32,10 +33,7 @@ export interface DescribeTimeToLive extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeTimeToLiveRequest,
-    ) => Effect.Effect<
-      DynamoDB.DescribeTimeToLiveOutput,
-      DynamoDB.DescribeTimeToLiveError
-    >
+    ) => Effect.Effect<DynamoDB.DescribeTimeToLiveOutput, DynamoDB.DescribeTimeToLiveError>
   >
 > {}
 export const DescribeTimeToLive = Binding.Service<DescribeTimeToLive>(

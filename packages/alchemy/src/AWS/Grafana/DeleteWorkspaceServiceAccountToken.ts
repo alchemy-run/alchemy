@@ -11,9 +11,8 @@ import type { Workspace } from "./Workspace.ts";
  * Revokes a service account API token — the other half of a token-rotation
  * loop. Provide the implementation with
  * `Effect.provide(AWS.Grafana.DeleteWorkspaceServiceAccountTokenHttp)`.
- * @binding
- * @section Managing Service Accounts
- * @example Revoke a Rotated-Out Token
+ * ### Managing Service Accounts
+ * **Example:** Revoke a Rotated-Out Token
  * ```typescript
  * const deleteToken =
  *   yield* Grafana.DeleteWorkspaceServiceAccountToken(workspace);
@@ -23,6 +22,8 @@ import type { Workspace } from "./Workspace.ts";
  *   tokenId: staleToken.id,
  * });
  * ```
+ *
+ * @binding
  */
 export interface DeleteWorkspaceServiceAccountToken extends Binding.Service<
   DeleteWorkspaceServiceAccountToken,
@@ -31,10 +32,7 @@ export interface DeleteWorkspaceServiceAccountToken extends Binding.Service<
     workspace: Workspace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        grafana.DeleteWorkspaceServiceAccountTokenRequest,
-        "workspaceId"
-      >,
+      request: Omit<grafana.DeleteWorkspaceServiceAccountTokenRequest, "workspaceId">,
     ) => Effect.Effect<
       grafana.DeleteWorkspaceServiceAccountTokenResponse,
       grafana.DeleteWorkspaceServiceAccountTokenError

@@ -83,9 +83,8 @@ export interface LoggingConfiguration extends Resource<
  * An Amazon IVS Chat logging configuration — records the chat messages of
  * the rooms it is attached to into S3, CloudWatch Logs, or a Kinesis
  * Data Firehose delivery stream.
- * @resource
- * @section Creating Logging Configurations
- * @example CloudWatch Logs Destination
+ * ### Creating Logging Configurations
+ * **Example:** CloudWatch Logs Destination
  * ```typescript
  * import * as IVSChat from "alchemy/AWS/IVSChat";
  * import * as Logs from "alchemy/AWS/Logs";
@@ -98,7 +97,7 @@ export interface LoggingConfiguration extends Resource<
  * });
  * ```
  *
- * @example S3 Destination
+ * **Example:** S3 Destination
  * ```typescript
  * const logging = yield* IVSChat.LoggingConfiguration("ChatLogs", {
  *   destinationConfiguration: {
@@ -107,13 +106,15 @@ export interface LoggingConfiguration extends Resource<
  * });
  * ```
  *
- * @section Attaching to Rooms
- * @example Log a Room's Messages
+ * ### Attaching to Rooms
+ * **Example:** Log a Room's Messages
  * ```typescript
  * const room = yield* IVSChat.Room("LiveChat", {
  *   loggingConfigurationIdentifiers: [logging.loggingConfigurationArn],
  * });
  * ```
+ *
+ * @resource
  */
 export const LoggingConfiguration = Resource<LoggingConfiguration>(
   "AWS.IVSChat.LoggingConfiguration",
@@ -131,15 +132,10 @@ export class IvsChatLoggingConfigurationInvalid extends Data.TaggedError(
 /** Narrow the plain destination prop to the exactly-one wire union. */
 const toWireDestination = (
   destination: LoggingConfigurationDestination,
-): Effect.Effect<
-  ivschat.DestinationConfiguration,
-  IvsChatLoggingConfigurationInvalid
-> => {
-  const specified = [
-    destination.s3,
-    destination.cloudWatchLogs,
-    destination.firehose,
-  ].filter((d) => d !== undefined);
+): Effect.Effect<ivschat.DestinationConfiguration, IvsChatLoggingConfigurationInvalid> => {
+  const specified = [destination.s3, destination.cloudWatchLogs, destination.firehose].filter(
+    (d) => d !== undefined,
+  );
   if (specified.length !== 1) {
     return Effect.fail(
       new IvsChatLoggingConfigurationInvalid({
@@ -159,17 +155,12 @@ const toWireDestination = (
  * Explicitly-typed pipeable poll helper: repeat a read until the
  * configuration reaches a settled state (bounded — ~60s).
  */
-const pollUntilSettled = <
-  A extends { state?: string | undefined } | undefined,
-  E,
-  R,
->(
+const pollUntilSettled = <A extends { state?: string | undefined } | undefined, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.repeat(self, {
     until: (config) =>
-      config === undefined ||
-      (config.state !== "CREATING" && config.state !== "UPDATING"),
+      config === undefined || (config.state !== "CREATING" && config.state !== "UPDATING"),
     schedule: Schedule.fixed("2 seconds"),
     times: 30,
   });
@@ -187,10 +178,7 @@ export const LoggingConfigurationProvider = () =>
   Provider.effect(
     LoggingConfiguration,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { loggingConfigurationName?: string | undefined },
-      ) =>
+      const toName = (id: string, props: { loggingConfigurationName?: string | undefined }) =>
         props.loggingConfigurationName
           ? Effect.succeed(props.loggingConfigurationName)
           : createPhysicalName({ id, maxLength: 128 });
@@ -199,8 +187,7 @@ export const LoggingConfigurationProvider = () =>
         if (!config.arn || !config.id || !config.name) {
           return yield* Effect.fail(
             new IvsChatLoggingConfigurationInvalid({
-              message:
-                "IVS Chat logging configuration is missing its ARN, ID, or name",
+              message: "IVS Chat logging configuration is missing its ARN, ID, or name",
             }),
           );
         }
@@ -215,23 +202,17 @@ export const LoggingConfigurationProvider = () =>
       const getByIdentifier = Effect.fn(function* (identifier: string) {
         return yield* ivschat.getLoggingConfiguration({ identifier }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       /** No name filter on ListLoggingConfigurations — enumerate + match. */
       const findByName = Effect.fn(function* (name: string) {
-        const summaries = yield* ivschat.listLoggingConfigurations
-          .pages({})
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.loggingConfigurations),
-            ),
-            retryWhileThrottled,
-          );
+        const summaries = yield* ivschat.listLoggingConfigurations.pages({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.loggingConfigurations)),
+          retryWhileThrottled,
+        );
         const match = summaries.find((s) => s.name === name && s.arn);
         return match?.arn ? yield* getByIdentifier(match.arn) : undefined;
       });
@@ -245,9 +226,7 @@ export const LoggingConfigurationProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (config === undefined) return undefined;
           const attrs = yield* toAttrs(config);
-          return (yield* hasAlchemyTags(id, toTagRecord(config.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(config.tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news }) {
@@ -260,16 +239,12 @@ export const LoggingConfigurationProvider = () =>
           const name = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          const desiredDestination = yield* toWireDestination(
-            news.destinationConfiguration,
-          );
+          const desiredDestination = yield* toWireDestination(news.destinationConfiguration);
 
           // 1. Observe — and wait out any in-flight state transition so
           // the sync step below is allowed to mutate.
           let observed = output?.loggingConfigurationArn
-            ? yield* pollUntilSettled(
-                getByIdentifier(output.loggingConfigurationArn),
-              )
+            ? yield* pollUntilSettled(getByIdentifier(output.loggingConfigurationArn))
             : yield* findByName(name);
 
           // 2. Ensure — create if missing, then wait for ACTIVE (a
@@ -301,8 +276,7 @@ export const LoggingConfigurationProvider = () =>
           const patch: Partial<ivschat.UpdateLoggingConfigurationRequest> = {};
           if (observed.name !== name) patch.name = name;
           if (
-            JSON.stringify(observed.destinationConfiguration) !==
-            JSON.stringify(desiredDestination)
+            JSON.stringify(observed.destinationConfiguration) !== JSON.stringify(desiredDestination)
           ) {
             patch.destinationConfiguration = desiredDestination;
           }
@@ -345,9 +319,7 @@ export const LoggingConfigurationProvider = () =>
         list: () =>
           ivschat.listLoggingConfigurations.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.loggingConfigurations),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.loggingConfigurations)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

@@ -7,9 +7,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * Runtime binding for `finspace:GetKxDataview` — reads one dataview of a kdb database in the bound environment — status, active versions, and segment configurations.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxDataviewHttp)`.
- * @binding
- * @section Managing Dataviews
- * @example Poll a Dataview
+ * ### Managing Dataviews
+ * **Example:** Poll a Dataview
  * ```typescript
  * const getDataview = yield* AWS.FinSpace.GetKxDataview(kdb);
  *
@@ -18,6 +17,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  *   dataviewName: "latest",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetKxDataview extends Binding.Service<
   GetKxDataview,
@@ -30,6 +31,4 @@ export interface GetKxDataview extends Binding.Service<
     ) => Effect.Effect<SVC.GetKxDataviewResponse, SVC.GetKxDataviewError>
   >
 > {}
-export const GetKxDataview = Binding.Service<GetKxDataview>(
-  "AWS.FinSpace.GetKxDataview",
-);
+export const GetKxDataview = Binding.Service<GetKxDataview>("AWS.FinSpace.GetKxDataview");

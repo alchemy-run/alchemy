@@ -67,9 +67,8 @@ export interface VpcLink extends Resource<
  *
  * Unlike the v1 VPC link (NLB-only, ~10 min provisioning), the v2 link is
  * subnet/security-group based and provisions in ~1–2 minutes.
- * @resource
- * @section Private integrations
- * @example VPC link + private integration
+ * ### Private integrations
+ * **Example:** VPC link + private integration
  * ```typescript
  * const link = yield* ApiGatewayV2.VpcLink("Link", {
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
@@ -86,12 +85,12 @@ export interface VpcLink extends Resource<
  *   payloadFormatVersion: "1.0",
  * });
  * ```
+ *
+ * @resource
  */
 export const VpcLink = Resource<VpcLink>("AWS.ApiGatewayV2.VpcLink");
 
-const snapshotFromVpcLink = (
-  link: agw2.GetVpcLinkResponse,
-): VpcLink["Attributes"] => ({
+const snapshotFromVpcLink = (link: agw2.GetVpcLinkResponse): VpcLink["Attributes"] => ({
   vpcLinkId: link.VpcLinkId!,
   name: link.Name ?? "",
   subnetIds: [...(link.SubnetIds ?? [])],
@@ -104,32 +103,21 @@ export const VpcLinkProvider = () =>
   Provider.effect(
     VpcLink,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<VpcLinkProps, "name">,
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<VpcLinkProps, "name">) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const getVpcLinkSafe = (vpcLinkId: string) =>
         agw2
           .getVpcLink({ VpcLinkId: vpcLinkId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return VpcLink.Provider.of({
         stables: ["vpcLinkId"],
 
         list: () =>
           Effect.gen(function* () {
-            const items = yield* collectAllPages((NextToken) =>
-              agw2.getVpcLinks({ NextToken }),
-            );
+            const items = yield* collectAllPages((NextToken) => agw2.getVpcLinks({ NextToken }));
             return items
               .filter((link) => link.VpcLinkId != null)
               .map((link) => snapshotFromVpcLink(link));
@@ -146,10 +134,7 @@ export const VpcLinkProvider = () =>
           if (!isResolved(news)) return undefined;
           // Subnets and security groups are immutable on a v2 VPC link.
           if (
-            !deepEqual(
-              [...news.subnetIds].sort(),
-              [...olds.subnetIds].sort(),
-            ) ||
+            !deepEqual([...news.subnetIds].sort(), [...olds.subnetIds].sort()) ||
             !deepEqual(
               [...(news.securityGroupIds ?? [])].sort(),
               [...(olds.securityGroupIds ?? [])].sort(),
@@ -166,9 +151,7 @@ export const VpcLinkProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE
-          let observed = output?.vpcLinkId
-            ? yield* getVpcLinkSafe(output.vpcLinkId)
-            : undefined;
+          let observed = output?.vpcLinkId ? yield* getVpcLinkSafe(output.vpcLinkId) : undefined;
 
           // 2. ENSURE
           if (!observed?.VpcLinkId) {

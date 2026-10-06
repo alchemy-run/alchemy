@@ -89,8 +89,8 @@ export interface ClusterEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Cluster Events
- * @example Alert On Failed Steps
+ * ### Consuming Cluster Events
+ * **Example:** Alert On Failed Steps
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -121,12 +121,8 @@ export const consumeClusterEvents = <StreamReq = never, Req = never>(
     props.id ?? "EMRClusterEvents",
     {
       source: ["aws.emr"],
-      "detail-type": (props.kinds ?? (["cluster"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.clusterIds !== undefined
-        ? { detail: { clusterId: [...props.clusterIds] } }
-        : {}),
+      "detail-type": (props.kinds ?? (["cluster"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.clusterIds !== undefined ? { detail: { clusterId: [...props.clusterIds] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

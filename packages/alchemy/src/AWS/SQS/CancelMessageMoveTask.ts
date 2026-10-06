@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface CancelMessageMoveTaskRequest
-  extends sqs.CancelMessageMoveTaskRequest {}
+export interface CancelMessageMoveTaskRequest extends sqs.CancelMessageMoveTaskRequest {}
 
 /**
  * Runtime binding for `sqs:CancelMessageMoveTask` (dead-letter queue
@@ -17,9 +16,8 @@ export interface CancelMessageMoveTaskRequest
  * `sqs:CancelMessageMoveTask` on the queue. Provide the
  * `CancelMessageMoveTaskHttp` layer on the Function to implement the
  * binding.
- * @binding
- * @section Dead-Letter Queue Redrive
- * @example Cancel a Running Redrive
+ * ### Dead-Letter Queue Redrive
+ * **Example:** Cancel a Running Redrive
  * ```typescript
  * // init (provide SQS.CancelMessageMoveTaskHttp on the Function)
  * const cancelMessageMoveTask = yield* SQS.CancelMessageMoveTask(dlq);
@@ -27,6 +25,8 @@ export interface CancelMessageMoveTaskRequest
  * // runtime
  * yield* cancelMessageMoveTask({ TaskHandle: taskHandle });
  * ```
+ *
+ * @binding
  */
 export interface CancelMessageMoveTask extends Binding.Service<
   CancelMessageMoveTask,
@@ -36,10 +36,7 @@ export interface CancelMessageMoveTask extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CancelMessageMoveTaskRequest,
-    ) => Effect.Effect<
-      sqs.CancelMessageMoveTaskResult,
-      sqs.CancelMessageMoveTaskError
-    >
+    ) => Effect.Effect<sqs.CancelMessageMoveTaskResult, sqs.CancelMessageMoveTaskError>
   >
 > {}
 

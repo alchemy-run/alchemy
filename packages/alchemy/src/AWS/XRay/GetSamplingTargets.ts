@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetSamplingTargetsRequest
-  extends xray.GetSamplingTargetsRequest {}
+export interface GetSamplingTargetsRequest extends xray.GetSamplingTargetsRequest {}
 
 /**
  * Report sampling statistics and receive updated sampling quotas — the
@@ -13,9 +12,8 @@ export interface GetSamplingTargetsRequest
  * provide the implementation with `Effect.provide(XRay.GetSamplingTargetsHttp)`.
  * The action is account-scoped: X-Ray does not support resource-level
  * permissions for `xray:GetSamplingTargets`, so the binding grants it on `*`.
- * @binding
- * @section Sampling
- * @example Refresh sampling quotas
+ * ### Sampling
+ * **Example:** Refresh sampling quotas
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -36,6 +34,8 @@ export interface GetSamplingTargetsRequest
  * });
  * const documents = targets.SamplingTargetDocuments ?? [];
  * ```
+ *
+ * @binding
  */
 export interface GetSamplingTargets extends Binding.Service<
   GetSamplingTargets,
@@ -43,10 +43,7 @@ export interface GetSamplingTargets extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetSamplingTargetsRequest,
-    ) => Effect.Effect<
-      xray.GetSamplingTargetsResult,
-      xray.GetSamplingTargetsError
-    >
+    ) => Effect.Effect<xray.GetSamplingTargetsResult, xray.GetSamplingTargetsError>
   >
 > {}
 export const GetSamplingTargets = Binding.Service<GetSamplingTargets>(

@@ -20,15 +20,16 @@ export interface ListFHIRImportJobsRequest extends Omit<
  * filtered by name, status or submit-time window. Provide the implementation
  * with `Effect.provide(AWS.HealthLake.ListFHIRImportJobsHttp)`.
  *
- * @binding
- * @section Importing FHIR Data
- * @example List Recent Import Jobs
+ * ### Importing FHIR Data
+ * **Example:** List Recent Import Jobs
  * ```typescript
  * const listImports = yield* HealthLake.ListFHIRImportJobs(datastore);
  *
  * const jobs = yield* listImports({ JobStatus: "COMPLETED" });
  * // jobs.ImportJobPropertiesList, jobs.NextToken
  * ```
+ *
+ * @binding
  */
 export interface ListFHIRImportJobs extends Binding.Service<
   ListFHIRImportJobs,
@@ -38,10 +39,7 @@ export interface ListFHIRImportJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListFHIRImportJobsRequest,
-    ) => Effect.Effect<
-      healthlake.ListFHIRImportJobsResponse,
-      healthlake.ListFHIRImportJobsError
-    >
+    ) => Effect.Effect<healthlake.ListFHIRImportJobsResponse, healthlake.ListFHIRImportJobsError>
   >
 > {}
 export const ListFHIRImportJobs = Binding.Service<ListFHIRImportJobs>(

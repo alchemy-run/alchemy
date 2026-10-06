@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface DeleteAttributesRequest extends Omit<
-  sdb.DeleteAttributesRequest,
-  "DomainName"
-> {}
+export interface DeleteAttributesRequest extends Omit<sdb.DeleteAttributesRequest, "DomainName"> {}
 
 /**
  * Runtime binding for `sdb:DeleteAttributes`.
@@ -15,22 +12,23 @@ export interface DeleteAttributesRequest extends Omit<
  * Bind this operation to a {@link Domain} inside a function runtime to get a
  * callable that automatically injects the domain name. Omitting `Attributes`
  * deletes the whole item.
- * @binding
- * @section Deleting Items
- * @example Delete a Whole Item
+ * ### Deleting Items
+ * **Example:** Delete a Whole Item
  * ```typescript
  * const deleteAttributes = yield* AWS.SimpleDB.DeleteAttributes(domain);
  *
  * yield* deleteAttributes({ ItemName: "user#123" });
  * ```
  *
- * @example Delete a Single Attribute
+ * **Example:** Delete a Single Attribute
  * ```typescript
  * yield* deleteAttributes({
  *   ItemName: "user#123",
  *   Attributes: [{ Name: "plan" }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface DeleteAttributes extends Binding.Service<
   DeleteAttributes,
@@ -40,13 +38,7 @@ export interface DeleteAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteAttributesRequest,
-    ) => Effect.Effect<
-      sdb.DeleteAttributesResponse,
-      sdb.DeleteAttributesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<sdb.DeleteAttributesResponse, sdb.DeleteAttributesError, RuntimeContext>
   >
 > {}
-export const DeleteAttributes = Binding.Service<DeleteAttributes>(
-  "AWS.SimpleDB.DeleteAttributes",
-);
+export const DeleteAttributes = Binding.Service<DeleteAttributes>("AWS.SimpleDB.DeleteAttributes");

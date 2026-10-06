@@ -75,9 +75,8 @@ export interface Project extends Resource<
  * An AWS Glue DataBrew project — the interactive workspace binding a dataset
  * to a recipe's working version. The project definition is free; costs only
  * accrue when an interactive session is started in the console.
- * @resource
- * @section Creating Projects
- * @example Dataset + Recipe Project
+ * ### Creating Projects
+ * **Example:** Dataset + Recipe Project
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -88,7 +87,7 @@ export interface Project extends Resource<
  * });
  * ```
  *
- * @example Custom Sample
+ * **Example:** Custom Sample
  * ```typescript
  * const project = yield* AWS.DataBrew.Project("Explore", {
  *   datasetName: dataset.datasetName,
@@ -97,6 +96,8 @@ export interface Project extends Resource<
  *   role: role.roleArn,
  * });
  * ```
+ *
+ * @resource
  */
 export const Project = Resource<Project>("AWS.DataBrew.Project");
 
@@ -111,20 +112,13 @@ export const ProjectProvider = () =>
         id: string,
         props: { projectName?: string | undefined },
       ) {
-        return (
-          props.projectName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.projectName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeProject({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Project.Provider.of({
@@ -133,28 +127,21 @@ export const ProjectProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* databrew.listProjects
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* databrew.listProjects.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Projects ?? [])
               .map((p) => ({
                 projectName: p.Name,
-                projectArn:
-                  p.ResourceArn ??
-                  databrewArn(region, accountId, "project", p.Name),
+                projectArn: p.ResourceArn ?? databrewArn(region, accountId, "project", p.Name),
               }));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.projectName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.projectName ?? (yield* createName(id, olds ?? {}));
           const project = yield* observe(name);
           if (project === undefined) return undefined;
-          const arn =
-            project.ResourceArn ??
-            databrewArn(region, accountId, "project", name);
+          const arn = project.ResourceArn ?? databrewArn(region, accountId, "project", name);
           const attrs = { projectName: name, projectArn: arn };
           const tags = cleanMap(project.Tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -206,9 +193,7 @@ export const ProjectProvider = () =>
             );
           }
 
-          const arn =
-            project?.ResourceArn ??
-            databrewArn(region, accountId, "project", name);
+          const arn = project?.ResourceArn ?? databrewArn(region, accountId, "project", name);
 
           // 3b. SYNC TAGS against observed cloud tags
           const observedTags = yield* fetchObservedTags(arn);
@@ -220,12 +205,8 @@ export const ProjectProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // ConflictException while an interactive session is winding down.
-          yield* retryWhileConflict(
-            databrew.deleteProject({ Name: output.projectName }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+          yield* retryWhileConflict(databrew.deleteProject({ Name: output.projectName })).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
         }),
       });

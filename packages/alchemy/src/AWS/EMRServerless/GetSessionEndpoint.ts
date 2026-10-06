@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link GetSessionEndpoint} runtime callable. The
  * `applicationId` is injected from the bound {@link Application}.
  */
-export type GetSessionEndpointInput = Omit<
-  emr.GetSessionEndpointRequest,
-  "applicationId"
->;
+export type GetSessionEndpointInput = Omit<emr.GetSessionEndpointRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:GetSessionEndpoint`.
@@ -20,9 +17,8 @@ export type GetSessionEndpointInput = Omit<
  * the response is `Redacted` — unwrap it with `Redacted.value` only at the
  * point of use. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.GetSessionEndpointHttp)`.
- * @binding
- * @section Interactive Sessions
- * @example Connect To A Session
+ * ### Interactive Sessions
+ * **Example:** Connect To A Session
  * ```typescript
  * // init
  * const getSessionEndpoint = yield* AWS.EMRServerless.GetSessionEndpoint(app);
@@ -30,6 +26,8 @@ export type GetSessionEndpointInput = Omit<
  * // runtime
  * const { endpoint, authToken } = yield* getSessionEndpoint({ sessionId });
  * ```
+ *
+ * @binding
  */
 export interface GetSessionEndpoint extends Binding.Service<
   GetSessionEndpoint,
@@ -39,10 +37,7 @@ export interface GetSessionEndpoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetSessionEndpointInput,
-    ) => Effect.Effect<
-      emr.GetSessionEndpointResponse,
-      emr.GetSessionEndpointError
-    >
+    ) => Effect.Effect<emr.GetSessionEndpointResponse, emr.GetSessionEndpointError>
   >
 > {}
 export const GetSessionEndpoint = Binding.Service<GetSessionEndpoint>(

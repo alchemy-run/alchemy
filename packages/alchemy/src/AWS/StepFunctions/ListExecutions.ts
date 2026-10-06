@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
-export interface ListExecutionsRequest extends Omit<
-  sfn.ListExecutionsInput,
-  "stateMachineArn"
-> {}
+export interface ListExecutionsRequest extends Omit<sfn.ListExecutionsInput, "stateMachineArn"> {}
 
 /**
  * Runtime binding for `states:ListExecutions`.
@@ -15,14 +12,15 @@ export interface ListExecutionsRequest extends Omit<
  * to list that machine's executions (optionally filtered by status) with
  * the state machine ARN injected automatically. Not supported by `EXPRESS`
  * state machines.
- * @binding
- * @section Polling Executions
- * @example List running executions
+ * ### Polling Executions
+ * **Example:** List running executions
  * ```typescript
  * const listExecutions = yield* StepFunctions.ListExecutions(machine);
  *
  * const { executions } = yield* listExecutions({ statusFilter: "RUNNING" });
  * ```
+ *
+ * @binding
  */
 export interface ListExecutions extends Binding.Service<
   ListExecutions,
@@ -35,6 +33,4 @@ export interface ListExecutions extends Binding.Service<
     ) => Effect.Effect<sfn.ListExecutionsOutput, sfn.ListExecutionsError>
   >
 > {}
-export const ListExecutions = Binding.Service<ListExecutions>(
-  "AWS.StepFunctions.ListExecutions",
-);
+export const ListExecutions = Binding.Service<ListExecutions>("AWS.StepFunctions.ListExecutions");

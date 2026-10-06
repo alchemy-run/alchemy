@@ -83,15 +83,12 @@ export const local = ({
           kind: "durable-object",
           scriptName,
           className,
-          uniqueKey:
-            uniqueKey ?? defaultDurableObjectUniqueKey(scriptName, className),
+          uniqueKey: uniqueKey ?? defaultDurableObjectUniqueKey(scriptName, className),
         }),
       ),
-      Effect.map(
-        (durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
-          name: binding,
-          durableObjectNamespace,
-        }),
-      ),
+      Effect.map((durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
+        name: binding,
+        durableObjectNamespace,
+      })),
     );
   });

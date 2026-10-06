@@ -63,13 +63,13 @@ export interface AdminAccount extends Resource<
  * tracked by Alchemy state — adopting a pre-existing admin account that Alchemy
  * did not create requires `--adopt`, and destroy disassociates the admin.
  *
- * @section Designating the FMS admin
- * @example Designate the caller as the FMS admin
+ * ### Designating the FMS admin
+ * **Example:** Designate the caller as the FMS admin
  * ```typescript
  * const admin = yield* FMS.AdminAccount("FmsAdmin", {});
  * ```
  *
- * @example Designate a specific member account
+ * **Example:** Designate a specific member account
  * ```typescript
  * const admin = yield* FMS.AdminAccount("FmsAdmin", {
  *   adminAccount: "123456789012",
@@ -117,9 +117,7 @@ export const AdminAccountProvider = () =>
         list: () =>
           getAdmin.pipe(
             Effect.map((a) =>
-              a?.AdminAccount
-                ? [{ adminAccount: a.AdminAccount, roleStatus: a.RoleStatus }]
-                : [],
+              a?.AdminAccount ? [{ adminAccount: a.AdminAccount, roleStatus: a.RoleStatus }] : [],
             ),
           ),
 
@@ -139,9 +137,7 @@ export const AdminAccountProvider = () =>
             // `Service role name AWSServiceRoleForFMS already exists ...
             // Otherwise, try your request again.` Both are eventual-
             // consistency races, not terminal failures — retry bounded.
-            yield* pinFms(
-              fms.associateAdminAccount({ AdminAccount: desired }),
-            ).pipe(
+            yield* pinFms(fms.associateAdminAccount({ AdminAccount: desired })).pipe(
               Effect.retry({
                 // `: boolean` blocks TS 5.5+ inferred type predicates — see
                 // the note on the disassociate retry in `delete` below.

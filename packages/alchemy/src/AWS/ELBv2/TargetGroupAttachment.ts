@@ -58,9 +58,8 @@ export interface TargetGroupAttachment extends Resource<
  * `elasticloadbalancing.amazonaws.com` to invoke it, scoped to the target
  * group ARN — create a {@link Permission} first. The provider retries the
  * registration briefly while that permission propagates.
- * @resource
- * @section Registering Targets
- * @example Lambda function target
+ * ### Registering Targets
+ * **Example:** Lambda function target
  * ```typescript
  * const tg = yield* TargetGroup("fn", { targetType: "lambda" });
  * yield* Lambda.Permission("AlbInvoke", {
@@ -75,7 +74,7 @@ export interface TargetGroupAttachment extends Resource<
  * });
  * ```
  *
- * @example IP address target
+ * **Example:** IP address target
  * ```typescript
  * yield* TargetGroupAttachment("ip-target", {
  *   targetGroupArn: tg.targetGroupArn,
@@ -84,7 +83,7 @@ export interface TargetGroupAttachment extends Resource<
  * });
  * ```
  *
- * @example EC2 instance target
+ * **Example:** EC2 instance target
  * ```typescript
  * yield* TargetGroupAttachment("instance-target", {
  *   targetGroupArn: tg.targetGroupArn,
@@ -92,6 +91,8 @@ export interface TargetGroupAttachment extends Resource<
  *   port: 80,
  * });
  * ```
+ *
+ * @resource
  */
 export const TargetGroupAttachment = Resource<TargetGroupAttachment>(
   "AWS.ELBv2.TargetGroupAttachment",
@@ -110,8 +111,7 @@ const retryThroughPermissionPropagation = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "InvalidTargetException" || e._tag === "AccessDeniedException",
+    while: (e) => e._tag === "InvalidTargetException" || e._tag === "AccessDeniedException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(15)]),
   });
 
@@ -148,11 +148,7 @@ export const TargetGroupAttachmentProvider = () =>
       // registered targets, so presence in the response means registered.
       const health = yield* elbv2
         .describeTargetHealth({ TargetGroupArn: output.targetGroupArn })
-        .pipe(
-          Effect.catchTag(["TargetGroupNotFoundException"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["TargetGroupNotFoundException"], () => Effect.succeed(undefined)));
       const registered = health?.TargetHealthDescriptions?.some(
         (d) =>
           d.Target?.Id === output.targetId &&
@@ -192,9 +188,7 @@ export const TargetGroupAttachmentProvider = () =>
               ),
             ),
             // The group may vanish between enumeration and health lookup.
-            Effect.catchTag(["TargetGroupNotFoundException"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["TargetGroupNotFoundException"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -208,11 +202,7 @@ export const TargetGroupAttachmentProvider = () =>
       // Observe — is the target already registered?
       const health = yield* elbv2
         .describeTargetHealth({ TargetGroupArn: targetGroupArn })
-        .pipe(
-          Effect.catchTag(["InvalidTargetException"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["InvalidTargetException"], () => Effect.succeed(undefined)));
       const registered = health?.TargetHealthDescriptions?.some(
         (d) =>
           d.Target?.Id === news.targetId &&

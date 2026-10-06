@@ -140,9 +140,8 @@ export interface Budget extends Resource<
  * An AWS Deadline Cloud budget — tracks a queue's approximate render spend
  * over a fixed window and stops scheduling when thresholds are crossed.
  *
- * @resource
- * @section Creating Budgets
- * @example Queue Budget with Hard Stop
+ * ### Creating Budgets
+ * **Example:** Queue Budget with Hard Stop
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -162,7 +161,7 @@ export interface Budget extends Resource<
  * });
  * ```
  *
- * @example Graduated Thresholds
+ * **Example:** Graduated Thresholds
  * ```typescript
  * // Let in-flight tasks finish at 90%, cancel everything at 100%.
  * const budget = yield* AWS.Deadline.Budget("QueueBudget", {
@@ -181,13 +180,12 @@ export interface Budget extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Budget = Resource<Budget>("AWS.Deadline.Budget");
 
-const createBudgetName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createBudgetName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -204,11 +202,7 @@ const readBudgetById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getBudget({ farmId, budgetId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   const budgetArn = arnOf(`farm/${farmId}/budget/${described.budgetId}`);
   const state: BudgetState = {
@@ -240,21 +234,15 @@ const findBudgetByDisplayName = Effect.fn(function* (
       Effect.succeed([] as deadline.BudgetSummary[]),
     ),
   );
-  const match = summaries.find(
-    (summary) => summary.displayName === displayName,
-  );
+  const match = summaries.find((summary) => summary.displayName === displayName);
   if (!match) return undefined;
   return yield* readBudgetById(farmId, match.budgetId, arnOf);
 });
 
-const actionKey = (action: {
-  type: BudgetActionType;
-  thresholdPercentage: number;
-}) => `${action.type}@${action.thresholdPercentage}`;
+const actionKey = (action: { type: BudgetActionType; thresholdPercentage: number }) =>
+  `${action.type}@${action.thresholdPercentage}`;
 
-const toWireSchedule = (
-  schedule: BudgetScheduleProps,
-): deadline.BudgetSchedule => ({
+const toWireSchedule = (schedule: BudgetScheduleProps): deadline.BudgetSchedule => ({
   fixed: {
     startTime: new Date(schedule.fixed.startTime),
     endTime: new Date(schedule.fixed.endTime),
@@ -295,9 +283,7 @@ export const BudgetProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(
-              new Error("AWS.Deadline.Budget requires props"),
-            );
+            return yield* Effect.fail(new Error("AWS.Deadline.Budget requires props"));
           }
           const arnOf = yield* deadlineArnOf;
           const farmId = news.farmId;
@@ -325,14 +311,10 @@ export const BudgetProvider = () =>
                 tags: desiredTags,
               }),
             );
-            yield* session.note(
-              `Created budget ${displayName} (${created.budgetId})`,
-            );
+            yield* session.note(`Created budget ${displayName} (${created.budgetId})`);
             state = yield* readBudgetById(farmId, created.budgetId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created budget ${displayName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created budget ${displayName}`));
             }
           }
 
@@ -358,10 +340,8 @@ export const BudgetProvider = () =>
           const now = yield* Effect.sync(() => Date.now());
           const desiredStart = desiredSchedule.fixed.startTime.getTime();
           const scheduleDrifted =
-            (desiredStart > now &&
-              observedSchedule.startTime.getTime() !== desiredStart) ||
-            observedSchedule.endTime.getTime() !==
-              desiredSchedule.fixed.endTime.getTime();
+            (desiredStart > now && observedSchedule.startTime.getTime() !== desiredStart) ||
+            observedSchedule.endTime.getTime() !== desiredSchedule.fixed.endTime.getTime();
           const desiredStatus = news.status ?? described.status;
           const needsUpdate =
             displayName !== described.displayName ||
@@ -381,10 +361,8 @@ export const BudgetProvider = () =>
                 description: news.description,
                 status: news.status,
                 approximateDollarLimit: news.approximateDollarLimit,
-                actionsToAdd:
-                  actionsToAdd.length > 0 ? actionsToAdd : undefined,
-                actionsToRemove:
-                  actionsToRemove.length > 0 ? actionsToRemove : undefined,
+                actionsToAdd: actionsToAdd.length > 0 ? actionsToAdd : undefined,
+                actionsToRemove: actionsToRemove.length > 0 ? actionsToRemove : undefined,
                 schedule: scheduleDrifted ? desiredSchedule : undefined,
               }),
             );
@@ -395,15 +373,9 @@ export const BudgetProvider = () =>
           yield* syncDeadlineTags(state.attrs.budgetArn, desiredTags);
 
           yield* session.note(state.attrs.budgetArn);
-          const final = yield* readBudgetById(
-            farmId,
-            state.attrs.budgetId,
-            arnOf,
-          );
+          const final = yield* readBudgetById(farmId, state.attrs.budgetId, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled budget ${displayName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled budget ${displayName}`));
           }
           return final.attrs;
         }),
@@ -413,9 +385,7 @@ export const BudgetProvider = () =>
               farmId: output.farmId,
               budgetId: output.budgetId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

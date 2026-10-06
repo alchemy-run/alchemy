@@ -45,14 +45,15 @@ export interface EntityType extends Resource<
  * event is about (e.g. `customer`, `merchant`). Event types reference entity
  * types; they are cheap metadata objects.
  *
- * @resource
- * @section Creating an Entity Type
- * @example Basic Entity Type
+ * ### Creating an Entity Type
+ * **Example:** Basic Entity Type
  * ```typescript
  * const customer = yield* FraudDetector.EntityType("customer", {
  *   description: "the buyer placing an order",
  * });
  * ```
+ *
+ * @resource
  */
 export const EntityType = Resource<EntityType>("AWS.FraudDetector.EntityType");
 
@@ -60,25 +61,15 @@ export const EntityTypeProvider = () =>
   Provider.effect(
     EntityType,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: EntityTypeProps,
-      ) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
-        );
+      const createName = Effect.fn(function* (id: string, props: EntityTypeProps) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
       /** Look an entity type up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getEntityTypes({ name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.entityTypes?.[0];
       });
 
@@ -140,9 +131,7 @@ export const EntityTypeProvider = () =>
           frauddetector.getEntityTypes.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.entityTypes ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.entityTypes ?? []).map(toAttrs)),
             ),
           ),
       };

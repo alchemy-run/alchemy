@@ -2,8 +2,7 @@ import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface RegisterDomainRequest
-  extends route53domains.RegisterDomainRequest {}
+export interface RegisterDomainRequest extends route53domains.RegisterDomainRequest {}
 
 /**
  * Runtime binding for `route53domains:RegisterDomain` — register a domain
@@ -27,9 +26,8 @@ export interface RegisterDomainRequest
  * Provide the implementation with
  * `Effect.provide(AWS.Route53Domains.RegisterDomainHttp)`.
  *
- * @binding
- * @section Registering Domains
- * @example Register a Domain for a Customer
+ * ### Registering Domains
+ * **Example:** Register a Domain for a Customer
  * ```typescript
  * // init
  * const registerDomain = yield* AWS.Route53Domains.RegisterDomain();
@@ -45,6 +43,8 @@ export interface RegisterDomainRequest
  * });
  * // poll result.OperationId with GetOperationDetail until SUCCESSFUL
  * ```
+ *
+ * @binding
  */
 export interface RegisterDomain extends Binding.Service<
   RegisterDomain,
@@ -52,12 +52,7 @@ export interface RegisterDomain extends Binding.Service<
   () => Effect.Effect<
     (
       request: RegisterDomainRequest,
-    ) => Effect.Effect<
-      route53domains.RegisterDomainResponse,
-      route53domains.RegisterDomainError
-    >
+    ) => Effect.Effect<route53domains.RegisterDomainResponse, route53domains.RegisterDomainError>
   >
 > {}
-export const RegisterDomain = Binding.Service<RegisterDomain>(
-  "AWS.Route53Domains.RegisterDomain",
-);
+export const RegisterDomain = Binding.Service<RegisterDomain>("AWS.Route53Domains.RegisterDomain");

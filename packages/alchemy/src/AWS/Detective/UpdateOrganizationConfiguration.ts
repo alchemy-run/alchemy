@@ -11,9 +11,8 @@ import type { Graph } from "./Graph.ts";
  * account. The graph ARN is injected from the bound {@link Graph}.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.UpdateOrganizationConfigurationHttp)`.
- * @binding
- * @section Organization Administration
- * @example Auto-Enable New Organization Accounts
+ * ### Organization Administration
+ * **Example:** Auto-Enable New Organization Accounts
  * ```typescript
  * // init
  * const updateOrganizationConfiguration =
@@ -22,6 +21,8 @@ import type { Graph } from "./Graph.ts";
  * // runtime
  * yield* updateOrganizationConfiguration({ AutoEnable: true });
  * ```
+ *
+ * @binding
  */
 export interface UpdateOrganizationConfiguration extends Binding.Service<
   UpdateOrganizationConfiguration,
@@ -30,17 +31,13 @@ export interface UpdateOrganizationConfiguration extends Binding.Service<
     graph: Graph,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        detective.UpdateOrganizationConfigurationRequest,
-        "GraphArn"
-      >,
+      request?: Omit<detective.UpdateOrganizationConfigurationRequest, "GraphArn">,
     ) => Effect.Effect<
       detective.UpdateOrganizationConfigurationResponse,
       detective.UpdateOrganizationConfigurationError
     >
   >
 > {}
-export const UpdateOrganizationConfiguration =
-  Binding.Service<UpdateOrganizationConfiguration>(
-    "AWS.Detective.UpdateOrganizationConfiguration",
-  );
+export const UpdateOrganizationConfiguration = Binding.Service<UpdateOrganizationConfiguration>(
+  "AWS.Detective.UpdateOrganizationConfiguration",
+);

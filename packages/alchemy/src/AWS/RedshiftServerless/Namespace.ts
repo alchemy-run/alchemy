@@ -117,9 +117,8 @@ export interface Namespace extends Resource<
  * the namespace. Creating a namespace is quick (~1 minute); the provider
  * waits (bounded) for it to become `AVAILABLE`.
  *
- * @resource
- * @section Creating a Namespace
- * @example Inline Admin Credentials
+ * ### Creating a Namespace
+ * **Example:** Inline Admin Credentials
  * ```typescript
  * const namespace = yield* RedshiftServerless.Namespace("Analytics", {
  *   dbName: "analytics",
@@ -128,7 +127,7 @@ export interface Namespace extends Resource<
  * });
  * ```
  *
- * @example Secrets-Manager-Managed Admin Password
+ * **Example:** Secrets-Manager-Managed Admin Password
  * ```typescript
  * const namespace = yield* RedshiftServerless.Namespace("Analytics", {
  *   dbName: "analytics",
@@ -138,8 +137,8 @@ export interface Namespace extends Resource<
  * // namespace.adminPasswordSecretArn -> the generated secret's ARN
  * ```
  *
- * @section IAM Roles and Encryption
- * @example Default Role and Customer KMS Key
+ * ### IAM Roles and Encryption
+ * **Example:** Default Role and Customer KMS Key
  * ```typescript
  * const namespace = yield* RedshiftServerless.Namespace("Analytics", {
  *   dbName: "analytics",
@@ -149,10 +148,10 @@ export interface Namespace extends Resource<
  *   logExports: ["userlog", "connectionlog"],
  * });
  * ```
+ *
+ * @resource
  */
-export const Namespace = Resource<Namespace>(
-  "AWS.RedshiftServerless.Namespace",
-);
+export const Namespace = Resource<Namespace>("AWS.RedshiftServerless.Namespace");
 
 class NamespaceNotSettled extends Data.TaggedError("NamespaceNotSettled")<{
   readonly namespaceName: string;
@@ -180,11 +179,7 @@ export const NamespaceProvider = () =>
       const readNamespace = Effect.fn(function* (name: string) {
         const response = yield* redshiftserverless
           .getNamespace({ namespaceName: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.namespace;
       });
 
@@ -204,10 +199,7 @@ export const NamespaceProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof NamespaceNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(36),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
           }),
         );
       });
@@ -226,10 +218,7 @@ export const NamespaceProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof NamespaceNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -248,9 +237,7 @@ export const NamespaceProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // dbName and the KMS key are create-only.
@@ -288,9 +275,7 @@ export const NamespaceProvider = () =>
                 adminUsername: news.adminUsername,
                 // Redshift generates the password when it manages it; passing
                 // one alongside manageAdminPassword is rejected.
-                adminUserPassword: news.manageAdminPassword
-                  ? undefined
-                  : news.adminUserPassword,
+                adminUserPassword: news.manageAdminPassword ? undefined : news.adminUserPassword,
                 manageAdminPassword: news.manageAdminPassword,
                 adminPasswordSecretKmsKeyId: news.adminPasswordSecretKmsKeyId,
                 kmsKeyId: news.kmsKeyId,
@@ -314,18 +299,13 @@ export const NamespaceProvider = () =>
           if (settled !== undefined) observed = settled;
           if (observed === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Redshift namespace '${name}' disappeared while reconciling`,
-              ),
+              new Error(`Redshift namespace '${name}' disappeared while reconciling`),
             );
           }
 
           // 3. Sync — apply mutable aspects the user specified when they drift
           // from OBSERVED state.
-          const update: Omit<
-            redshiftserverless.UpdateNamespaceRequest,
-            "namespaceName"
-          > = {};
+          const update: Omit<redshiftserverless.UpdateNamespaceRequest, "namespaceName"> = {};
           if (
             news.defaultIamRoleArn !== undefined &&
             observed.defaultIamRoleArn !== news.defaultIamRoleArn
@@ -362,20 +342,15 @@ export const NamespaceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* redshiftserverless
-            .deleteNamespace({ namespaceName: output.namespaceName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // A workgroup may still be detaching — retry briefly.
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
-              }),
-              Effect.catchTag("ConflictException", () => Effect.void),
-            );
+          yield* redshiftserverless.deleteNamespace({ namespaceName: output.namespaceName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            // A workgroup may still be detaching — retry briefly.
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
+            }),
+            Effect.catchTag("ConflictException", () => Effect.void),
+          );
           yield* waitUntilGone(output.namespaceName);
         }),
 

@@ -16,9 +16,8 @@ export interface DeleteLibraryItemRequest extends Omit<
  *
  * Unpublishes a library item, removing the app from the instance's library. Provide the implementation with
  * `Effect.provide(AWS.QApps.DeleteLibraryItemHttp)`.
- * @binding
- * @section Library Items
- * @example Delete a Library Item
+ * ### Library Items
+ * **Example:** Delete a Library Item
  * ```typescript
  * // init — bind the operation to the Q App
  * const deleteLibraryItem = yield* AWS.QApps.DeleteLibraryItem(app);
@@ -26,6 +25,8 @@ export interface DeleteLibraryItemRequest extends Omit<
  * // runtime
  * yield* deleteLibraryItem({ libraryItemId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteLibraryItem extends Binding.Service<
   DeleteLibraryItem,
@@ -35,13 +36,8 @@ export interface DeleteLibraryItem extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteLibraryItemRequest,
-    ) => Effect.Effect<
-      qapps.DeleteLibraryItemResponse,
-      qapps.DeleteLibraryItemError
-    >
+    ) => Effect.Effect<qapps.DeleteLibraryItemResponse, qapps.DeleteLibraryItemError>
   >
 > {}
 
-export const DeleteLibraryItem = Binding.Service<DeleteLibraryItem>(
-  "AWS.QApps.DeleteLibraryItem",
-);
+export const DeleteLibraryItem = Binding.Service<DeleteLibraryItem>("AWS.QApps.DeleteLibraryItem");

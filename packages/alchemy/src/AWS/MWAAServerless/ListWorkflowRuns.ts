@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link ListWorkflowRuns} runtime callable. The
  * `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type ListWorkflowRunsInput = Omit<
-  mwaa.ListWorkflowRunsRequest,
-  "WorkflowArn"
->;
+export type ListWorkflowRunsInput = Omit<mwaa.ListWorkflowRunsRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:ListWorkflowRuns`.
@@ -18,9 +15,8 @@ export type ListWorkflowRunsInput = Omit<
  * Lists runs of the bound {@link Workflow}, optionally filtered to a
  * specific workflow version. Provide the implementation with
  * `Effect.provide(AWS.MWAAServerless.ListWorkflowRunsHttp)`.
- * @binding
- * @section Observing Runs
- * @example List Recent Runs
+ * ### Observing Runs
+ * **Example:** List Recent Runs
  * ```typescript
  * // init — bind the operation to the workflow
  * const listWorkflowRuns = yield* AWS.MWAAServerless.ListWorkflowRuns(workflow);
@@ -29,6 +25,8 @@ export type ListWorkflowRunsInput = Omit<
  * const { WorkflowRuns } = yield* listWorkflowRuns({ MaxResults: 10 });
  * yield* Effect.log(`found ${WorkflowRuns?.length ?? 0} runs`);
  * ```
+ *
+ * @binding
  */
 export interface ListWorkflowRuns extends Binding.Service<
   ListWorkflowRuns,
@@ -38,10 +36,7 @@ export interface ListWorkflowRuns extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListWorkflowRunsInput,
-    ) => Effect.Effect<
-      mwaa.ListWorkflowRunsResponse,
-      mwaa.ListWorkflowRunsError
-    >
+    ) => Effect.Effect<mwaa.ListWorkflowRunsResponse, mwaa.ListWorkflowRunsError>
   >
 > {}
 export const ListWorkflowRuns = Binding.Service<ListWorkflowRuns>(

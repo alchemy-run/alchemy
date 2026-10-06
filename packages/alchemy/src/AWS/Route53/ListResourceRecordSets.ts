@@ -20,9 +20,8 @@ export interface ListResourceRecordSetsRequest extends Omit<
  * current DNS state before computing a change batch, or audit what a
  * dynamic-DNS workflow has written. Provide the implementation with
  * `Effect.provide(AWS.Route53.ListResourceRecordSetsHttp)`.
- * @binding
- * @section Managing Records at Runtime
- * @example List records from a name
+ * ### Managing Records at Runtime
+ * **Example:** List records from a name
  * ```typescript
  * const listRecordSets = yield* AWS.Route53.ListResourceRecordSets(zone);
  *
@@ -31,6 +30,8 @@ export interface ListResourceRecordSetsRequest extends Omit<
  *   MaxItems: 10,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListResourceRecordSets extends Binding.Service<
   ListResourceRecordSets,
@@ -40,10 +41,7 @@ export interface ListResourceRecordSets extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListResourceRecordSetsRequest,
-    ) => Effect.Effect<
-      route53.ListResourceRecordSetsResponse,
-      route53.ListResourceRecordSetsError
-    >
+    ) => Effect.Effect<route53.ListResourceRecordSetsResponse, route53.ListResourceRecordSetsError>
   >
 > {}
 export const ListResourceRecordSets = Binding.Service<ListResourceRecordSets>(

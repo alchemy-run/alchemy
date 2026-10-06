@@ -52,9 +52,8 @@ export interface PolicyTemplate extends Resource<
  * contain `?principal` / `?resource` placeholders; template-linked policies
  * instantiate the template for a concrete principal and resource, and every
  * linked policy automatically picks up template updates.
- * @resource
- * @section Creating Policy Templates
- * @example Template with a Principal Placeholder
+ * ### Creating Policy Templates
+ * **Example:** Template with a Principal Placeholder
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -71,7 +70,7 @@ export interface PolicyTemplate extends Resource<
  * });
  * ```
  *
- * @example Link a Policy to the Template
+ * **Example:** Link a Policy to the Template
  * ```typescript
  * yield* AWS.VerifiedPermissions.Policy("AliceCanView", {
  *   policyStoreId: store.policyStoreId,
@@ -79,26 +78,19 @@ export interface PolicyTemplate extends Resource<
  *   principal: { entityType: "PhotoApp::User", entityId: "alice" },
  * });
  * ```
+ *
+ * @resource
  */
-export const PolicyTemplate = Resource<PolicyTemplate>(
-  "AWS.VerifiedPermissions.PolicyTemplate",
-);
+export const PolicyTemplate = Resource<PolicyTemplate>("AWS.VerifiedPermissions.PolicyTemplate");
 
 export const PolicyTemplateProvider = () =>
   Provider.effect(
     PolicyTemplate,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        policyStoreId: string,
-        policyTemplateId: string,
-      ) {
+      const observe = Effect.fn(function* (policyStoreId: string, policyTemplateId: string) {
         return yield* avp
           .getPolicyTemplate({ policyStoreId, policyTemplateId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return PolicyTemplate.Provider.of({
@@ -175,9 +167,7 @@ export const PolicyTemplateProvider = () =>
               policyStoreId: output.policyStoreId,
               policyTemplateId: output.policyTemplateId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

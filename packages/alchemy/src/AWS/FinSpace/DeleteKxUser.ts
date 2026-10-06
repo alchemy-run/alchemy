@@ -7,14 +7,15 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * Runtime binding for `finspace:DeleteKxUser` — deletes a kdb user of the bound environment.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.DeleteKxUserHttp)`.
- * @binding
- * @section Managing kdb Users
- * @example Delete a User
+ * ### Managing kdb Users
+ * **Example:** Delete a User
  * ```typescript
  * const deleteUser = yield* AWS.FinSpace.DeleteKxUser(kdb);
  *
  * yield* deleteUser({ userName: "analyst" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteKxUser extends Binding.Service<
   DeleteKxUser,
@@ -27,6 +28,4 @@ export interface DeleteKxUser extends Binding.Service<
     ) => Effect.Effect<SVC.DeleteKxUserResponse, SVC.DeleteKxUserError>
   >
 > {}
-export const DeleteKxUser = Binding.Service<DeleteKxUser>(
-  "AWS.FinSpace.DeleteKxUser",
-);
+export const DeleteKxUser = Binding.Service<DeleteKxUser>("AWS.FinSpace.DeleteKxUser");

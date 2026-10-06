@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetServiceSettings}.
  */
-export interface GetServiceSettingsRequest
-  extends licensemanager.GetServiceSettingsRequest {}
+export interface GetServiceSettingsRequest extends licensemanager.GetServiceSettingsRequest {}
 
 /**
  * Runtime binding for `license-manager:GetServiceSettings` — read the
@@ -15,9 +14,8 @@ export interface GetServiceSettingsRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.GetServiceSettingsHttp)`.
- * @binding
- * @section Resource Inventory and Specifications
- * @example Read the Account's Service Settings
+ * ### Resource Inventory and Specifications
+ * **Example:** Read the Account's Service Settings
  * ```typescript
  * // init
  * const getServiceSettings =
@@ -27,6 +25,8 @@ export interface GetServiceSettingsRequest
  * const { SnsTopicArn, EnableCrossAccountsDiscovery } =
  *   yield* getServiceSettings();
  * ```
+ *
+ * @binding
  */
 export interface GetServiceSettings extends Binding.Service<
   GetServiceSettings,

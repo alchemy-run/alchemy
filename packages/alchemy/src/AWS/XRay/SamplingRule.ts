@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -110,9 +105,8 @@ export interface SamplingRule extends Resource<
  * X-Ray evaluates sampling rules in ascending priority order for each
  * request. The first matching rule borrows from its reservoir, then applies
  * the fixed rate.
- * @resource
- * @section Creating Sampling Rules
- * @example Sample all requests to a service
+ * ### Creating Sampling Rules
+ * **Example:** Sample all requests to a service
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -124,7 +118,7 @@ export interface SamplingRule extends Resource<
  * });
  * ```
  *
- * @example Low-rate sampling for a noisy endpoint
+ * **Example:** Low-rate sampling for a noisy endpoint
  * ```typescript
  * const rule = yield* XRay.SamplingRule("HealthChecks", {
  *   priority: 10,
@@ -134,7 +128,7 @@ export interface SamplingRule extends Resource<
  * });
  * ```
  *
- * @example Match on segment attributes
+ * **Example:** Match on segment attributes
  * ```typescript
  * const rule = yield* XRay.SamplingRule("PremiumTenants", {
  *   priority: 50,
@@ -143,6 +137,8 @@ export interface SamplingRule extends Resource<
  *   attributes: { tier: "premium" },
  * });
  * ```
+ *
+ * @resource
  */
 export const SamplingRule = Resource<SamplingRule>("AWS.XRay.SamplingRule");
 
@@ -150,9 +146,9 @@ export const SamplingRule = Resource<SamplingRule>("AWS.XRay.SamplingRule");
  * Raised when a `SamplingRule` is configured with the reserved rule name
  * `Default`, which X-Ray uses for the built-in fallback rule.
  */
-export class XRayReservedRuleName extends Data.TaggedError(
-  "XRayReservedRuleName",
-)<{ message: string }> {}
+export class XRayReservedRuleName extends Data.TaggedError("XRayReservedRuleName")<{
+  message: string;
+}> {}
 
 const validateRuleName = (props: Pick<SamplingRuleProps, "ruleName">) =>
   props.ruleName === "Default"
@@ -170,9 +166,7 @@ const shallowRecordEqual = (
 ) => {
   const aKeys = Object.keys(a).filter((k) => a[k] !== undefined);
   const bKeys = Object.keys(b).filter((k) => b[k] !== undefined);
-  return (
-    aKeys.length === bKeys.length && aKeys.every((key) => a[key] === b[key])
-  );
+  return aKeys.length === bKeys.length && aKeys.every((key) => a[key] === b[key]);
 };
 
 export const SamplingRuleProvider = () =>
@@ -184,9 +178,7 @@ export const SamplingRuleProvider = () =>
         props: Pick<SamplingRuleProps, "ruleName">,
       ) {
         // X-Ray rule names are limited to 32 characters.
-        return (
-          props.ruleName ?? (yield* createPhysicalName({ id, maxLength: 32 }))
-        );
+        return props.ruleName ?? (yield* createPhysicalName({ id, maxLength: 32 }));
       });
 
       // The desired wire shape for both create and update, derived purely
@@ -217,9 +209,7 @@ export const SamplingRuleProvider = () =>
       const observedTags = (ruleArn: string) =>
         xray.listTagsForResource.items({ ResourceARN: ruleArn }).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Object.fromEntries(Array.from(chunk).map((t) => [t.Key, t.Value])),
-          ),
+          Effect.map((chunk) => Object.fromEntries(Array.from(chunk).map((t) => [t.Key, t.Value]))),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
           ),
@@ -229,9 +219,7 @@ export const SamplingRuleProvider = () =>
         stables: ["ruleName", "ruleArn"],
         list: () =>
           Effect.gen(function* () {
-            const records = yield* xray.getSamplingRules
-              .items({})
-              .pipe(Stream.runCollect);
+            const records = yield* xray.getSamplingRules.items({}).pipe(Stream.runCollect);
             return Array.from(records).flatMap((record) =>
               record.SamplingRule?.RuleName &&
               record.SamplingRule.RuleARN &&
@@ -249,8 +237,7 @@ export const SamplingRuleProvider = () =>
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const ruleName =
-            output?.ruleName ?? (yield* createRuleName(id, olds ?? {}));
+          const ruleName = output?.ruleName ?? (yield* createRuleName(id, olds ?? {}));
           const found = yield* observeRule(ruleName);
           if (!found?.RuleARN) return undefined;
           const attrs = { ruleName, ruleArn: found.RuleARN };
@@ -269,8 +256,7 @@ export const SamplingRuleProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           yield* validateRuleName(news);
-          const ruleName =
-            output?.ruleName ?? (yield* createRuleName(id, news));
+          const ruleName = output?.ruleName ?? (yield* createRuleName(id, news));
           const desired = desiredRule(ruleName, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -290,9 +276,7 @@ export const SamplingRuleProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.SamplingRuleRecord?.SamplingRule),
-                Effect.catchTag("SamplingRuleAlreadyExists", () =>
-                  observeRule(ruleName),
-                ),
+                Effect.catchTag("SamplingRuleAlreadyExists", () => observeRule(ruleName)),
               );
           }
 
@@ -321,8 +305,7 @@ export const SamplingRuleProvider = () =>
           // arn:aws:xray:{region}:{account}:sampling-rule/{name}
           const { accountId, region } = yield* AWSEnvironment.current;
           const ruleArn =
-            live?.RuleARN ??
-            `arn:aws:xray:${region}:${accountId}:sampling-rule/${ruleName}`;
+            live?.RuleARN ?? `arn:aws:xray:${region}:${accountId}:sampling-rule/${ruleName}`;
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).

@@ -12,14 +12,15 @@ export interface ListMapRunsRequest extends sfn.ListMapRunsInput {}
  * {@link StateMachine} — use the returned `mapRunArn`s with
  * `DescribeMapRun` / `UpdateMapRun`. IAM access is scoped to executions of
  * the bound state machine.
- * @binding
- * @section Distributed Map Runs
- * @example List an execution's Map Runs
+ * ### Distributed Map Runs
+ * **Example:** List an execution's Map Runs
  * ```typescript
  * const listMapRuns = yield* StepFunctions.ListMapRuns(machine);
  *
  * const { mapRuns } = yield* listMapRuns({ executionArn });
  * ```
+ *
+ * @binding
  */
 export interface ListMapRuns extends Binding.Service<
   ListMapRuns,
@@ -27,11 +28,7 @@ export interface ListMapRuns extends Binding.Service<
   (
     stateMachine: StateMachine,
   ) => Effect.Effect<
-    (
-      request: ListMapRunsRequest,
-    ) => Effect.Effect<sfn.ListMapRunsOutput, sfn.ListMapRunsError>
+    (request: ListMapRunsRequest) => Effect.Effect<sfn.ListMapRunsOutput, sfn.ListMapRunsError>
   >
 > {}
-export const ListMapRuns = Binding.Service<ListMapRuns>(
-  "AWS.StepFunctions.ListMapRuns",
-);
+export const ListMapRuns = Binding.Service<ListMapRuns>("AWS.StepFunctions.ListMapRuns");

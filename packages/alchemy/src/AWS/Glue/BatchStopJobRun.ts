@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface BatchStopJobRunRequest extends Omit<
-  glue.BatchStopJobRunRequest,
-  "JobName"
-> {}
+export interface BatchStopJobRunRequest extends Omit<glue.BatchStopJobRunRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:BatchStopJobRun`.
@@ -16,9 +13,8 @@ export interface BatchStopJobRunRequest extends Omit<
  * succeeds), so inspect `SuccessfulSubmissions`/`Errors` rather than the
  * error channel. The job name is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Glue.BatchStopJobRunHttp)`.
- * @binding
- * @section Running Jobs
- * @example Stop a Run
+ * ### Running Jobs
+ * **Example:** Stop a Run
  * ```typescript
  * // init
  * const batchStopJobRun = yield* AWS.Glue.BatchStopJobRun(job);
@@ -28,6 +24,8 @@ export interface BatchStopJobRunRequest extends Omit<
  *   JobRunIds: [runId],
  * });
  * ```
+ *
+ * @binding
  */
 export interface BatchStopJobRun extends Binding.Service<
   BatchStopJobRun,
@@ -41,6 +39,4 @@ export interface BatchStopJobRun extends Binding.Service<
   >
 > {}
 
-export const BatchStopJobRun = Binding.Service<BatchStopJobRun>(
-  "AWS.Glue.BatchStopJobRun",
-);
+export const BatchStopJobRun = Binding.Service<BatchStopJobRun>("AWS.Glue.BatchStopJobRun");

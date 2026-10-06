@@ -8,9 +8,8 @@ import * as Binding from "../../Binding.ts";
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:UntagResource` on `*`.
  *
- * @binding
- * @section Tagging
- * @example Untag a Transcribe Resource
+ * ### Tagging
+ * **Example:** Untag a Transcribe Resource
  * ```typescript
  * // init
  * const untagResource = yield* AWS.Transcribe.UntagResource();
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   TagKeys: ["tenant"],
  * });
  * ```
+ *
+ * @binding
  */
 export interface UntagResource extends Binding.Service<
   UntagResource,
@@ -28,12 +29,7 @@ export interface UntagResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.UntagResourceRequest,
-    ) => Effect.Effect<
-      transcribe.UntagResourceResponse,
-      transcribe.UntagResourceError
-    >
+    ) => Effect.Effect<transcribe.UntagResourceResponse, transcribe.UntagResourceError>
   >
 > {}
-export const UntagResource = Binding.Service<UntagResource>(
-  "AWS.Transcribe.UntagResource",
-);
+export const UntagResource = Binding.Service<UntagResource>("AWS.Transcribe.UntagResource");

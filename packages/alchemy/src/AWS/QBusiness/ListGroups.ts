@@ -19,14 +19,15 @@ export interface ListGroupsRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.ListGroupsHttp)`.
  *
- * @binding
- * @section Principal Mapping
- * @example List Mapped Groups
+ * ### Principal Mapping
+ * **Example:** List Mapped Groups
  * ```typescript
  * const listGroups = yield* AWS.QBusiness.ListGroups(index);
  *
  * const { items } = yield* listGroups({ updatedEarlierThan: new Date() });
  * ```
+ *
+ * @binding
  */
 export interface ListGroups extends Binding.Service<
   ListGroups,
@@ -39,6 +40,4 @@ export interface ListGroups extends Binding.Service<
     ) => Effect.Effect<qbusiness.ListGroupsResponse, qbusiness.ListGroupsError>
   >
 > {}
-export const ListGroups = Binding.Service<ListGroups>(
-  "AWS.QBusiness.ListGroups",
-);
+export const ListGroups = Binding.Service<ListGroups>("AWS.QBusiness.ListGroups");

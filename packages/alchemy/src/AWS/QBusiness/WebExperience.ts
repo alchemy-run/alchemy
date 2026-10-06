@@ -6,12 +6,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type WebExperienceStatus = qbusiness.WebExperienceStatus;
@@ -105,9 +100,8 @@ export interface WebExperience extends Resource<
  * An Amazon Q Business web experience — the hosted chat UI end users open
  * to converse with an application.
  *
- * @resource
- * @section Creating Web Experiences
- * @example Basic Web Experience
+ * ### Creating Web Experiences
+ * **Example:** Basic Web Experience
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -118,7 +112,7 @@ export interface WebExperience extends Resource<
  * });
  * ```
  *
- * @example Embeddable Web Experience
+ * **Example:** Embeddable Web Experience
  * ```typescript
  * const web = yield* AWS.QBusiness.WebExperience("Chat", {
  *   applicationId: app.applicationId,
@@ -126,22 +120,16 @@ export interface WebExperience extends Resource<
  *   samplePromptsControlMode: "ENABLED",
  * });
  * ```
+ *
+ * @resource
  */
-export const WebExperience = Resource<WebExperience>(
-  "AWS.QBusiness.WebExperience",
-);
+export const WebExperience = Resource<WebExperience>("AWS.QBusiness.WebExperience");
 
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
-  return Object.fromEntries(
-    (response?.tags ?? []).map((tag) => [tag.key, tag.value]),
-  );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
 interface WebExperienceState {
@@ -149,17 +137,10 @@ interface WebExperienceState {
   described: qbusiness.GetWebExperienceResponse;
 }
 
-const readWebExperienceById = Effect.fn(function* (
-  applicationId: string,
-  webExperienceId: string,
-) {
+const readWebExperienceById = Effect.fn(function* (applicationId: string, webExperienceId: string) {
   const described = yield* qbusiness
     .getWebExperience({ applicationId, webExperienceId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.webExperienceArn;
   if (arn === undefined) return undefined;
@@ -221,11 +202,7 @@ const waitForWebExperienceSettled = (
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getWebExperience({ applicationId, webExperienceId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* Effect.fail(
@@ -235,10 +212,7 @@ const waitForWebExperienceSettled = (
           }),
         );
       }
-      if (
-        described?.status === "ACTIVE" ||
-        described?.status === "PENDING_AUTH_CONFIG"
-      ) {
+      if (described?.status === "ACTIVE" || described?.status === "PENDING_AUTH_CONFIG") {
         return;
       }
       if (described?.status === "FAILED") {
@@ -273,16 +247,10 @@ export const WebExperienceProvider = () =>
           // Web experience summaries carry no display name, so there is no
           // name-based fallback — without a cached id the resource is
           // treated as missing.
-          if (
-            applicationId === undefined ||
-            output?.webExperienceId === undefined
-          ) {
+          if (applicationId === undefined || output?.webExperienceId === undefined) {
             return undefined;
           }
-          const state = yield* readWebExperienceById(
-            applicationId,
-            output.webExperienceId,
-          );
+          const state = yield* readWebExperienceById(applicationId, output.webExperienceId);
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -298,9 +266,7 @@ export const WebExperienceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("QBusiness WebExperience requires props"),
-            );
+            return yield* Effect.fail(new Error("QBusiness WebExperience requires props"));
           }
           const applicationId = news.applicationId;
           const internalTags = yield* createInternalTags(id);
@@ -309,10 +275,7 @@ export const WebExperienceProvider = () =>
           // Observe — the cached id is the only handle (summaries carry no
           // display name to search by).
           let state = output?.webExperienceId
-            ? yield* readWebExperienceById(
-                applicationId,
-                output.webExperienceId,
-              )
+            ? yield* readWebExperienceById(applicationId, output.webExperienceId)
             : undefined;
 
           // Ensure — create if missing, then wait for a settled status.
@@ -335,23 +298,12 @@ export const WebExperienceProvider = () =>
             });
             if (!created.webExperienceId) {
               return yield* Effect.fail(
-                new Error(
-                  `CreateWebExperience for '${id}' returned no webExperienceId`,
-                ),
+                new Error(`CreateWebExperience for '${id}' returned no webExperienceId`),
               );
             }
-            yield* session.note(
-              `Creating web experience (${created.webExperienceId})...`,
-            );
-            yield* waitForWebExperienceSettled(
-              applicationId,
-              created.webExperienceId,
-              "SETTLED",
-            );
-            state = yield* readWebExperienceById(
-              applicationId,
-              created.webExperienceId,
-            );
+            yield* session.note(`Creating web experience (${created.webExperienceId})...`);
+            yield* waitForWebExperienceSettled(applicationId, created.webExperienceId, "SETTLED");
+            state = yield* readWebExperienceById(applicationId, created.webExperienceId);
             if (state === undefined) {
               return yield* Effect.fail(
                 new Error(`failed to read created web experience for '${id}'`),
@@ -367,12 +319,9 @@ export const WebExperienceProvider = () =>
             (news.subtitle ?? "") !== (described.subtitle ?? "") ||
             (news.welcomeMessage ?? "") !== (described.welcomeMessage ?? "") ||
             (news.samplePromptsControlMode !== undefined &&
-              news.samplePromptsControlMode !==
-                described.samplePromptsControlMode) ||
-            (news.roleArn !== undefined &&
-              news.roleArn !== described.roleArn) ||
-            JSON.stringify(news.origins ?? []) !==
-              JSON.stringify(described.origins ?? []) ||
+              news.samplePromptsControlMode !== described.samplePromptsControlMode) ||
+            (news.roleArn !== undefined && news.roleArn !== described.roleArn) ||
+            JSON.stringify(news.origins ?? []) !== JSON.stringify(described.origins ?? []) ||
             news.identityProviderConfiguration !== undefined ||
             news.browserExtensionConfiguration !== undefined ||
             news.customizationConfiguration !== undefined;
@@ -418,10 +367,7 @@ export const WebExperienceProvider = () =>
 
           yield* session.note(state.attrs.webExperienceArn);
 
-          const final = yield* readWebExperienceById(
-            applicationId,
-            state.attrs.webExperienceId,
-          );
+          const final = yield* readWebExperienceById(applicationId, state.attrs.webExperienceId);
           if (!final) {
             return yield* Effect.fail(
               new Error(`failed to read reconciled web experience for '${id}'`),
@@ -435,9 +381,7 @@ export const WebExperienceProvider = () =>
               applicationId: output.applicationId,
               webExperienceId: output.webExperienceId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitForWebExperienceSettled(
             output.applicationId,
             output.webExperienceId,

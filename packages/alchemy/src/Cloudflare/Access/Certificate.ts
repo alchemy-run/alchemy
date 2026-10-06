@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -68,18 +67,15 @@ export type Certificate = Resource<
  *
  * The certificate body is immutable — changing the PEM replaces the
  * resource. The name and associated hostnames converge in place.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Certificate
- * @example Upload a CA certificate
+ * ### Creating a Certificate
+ * **Example:** Upload a CA certificate
  * ```typescript
  * const ca = yield* Cloudflare.Access.Certificate("ClientCa", {
  *   certificate: CA_PEM, // -----BEGIN CERTIFICATE----- ...
  * });
  * ```
  *
- * @example Certificate with associated hostnames
+ * **Example:** Certificate with associated hostnames
  * ```typescript
  * const ca = yield* Cloudflare.Access.Certificate("ClientCa", {
  *   name: "corp-client-ca",
@@ -88,22 +84,23 @@ export type Certificate = Resource<
  * });
  * ```
  *
- * @section Updating Hostnames
- * @example Associate more hostnames in place
+ * ### Updating Hostnames
+ * **Example:** Associate more hostnames in place
  * ```typescript
  * const ca = yield* Cloudflare.Access.Certificate("ClientCa", {
  *   certificate: CA_PEM,
  *   associatedHostnames: ["app.example.com", "admin.example.com"],
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
-export const Certificate = Resource<Certificate>(
-  "Cloudflare.Access.Certificate",
-);
+export const Certificate = Resource<Certificate>("Cloudflare.Access.Certificate");
 
 export const isCertificate = (value: unknown): value is Certificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Certificate";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Certificate";
 
 export const CertificateProvider = () =>
   Provider.succeed(Certificate, {
@@ -113,21 +110,16 @@ export const CertificateProvider = () =>
     // enumerated items — every other attribute matches the `read` shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listAccessCertificatesForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (c): c is ObservedCertificate & { id: string } =>
-                    c.id != null,
-                )
-                .map((c) => toAttrs(c, accountId, "")),
-            ),
+      return yield* zeroTrust.listAccessCertificatesForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((c): c is ObservedCertificate & { id: string } => c.id != null)
+              .map((c) => toAttrs(c, accountId, "")),
           ),
-        );
+        ),
+      );
     }),
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -150,11 +142,7 @@ export const CertificateProvider = () =>
             accountId: acct,
             certificateId: output.certificateId,
           })
-          .pipe(
-            Effect.catchTag("AccessCertificateNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.succeed(undefined)));
         if (direct && direct.id) {
           return toAttrs(direct, acct, output.certificate);
         }
@@ -183,11 +171,7 @@ export const CertificateProvider = () =>
             accountId: acct,
             certificateId: output.certificateId,
           })
-          .pipe(
-            Effect.catchTag("AccessCertificateNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.succeed(undefined)));
       }
       if (!observed || !observed.id) {
         observed = yield* findCertificateByName(acct, name);
@@ -213,9 +197,7 @@ export const CertificateProvider = () =>
             ),
           );
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Certificate: created certificate missing id"),
-          );
+          return yield* Effect.fail(new Error("Certificate: created certificate missing id"));
         }
         return toAttrs(created, acct, news.certificate);
       }
@@ -223,10 +205,7 @@ export const CertificateProvider = () =>
       // Sync — converge name and associated hostnames via PUT only when the
       // observed state differs from the desired state.
       const observedHostnames = [...(observed.associatedHostnames ?? [])];
-      if (
-        observed.name !== name ||
-        !sameMembers(observedHostnames, desiredHostnames)
-      ) {
+      if (observed.name !== name || !sameMembers(observedHostnames, desiredHostnames)) {
         const updated = yield* zeroTrust.updateAccessCertificateForAccount({
           accountId: acct,
           certificateId: observed.id,
@@ -279,14 +258,9 @@ const findCertificateByName = (acct: string, name: string) =>
   );
 
 const sameMembers = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length &&
-  [...a].sort().join("\n") === [...b].sort().join("\n");
+  a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
 
-const toAttrs = (
-  observed: ObservedCertificate,
-  accountId: string,
-  certificate: string,
-) => ({
+const toAttrs = (observed: ObservedCertificate, accountId: string, certificate: string) => ({
   certificateId: observed.id!,
   accountId,
   name: observed.name ?? "",

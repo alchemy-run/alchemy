@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Project } from "./Project.ts";
 
-export interface StartBuildRequest extends Omit<
-  SVC.StartBuildInput,
-  "projectName"
-> {}
+export interface StartBuildRequest extends Omit<SVC.StartBuildInput, "projectName"> {}
 
 /**
  * Runtime binding for `codebuild:StartBuild` — lets a workload kick off a
@@ -15,9 +12,8 @@ export interface StartBuildRequest extends Omit<
  *
  * The response carries the created `build` including its `id`, which can be
  * polled with the {@link BatchGetBuilds} binding.
- * @binding
- * @section Starting Builds
- * @example Start a Build
+ * ### Starting Builds
+ * **Example:** Start a Build
  * ```typescript
  * const startBuild = yield* AWS.CodeBuild.StartBuild(project);
  *
@@ -27,6 +23,8 @@ export interface StartBuildRequest extends Omit<
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartBuild extends Binding.Service<
   StartBuild,
@@ -34,11 +32,7 @@ export interface StartBuild extends Binding.Service<
   <P extends Project>(
     project: P,
   ) => Effect.Effect<
-    (
-      request?: StartBuildRequest,
-    ) => Effect.Effect<SVC.StartBuildOutput, SVC.StartBuildError>
+    (request?: StartBuildRequest) => Effect.Effect<SVC.StartBuildOutput, SVC.StartBuildError>
   >
 > {}
-export const StartBuild = Binding.Service<StartBuild>(
-  "AWS.CodeBuild.StartBuild",
-);
+export const StartBuild = Binding.Service<StartBuild>("AWS.CodeBuild.StartBuild");

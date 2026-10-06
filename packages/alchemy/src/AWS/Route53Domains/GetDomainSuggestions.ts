@@ -2,8 +2,7 @@ import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetDomainSuggestionsRequest
-  extends route53domains.GetDomainSuggestionsRequest {}
+export interface GetDomainSuggestionsRequest extends route53domains.GetDomainSuggestionsRequest {}
 
 /**
  * Runtime binding for `route53domains:GetDomainSuggestions` — return a list
@@ -19,9 +18,8 @@ export interface GetDomainSuggestionsRequest
  * Provide the implementation with
  * `Effect.provide(AWS.Route53Domains.GetDomainSuggestionsHttp)`.
  *
- * @binding
- * @section Suggesting Domain Names
- * @example Suggest Available Alternatives for a Name
+ * ### Suggesting Domain Names
+ * **Example:** Suggest Available Alternatives for a Name
  * ```typescript
  * // init
  * const getDomainSuggestions =
@@ -35,6 +33,8 @@ export interface GetDomainSuggestionsRequest
  * });
  * const names = (result.SuggestionsList ?? []).map((s) => s.DomainName);
  * ```
+ *
+ * @binding
  */
 export interface GetDomainSuggestions extends Binding.Service<
   GetDomainSuggestions,

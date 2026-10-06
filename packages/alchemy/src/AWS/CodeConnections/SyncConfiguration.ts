@@ -89,9 +89,8 @@ export interface SyncConfiguration extends Resource<
  * branch + deployment file to an Amazon Web Services resource so Git sync
  * keeps the resource updated from the repository (CloudFormation stack
  * sync).
- * @resource
- * @section Syncing a CloudFormation Stack
- * @example Stack Sync from a Repository Link
+ * ### Syncing a CloudFormation Stack
+ * **Example:** Stack Sync from a Repository Link
  * ```typescript
  * const sync = yield* CodeConnections.SyncConfiguration("StackSync", {
  *   branch: "main",
@@ -102,7 +101,7 @@ export interface SyncConfiguration extends Resource<
  * });
  * ```
  *
- * @example Sync Only on Deployment-File Changes
+ * **Example:** Sync Only on Deployment-File Changes
  * ```typescript
  * const sync = yield* CodeConnections.SyncConfiguration("StackSync", {
  *   branch: "main",
@@ -114,6 +113,8 @@ export interface SyncConfiguration extends Resource<
  *   pullRequestComment: "DISABLED",
  * });
  * ```
+ *
+ * @resource
  */
 export const SyncConfiguration = Resource<SyncConfiguration>(
   "AWS.CodeConnections.SyncConfiguration",
@@ -129,20 +130,13 @@ export const SyncConfigurationProvider = () =>
        * Read a sync configuration by its identity (sync type + resource
        * name); a missing configuration reads as absent.
        */
-      const getByIdentity = Effect.fn(function* (
-        syncType: string,
-        resourceName: string,
-      ) {
+      const getByIdentity = Effect.fn(function* (syncType: string, resourceName: string) {
         const response = yield* codeconnections
           .getSyncConfiguration({
             SyncType: syncType,
             ResourceName: resourceName,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.SyncConfiguration;
       });
 
@@ -159,13 +153,7 @@ export const SyncConfigurationProvider = () =>
       });
 
       return {
-        stables: [
-          "resourceName",
-          "syncType",
-          "repositoryName",
-          "ownerId",
-          "providerType",
-        ],
+        stables: ["resourceName", "syncType", "repositoryName", "ownerId", "providerType"],
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -173,10 +161,8 @@ export const SyncConfigurationProvider = () =>
           // replace on change. Everything else is mutable via
           // UpdateSyncConfiguration.
           if (
-            (news?.resourceName ?? undefined) !==
-              (olds?.resourceName ?? undefined) ||
-            (news?.syncType ?? DEFAULT_SYNC_TYPE) !==
-              (olds?.syncType ?? DEFAULT_SYNC_TYPE)
+            (news?.resourceName ?? undefined) !== (olds?.resourceName ?? undefined) ||
+            (news?.syncType ?? DEFAULT_SYNC_TYPE) !== (olds?.syncType ?? DEFAULT_SYNC_TYPE)
           ) {
             return { action: "replace" } as const;
           }
@@ -186,8 +172,7 @@ export const SyncConfigurationProvider = () =>
         // (syncType, resourceName) identity the caller declares, so `read`
         // returns the observed state as owned.
         read: Effect.fn(function* ({ olds, output }) {
-          const syncType =
-            output?.syncType ?? olds?.syncType ?? DEFAULT_SYNC_TYPE;
+          const syncType = output?.syncType ?? olds?.syncType ?? DEFAULT_SYNC_TYPE;
           const resourceName = output?.resourceName ?? olds?.resourceName;
           if (resourceName === undefined) return undefined;
           const config = yield* getByIdentity(syncType, resourceName);
@@ -219,9 +204,7 @@ export const SyncConfigurationProvider = () =>
                 Effect.catchTag("ResourceAlreadyExistsException", (error) =>
                   getByIdentity(syncType, news.resourceName).pipe(
                     Effect.flatMap((config) =>
-                      config === undefined
-                        ? Effect.fail(error)
-                        : Effect.succeed(config),
+                      config === undefined ? Effect.fail(error) : Effect.succeed(config),
                     ),
                   ),
                 ),
@@ -237,11 +220,9 @@ export const SyncConfigurationProvider = () =>
             observed.RepositoryLinkId !== news.repositoryLinkId ||
             observed.RoleArn !== news.roleArn ||
             (news.publishDeploymentStatus !== undefined &&
-              observed.PublishDeploymentStatus !==
-                news.publishDeploymentStatus) ||
+              observed.PublishDeploymentStatus !== news.publishDeploymentStatus) ||
             (news.triggerResourceUpdateOn !== undefined &&
-              observed.TriggerResourceUpdateOn !==
-                news.triggerResourceUpdateOn) ||
+              observed.TriggerResourceUpdateOn !== news.triggerResourceUpdateOn) ||
             (news.pullRequestComment !== undefined &&
               observed.PullRequestComment !== news.pullRequestComment);
           if (drifted) {
@@ -267,10 +248,7 @@ export const SyncConfigurationProvider = () =>
         // first so a repeat delete (after a state-persistence failure) is a
         // no-op instead of an InvalidInput failure.
         delete: Effect.fn(function* ({ output }) {
-          const observed = yield* getByIdentity(
-            output.syncType,
-            output.resourceName,
-          );
+          const observed = yield* getByIdentity(output.syncType, output.resourceName);
           if (observed !== undefined) {
             yield* codeconnections.deleteSyncConfiguration({
               SyncType: output.syncType,
@@ -283,9 +261,7 @@ export const SyncConfigurationProvider = () =>
         list: () =>
           codeconnections.listRepositoryLinks.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.RepositoryLinks ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.RepositoryLinks ?? [])),
             Effect.flatMap((links) =>
               Effect.forEach(
                 links,
@@ -298,9 +274,7 @@ export const SyncConfigurationProvider = () =>
                     .pipe(
                       Stream.runCollect,
                       Effect.map((chunk) =>
-                        Array.from(chunk).flatMap(
-                          (page) => page.SyncConfigurations ?? [],
-                        ),
+                        Array.from(chunk).flatMap((page) => page.SyncConfigurations ?? []),
                       ),
                     ),
                 { concurrency: 4 },

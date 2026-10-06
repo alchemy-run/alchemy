@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { PolicyStore } from "./PolicyStore.ts";
 
-export interface IsAuthorizedRequest extends Omit<
-  AVP.IsAuthorizedInput,
-  "policyStoreId"
-> {}
+export interface IsAuthorizedRequest extends Omit<AVP.IsAuthorizedInput, "policyStoreId"> {}
 export interface IsAuthorizedWithTokenRequest extends Omit<
   AVP.IsAuthorizedWithTokenInput,
   "policyStoreId"
@@ -39,10 +36,7 @@ export interface IsAuthorizedClient {
    */
   isAuthorizedWithToken(
     request: IsAuthorizedWithTokenRequest,
-  ): Effect.Effect<
-    AVP.IsAuthorizedWithTokenOutput,
-    AVP.IsAuthorizedWithTokenError
-  >;
+  ): Effect.Effect<AVP.IsAuthorizedWithTokenOutput, AVP.IsAuthorizedWithTokenError>;
   /**
    * Make up to 30 authorization decisions in one call, sharing one principal
    * or one resource across the batch.
@@ -57,10 +51,7 @@ export interface IsAuthorizedClient {
    */
   batchIsAuthorizedWithToken(
     request: BatchIsAuthorizedWithTokenRequest,
-  ): Effect.Effect<
-    AVP.BatchIsAuthorizedWithTokenOutput,
-    AVP.BatchIsAuthorizedWithTokenError
-  >;
+  ): Effect.Effect<AVP.BatchIsAuthorizedWithTokenOutput, AVP.BatchIsAuthorizedWithTokenError>;
 }
 
 /**
@@ -71,9 +62,8 @@ export interface IsAuthorizedClient {
  * This is the effectful-function DX for authorization: a Lambda calls
  * `isAuthorized(...)` and Verified Permissions returns `Allow` or `Deny`
  * along with the determining policies.
- * @binding
- * @section Authorizing Requests
- * @example Decide a Request in a Lambda
+ * ### Authorizing Requests
+ * **Example:** Decide a Request in a Lambda
  * ```typescript
  * // init
  * const authz = yield* AWS.VerifiedPermissions.IsAuthorized(store);
@@ -87,7 +77,7 @@ export interface IsAuthorizedClient {
  * // decision === "ALLOW" | "DENY"
  * ```
  *
- * @example Decide from a JWT
+ * **Example:** Decide from a JWT
  * ```typescript
  * const { decision } = yield* authz.isAuthorizedWithToken({
  *   identityToken,
@@ -95,12 +85,12 @@ export interface IsAuthorizedClient {
  *   resource: { entityType: "PhotoApp::Photo", entityId: "vacation.jpg" },
  * });
  * ```
+ *
+ * @binding
  */
 export interface IsAuthorized extends Binding.Service<
   IsAuthorized,
   "AWS.VerifiedPermissions.IsAuthorized",
   <S extends PolicyStore>(store: S) => Effect.Effect<IsAuthorizedClient>
 > {}
-export const IsAuthorized = Binding.Service<IsAuthorized>(
-  "AWS.VerifiedPermissions.IsAuthorized",
-);
+export const IsAuthorized = Binding.Service<IsAuthorized>("AWS.VerifiedPermissions.IsAuthorized");

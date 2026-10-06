@@ -13,9 +13,8 @@ import type { ReplicationInstance } from "./ReplicationInstance.ts";
  * {@link DescribeRefreshSchemasStatus}, then list the result with
  * {@link DescribeSchemas}. Provide the implementation with
  * `Effect.provide(AWS.DMS.RefreshSchemasHttp)`.
- * @binding
- * @section Refreshing Schemas
- * @example Kick Off a Schema Refresh
+ * ### Refreshing Schemas
+ * **Example:** Kick Off a Schema Refresh
  * ```typescript
  * // init — bind the operation to the instance + endpoint
  * const refreshSchemas = yield* AWS.DMS.RefreshSchemas(instance, source);
@@ -23,6 +22,8 @@ import type { ReplicationInstance } from "./ReplicationInstance.ts";
  * // runtime
  * const { RefreshSchemasStatus } = yield* refreshSchemas();
  * ```
+ *
+ * @binding
  */
 export interface RefreshSchemas extends Binding.Service<
   RefreshSchemas,
@@ -30,11 +31,7 @@ export interface RefreshSchemas extends Binding.Service<
   (
     instance: ReplicationInstance,
     endpoint: Endpoint,
-  ) => Effect.Effect<
-    () => Effect.Effect<dms.RefreshSchemasResponse, dms.RefreshSchemasError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<dms.RefreshSchemasResponse, dms.RefreshSchemasError>>
 > {}
 
-export const RefreshSchemas = Binding.Service<RefreshSchemas>(
-  "AWS.DMS.RefreshSchemas",
-);
+export const RefreshSchemas = Binding.Service<RefreshSchemas>("AWS.DMS.RefreshSchemas");

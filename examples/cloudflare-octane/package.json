@@ -1,7 +1,12 @@
 {
   "name": "example-cloudflare-octane",
-  "type": "module",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-octane"
+  },
+  "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -10,24 +15,19 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
-    "@octanejs/adapter-cloudflare": "catalog:frameworks",
-    "@octanejs/vite-plugin": "catalog:frameworks",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@octanejs/adapter-cloudflare": "catalog:",
+    "@octanejs/vite-plugin": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "octane": "catalog:frameworks",
-    "vite": "^8.0.0"
-  },
-  "engines": {
-    "node": ">=22"
+    "octane": "catalog:",
+    "vite": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
     "tailwindcss": "catalog:"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-octane"
+  "engines": {
+    "node": ">=22"
   }
 }

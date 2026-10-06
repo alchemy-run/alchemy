@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface GetJobBookmarkRequest extends Omit<
-  glue.GetJobBookmarkRequest,
-  "JobName"
-> {}
+export interface GetJobBookmarkRequest extends Omit<glue.GetJobBookmarkRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:GetJobBookmark`.
@@ -17,9 +14,8 @@ export interface GetJobBookmarkRequest extends Omit<
  * the job has never recorded a bookmark. The job name is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.GetJobBookmarkHttp)`.
- * @binding
- * @section Job Bookmarks
- * @example Read the Bookmark
+ * ### Job Bookmarks
+ * **Example:** Read the Bookmark
  * ```typescript
  * // init
  * const getJobBookmark = yield* AWS.Glue.GetJobBookmark(job);
@@ -32,6 +28,8 @@ export interface GetJobBookmarkRequest extends Omit<
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetJobBookmark extends Binding.Service<
   GetJobBookmark,
@@ -45,6 +43,4 @@ export interface GetJobBookmark extends Binding.Service<
   >
 > {}
 
-export const GetJobBookmark = Binding.Service<GetJobBookmark>(
-  "AWS.Glue.GetJobBookmark",
-);
+export const GetJobBookmark = Binding.Service<GetJobBookmark>("AWS.Glue.GetJobBookmark");

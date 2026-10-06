@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetInsightImpactGraphRequest
-  extends xray.GetInsightImpactGraphRequest {}
+export interface GetInsightImpactGraphRequest extends xray.GetInsightImpactGraphRequest {}
 
 /**
  * Retrieve a structural service graph filtered by insight — which
@@ -13,9 +12,8 @@ export interface GetInsightImpactGraphRequest
  * provide the implementation with `Effect.provide(XRay.GetInsightImpactGraphHttp)`.
  * The action is account-scoped: X-Ray does not support resource-level
  * permissions for `xray:GetInsightImpactGraph`, so the binding grants it on `*`.
- * @binding
- * @section Insights
- * @example Graph the services an insight impacted
+ * ### Insights
+ * **Example:** Graph the services an insight impacted
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -31,6 +29,8 @@ export interface GetInsightImpactGraphRequest
  * });
  * const services = graph.Services ?? [];
  * ```
+ *
+ * @binding
  */
 export interface GetInsightImpactGraph extends Binding.Service<
   GetInsightImpactGraph,
@@ -38,10 +38,7 @@ export interface GetInsightImpactGraph extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetInsightImpactGraphRequest,
-    ) => Effect.Effect<
-      xray.GetInsightImpactGraphResult,
-      xray.GetInsightImpactGraphError
-    >
+    ) => Effect.Effect<xray.GetInsightImpactGraphResult, xray.GetInsightImpactGraphError>
   >
 > {}
 export const GetInsightImpactGraph = Binding.Service<GetInsightImpactGraph>(

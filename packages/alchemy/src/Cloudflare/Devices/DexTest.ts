@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -107,11 +106,8 @@ export type DeviceDexTest = Resource<
  *
  * Requires the DEX entitlement on the account (the API rejects writes
  * with `Forbidden` / `dex.api.entitlements.missing` otherwise).
- * @resource
- * @product Devices
- * @category Cloudflare One (Zero Trust)
- * @section Creating a DEX test
- * @example HTTP probe every 30 minutes
+ * ### Creating a DEX test
+ * **Example:** HTTP probe every 30 minutes
  * ```typescript
  * const test = yield* Cloudflare.Devices.DeviceDexTest("AppHealth", {
  *   data: { host: "https://app.example.com/health", kind: "http", method: "GET" },
@@ -120,7 +116,7 @@ export type DeviceDexTest = Resource<
  * });
  * ```
  *
- * @example Traceroute probe targeting specific device profiles
+ * **Example:** Traceroute probe targeting specific device profiles
  * ```typescript
  * const trace = yield* Cloudflare.Devices.DeviceDexTest("OriginTrace", {
  *   data: { host: "203.0.113.10", kind: "traceroute" },
@@ -131,6 +127,10 @@ export type DeviceDexTest = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/dex/tests/
+ *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  */
 export const DeviceDexTest = Resource<DeviceDexTest>(TypeId);
 
@@ -186,9 +186,7 @@ export const DeviceDexTestProvider = () =>
       const name = yield* createTestName(id, news.name);
 
       // 1. Observe — cached id is a hint; fall back to a name scan.
-      let observed = output?.testId
-        ? yield* observeTest(accountId, output.testId)
-        : undefined;
+      let observed = output?.testId ? yield* observeTest(accountId, output.testId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
@@ -201,13 +199,9 @@ export const DeviceDexTestProvider = () =>
           enabled: news.enabled ?? true,
           interval: news.interval,
           data: encodeData(news.data),
-          ...(news.description !== undefined
-            ? { description: news.description }
-            : {}),
+          ...(news.description !== undefined ? { description: news.description } : {}),
           ...(news.targeted !== undefined ? { targeted: news.targeted } : {}),
-          ...(news.targetPolicies !== undefined
-            ? { targetPolicies: news.targetPolicies }
-            : {}),
+          ...(news.targetPolicies !== undefined ? { targetPolicies: news.targetPolicies } : {}),
         });
         return toAttributes(created, accountId);
       }
@@ -230,13 +224,9 @@ export const DeviceDexTestProvider = () =>
         enabled: news.enabled ?? true,
         interval: news.interval,
         data: encodeData(news.data),
-        ...(news.description !== undefined
-          ? { description: news.description }
-          : {}),
+        ...(news.description !== undefined ? { description: news.description } : {}),
         ...(news.targeted !== undefined ? { targeted: news.targeted } : {}),
-        ...(news.targetPolicies !== undefined
-          ? { targetPolicies: news.targetPolicies }
-          : {}),
+        ...(news.targetPolicies !== undefined ? { targetPolicies: news.targetPolicies } : {}),
       });
       return toAttributes(updated, accountId);
     }),
@@ -282,9 +272,7 @@ const findByName = (accountId: string, name: string) =>
   zeroTrust
     .listDeviceDexTests({ accountId })
     .pipe(
-      Effect.map((list) =>
-        (list.result ?? []).find((t) => t.name === name && t.testId != null),
-      ),
+      Effect.map((list) => (list.result ?? []).find((t) => t.name === name && t.testId != null)),
     );
 
 const createTestName = (id: string, name: string | undefined) =>
@@ -304,18 +292,12 @@ const encodeData = (
   ...(data.method !== undefined ? { method: data.method } : {}),
 });
 
-const sameData = (
-  observed: ObservedDexTest["data"],
-  desired: DeviceDexTestData,
-): boolean =>
+const sameData = (observed: ObservedDexTest["data"], desired: DeviceDexTestData): boolean =>
   observed.host === desired.host &&
   observed.kind === desired.kind &&
   (observed.method ?? undefined) === desired.method;
 
-const toAttributes = (
-  test: ObservedDexTest,
-  accountId: string,
-): DeviceDexTestAttributes => ({
+const toAttributes = (test: ObservedDexTest, accountId: string): DeviceDexTestAttributes => ({
   testId: test.testId ?? "",
   accountId,
   name: test.name,

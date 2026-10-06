@@ -32,21 +32,13 @@ export interface StatementsOptions {
  * database, and the auth fields resolved from {@link StatementsOptions}
  * (cluster-only fields are excluded because this binding targets Serverless).
  */
-type InjectedFields =
-  | "WorkgroupName"
-  | "Database"
-  | "ClusterIdentifier"
-  | "SecretArn"
-  | "DbUser";
+type InjectedFields = "WorkgroupName" | "Database" | "ClusterIdentifier" | "SecretArn" | "DbUser";
 
 /**
  * `executeStatement` input minus the identifiers this binding injects
  * (workgroup, database, and the cluster-only fields).
  */
-export interface ExecuteStatementRequest extends Omit<
-  data.ExecuteStatementInput,
-  InjectedFields
-> {}
+export interface ExecuteStatementRequest extends Omit<data.ExecuteStatementInput, InjectedFields> {}
 
 /**
  * `batchExecuteStatement` input minus the identifiers this binding injects
@@ -61,34 +53,22 @@ export interface BatchExecuteStatementRequest extends Omit<
  * `describeTable` input minus the injected identifiers. Use
  * `ConnectedDatabase` to introspect a database other than the pinned one.
  */
-export interface DescribeTableRequest extends Omit<
-  data.DescribeTableRequest,
-  InjectedFields
-> {}
+export interface DescribeTableRequest extends Omit<data.DescribeTableRequest, InjectedFields> {}
 
 /**
  * `listDatabases` input minus the injected identifiers.
  */
-export interface ListDatabasesRequest extends Omit<
-  data.ListDatabasesRequest,
-  InjectedFields
-> {}
+export interface ListDatabasesRequest extends Omit<data.ListDatabasesRequest, InjectedFields> {}
 
 /**
  * `listSchemas` input minus the injected identifiers.
  */
-export interface ListSchemasRequest extends Omit<
-  data.ListSchemasRequest,
-  InjectedFields
-> {}
+export interface ListSchemasRequest extends Omit<data.ListSchemasRequest, InjectedFields> {}
 
 /**
  * `listTables` input minus the injected identifiers.
  */
-export interface ListTablesRequest extends Omit<
-  data.ListTablesRequest,
-  InjectedFields
-> {}
+export interface ListTablesRequest extends Omit<data.ListTablesRequest, InjectedFields> {}
 
 /**
  * `listStatements` input minus the workgroup identifier this binding injects.
@@ -103,9 +83,7 @@ export interface ListStatementsRequest extends Omit<
  * Raised when a statement reaches a terminal `FAILED` or `ABORTED` status
  * while a composite `query` waits for it to finish.
  */
-export class RedshiftStatementFailed extends Data.TaggedError(
-  "RedshiftStatementFailed",
-)<{
+export class RedshiftStatementFailed extends Data.TaggedError("RedshiftStatementFailed")<{
   /**
    * ID of the failed statement.
    */
@@ -139,19 +117,13 @@ export interface StatementsClient {
    */
   readonly executeBatch: (
     request: BatchExecuteStatementRequest,
-  ) => Effect.Effect<
-    data.BatchExecuteStatementOutput,
-    data.BatchExecuteStatementError
-  >;
+  ) => Effect.Effect<data.BatchExecuteStatementOutput, data.BatchExecuteStatementError>;
   /**
    * Describe a submitted statement (status, timing, row counts).
    */
   readonly describe: (
     id: string,
-  ) => Effect.Effect<
-    data.DescribeStatementResponse,
-    data.DescribeStatementError
-  >;
+  ) => Effect.Effect<data.DescribeStatementResponse, data.DescribeStatementError>;
   /**
    * Cancel a running statement. Returns `Status: true` when the cancellation
    * was accepted.
@@ -166,10 +138,7 @@ export interface StatementsClient {
   readonly getResult: (
     id: string,
     nextToken?: string,
-  ) => Effect.Effect<
-    data.GetStatementResultResponse,
-    data.GetStatementResultError
-  >;
+  ) => Effect.Effect<data.GetStatementResultResponse, data.GetStatementResultError>;
   /**
    * Fetch the cached result rows of a finished statement that ran with
    * `ResultFormat: "CSV"`. Pass `nextToken` to page through large result
@@ -178,10 +147,7 @@ export interface StatementsClient {
   readonly getResultV2: (
     id: string,
     nextToken?: string,
-  ) => Effect.Effect<
-    data.GetStatementResultV2Response,
-    data.GetStatementResultV2Error
-  >;
+  ) => Effect.Effect<data.GetStatementResultV2Response, data.GetStatementResultV2Error>;
   /**
    * Describe a table's columns from the database metadata.
    */
@@ -248,16 +214,15 @@ export interface StatementsClient {
  * Provide the implementation with
  * `Effect.provide(AWS.RedshiftData.StatementsHttp)`.
  *
- * @binding
- * @section Running SQL
- * @example Query a Workgroup
+ * ### Running SQL
+ * **Example:** Query a Workgroup
  * ```typescript
  * const sql = yield* RedshiftData.Statements(workgroup, { database: "dev" });
  * const result = yield* sql.query("SELECT 1 AS n");
  * // result.Records -> [[{ longValue: 1 }]]
  * ```
  *
- * @example Run a Batch of Statements in One Transaction
+ * **Example:** Run a Batch of Statements in One Transaction
  * ```typescript
  * const submitted = yield* sql.executeBatch({
  *   Sqls: ["CREATE TABLE IF NOT EXISTS events(id int)", "INSERT INTO events VALUES (1)"],
@@ -266,14 +231,14 @@ export interface StatementsClient {
  * const described = yield* sql.describe(submitted.Id!);
  * ```
  *
- * @example Cancel a Running Statement
+ * **Example:** Cancel a Running Statement
  * ```typescript
  * const submitted = yield* sql.execute({ Sql: "SELECT count(*) FROM big_table" });
  * const { Status } = yield* sql.cancel(submitted.Id!);
  * ```
  *
- * @section Browsing Metadata
- * @example List Databases, Schemas and Tables
+ * ### Browsing Metadata
+ * **Example:** List Databases, Schemas and Tables
  * ```typescript
  * const { Databases } = yield* sql.listDatabases();
  * const { Schemas } = yield* sql.listSchemas({ SchemaPattern: "public" });
@@ -281,10 +246,10 @@ export interface StatementsClient {
  * const { ColumnList } = yield* sql.describeTable({ Schema: "public", Table: "events" });
  * ```
  *
- * @example Serve Query Results from a Lambda Function
+ * **Example:** Serve Query Results from a Lambda Function
  * ```typescript
  * export default QueryFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const namespace = yield* RedshiftServerless.Namespace("Analytics", {
  *       dbName: "analytics",
@@ -310,16 +275,13 @@ export interface StatementsClient {
  *   }).pipe(Effect.provide(RedshiftData.StatementsHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface Statements extends Binding.Service<
   Statements,
   "AWS.RedshiftData.Statements",
-  (
-    workgroup: Workgroup,
-    options?: StatementsOptions,
-  ) => Effect.Effect<StatementsClient>
+  (workgroup: Workgroup, options?: StatementsOptions) => Effect.Effect<StatementsClient>
 > {}
 
-export const Statements = Binding.Service<Statements>(
-  "AWS.RedshiftData.Statements",
-);
+export const Statements = Binding.Service<Statements>("AWS.RedshiftData.Statements");

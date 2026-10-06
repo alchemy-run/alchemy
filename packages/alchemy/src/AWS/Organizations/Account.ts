@@ -12,6 +12,7 @@ import {
   collectPages,
   readResourceTags,
   retryOrganizations,
+  unredact,
   updateResourceTags,
 } from "./common.ts";
 
@@ -60,11 +61,11 @@ export interface Account extends Resource<
     /**
      * Friendly account name.
      */
-    name: organizations.Account["Name"] | undefined;
+    name: string | undefined;
     /**
      * Email address associated with the account.
      */
-    email: organizations.Account["Email"] | undefined;
+    email: string | undefined;
     /**
      * ID of the parent root or OU.
      */
@@ -101,9 +102,8 @@ export interface Account extends Resource<
  * until the account ID is assigned. Must be deployed from the organization's
  * management account. Changing `email` replaces the account; changing `name`
  * updates it in place.
- * @resource
- * @section Creating Member Accounts
- * @example Account Under the Organization Root
+ * ### Creating Member Accounts
+ * **Example:** Account Under the Organization Root
  * ```typescript
  * const root = yield* Root("Root", {});
  *
@@ -114,7 +114,7 @@ export interface Account extends Resource<
  * });
  * ```
  *
- * @example Account Inside an Organizational Unit
+ * **Example:** Account Inside an Organizational Unit
  * ```typescript
  * const workloads = yield* OrganizationalUnit("Workloads", {
  *   parentId: root.rootId,
@@ -129,6 +129,8 @@ export interface Account extends Resource<
  *   tags: { environment: "prod" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Account = Resource<Account>("AWS.Organizations.Account");
 
@@ -157,9 +159,7 @@ export const AccountProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Observe — locate the account by ID if known, else by
@@ -191,16 +191,20 @@ export const AccountProvider = () =>
             if (requestId) {
               const status = yield* waitForCreateAccount(requestId);
               yield* session.note(status.AccountId ?? requestId);
+              state = status.AccountId
+                ? yield* readAccountById(status.AccountId)
+                : yield* readAccountByNameOrEmail({
+                    name: news.name,
+                    email: news.email,
+                  });
+            } else {
+              state = yield* readAccountByNameOrEmail({
+                name: news.name,
+                email: news.email,
+              });
             }
-
-            state = yield* readAccountByNameOrEmail({
-              name: news.name,
-              email: news.email,
-            });
             if (!state) {
-              return yield* Effect.fail(
-                new Error(`account '${news.name}' not found after create`),
-              );
+              return yield* Effect.fail(new Error(`account '${news.name}' not found after create`));
             }
           }
 
@@ -242,9 +246,7 @@ export const AccountProvider = () =>
           const updated = yield* readAccountById(state.accountId);
           if (!updated) {
             return yield* Effect.fail(
-              new Error(
-                `account '${state.accountId}' not found after reconcile`,
-              ),
+              new Error(`account '${state.accountId}' not found after reconcile`),
             );
           }
 
@@ -279,15 +281,10 @@ export const AccountProvider = () =>
             const accounts = yield* listAccounts();
             const rows = yield* Effect.forEach(
               accounts,
-              (account) =>
-                account.Id
-                  ? readAccountById(account.Id)
-                  : Effect.succeed(undefined),
+              (account) => (account.Id ? readAccountById(account.Id) : Effect.succeed(undefined)),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is Account["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Account["Attributes"] => row !== undefined);
           }).pipe(
             Effect.catchTag("AWSOrganizationsNotInUseException", () =>
               Effect.succeed([] as Account["Attributes"][]),
@@ -317,9 +314,7 @@ const readAccountById = Effect.fn(function* (accountId: string) {
   const described = yield* retryOrganizations(
     organizations.describeAccount({ AccountId: accountId }).pipe(
       Effect.map((response) => response.Account),
-      Effect.catchTag("AccountNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("AccountNotFoundException", () => Effect.succeed(undefined)),
     ),
   );
 
@@ -337,8 +332,8 @@ const readAccountById = Effect.fn(function* (accountId: string) {
   return {
     accountId: described.Id,
     accountArn: described.Arn,
-    name: described.Name,
-    email: described.Email,
+    name: unredact(described.Name),
+    email: unredact(described.Email),
     parentId,
     status: described.Status,
     state: described.State,
@@ -354,7 +349,7 @@ const readAccountByNameOrEmail = Effect.fn(function* ({
 }: Pick<AccountProps, "name" | "email">) {
   const accounts = yield* listAccounts();
   const match = accounts.find(
-    (candidate) => candidate.Name === name || candidate.Email === email,
+    (candidate) => unredact(candidate.Name) === name || unredact(candidate.Email) === email,
   );
   return match?.Id ? yield* readAccountById(match.Id) : undefined;
 });
@@ -375,26 +370,19 @@ const waitForCreateAccount = (requestId: string) =>
 
     if (status.State === "FAILED") {
       return yield* Effect.fail(
-        new Error(
-          `account creation failed: ${status.FailureReason ?? "unknown failure"}`,
-        ),
+        new Error(`account creation failed: ${status.FailureReason ?? "unknown failure"}`),
       );
     }
 
     if (!status.AccountId) {
-      return yield* Effect.fail(
-        new Error("account creation succeeded without AccountId"),
-      );
+      return yield* Effect.fail(new Error("account creation succeeded without AccountId"));
     }
 
     return status;
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "CreateAccountInProgress",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(120),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(120)]),
     }),
   );
 
@@ -402,8 +390,7 @@ const retryAccountManagement = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error: any) =>
-        error?._tag === "TooManyRequestsException" ||
-        error?._tag === "InternalServerException",
+        error?._tag === "TooManyRequestsException" || error?._tag === "InternalServerException",
       schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
   );

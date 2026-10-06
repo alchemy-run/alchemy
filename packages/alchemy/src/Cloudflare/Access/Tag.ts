@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -41,24 +40,21 @@ export type Tag = Resource<
  *
  * The tag's name is its identity — there is nothing to update in place, so
  * renaming replaces the tag.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Tag
- * @example Tag with a generated name
+ * ### Creating a Tag
+ * **Example:** Tag with a generated name
  * ```typescript
  * const tag = yield* Cloudflare.Access.Tag("Team", {});
  * ```
  *
- * @example Tag with an explicit name
+ * **Example:** Tag with an explicit name
  * ```typescript
  * const tag = yield* Cloudflare.Access.Tag("Team", {
  *   name: "platform-team",
  * });
  * ```
  *
- * @section Tagging an Application
- * @example Reference from an Access application
+ * ### Tagging an Application
+ * **Example:** Reference from an Access application
  * ```typescript
  * const tag = yield* Cloudflare.Access.Tag("Team", { name: "platform-team" });
  *
@@ -68,12 +64,15 @@ export type Tag = Resource<
  *   tags: [tag.name],
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const Tag = Resource<Tag>("Cloudflare.Access.Tag");
 
 export const isTag = (value: unknown): value is Tag =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Tag";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Tag";
 
 export const TagProvider = () =>
   Provider.succeed(Tag, {
@@ -109,9 +108,7 @@ export const TagProvider = () =>
       const name = yield* createTagName(id, output?.name ?? olds?.name);
       const existing = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(
-          Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
       if (!existing) return undefined;
       return { name: existing.name, accountId: acct };
     }),
@@ -123,9 +120,7 @@ export const TagProvider = () =>
       // Observe — the name is the identity, so existence is the only state.
       const observed = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(
-          Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
 
       // Ensure — create when missing; a create race resolves to the same tag.
       if (!observed) {
@@ -135,9 +130,7 @@ export const TagProvider = () =>
             Effect.catch((err) =>
               zeroTrust
                 .getAccessTag({ accountId: acct, tagName: name })
-                .pipe(
-                  Effect.catchTag("AccessTagNotFound", () => Effect.fail(err)),
-                ),
+                .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.fail(err))),
             ),
           );
         return { name: created.name, accountId: acct };

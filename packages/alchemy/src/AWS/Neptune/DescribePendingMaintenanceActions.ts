@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * {@link ApplyPendingMaintenanceAction} for maintenance automation. Provide
  * the implementation with
  * `Effect.provide(AWS.Neptune.DescribePendingMaintenanceActionsHttp)`.
- * @binding
- * @section Maintenance
- * @example List Pending Maintenance
+ * ### Maintenance
+ * **Example:** List Pending Maintenance
  * ```typescript
  * const describePendingMaintenanceActions =
  *   yield* AWS.Neptune.DescribePendingMaintenanceActions();
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  * const page = yield* describePendingMaintenanceActions();
  * const pending = page.PendingMaintenanceActions ?? [];
  * ```
+ *
+ * @binding
  */
 export interface DescribePendingMaintenanceActions extends Binding.Service<
   DescribePendingMaintenanceActions,
@@ -34,7 +35,6 @@ export interface DescribePendingMaintenanceActions extends Binding.Service<
     >
   >
 > {}
-export const DescribePendingMaintenanceActions =
-  Binding.Service<DescribePendingMaintenanceActions>(
-    "AWS.Neptune.DescribePendingMaintenanceActions",
-  );
+export const DescribePendingMaintenanceActions = Binding.Service<DescribePendingMaintenanceActions>(
+  "AWS.Neptune.DescribePendingMaintenanceActions",
+);

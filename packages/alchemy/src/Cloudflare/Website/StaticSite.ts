@@ -7,11 +7,7 @@ import type { Input, InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { renamedFrom } from "../../Rename.ts";
-import {
-  effectClass,
-  isYieldableEffectLike,
-  type YieldableEffectLike,
-} from "../../Util/effect.ts";
+import { effectClass, isYieldableEffectLike, type YieldableEffectLike } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
@@ -78,10 +74,10 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
 }
 
 type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
-  [binding in keyof NormalizedBindings<
+  [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
     Bindings,
     WorkerAssetsConfig
-  >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+  >[binding];
 }>;
 
 /**
@@ -96,17 +92,14 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * For Vite-based projects, prefer `Cloudflare.Website.Vite` which handles
  * building automatically.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Basic Usage
+ * ### Basic Usage
  * Point `command` at your build script and `outdir` at where it writes
  * output. Alchemy runs the command, hashes the output, and deploys it as
  * an assets-only Worker — no Worker code is uploaded, and Cloudflare's
  * asset layer serves every request itself.
  *
- * @example Deploying a Hugo site
+ * **Example:** Deploying a Hugo site
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
@@ -125,7 +118,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * };
  * ```
  *
- * @example Custom Worker in front of the assets
+ * **Example:** Custom Worker in front of the assets
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
@@ -134,11 +127,11 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Asset Configuration
+ * ### Asset Configuration
  * Use `assets` to control how Cloudflare handles routing for
  * your static files — HTML handling, not-found behavior, etc.
  *
- * @example SPA-style routing
+ * **Example:** SPA-style routing
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("App", {
  *   command: "npm run build",
@@ -151,11 +144,11 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Building from a Subdirectory
+ * ### Building from a Subdirectory
  * Set `cwd` to run the build command in a subdirectory (e.g. a
  * monorepo package). `outdir` is resolved relative to `cwd`.
  *
- * @example Building a frontend in a monorepo
+ * **Example:** Building a frontend in a monorepo
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Web", {
  *   cwd: "apps/web",
@@ -165,11 +158,11 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, all non-gitignored files are hashed to decide whether
  * the build should re-run. Use `memo` to narrow the scope.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Docs", {
  *   command: "npm run build",
@@ -181,7 +174,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @example Rebuilding when a sibling workspace package changes
+ * **Example:** Rebuilding when a sibling workspace package changes
  * The default scope only hashes files under `cwd` (plus the nearest
  * lockfile), so edits to a sibling workspace package the app imports do
  * not retrigger the build on their own. Add the sibling's sources with a
@@ -200,13 +193,13 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `StaticSite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both
  * an `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Blog extends Cloudflare.Website.StaticSite<Blog>()("Blog", {
  *   command: "hugo --minify",
@@ -216,6 +209,10 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * const site = yield* Blog;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const StaticSite: {
   <Self>(): {
@@ -223,11 +220,7 @@ export const StaticSite: {
       id: string,
       propsEff:
         | InputProps<StaticSiteProps<Bindings>, "dev">
-        | Effect.Effect<
-            InputProps<StaticSiteProps<Bindings>, "dev">,
-            never,
-            Req
-          >,
+        | Effect.Effect<InputProps<StaticSiteProps<Bindings>, "dev">, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): StaticSiteWorker<Bindings>;
     };
@@ -243,10 +236,7 @@ export const StaticSite: {
     ? (id: string, propsEff: any) => effectClass(makeStaticSite(id, propsEff))
     : makeStaticSite(id, propsEff)) as any;
 
-const makeStaticSite = <
-  const Bindings extends WorkerBindingProps = {},
-  Req = never,
->(
+const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = never>(
   id: string,
   propsEff:
     | InputProps<StaticSiteProps<Bindings>, "dev">
@@ -271,9 +261,7 @@ const makeStaticSite = <
       ctx.dev && props.dev
         ? yield* Command.Dev("Dev", {
             command: props.dev.command,
-            cwd:
-              props.dev.cwd ??
-              (typeof props.cwd === "string" ? props.cwd : undefined),
+            cwd: props.dev.cwd ?? (typeof props.cwd === "string" ? props.cwd : undefined),
             env: yield* serializeEnv(props.dev.env ?? props.env),
           }).pipe(
             Namespace.push(id),
@@ -341,11 +329,7 @@ const makeStaticSite = <
  * - remaining plain values (`null`, numbers, JSON objects) are stringified
  */
 const serializeEnv = Effect.fn(function* (
-  env: Input<
-    | WorkerBindingProps
-    | Record<string, string | Redacted.Redacted<string>>
-    | undefined
-  >,
+  env: Input<WorkerBindingProps | Record<string, string | Redacted.Redacted<string>> | undefined>,
 ) {
   const entries: [string, unknown][] = [];
   for (const [k, v] of Object.entries(env ?? {})) {
@@ -363,9 +347,7 @@ const serializeEnv = Effect.fn(function* (
       continue;
     } else if (isYieldableEffectLike(v)) {
       const resolved = serializeEnvValue(
-        yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(
-          Effect.orDie,
-        ),
+        yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(Effect.orDie),
       );
       if (resolved === undefined) continue;
       entries.push([k, resolved]);
@@ -377,19 +359,14 @@ const serializeEnv = Effect.fn(function* (
       entries.push([k, JSON.stringify(v)]);
     }
   }
-  return Object.fromEntries(entries) as Record<
-    string,
-    string | Redacted.Redacted<string>
-  >;
+  return Object.fromEntries(entries) as Record<string, string | Redacted.Redacted<string>>;
 });
 
 /**
  * Serialize one resolved env value for the build/dev subprocess: strings and
  * `Redacted` pass through, everything else becomes JSON.
  */
-const serializeEnvValue = (
-  value: unknown,
-): string | Redacted.Redacted<string> | undefined =>
+const serializeEnvValue = (value: unknown): string | Redacted.Redacted<string> | undefined =>
   value === undefined
     ? undefined
     : typeof value === "string"

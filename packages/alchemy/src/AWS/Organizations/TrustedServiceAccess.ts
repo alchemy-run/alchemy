@@ -37,16 +37,15 @@ export interface TrustedServiceAccess extends Resource<
  * Typically paired with a {@link DelegatedAdministrator} that hands day-to-day
  * administration of the service to a member account. Existence-only resource:
  * changing `servicePrincipal` replaces it.
- * @resource
- * @section Enabling Trusted Access
- * @example Enable IAM Identity Center
+ * ### Enabling Trusted Access
+ * **Example:** Enable IAM Identity Center
  * ```typescript
  * yield* TrustedServiceAccess("SsoTrustedAccess", {
  *   servicePrincipal: "sso.amazonaws.com",
  * });
  * ```
  *
- * @example Trusted Access Plus a Delegated Administrator
+ * **Example:** Trusted Access Plus a Delegated Administrator
  * ```typescript
  * const guardDutyAccess = yield* TrustedServiceAccess("GuardDutyAccess", {
  *   servicePrincipal: "guardduty.amazonaws.com",
@@ -57,6 +56,8 @@ export interface TrustedServiceAccess extends Resource<
  *   servicePrincipal: guardDutyAccess.servicePrincipal,
  * });
  * ```
+ *
+ * @resource
  */
 export const TrustedServiceAccess = Resource<TrustedServiceAccess>(
   "AWS.Organizations.TrustedServiceAccess",
@@ -75,8 +76,7 @@ export const TrustedServiceAccessProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const servicePrincipal =
-            output?.servicePrincipal ?? olds?.servicePrincipal;
+          const servicePrincipal = output?.servicePrincipal ?? olds?.servicePrincipal;
           if (servicePrincipal === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
             // (they deserialize as `undefined`) — report "not found" so the
@@ -168,20 +168,15 @@ export const TrustedServiceAccessProvider = () =>
     }),
   );
 
-const readTrustedServiceAccess = Effect.fn(function* (
-  servicePrincipal: string,
-) {
+const readTrustedServiceAccess = Effect.fn(function* (servicePrincipal: string) {
   const principals = yield* retryOrganizations(
     collectPages(
-      (NextToken) =>
-        organizations.listAWSServiceAccessForOrganization({ NextToken }),
+      (NextToken) => organizations.listAWSServiceAccessForOrganization({ NextToken }),
       (page) => page.EnabledServicePrincipals,
     ),
   );
 
-  const match = principals.find(
-    (candidate) => candidate.ServicePrincipal === servicePrincipal,
-  );
+  const match = principals.find((candidate) => candidate.ServicePrincipal === servicePrincipal);
 
   return match
     ? ({

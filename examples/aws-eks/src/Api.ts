@@ -1,9 +1,9 @@
 import * as AWS from "alchemy/AWS";
 import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { EntriesTable, GuestbookCluster, GuestbookNamespace } from "./infra.ts";
 
 /**
@@ -102,10 +102,7 @@ export default Api.make(
             Key: { pk: { S: `entry#${match[1]}` } },
           });
           if (!result.Item) {
-            return yield* HttpServerResponse.json(
-              { error: "not found" },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
           }
           return yield* HttpServerResponse.json({
             id: match[1],
@@ -118,9 +115,7 @@ export default Api.make(
         if (request.method === "POST" && url.pathname === "/entries") {
           const author = url.searchParams.get("author") ?? "anonymous";
           const message = url.searchParams.get("message") ?? "";
-          const id = yield* Effect.sync(() =>
-            crypto.randomUUID().slice(0, 8),
-          );
+          const id = yield* Effect.sync(() => crypto.randomUUID().slice(0, 8));
           yield* putItem({
             Item: {
               pk: { S: `entry#${id}` },
@@ -140,11 +135,7 @@ export default Api.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        AWS.DynamoDB.PutItemHttp,
-        AWS.DynamoDB.GetItemHttp,
-        AWS.DynamoDB.ScanHttp,
-      ),
+      Layer.mergeAll(AWS.DynamoDB.PutItemHttp, AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.ScanHttp),
     ),
   ),
 );

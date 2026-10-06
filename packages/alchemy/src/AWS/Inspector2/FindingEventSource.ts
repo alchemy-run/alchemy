@@ -69,8 +69,8 @@ export interface FindingEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Findings
- * @example Alert on Critical Findings
+ * ### Consuming Findings
+ * **Example:** Alert on Critical Findings
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -105,12 +105,8 @@ export const consumeFindings = <StreamReq = never, Req = never>(
       ...(props.severities !== undefined || props.statuses !== undefined
         ? {
             detail: {
-              ...(props.severities !== undefined
-                ? { severity: [...props.severities] }
-                : {}),
-              ...(props.statuses !== undefined
-                ? { status: [...props.statuses] }
-                : {}),
+              ...(props.severities !== undefined ? { severity: [...props.severities] } : {}),
+              ...(props.statuses !== undefined ? { status: [...props.statuses] } : {}),
             },
           }
         : {}),

@@ -6,11 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  canonicalizePolicy,
-  retryWhileConflict,
-  stringifyPolicy,
-} from "./internal.ts";
+import { canonicalizePolicy, retryWhileConflict, stringifyPolicy } from "./internal.ts";
 import type { SecurityPolicyDocument } from "./SecurityPolicy.ts";
 
 export interface AccessPolicyProps {
@@ -69,9 +65,8 @@ export interface AccessPolicy extends Resource<
  * requires a data access policy granting the Knowledge Base's service role
  * `aoss:APIAccessAll` on the collection and its indexes.
  *
- * @resource
- * @section Creating Access Policies
- * @example Grant a Role Full Data Access
+ * ### Creating Access Policies
+ * **Example:** Grant a Role Full Data Access
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -96,10 +91,10 @@ export interface AccessPolicy extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
-export const AccessPolicy = Resource<AccessPolicy>(
-  "AWS.OpenSearchServerless.AccessPolicy",
-);
+export const AccessPolicy = Resource<AccessPolicy>("AWS.OpenSearchServerless.AccessPolicy");
 
 // OpenSearch Serverless only defines the "data" access-policy type.
 const ACCESS_POLICY_TYPE = "data";
@@ -113,8 +108,7 @@ export const AccessPolicyProvider = () =>
         props: { policyName?: string | undefined },
       ) {
         return (
-          props.policyName ??
-          (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
+          props.policyName ?? (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
         );
       });
 
@@ -137,9 +131,7 @@ export const AccessPolicyProvider = () =>
               .flatMap((page) => page.accessPolicySummaries ?? [])
               .filter(
                 (s) =>
-                  s.name !== undefined &&
-                  s.type !== undefined &&
-                  s.policyVersion !== undefined,
+                  s.name !== undefined && s.type !== undefined && s.policyVersion !== undefined,
               )
               .map((s) => ({
                 policyName: s.name!,
@@ -150,15 +142,10 @@ export const AccessPolicyProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.policyName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* aoss
             .getAccessPolicy({ type: ACCESS_POLICY_TYPE, name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found?.accessPolicyDetail === undefined) {
             return undefined;
           }
@@ -182,14 +169,10 @@ export const AccessPolicyProvider = () =>
           const policy = stringifyPolicy(news.policy);
 
           // 1. OBSERVE
-          let detail = yield* aoss
-            .getAccessPolicy({ type: ACCESS_POLICY_TYPE, name })
-            .pipe(
-              Effect.map((r) => r.accessPolicyDetail),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+          let detail = yield* aoss.getAccessPolicy({ type: ACCESS_POLICY_TYPE, name }).pipe(
+            Effect.map((r) => r.accessPolicyDetail),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          );
 
           // 2. ENSURE
           if (detail === undefined) {
@@ -210,11 +193,9 @@ export const AccessPolicyProvider = () =>
               );
           } else {
             // 3. SYNC
-            const policyDrift =
-              canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
+            const policyDrift = canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
             const descriptionDrift =
-              news.description !== undefined &&
-              news.description !== detail.description;
+              news.description !== undefined && news.description !== detail.description;
             if (policyDrift || descriptionDrift) {
               detail = yield* aoss
                 .updateAccessPolicy({
@@ -245,9 +226,7 @@ export const AccessPolicyProvider = () =>
               type: ACCESS_POLICY_TYPE,
               name: output.policyName,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

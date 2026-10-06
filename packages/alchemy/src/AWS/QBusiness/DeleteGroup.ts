@@ -20,14 +20,15 @@ export interface DeleteGroupRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.DeleteGroupHttp)`.
  *
- * @binding
- * @section Principal Mapping
- * @example Delete a Group Mapping
+ * ### Principal Mapping
+ * **Example:** Delete a Group Mapping
  * ```typescript
  * const deleteGroup = yield* AWS.QBusiness.DeleteGroup(index);
  *
  * yield* deleteGroup({ groupName: "engineering" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteGroup extends Binding.Service<
   DeleteGroup,
@@ -37,12 +38,7 @@ export interface DeleteGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteGroupRequest,
-    ) => Effect.Effect<
-      qbusiness.DeleteGroupResponse,
-      qbusiness.DeleteGroupError
-    >
+    ) => Effect.Effect<qbusiness.DeleteGroupResponse, qbusiness.DeleteGroupError>
   >
 > {}
-export const DeleteGroup = Binding.Service<DeleteGroup>(
-  "AWS.QBusiness.DeleteGroup",
-);
+export const DeleteGroup = Binding.Service<DeleteGroup>("AWS.QBusiness.DeleteGroup");

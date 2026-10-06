@@ -48,9 +48,8 @@ export interface LFTag extends Resource<
  * Creating LF-tags requires the caller to be a data lake administrator — see
  * {@link DataLakeSettings | AWS.LakeFormation.DataLakeSettings}.
  *
- * @resource
- * @section Creating LF-Tags
- * @example Environment Tag
+ * ### Creating LF-Tags
+ * **Example:** Environment Tag
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -59,6 +58,8 @@ export interface LFTag extends Resource<
  *   tagValues: ["dev", "staging", "prod"],
  * });
  * ```
+ *
+ * @resource
  */
 export const LFTag = Resource<LFTag>("AWS.LakeFormation.LFTag");
 
@@ -66,17 +67,10 @@ export const LFTagProvider = () =>
   Provider.effect(
     LFTag,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        tagKey: string,
-        catalogId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (tagKey: string, catalogId: string | undefined) {
         return yield* lf
           .getLFTag({ TagKey: tagKey, CatalogId: catalogId })
-          .pipe(
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return LFTag.Provider.of({
@@ -85,9 +79,7 @@ export const LFTagProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            const pages = yield* lf.listLFTags
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lf.listLFTags.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.LFTags ?? [])
               .map((tag) => ({
@@ -166,9 +158,7 @@ export const LFTagProvider = () =>
               TagKey: output.tagKey,
               CatalogId: output.catalogId,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.void));
         }),
       });
     }),

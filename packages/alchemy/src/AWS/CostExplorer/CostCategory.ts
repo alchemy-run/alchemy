@@ -77,9 +77,8 @@ export interface CostCategory extends Resource<
  * regardless of the stack region. Rules, the default value, and split-charge
  * rules are mutable in place; changing the name replaces the category.
  *
- * @resource
- * @section Creating Cost Categories
- * @example Categorize by linked account name
+ * ### Creating Cost Categories
+ * **Example:** Categorize by linked account name
  * ```typescript
  * import * as CostExplorer from "alchemy/AWS/CostExplorer";
  *
@@ -101,7 +100,7 @@ export interface CostCategory extends Resource<
  * });
  * ```
  *
- * @example Categorize by cost allocation tag
+ * **Example:** Categorize by cost allocation tag
  * ```typescript
  * const category = yield* CostExplorer.CostCategory("Team", {
  *   rules: [
@@ -115,10 +114,10 @@ export interface CostCategory extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
-export const CostCategory = Resource<CostCategory>(
-  "AWS.CostExplorer.CostCategory",
-);
+export const CostCategory = Resource<CostCategory>("AWS.CostExplorer.CostCategory");
 
 const DEFAULT_RULE_VERSION = "CostCategoryExpression.v1";
 
@@ -126,10 +125,7 @@ export const CostCategoryProvider = () =>
   Provider.effect(
     CostCategory,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 50 }));
       });
 
@@ -140,9 +136,7 @@ export const CostCategoryProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.CostCategory),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       // Fallback observation when no ARN is cached: scan currently-effective
@@ -150,9 +144,7 @@ export const CostCategoryProvider = () =>
       const findByName = (name: string) =>
         pinCe(
           ce.listCostCategoryDefinitions.items({}).pipe(
-            Stream.filter(
-              (r) => r.Name === name && r.EffectiveEnd === undefined,
-            ),
+            Stream.filter((r) => r.Name === name && r.EffectiveEnd === undefined),
             Stream.take(1),
             Stream.runCollect,
           ),
@@ -208,17 +200,12 @@ export const CostCategoryProvider = () =>
             : yield* findByName(yield* createName(id, olds ?? {}));
           if (live === undefined) return undefined;
           const attrs = yield* toAttrs(live);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           // UpdateCostCategoryDefinition cannot rename — name change replaces.
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news ?? {}))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -257,8 +244,7 @@ export const CostCategoryProvider = () =>
             const needsUpdate =
               JSON.stringify(observed.Rules) !== JSON.stringify(news.rules) ||
               observed.DefaultValue !== news.defaultValue ||
-              JSON.stringify(observed.SplitChargeRules) !==
-                JSON.stringify(news.splitChargeRules) ||
+              JSON.stringify(observed.SplitChargeRules) !== JSON.stringify(news.splitChargeRules) ||
               observed.RuleVersion !== ruleVersion;
             if (needsUpdate) {
               const updated = yield* pinCe(
@@ -290,9 +276,7 @@ export const CostCategoryProvider = () =>
             ce.deleteCostCategoryDefinition({
               CostCategoryArn: output.costCategoryArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

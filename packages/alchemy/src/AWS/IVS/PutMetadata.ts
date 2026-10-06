@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Channel } from "./Channel.ts";
 
-export interface PutMetadataRequest extends Omit<
-  ivs.PutMetadataRequest,
-  "channelArn"
-> {}
+export interface PutMetadataRequest extends Omit<ivs.PutMetadataRequest, "channelArn"> {}
 
 /**
  * Runtime binding for `ivs:PutMetadata`.
@@ -18,9 +15,8 @@ export interface PutMetadataRequest extends Omit<
  * requests per second per channel. The channel ARN is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.IVS.PutMetadataHttp)`.
- * @binding
- * @section Embedding Timed Metadata
- * @example Push a Poll Question to Viewers
+ * ### Embedding Timed Metadata
+ * **Example:** Push a Poll Question to Viewers
  * ```typescript
  * // init — bind the operation to the channel
  * const putMetadata = yield* AWS.IVS.PutMetadata(channel);
@@ -30,6 +26,8 @@ export interface PutMetadataRequest extends Omit<
  *   metadata: JSON.stringify({ question: "Who wins?", options: ["A", "B"] }),
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutMetadata extends Binding.Service<
   PutMetadata,
@@ -37,9 +35,7 @@ export interface PutMetadata extends Binding.Service<
   (
     channel: Channel,
   ) => Effect.Effect<
-    (
-      request: PutMetadataRequest,
-    ) => Effect.Effect<ivs.PutMetadataResponse, ivs.PutMetadataError>
+    (request: PutMetadataRequest) => Effect.Effect<ivs.PutMetadataResponse, ivs.PutMetadataError>
   >
 > {}
 export const PutMetadata = Binding.Service<PutMetadata>("AWS.IVS.PutMetadata");

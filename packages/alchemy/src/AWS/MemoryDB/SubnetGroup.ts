@@ -61,15 +61,16 @@ export interface SubnetGroup extends Resource<
  *
  * Subnet groups are free and provision instantly. A cluster references one by
  * name via `subnetGroupName`.
- * @resource
- * @section Creating a Subnet Group
- * @example Subnet Group Spanning Two Subnets
+ * ### Creating a Subnet Group
+ * **Example:** Subnet Group Spanning Two Subnets
  * ```typescript
  * const subnetGroup = yield* SubnetGroup("CacheSubnets", {
  *   description: "MemoryDB cluster subnets",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
  * ```
+ *
+ * @resource
  */
 export const SubnetGroup = Resource<SubnetGroup>("AWS.MemoryDB.SubnetGroup");
 
@@ -85,19 +86,13 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeSubnetGroups({ SubnetGroupName: name })
-          .pipe(
-            Effect.catchTag("SubnetGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.SubnetGroups?.[0];
       });
 
       const toAttrs = Effect.fn(function* (group: memorydb.SubnetGroup) {
         if (!group.Name || !group.ARN) {
-          return yield* Effect.fail(
-            new Error(`Subnet group '${group.Name}' is missing its ARN`),
-          );
+          return yield* Effect.fail(new Error(`Subnet group '${group.Name}' is missing its ARN`));
         }
         return {
           subnetGroupName: group.Name,
@@ -125,15 +120,11 @@ export const SubnetGroupProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.subnetGroupName ??
-            (yield* toName(id, olds ?? { subnetIds: [] }));
+          const name = output?.subnetGroupName ?? (yield* toName(id, olds ?? { subnetIds: [] }));
           const group = yield* readGroup(name);
           if (!group?.ARN) return undefined;
           const attrs = yield* toAttrs(group);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -157,18 +148,11 @@ export const SubnetGroupProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "SubnetGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("SubnetGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Subnet group '${name}' not found after create`),
-            );
+            return yield* Effect.fail(new Error(`Subnet group '${name}' not found after create`));
           }
 
           // 3. Sync — apply description / subnet delta from OBSERVED state.
@@ -176,10 +160,7 @@ export const SubnetGroupProvider = () =>
             SubnetGroupName: name,
           };
           let mutated = false;
-          if (
-            props.description !== undefined &&
-            props.description !== observed.Description
-          ) {
+          if (props.description !== undefined && props.description !== observed.Description) {
             update.Description = props.description;
             mutated = true;
           }
@@ -219,18 +200,13 @@ export const SubnetGroupProvider = () =>
           // A subnet group still attached to a cluster rejects deletion with
           // SubnetGroupInUseFault — retry (bounded) while the cluster releases
           // it. NotFound is success (idempotent delete).
-          yield* memorydb
-            .deleteSubnetGroup({ SubnetGroupName: output.subnetGroupName })
-            .pipe(
-              Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "SubnetGroupInUseFault",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(12),
-                ]),
-              }),
-            );
+          yield* memorydb.deleteSubnetGroup({ SubnetGroupName: output.subnetGroupName }).pipe(
+            Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "SubnetGroupInUseFault",
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
+            }),
+          );
         }),
 
         list: () =>
@@ -239,14 +215,11 @@ export const SubnetGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.SubnetGroups ?? []).filter(
-                  (group) =>
-                    group.Name !== undefined && group.ARN !== undefined,
+                  (group) => group.Name !== undefined && group.ARN !== undefined,
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((group) => toAttrs(group), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((group) => toAttrs(group), { concurrency: 4 })),
           ),
       };
     }),

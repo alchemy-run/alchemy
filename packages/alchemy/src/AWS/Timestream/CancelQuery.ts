@@ -14,9 +14,8 @@ export interface CancelQueryRequest extends TSQ.CancelQueryRequest {}
  * Provide `Timestream.CancelQueryHttp` on the Function to implement the
  * binding.
  *
- * @binding
- * @section Querying Data
- * @example Cancel a running query
+ * ### Querying Data
+ * **Example:** Cancel a running query
  * ```typescript
  * // init — account-level binding, no resource argument
  * const cancelQuery = yield* Timestream.CancelQuery();
@@ -25,6 +24,8 @@ export interface CancelQueryRequest extends TSQ.CancelQueryRequest {}
  * const result = yield* cancelQuery({ QueryId: queryId });
  * // result.CancellationMessage reports whether the query was still running
  * ```
+ *
+ * @binding
  */
 export interface CancelQuery extends Binding.Service<
   CancelQuery,
@@ -32,13 +33,8 @@ export interface CancelQuery extends Binding.Service<
   () => Effect.Effect<
     (
       request: CancelQueryRequest,
-    ) => Effect.Effect<
-      TSQ.CancelQueryResponse,
-      TSQ.CancelQueryError | TSQ.DescribeEndpointsError
-    >
+    ) => Effect.Effect<TSQ.CancelQueryResponse, TSQ.CancelQueryError | TSQ.DescribeEndpointsError>
   >
 > {}
 
-export const CancelQuery = Binding.Service<CancelQuery>(
-  "AWS.Timestream.CancelQuery",
-);
+export const CancelQuery = Binding.Service<CancelQuery>("AWS.Timestream.CancelQuery");

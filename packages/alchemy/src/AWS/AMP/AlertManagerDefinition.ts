@@ -38,9 +38,8 @@ export interface AlertManagerDefinition extends Resource<
  * workspace — configures how firing alerts are grouped, routed, and
  * dispatched to receivers (SNS, etc.). A workspace has at most one.
  *
- * @resource
- * @section Creating an Alert Manager Definition
- * @example Basic Definition
+ * ### Creating an Alert Manager Definition
+ * **Example:** Basic Definition
  * ```typescript
  * const workspace = yield* AMP.Workspace("Metrics", {});
  * const alerts = yield* AMP.AlertManagerDefinition("Alerts", {
@@ -52,6 +51,8 @@ export interface AlertManagerDefinition extends Resource<
  *     - name: default`,
  * });
  * ```
+ *
+ * @resource
  */
 export const AlertManagerDefinition = Resource<AlertManagerDefinition>(
   "AWS.AMP.AlertManagerDefinition",
@@ -65,11 +66,7 @@ export const AlertManagerDefinitionProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeAlertManagerDefinition({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.alertManagerDefinition;
       });
 
@@ -84,10 +81,7 @@ export const AlertManagerDefinitionProvider = () =>
         return yield* amp.describeAlertManagerDefinition({ workspaceId }).pipe(
           Effect.map((r) => r.alertManagerDefinition),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(20),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             until: (d) => d.status.statusCode === "ACTIVE",
           }),
         );
@@ -129,9 +123,7 @@ export const AlertManagerDefinitionProvider = () =>
             });
           } else {
             const currentDefinition =
-              existing.data !== undefined
-                ? yield* decodeDefinition(existing.data)
-                : undefined;
+              existing.data !== undefined ? yield* decodeDefinition(existing.data) : undefined;
             if (currentDefinition !== news!.definition) {
               yield* amp.putAlertManagerDefinition({
                 workspaceId,
@@ -148,18 +140,13 @@ export const AlertManagerDefinitionProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* amp
-            .deleteAlertManagerDefinition({ workspaceId: output.workspaceId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* amp.deleteAlertManagerDefinition({ workspaceId: output.workspaceId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         // Singleton sub-resource keyed by its parent workspace.

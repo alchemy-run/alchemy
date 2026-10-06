@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link SearchTablesByLFTags}.
  */
-export interface SearchTablesByLFTagsRequest
-  extends lf.SearchTablesByLFTagsRequest {}
+export interface SearchTablesByLFTagsRequest extends lf.SearchTablesByLFTagsRequest {}
 
 /**
  * Runtime binding for `lakeformation:SearchTablesByLFTags`.
@@ -14,9 +13,8 @@ export interface SearchTablesByLFTagsRequest
  * Finds Glue tables whose LF-tags match an expression — tag-driven data
  * discovery at runtime. Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.SearchTablesByLFTagsHttp)`.
- * @binding
- * @section Searching by LF-Tags
- * @example Find Tables Tagged pii
+ * ### Searching by LF-Tags
+ * **Example:** Find Tables Tagged pii
  * ```typescript
  * // init — account-level binding takes no resource
  * const searchTables = yield* AWS.LakeFormation.SearchTablesByLFTags();
@@ -26,6 +24,8 @@ export interface SearchTablesByLFTagsRequest
  *   Expression: [{ TagKey: "classification", TagValues: ["pii"] }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface SearchTablesByLFTags extends Binding.Service<
   SearchTablesByLFTags,
@@ -33,10 +33,7 @@ export interface SearchTablesByLFTags extends Binding.Service<
   () => Effect.Effect<
     (
       request: SearchTablesByLFTagsRequest,
-    ) => Effect.Effect<
-      lf.SearchTablesByLFTagsResponse,
-      lf.SearchTablesByLFTagsError
-    >
+    ) => Effect.Effect<lf.SearchTablesByLFTagsResponse, lf.SearchTablesByLFTagsError>
   >
 > {}
 

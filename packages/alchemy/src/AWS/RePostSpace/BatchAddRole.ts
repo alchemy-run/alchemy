@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface BatchAddRoleRequest extends Omit<
-  repostspace.BatchAddRoleInput,
-  "spaceId"
-> {}
+export interface BatchAddRoleRequest extends Omit<repostspace.BatchAddRoleInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `BatchAddRole` operation (IAM action
@@ -18,9 +15,8 @@ export interface BatchAddRoleRequest extends Omit<
  * output's `errors` list rather than failing the whole call.
  * Provide the implementation with
  * `Effect.provide(AWS.RePostSpace.BatchAddRoleHttp)`.
- * @binding
- * @section Managing Roles
- * @example Grant the EXPERT role to users
+ * ### Managing Roles
+ * **Example:** Grant the EXPERT role to users
  * ```typescript
  * const batchAddRole = yield* AWS.RePostSpace.BatchAddRole(space);
  *
@@ -30,6 +26,8 @@ export interface BatchAddRoleRequest extends Omit<
  * });
  * console.log(result.addedAccessorIds, result.errors);
  * ```
+ *
+ * @binding
  */
 export interface BatchAddRole extends Binding.Service<
   BatchAddRole,
@@ -39,12 +37,7 @@ export interface BatchAddRole extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchAddRoleRequest,
-    ) => Effect.Effect<
-      repostspace.BatchAddRoleOutput,
-      repostspace.BatchAddRoleError
-    >
+    ) => Effect.Effect<repostspace.BatchAddRoleOutput, repostspace.BatchAddRoleError>
   >
 > {}
-export const BatchAddRole = Binding.Service<BatchAddRole>(
-  "AWS.RePostSpace.BatchAddRole",
-);
+export const BatchAddRole = Binding.Service<BatchAddRole>("AWS.RePostSpace.BatchAddRole");

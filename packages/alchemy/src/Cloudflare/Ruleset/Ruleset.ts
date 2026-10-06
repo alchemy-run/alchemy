@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 import type { Attributes, Zone } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-export type Phase = rulesets.CreateRulesetForZoneRequest["phase"];
+export type Phase = NonNullable<rulesets.CreateRulesetForZoneRequest["phase"]>;
 export type Rule = NonNullable<rulesets.PutPhasForZoneRequest["rules"]>[number];
 export type OutputRule = Omit<
   NonNullable<rulesets.GetPhasResponse["rules"]>[number],
@@ -78,11 +78,8 @@ export type Ruleset = Resource<
  *
  * This resource owns the entire ruleset for a phase entrypoint. Rules managed
  * elsewhere in the same phase can be overwritten on deploy.
- * @resource
- * @product Rulesets
- * @category Rules & Configuration
- * @section WAF Rules
- * @example Block probes in the custom firewall phase
+ * ### WAF Rules
+ * **Example:** Block probes in the custom firewall phase
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
  * const waf = yield* Cloudflare.Ruleset.Ruleset("WafRules", {
@@ -97,6 +94,10 @@ export type Ruleset = Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
+ * @product Rulesets
+ * @category Rules & Configuration
  */
 export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset", {
   aliases: ["Cloudflare.Ruleset"],
@@ -141,9 +142,7 @@ export const RulesetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const zoneId = output?.zoneId ?? zoneIdOf(news.zone);
       if (zoneId === undefined) {
-        return yield* Effect.fail(
-          new Error("Cloudflare Ruleset: zone id is not resolved"),
-        );
+        return yield* Effect.fail(new Error("Cloudflare Ruleset: zone id is not resolved"));
       }
       const name = yield* createRulesetName(id, news.name ?? output?.name);
       const ruleset = yield* rulesets.putPhasForZone({
@@ -165,9 +164,7 @@ export const RulesetProvider = () =>
           zoneId: output.zoneId,
           rulesetPhase: output.phase ?? olds.phase,
         })
-        .pipe(
-          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
       if (entrypoint === undefined) return;
       yield* rulesets
         .deleteRulesetForZone({
@@ -217,9 +214,7 @@ export const RulesetProvider = () =>
                       rulesetPhase: entry.phase,
                     })
                     .pipe(
-                      Effect.map((ruleset) =>
-                        toRulesetAttributes(zone.id, ruleset),
-                      ),
+                      Effect.map((ruleset) => toRulesetAttributes(zone.id, ruleset)),
                       // Per-item not-found / plan-gated entrypoints are
                       // skipped rather than failing the whole enumeration.
                       Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>

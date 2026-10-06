@@ -6,9 +6,8 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
 /**
  * Runtime binding for `codedeploy:ListDeploymentTargets` — lists the target
  * ids of a deployment (optionally filtered by target status).
- * @binding
- * @section Observing Deployment Targets
- * @example List Failed Targets
+ * ### Observing Deployment Targets
+ * **Example:** List Failed Targets
  * ```typescript
  * const listDeploymentTargets =
  *   yield* AWS.CodeDeploy.ListDeploymentTargets(group);
@@ -18,6 +17,8 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
  *   targetFilters: { TargetStatus: ["Failed"] },
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListDeploymentTargets extends Binding.Service<
   ListDeploymentTargets,
@@ -27,10 +28,7 @@ export interface ListDeploymentTargets extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.ListDeploymentTargetsInput,
-    ) => Effect.Effect<
-      SVC.ListDeploymentTargetsOutput,
-      SVC.ListDeploymentTargetsError
-    >
+    ) => Effect.Effect<SVC.ListDeploymentTargetsOutput, SVC.ListDeploymentTargetsError>
   >
 > {}
 export const ListDeploymentTargets = Binding.Service<ListDeploymentTargets>(

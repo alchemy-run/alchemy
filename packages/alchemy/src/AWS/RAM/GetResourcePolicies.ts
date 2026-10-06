@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.GetResourcePoliciesHttp)`.
- * @binding
- * @section Discovering Shares & Shared Resources
- * @example Read the Policy of a Shared Resource
+ * ### Discovering Shares & Shared Resources
+ * **Example:** Read the Policy of a Shared Resource
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getResourcePolicies = yield* AWS.RAM.GetResourcePolicies();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   resourceArns: [subnetArn],
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetResourcePolicies extends Binding.Service<
   GetResourcePolicies,
@@ -29,10 +30,7 @@ export interface GetResourcePolicies extends Binding.Service<
   () => Effect.Effect<
     (
       request: ram.GetResourcePoliciesRequest,
-    ) => Effect.Effect<
-      ram.GetResourcePoliciesResponse,
-      ram.GetResourcePoliciesError
-    >
+    ) => Effect.Effect<ram.GetResourcePoliciesResponse, ram.GetResourcePoliciesError>
   >
 > {}
 export const GetResourcePolicies = Binding.Service<GetResourcePolicies>(

@@ -5,7 +5,6 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -87,13 +86,7 @@ export type TokenAttributes = {
   modifiedBy: string | undefined;
 };
 
-export type SearchToken = Resource<
-  TypeId,
-  SearchTokenProps,
-  TokenAttributes,
-  never,
-  Providers
->;
+export type SearchToken = Resource<TypeId, SearchTokenProps, TokenAttributes, never, Providers>;
 
 /**
  * A Cloudflare.AI. Search service token — the credential AI Search uses to
@@ -107,11 +100,8 @@ export type SearchToken = Resource<
  * `Cloudflare.ApiToken.AccountApiToken` to mint the underlying API token in the
  * same stack, then reference the service token's `id` from an AI Search
  * instance's `tokenId` prop.
- * @resource
- * @product AI Search
- * @category AI
- * @section Creating a Token
- * @example Minting the underlying API token in the same stack
+ * ### Creating a Token
+ * **Example:** Minting the underlying API token in the same stack
  * ```typescript
  * const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("SearchTokenSource", {
  *   policies: [
@@ -128,8 +118,8 @@ export type SearchToken = Resource<
  * });
  * ```
  *
- * @section Using the Token from a SearchInstance
- * @example Wiring the token into an AI Search instance
+ * ### Using the Token from a SearchInstance
+ * **Example:** Wiring the token into an AI Search instance
  * ```typescript
  * const search = yield* Cloudflare.AI.Search("Search", {
  *   source: bucket,
@@ -138,6 +128,10 @@ export type SearchToken = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ai-search/
+ *
+ * @resource
+ * @product AI Search
+ * @category AI
  */
 export const SearchToken = Resource<SearchToken>(TypeId, {
   aliases: ["Cloudflare.AiSearch.Token"],
@@ -221,8 +215,7 @@ export const SearchTokenProvider = () =>
         keyRotated ||
         observed.name !== name ||
         observed.cfApiId !== body.cfApiId ||
-        (news.legacy !== undefined &&
-          (observed.legacy ?? undefined) !== news.legacy);
+        (news.legacy !== undefined && (observed.legacy ?? undefined) !== news.legacy);
       if (!dirty) {
         return toAttributes(observed, acct);
       }
@@ -238,22 +231,20 @@ export const SearchTokenProvider = () =>
       // not nested under an instance — one paginated list per account.
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* aisearch.listTokens
-          .pages({ accountId, perPage: 50 })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                // The list item shape matches the create/read response, so the
-                // emitted Attributes are identical to `read` (the write-only
-                // `cfApiKey` is never part of Attributes anyway).
-                (page.result ?? []).map((t) => toAttributes(t, accountId)),
-              ),
+        return yield* aisearch.listTokens.pages({ accountId, perPage: 50 }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              // The list item shape matches the create/read response, so the
+              // emitted Attributes are identical to `read` (the write-only
+              // `cfApiKey` is never part of Attributes anyway).
+              (page.result ?? []).map((t) => toAttributes(t, accountId)),
             ),
-            // AI Search isn't enabled on every account — the route is gated
-            // rather than returning an empty list. Treat it as "none".
-            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
-          );
+          ),
+          // AI Search isn't enabled on every account — the route is gated
+          // rather than returning an empty list. Treat it as "none".
+          Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+        );
       }),
     delete: Effect.fn(function* ({ output }) {
       // A missing token (already deleted) is success. An AI Search
@@ -261,21 +252,16 @@ export const SearchTokenProvider = () =>
       // asynchronously — Cloudflare rejects the delete with
       // `token_in_use_by_instances` until the instance is gone, so ride
       // that out briefly.
-      yield* aisearch
-        .deleteToken({ accountId: output.accountId, id: output.id })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "TokenInUseByInstances",
-            // The referencing instance tears down its managed Vectorize
-            // index asynchronously and can hold the token well past two
-            // minutes. Poll at a steady 5s and give it a generous overall
-            // budget (~5min) so the token delete reliably waits out the
-            // instance instead of racing the teardown and failing flakily.
-            schedule: Schedule.spaced("5 seconds"),
-            times: 60,
-          }),
-          Effect.catchTag("TokenNotFound", () => Effect.void),
-        );
+      yield* aisearch.deleteToken({ accountId: output.accountId, id: output.id }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "TokenInUseByInstances",
+          // Allow brief asynchronous teardown, but surface a token still
+          // referenced by another instance instead of stalling cleanup.
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+        }),
+        Effect.catchTag("TokenNotFound", () => Effect.void),
+      );
     }),
   });
 
@@ -288,19 +274,17 @@ type ObservedToken = aisearch.CreateTokenResponse;
  */
 const getToken = (accountId: string, id: string) =>
   aisearch.readToken({ accountId, id }).pipe(
-    Effect.map(
-      (t): ObservedToken => ({
-        id: t.id ?? id,
-        name: t.name ?? "",
-        cfApiId: t.cfApiId ?? "",
-        createdAt: t.createdAt ?? "",
-        modifiedAt: t.modifiedAt ?? "",
-        createdBy: t.createdBy,
-        enabled: t.enabled,
-        legacy: t.legacy,
-        modifiedBy: t.modifiedBy,
-      }),
-    ),
+    Effect.map((t): ObservedToken => ({
+      id: t.id ?? id,
+      name: t.name ?? "",
+      cfApiId: t.cfApiId ?? "",
+      createdAt: t.createdAt ?? "",
+      modifiedAt: t.modifiedAt ?? "",
+      createdBy: t.createdBy,
+      enabled: t.enabled,
+      legacy: t.legacy,
+      modifiedBy: t.modifiedBy,
+    })),
     Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
   );
 
@@ -328,9 +312,7 @@ const createTokenName = (id: string, name: string | undefined) =>
  * (code 7012) with a short, bounded retry. Genuinely invalid credentials
  * still fail after the retries are exhausted.
  */
-const retryTokenPropagation = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryTokenPropagation = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "InvalidTokenCredentials",

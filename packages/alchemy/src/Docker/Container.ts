@@ -45,6 +45,18 @@ export interface ContainerProps {
   stopTimeout?: Duration.Input;
   /** Networks to connect after create. */
   networks?: Container.NetworkMapping[];
+  /**
+   * Extra `/etc/hosts` entries, each `hostname:address`. Docker's
+   * `host-gateway` alias resolves to the host machine, so
+   * `"host.docker.internal:host-gateway"` reaches services listening on the
+   * developer's machine from inside the container.
+   *
+   * On Linux `host-gateway` is the bridge gateway address, so those packets
+   * traverse the host's `INPUT` chain — under a default-deny firewall the
+   * name resolves and the connection then times out. See the Host Access
+   * examples.
+   */
+  extraHosts?: string[];
   /** Remove the container when it exits. @default false */
   removeOnExit?: boolean;
   /** Start the container after creation/reconciliation. @default false */
@@ -54,14 +66,7 @@ export interface ContainerProps {
 }
 
 export declare namespace Container {
-  type Status =
-    | "created"
-    | "running"
-    | "paused"
-    | "restarting"
-    | "removing"
-    | "exited"
-    | "dead";
+  type Status = "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead";
   type Image = string | { imageRef: string };
   interface PortMapping {
     /** External port on the host. */
@@ -133,10 +138,9 @@ export interface Container extends Resource<
  * manages Cloudflare's container platform; use pushed image references to bridge
  * Docker-built images into cloud container runtimes.
  *
- * @resource
  *
- * @section Running Containers
- * @example Nginx with a published port
+ * ### Running Containers
+ * **Example:** Nginx with a published port
  * ```typescript
  * const nginx = yield* Docker.Container("nginx", {
  *   image: "nginx:alpine",
@@ -145,10 +149,10 @@ export interface Container extends Resource<
  * });
  * ```
  *
- * @section Secret Environment
- * @example Redacted env var
+ * ### Secret Environment
+ * **Example:** Redacted env var
  * ```typescript
- * const password = yield* Config.redacted("POSTGRES_PASSWORD");
+ * const password = yield* Config.Redacted("POSTGRES_PASSWORD");
  * const db = yield* Docker.Container("postgres", {
  *   image: "postgres:18-alpine",
  *   environment: {
@@ -158,8 +162,8 @@ export interface Container extends Resource<
  * });
  * ```
  *
- * @section Networks and Volumes
- * @example PostgreSQL with persistent storage
+ * ### Networks and Volumes
+ * **Example:** PostgreSQL with persistent storage
  * ```typescript
  * const network = yield* Docker.Network("app-network");
  * const data = yield* Docker.Volume("postgres-data");
@@ -175,8 +179,57 @@ export interface Container extends Resource<
  * const runtime = yield* Docker.inspectContainer(postgresName);
  * ```
  *
- * @section Traefik
- * @example Route a container through Traefik
+ * ### Host Access
+ * `extraHosts` writes lines into the container's `/etc/hosts`; it changes name
+ * resolution and nothing else. Docker's `host-gateway` alias resolves to the
+ * host machine, which is how a container reaches a service on the developer's
+ * loopback.
+ *
+ * On Linux `host-gateway` is the Docker bridge gateway (typically
+ * `172.17.0.1`), so a container's packets to it arrive on the host's `INPUT`
+ * chain. Under a default-deny firewall — ufw ships
+ * `DEFAULT_INPUT_POLICY="DROP"` — the hostname resolves correctly and the
+ * connection then times out, which reads like an application bug rather than a
+ * firewall one. Allow the bridge subnet to fix it:
+ * `sudo ufw allow from 172.16.0.0/12`.
+ *
+ * **Example:** Reach a service on the developer's machine
+ * ```typescript
+ * const api = yield* Docker.Container("api", {
+ *   image: "ghcr.io/acme/api:latest",
+ *   // `host-gateway` resolves to the host machine, so a database listening
+ *   // on the developer's loopback is reachable from inside the container.
+ *   extraHosts: ["host.docker.internal:host-gateway"],
+ *   environment: {
+ *     DATABASE_URL: "postgres://postgres@host.docker.internal:5432/app",
+ *   },
+ *   start: true,
+ * });
+ * ```
+ *
+ * **Example:** Pin a hostname to a fixed address
+ * ```typescript
+ * const api = yield* Docker.Container("api", {
+ *   image: "ghcr.io/acme/api:latest",
+ *   // Any `hostname:address` pair — host access is just the common case.
+ *   extraHosts: ["payments.internal:10.1.2.3"],
+ *   start: true,
+ * });
+ * ```
+ *
+ * **Example:** Publish on any free host port
+ * ```typescript
+ * const api = yield* Docker.Container("api", {
+ *   image: "ghcr.io/acme/api:latest",
+ *   // `external: 0` lets Docker choose; the assigned port is reported back.
+ *   ports: [{ external: 0, internal: 3000 }],
+ *   start: true,
+ * });
+ * const hostPort = api.ports["3000/tcp"];
+ * ```
+ *
+ * ### Traefik
+ * **Example:** Route a container through Traefik
  * ```typescript
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
@@ -189,8 +242,9 @@ export interface Container extends Resource<
  *   stopTimeout: "30 seconds",
  *   start: true,
  * });
+ * ```
  *
- * @example Use a Docker.Context resource
+ * **Example:** Use a Docker.Context resource
  * ```typescript
  * const remote = yield* Docker.Context("remote", {
  *   name: "remote-build",
@@ -202,6 +256,9 @@ export interface Container extends Resource<
  *   context: remote,
  * });
  * ```
+ *
+ * @resource
+ * @product Container
  */
 export const Container = Resource<Container>("Docker.Container");
 
@@ -216,12 +273,8 @@ export const inspectContainer = (
   context?: Docker.ContextRef,
 ): Effect.Effect<Container["Attributes"], PlatformError, Docker> =>
   Docker.pipe(
-    Effect.flatMap((docker) =>
-      docker.container.inspect(name, dockerContextName(context)),
-    ),
-    Effect.map((container) =>
-      toContainerAttributes(container, container.Config.Image),
-    ),
+    Effect.flatMap((docker) => docker.container.inspect(name, dockerContextName(context))),
+    Effect.map((container) => toContainerAttributes(container, container.Config.Image)),
   );
 
 export const ContainerProvider = () =>
@@ -233,33 +286,34 @@ export const ContainerProvider = () =>
       const reconcileNetworks = Effect.fn(function* (
         live: Docker.Container,
         news: ContainerProps,
+        olds: ContainerProps | undefined,
       ) {
         const context = dockerContextName(news.context);
         const connect = new Map<string, Container.NetworkMapping>();
         const disconnect = new Set<string>();
-        const noop = new Set<string>();
         for (const network of news.networks ?? []) {
           const entry = live.NetworkSettings.Networks?.[network.name];
           if (!entry) {
             connect.set(network.name, network);
-          } else if (
-            !Equal.equals(entry.Aliases ?? [], network.aliases ?? [])
-          ) {
+          } else if (!Equal.equals(entry.Aliases ?? [], network.aliases ?? [])) {
             connect.set(network.name, network);
             disconnect.add(network.name);
-          } else {
-            noop.add(network.name);
           }
         }
-        for (const key of Object.keys(live.NetworkSettings.Networks ?? {})) {
-          if (!noop.has(key)) {
-            disconnect.add(key);
+        // Only networks alchemy itself attached are alchemy's to detach, and
+        // `olds.networks` is the sole record of which those are — the live
+        // container cannot say who connected a network. Sweeping every live
+        // network instead tore off the default `bridge` and anything a user,
+        // compose file, or another tool had attached out of band (#1386).
+        const desired = new Set((news.networks ?? []).map((n) => n.name));
+        for (const network of olds?.networks ?? []) {
+          if (!desired.has(network.name) && live.NetworkSettings.Networks?.[network.name]) {
+            disconnect.add(network.name);
           }
         }
         yield* Effect.forEach(
           disconnect,
-          (network) =>
-            docker.network.disconnect({ network, container: live.Id, context }),
+          (network) => docker.network.disconnect({ network, container: live.Id, context }),
           { concurrency: "unbounded" },
         );
         yield* Effect.forEach(
@@ -282,30 +336,19 @@ export const ContainerProvider = () =>
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.container
             .inspect(name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (!info) return undefined;
           // `olds.image` may be `undefined` when a `creating` row was
           // persisted before upstream Outputs resolved — fall back to the
           // live container's actual image.
           const attrs = toContainerAttributes(
             info,
-            olds.image !== undefined
-              ? normalizeImageRef(olds.image)
-              : info.Config.Image,
+            olds.image !== undefined ? normalizeImageRef(olds.image) : info.Config.Image,
           );
           if (output) return attrs;
           // Without prior state, only adopt a container that carries our
           // branding; anything else is foreign and gated behind `--adopt`.
-          const owned = yield* hasAlchemyTags(
-            id,
-            info.Config.Labels ?? undefined,
-          );
+          const owned = yield* hasAlchemyTags(id, info.Config.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
@@ -314,9 +357,7 @@ export const ContainerProvider = () =>
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
           if (olds.image === undefined) return undefined;
-          if (
-            dockerContextName(olds.context) !== dockerContextName(news.context)
-          ) {
+          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
             return { action: "replace" as const, deleteFirst: true };
           }
           const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
@@ -331,21 +372,15 @@ export const ContainerProvider = () =>
             return { action: "update" as const };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, olds }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
           const live = yield* docker.container
             .inspect(args.name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
           if (live) {
-            yield* reconcileNetworks(live, news);
+            yield* reconcileNetworks(live, news, olds);
             if (news.start && live.State.Status !== "running") {
               yield* docker.container.start(live.Id, context);
             } else if (!news.start && live.State.Status === "running") {
@@ -353,9 +388,7 @@ export const ContainerProvider = () =>
             }
             return yield* docker.container
               .inspect(live.Id, context)
-              .pipe(
-                Effect.map((info) => toContainerAttributes(info, args.image)),
-              );
+              .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
           }
 
           const internalTags = yield* createInternalTags(id);
@@ -382,22 +415,12 @@ export const ContainerProvider = () =>
           return toContainerAttributes(info, args.image);
         }),
         delete: Effect.fn(({ olds, output }) =>
-          docker.container
-            .stop(output.name, dockerContextName(olds.context))
-            .pipe(
-              Effect.andThen(
-                docker.container.remove(
-                  output.name,
-                  true,
-                  dockerContextName(olds.context),
-                ),
-              ),
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
+          docker.container.stop(output.name, dockerContextName(olds.context)).pipe(
+            Effect.andThen(
+              docker.container.remove(output.name, true, dockerContextName(olds.context)),
             ),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          ),
         ),
       });
     }),
@@ -408,48 +431,47 @@ const normalizeImageRef = (image: Container.Image): string =>
 
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
-    Effect.map(
-      (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
-        name,
-        image: normalizeImageRef(news.image),
-        command: news.command,
-        env: normalizeEnvironment(news.environment),
-        volume: news.volumes?.map(
-          (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
-        ),
-        p: news.ports?.map(
-          (port) =>
-            `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
-        ),
-        restart: news.restart ?? "no",
-        label: news.labels,
-        "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
-        rm: news.removeOnExit ?? false,
-        ...(news.healthcheck
-          ? {
-              "health-cmd": Array.isArray(news.healthcheck.cmd)
-                ? news.healthcheck.cmd.join(" ")
-                : news.healthcheck.cmd,
-              "health-interval": normalizeDuration(news.healthcheck.interval),
-              "health-timeout": normalizeDuration(news.healthcheck.timeout),
-              "health-retries": news.healthcheck.retries ?? 0,
-              "health-start-period": normalizeDuration(
-                news.healthcheck.startPeriod,
-              ),
-              "health-start-interval": normalizeDuration(
-                news.healthcheck.startInterval,
-              ),
-            }
-          : {
-              "health-cmd": undefined,
-              "health-interval": undefined,
-              "health-timeout": undefined,
-              "health-retries": undefined,
-              "health-start-period": undefined,
-              "health-start-interval": undefined,
-            }),
+    Effect.map((name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
+      name,
+      image: normalizeImageRef(news.image),
+      command: news.command,
+      env: normalizeEnvironment(news.environment),
+      volume: news.volumes?.map(
+        (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+      ),
+      p: news.ports?.map((port) => {
+        const target = `${port.internal}/${port.protocol ?? "tcp"}`;
+        // `external: 0` means "any free host port". Docker spells that as a
+        // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
+        // host port 0 literally, which the daemon accepts and then reports
+        // back as 0.
+        return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
       }),
-    ),
+      "add-host": news.extraHosts,
+      restart: news.restart ?? "no",
+      label: news.labels,
+      "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
+      rm: news.removeOnExit ?? false,
+      ...(news.healthcheck
+        ? {
+            "health-cmd": Array.isArray(news.healthcheck.cmd)
+              ? news.healthcheck.cmd.join(" ")
+              : news.healthcheck.cmd,
+            "health-interval": normalizeDuration(news.healthcheck.interval),
+            "health-timeout": normalizeDuration(news.healthcheck.timeout),
+            "health-retries": news.healthcheck.retries ?? 0,
+            "health-start-period": normalizeDuration(news.healthcheck.startPeriod),
+            "health-start-interval": normalizeDuration(news.healthcheck.startInterval),
+          }
+        : {
+            "health-cmd": undefined,
+            "health-interval": undefined,
+            "health-timeout": undefined,
+            "health-retries": undefined,
+            "health-start-period": undefined,
+            "health-start-interval": undefined,
+          }),
+    })),
   );
 
 const toContainerAttributes = (
@@ -461,16 +483,46 @@ const toContainerAttributes = (
   status: info.State.Status,
   createdAt: Date.parse(info.Created) || Date.now(),
   imageRef,
-  ports: Object.fromEntries(
-    Object.entries({
-      ...info.NetworkSettings.Ports,
-      ...info.HostConfig.PortBindings,
-    }).flatMap(([internal, bindings]) => {
-      if (!bindings?.[0]?.HostPort) return [];
-      return [[internal, Number.parseInt(bindings[0].HostPort, 10)]];
-    }),
-  ),
+  ports: toPortAttributes(info),
 });
+
+/** First binding that carries a real (non-zero) host port. */
+const boundHostPort = (
+  bindings: ReadonlyArray<{ HostPort?: string }> | null | undefined,
+): number | undefined => {
+  for (const binding of bindings ?? []) {
+    if (!binding.HostPort) continue;
+    const port = Number.parseInt(binding.HostPort, 10);
+    if (Number.isInteger(port) && port > 0) return port;
+  }
+  return undefined;
+};
+
+/**
+ * `HostConfig.PortBindings` is what was *requested*, `NetworkSettings.Ports`
+ * what Docker actually *assigned* — so the assignment wins wherever both
+ * exist. A container published with `external: 0` (or any random-publish
+ * mapping) has no requested host port at all, and reading the request over
+ * the assignment reported 0 instead of the port the container is reachable
+ * on. The request is still the fallback: a created-but-not-yet-started
+ * container has empty `NetworkSettings.Ports`.
+ */
+const toPortAttributes = (info: Docker.Container): Record<string, number> => {
+  const ports: Record<string, number> = {};
+  for (const [internal, bindings] of Object.entries(info.HostConfig.PortBindings ?? {})) {
+    const port = boundHostPort(bindings);
+    if (port !== undefined) ports[internal] = port;
+  }
+  for (const [internal, bindings] of Object.entries(info.NetworkSettings.Ports ?? {})) {
+    const port = boundHostPort(bindings);
+    if (port !== undefined) ports[internal] = port;
+  }
+  return ports;
+};
+
+/** `external: 0` / `"0"` asks Docker to pick any free host port. */
+const isRandomHostPort = (external: number | string): boolean =>
+  Number.parseInt(String(external), 10) === 0;
 
 const normalizeEnvironment = (
   environment: Record<string, string | Redacted.Redacted<string>> | undefined,
@@ -482,9 +534,7 @@ const normalizeEnvironment = (
     ]),
   );
 
-const normalizeDuration = (
-  input: Duration.Input | undefined,
-): string | undefined => {
+const normalizeDuration = (input: Duration.Input | undefined): string | undefined => {
   if (!input) return undefined;
   const duration = Duration.fromInputUnsafe(input);
   // Docker parses `--health-*` durations with Go's `time.ParseDuration`, which

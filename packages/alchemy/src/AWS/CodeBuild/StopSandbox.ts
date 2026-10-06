@@ -6,14 +6,15 @@ import type { Project } from "./Project.ts";
 /**
  * Runtime binding for `codebuild:StopSandbox` — stops a running sandbox of
  * the bound project by sandbox id.
- * @binding
- * @section Sandboxes
- * @example Stop a Sandbox
+ * ### Sandboxes
+ * **Example:** Stop a Sandbox
  * ```typescript
  * const stopSandbox = yield* AWS.CodeBuild.StopSandbox(project);
  *
  * yield* stopSandbox({ id: sandboxId });
  * ```
+ *
+ * @binding
  */
 export interface StopSandbox extends Binding.Service<
   StopSandbox,
@@ -21,11 +22,7 @@ export interface StopSandbox extends Binding.Service<
   <P extends Project>(
     project: P,
   ) => Effect.Effect<
-    (
-      request: SVC.StopSandboxInput,
-    ) => Effect.Effect<SVC.StopSandboxOutput, SVC.StopSandboxError>
+    (request: SVC.StopSandboxInput) => Effect.Effect<SVC.StopSandboxOutput, SVC.StopSandboxError>
   >
 > {}
-export const StopSandbox = Binding.Service<StopSandbox>(
-  "AWS.CodeBuild.StopSandbox",
-);
+export const StopSandbox = Binding.Service<StopSandbox>("AWS.CodeBuild.StopSandbox");

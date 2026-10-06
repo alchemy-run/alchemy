@@ -74,8 +74,8 @@ export interface InsightEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
  *
- * @section Consuming Insight Events
- * @example Alert on Active Insights
+ * ### Consuming Insight Events
+ * **Example:** Alert on Active Insights
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -110,12 +110,8 @@ export const consumeInsightEvents = <StreamReq = never, Req = never>(
       ...(props.groupNames !== undefined || props.states !== undefined
         ? {
             detail: {
-              ...(props.groupNames !== undefined
-                ? { GroupName: [...props.groupNames] }
-                : {}),
-              ...(props.states !== undefined
-                ? { State: [...props.states] }
-                : {}),
+              ...(props.groupNames !== undefined ? { GroupName: [...props.groupNames] } : {}),
+              ...(props.states !== undefined ? { State: [...props.states] } : {}),
             },
           }
         : {}),

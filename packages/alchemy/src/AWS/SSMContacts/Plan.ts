@@ -49,8 +49,8 @@ export interface Plan extends Resource<
  * `SSMContacts.Contact` or standalone with this resource — not both.
  * Deleting this resource resets the contact's plan to empty.
  *
- * @section Managing Engagement Plans
- * @example Engage an email channel for 5 minutes
+ * ### Managing Engagement Plans
+ * **Example:** Engage an email channel for 5 minutes
  * ```typescript
  * const plan = yield* SSMContacts.Plan("OncallPlan", {
  *   contactId: oncall.contactArn,
@@ -81,11 +81,7 @@ export const PlanProvider = () =>
       const getContact = (arn: string) =>
         contacts
           .getContact({ ContactId: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const buildAttrs = (contact: contacts.GetContactResult) => ({
         contactArn: contact.ContactArn,
@@ -106,8 +102,7 @@ export const PlanProvider = () =>
           // The plan is a setting on the contact, not a distinct cloud
           // object — it "exists" when the contact has stages or rotations.
           const hasPlan =
-            (contact.Plan.Stages?.length ?? 0) > 0 ||
-            (contact.Plan.RotationIds?.length ?? 0) > 0;
+            (contact.Plan.Stages?.length ?? 0) > 0 || (contact.Plan.RotationIds?.length ?? 0) > 0;
           return hasPlan ? buildAttrs(contact) : undefined;
         }),
 
@@ -128,9 +123,7 @@ export const PlanProvider = () =>
           //      observed one (updateContact fully replaces the plan).
           const desired: contacts.Plan = {
             Stages: news.stages ?? [],
-            ...(news.rotationIds !== undefined
-              ? { RotationIds: news.rotationIds }
-              : {}),
+            ...(news.rotationIds !== undefined ? { RotationIds: news.rotationIds } : {}),
           };
           const observed: contacts.Plan = {
             Stages: contact.Plan.Stages ?? [],

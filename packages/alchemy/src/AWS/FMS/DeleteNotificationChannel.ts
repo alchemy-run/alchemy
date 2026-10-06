@@ -5,17 +5,15 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DeleteNotificationChannel}.
  */
-export interface DeleteNotificationChannelRequest
-  extends fms.DeleteNotificationChannelRequest {}
+export interface DeleteNotificationChannelRequest extends fms.DeleteNotificationChannelRequest {}
 
 /**
  * Runtime binding for `fms:DeleteNotificationChannel`.
  *
  * Deletes the Firewall Manager association with the IAM role and SNS topic used to record SNS logs. Provide the
  * implementation with `Effect.provide(AWS.FMS.DeleteNotificationChannelHttp)`.
- * @binding
- * @section Notification Channel
- * @example Delete the Notification Channel
+ * ### Notification Channel
+ * **Example:** Delete the Notification Channel
  * ```typescript
  * // init — account-level binding takes no resource
  * const deleteNotificationChannel = yield* AWS.FMS.DeleteNotificationChannel();
@@ -23,6 +21,8 @@ export interface DeleteNotificationChannelRequest
  * // runtime
  * yield* deleteNotificationChannel();
  * ```
+ *
+ * @binding
  */
 export interface DeleteNotificationChannel extends Binding.Service<
   DeleteNotificationChannel,
@@ -30,14 +30,10 @@ export interface DeleteNotificationChannel extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DeleteNotificationChannelRequest,
-    ) => Effect.Effect<
-      fms.DeleteNotificationChannelResponse,
-      fms.DeleteNotificationChannelError
-    >
+    ) => Effect.Effect<fms.DeleteNotificationChannelResponse, fms.DeleteNotificationChannelError>
   >
 > {}
 
-export const DeleteNotificationChannel =
-  Binding.Service<DeleteNotificationChannel>(
-    "AWS.FMS.DeleteNotificationChannel",
-  );
+export const DeleteNotificationChannel = Binding.Service<DeleteNotificationChannel>(
+  "AWS.FMS.DeleteNotificationChannel",
+);

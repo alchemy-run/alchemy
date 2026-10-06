@@ -69,9 +69,8 @@ export interface Variable extends Resource<
  * and rules, typed and sourced from event data or model scores. Variables are
  * cheap metadata objects.
  *
- * @resource
- * @section Creating a Variable
- * @example Event Variable
+ * ### Creating a Variable
+ * **Example:** Event Variable
  * ```typescript
  * const email = yield* FraudDetector.Variable("email", {
  *   dataType: "STRING",
@@ -80,6 +79,8 @@ export interface Variable extends Resource<
  *   variableType: "EMAIL_ADDRESS",
  * });
  * ```
+ *
+ * @resource
  */
 export const Variable = Resource<Variable>("AWS.FraudDetector.Variable");
 
@@ -87,25 +88,15 @@ export const VariableProvider = () =>
   Provider.effect(
     Variable,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Partial<VariableProps>,
-      ) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Partial<VariableProps>) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
       /** Look a variable up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getVariables({ name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.variables?.[0];
       });
 
@@ -170,8 +161,7 @@ export const VariableProvider = () =>
           } else {
             // 3. Sync mutable aspects — update on drift.
             const defaultDrift =
-              (variable.defaultValue ?? undefined) !==
-              (news.defaultValue ?? undefined);
+              (variable.defaultValue ?? undefined) !== (news.defaultValue ?? undefined);
             const descriptionDrift =
               news.description !== undefined &&
               (variable.description ?? undefined) !== news.description;
@@ -206,9 +196,7 @@ export const VariableProvider = () =>
           frauddetector.getVariables.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.variables ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.variables ?? []).map(toAttrs)),
             ),
           ),
       };

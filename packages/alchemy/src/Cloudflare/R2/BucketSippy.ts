@@ -2,7 +2,6 @@ import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -147,11 +146,8 @@ export type BucketSippy = Resource<
  * One Sippy configuration exists per bucket (it is a singleton
  * sub-resource of the bucket). Destroying the resource disables Sippy;
  * objects already migrated stay in the R2 bucket.
- * @resource
- * @product R2
- * @category Storage & Databases
- * @section Migrating from AWS S3
- * @example Enable Sippy on a bucket with an S3 source
+ * ### Migrating from AWS S3
+ * **Example:** Enable Sippy on a bucket with an S3 source
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Media");
  *
@@ -161,18 +157,18 @@ export type BucketSippy = Resource<
  *     provider: "aws",
  *     bucket: "legacy-media",
  *     region: "us-east-1",
- *     accessKeyId: yield* Config.redacted("AWS_ACCESS_KEY_ID"),
- *     secretAccessKey: yield* Config.redacted("AWS_SECRET_ACCESS_KEY"),
+ *     accessKeyId: yield* Config.Redacted("AWS_ACCESS_KEY_ID"),
+ *     secretAccessKey: yield* Config.Redacted("AWS_SECRET_ACCESS_KEY"),
  *   },
  *   destination: {
- *     accessKeyId: yield* Config.redacted("R2_ACCESS_KEY_ID"),
- *     secretAccessKey: yield* Config.redacted("R2_SECRET_ACCESS_KEY"),
+ *     accessKeyId: yield* Config.Redacted("R2_ACCESS_KEY_ID"),
+ *     secretAccessKey: yield* Config.Redacted("R2_SECRET_ACCESS_KEY"),
  *   },
  * });
  * ```
  *
- * @section Migrating from Google Cloud Storage
- * @example Enable Sippy with a GCS source
+ * ### Migrating from Google Cloud Storage
+ * **Example:** Enable Sippy with a GCS source
  * ```typescript
  * yield* Cloudflare.R2.BucketSippy("MediaMigration", {
  *   bucketName: bucket.bucketName,
@@ -180,16 +176,20 @@ export type BucketSippy = Resource<
  *     provider: "gcs",
  *     bucket: "legacy-media",
  *     clientEmail: "sippy@my-project.iam.gserviceaccount.com",
- *     privateKey: yield* Config.redacted("GCS_PRIVATE_KEY"),
+ *     privateKey: yield* Config.Redacted("GCS_PRIVATE_KEY"),
  *   },
  *   destination: {
- *     accessKeyId: yield* Config.redacted("R2_ACCESS_KEY_ID"),
- *     secretAccessKey: yield* Config.redacted("R2_SECRET_ACCESS_KEY"),
+ *     accessKeyId: yield* Config.Redacted("R2_ACCESS_KEY_ID"),
+ *     secretAccessKey: yield* Config.Redacted("R2_SECRET_ACCESS_KEY"),
  *   },
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/r2/data-migration/sippy/
+ *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  */
 export const BucketSippy = Resource<BucketSippy>(TypeId);
 
@@ -253,19 +253,15 @@ export const BucketSippyProvider = () =>
       // The bucket is the configuration's identity; cold reads derive it
       // from the last-persisted props.
       const bucketName =
-        output?.bucketName ??
-        (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
+        output?.bucketName ?? (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
       if (bucketName === undefined) return undefined;
-      const jurisdiction =
-        output?.jurisdiction ?? olds?.jurisdiction ?? "default";
+      const jurisdiction = output?.jurisdiction ?? olds?.jurisdiction ?? "default";
 
-      const observed = yield* r2
-        .getBucketSippy({ accountId: acct, bucketName, jurisdiction })
-        .pipe(
-          Effect.map((config): r2.GetBucketSippyResponse | undefined => config),
-          // The bucket itself is gone — so is its Sippy configuration.
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
-        );
+      const observed = yield* r2.getBucketSippy({ accountId: acct, bucketName, jurisdiction }).pipe(
+        Effect.map((config): r2.GetBucketSippyResponse | undefined => config),
+        // The bucket itself is gone — so is its Sippy configuration.
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+      );
       // A bucket with Sippy never configured (or disabled) reads back as
       // `{ enabled: false }` — that is "absent" for this resource.
       if (!observed || observed.enabled !== true) return undefined;
@@ -332,23 +328,19 @@ export const BucketSippyProvider = () =>
           if (bucketName == null) {
             return Effect.succeed([] as BucketSippyAttributes[]);
           }
-          const jurisdiction = (bucket.jurisdiction ??
-            "default") as Bucket.Jurisdiction;
-          return r2
-            .getBucketSippy({ accountId, bucketName, jurisdiction })
-            .pipe(
-              Effect.map((config) =>
-                config.enabled === true
-                  ? [toAttributes(config, accountId, bucketName, jurisdiction)]
-                  : [],
-              ),
-              // A bucket that vanished mid-enumeration, or one whose plan
-              // rejects the Sippy route, contributes nothing — skip it.
-              Effect.catchTag(
-                ["NoSuchBucket", "InvalidRoute", "Forbidden"],
-                () => Effect.succeed([] as BucketSippyAttributes[]),
-              ),
-            );
+          const jurisdiction = (bucket.jurisdiction ?? "default") as Bucket.Jurisdiction;
+          return r2.getBucketSippy({ accountId, bucketName, jurisdiction }).pipe(
+            Effect.map((config) =>
+              config.enabled === true
+                ? [toAttributes(config, accountId, bucketName, jurisdiction)]
+                : [],
+            ),
+            // A bucket that vanished mid-enumeration, or one whose plan
+            // rejects the Sippy route, contributes nothing — skip it.
+            Effect.catchTag(["NoSuchBucket", "InvalidRoute", "Forbidden"], () =>
+              Effect.succeed([] as BucketSippyAttributes[]),
+            ),
+          );
         },
         { concurrency: 10 },
       );

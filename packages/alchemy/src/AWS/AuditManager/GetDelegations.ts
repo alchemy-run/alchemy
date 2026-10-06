@@ -7,13 +7,14 @@ import * as Binding from "../../Binding.ts";
  *
  * Lists the delegations assigned to the calling account. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.GetDelegationsHttp)`.
- * @binding
- * @section Delegations
- * @example List the Account's Delegations
+ * ### Delegations
+ * **Example:** List the Account's Delegations
  * ```typescript
  * const getDelegations = yield* AWS.AuditManager.GetDelegations();
  * const result = yield* getDelegations({ maxResults: 20 });
  * ```
+ *
+ * @binding
  */
 export interface GetDelegations extends Binding.Service<
   GetDelegations,
@@ -21,13 +22,8 @@ export interface GetDelegations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: auditmanager.GetDelegationsRequest,
-    ) => Effect.Effect<
-      auditmanager.GetDelegationsResponse,
-      auditmanager.GetDelegationsError
-    >
+    ) => Effect.Effect<auditmanager.GetDelegationsResponse, auditmanager.GetDelegationsError>
   >
 > {}
 
-export const GetDelegations = Binding.Service<GetDelegations>(
-  "AWS.AuditManager.GetDelegations",
-);
+export const GetDelegations = Binding.Service<GetDelegations>("AWS.AuditManager.GetDelegations");

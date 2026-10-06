@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetLicenseUsage}.
  */
-export interface GetLicenseUsageRequest
-  extends licensemanager.GetLicenseUsageRequest {}
+export interface GetLicenseUsageRequest extends licensemanager.GetLicenseUsageRequest {}
 
 /**
  * Runtime binding for `license-manager:GetLicenseUsage` — read the
@@ -14,9 +13,8 @@ export interface GetLicenseUsageRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.GetLicenseUsageHttp)`.
- * @binding
- * @section Reading Licenses and Grants
- * @example Read a License's Entitlement Usage
+ * ### Reading Licenses and Grants
+ * **Example:** Read a License's Entitlement Usage
  * ```typescript
  * // init
  * const getLicenseUsage = yield* AWS.LicenseManager.GetLicenseUsage();
@@ -26,6 +24,8 @@ export interface GetLicenseUsageRequest
  *   LicenseArn: licenseArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetLicenseUsage extends Binding.Service<
   GetLicenseUsage,
@@ -33,10 +33,7 @@ export interface GetLicenseUsage extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetLicenseUsageRequest,
-    ) => Effect.Effect<
-      licensemanager.GetLicenseUsageResponse,
-      licensemanager.GetLicenseUsageError
-    >
+    ) => Effect.Effect<licensemanager.GetLicenseUsageResponse, licensemanager.GetLicenseUsageError>
   >
 > {}
 export const GetLicenseUsage = Binding.Service<GetLicenseUsage>(

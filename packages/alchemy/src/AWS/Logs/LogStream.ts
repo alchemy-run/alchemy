@@ -39,14 +39,15 @@ export interface LogStream extends Resource<
  * Most log streams are created automatically by the emitting service (Lambda
  * creates its own streams under `/aws/lambda/...`); declare one explicitly
  * only when writing custom log events via `putLogEvents`.
- * @resource
- * @section Creating Log Streams
- * @example Custom Audit Stream
+ * ### Creating Log Streams
+ * **Example:** Custom Audit Stream
  * ```typescript
  * const stream = yield* LogStream("AuditStream", {
  *   logGroupName: logGroup.logGroupName,
  * });
  * ```
+ *
+ * @resource
  */
 export const LogStream = Resource<LogStream>("AWS.Logs.LogStream");
 
@@ -54,27 +55,19 @@ export const LogStreamProvider = () =>
   Provider.effect(
     LogStream,
     Effect.gen(function* () {
-      const toLogStreamName = (
-        id: string,
-        props: { logStreamName?: string } = {},
-      ) =>
+      const toLogStreamName = (id: string, props: { logStreamName?: string } = {}) =>
         props.logStreamName
           ? Effect.succeed(props.logStreamName)
           : createPhysicalName({ id, maxLength: 512 });
 
-      const observe = Effect.fn(function* (
-        logGroupName: string,
-        logStreamName: string,
-      ) {
+      const observe = Effect.fn(function* (logGroupName: string, logStreamName: string) {
         const described = yield* logs
           .describeLogStreams({
             logGroupName,
             logStreamNamePrefix: logStreamName,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({ logStreams: [] }),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ logStreams: [] })),
           );
         return (described.logStreams ?? []).find(
           (stream) => stream.logStreamName === logStreamName,
@@ -117,9 +110,7 @@ export const LogStreamProvider = () =>
                       })),
                   ),
                   // group deleted between list and describe — skip
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
             );
@@ -130,18 +121,14 @@ export const LogStreamProvider = () =>
           if (olds.logGroupName !== news.logGroupName) {
             return { action: "replace" } as const;
           }
-          if (
-            (yield* toLogStreamName(id, olds)) !==
-            (yield* toLogStreamName(id, news))
-          ) {
+          if ((yield* toLogStreamName(id, olds)) !== (yield* toLogStreamName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const logGroupName = output?.logGroupName ?? olds?.logGroupName;
           if (logGroupName === undefined) return undefined;
-          const logStreamName =
-            output?.logStreamName ?? (yield* toLogStreamName(id, olds ?? {}));
+          const logStreamName = output?.logStreamName ?? (yield* toLogStreamName(id, olds ?? {}));
           const observed = yield* observe(logGroupName, logStreamName);
           if (!observed) return undefined;
           return {
@@ -154,19 +141,13 @@ export const LogStreamProvider = () =>
         // log stream is mutable.
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const logGroupName = news.logGroupName;
-          const logStreamName =
-            output?.logStreamName ?? (yield* toLogStreamName(id, news));
+          const logStreamName = output?.logStreamName ?? (yield* toLogStreamName(id, news));
 
           let observed = yield* observe(logGroupName, logStreamName);
           if (!observed) {
             yield* logs
               .createLogStream({ logGroupName, logStreamName })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             observed = yield* observe(logGroupName, logStreamName);
           }
 

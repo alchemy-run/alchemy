@@ -1,7 +1,7 @@
 # cloudflare-foldkit
 
 A [Foldkit](https://foldkit.dev) counter app deployed to Cloudflare with
-`Cloudflare.Website.Vite`.
+`Cloudflare.Website.Foldkit`.
 
 ```sh
 bun alchemy deploy   # build and deploy

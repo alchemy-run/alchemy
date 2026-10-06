@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetFindingsHttp)`.
- * @binding
- * @section Working with Findings
- * @example Hydrate Finding Details
+ * ### Working with Findings
+ * **Example:** Hydrate Finding Details
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getFindings = yield* AWS.Macie2.GetFindings();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { findings } = yield* getFindings({ findingIds });
  * ```
+ *
+ * @binding
  */
 export interface GetFindings extends Binding.Service<
   GetFindings,
@@ -29,6 +30,4 @@ export interface GetFindings extends Binding.Service<
     ) => Effect.Effect<macie2.GetFindingsResponse, macie2.GetFindingsError>
   >
 > {}
-export const GetFindings = Binding.Service<GetFindings>(
-  "AWS.Macie2.GetFindings",
-);
+export const GetFindings = Binding.Service<GetFindings>("AWS.Macie2.GetFindings");

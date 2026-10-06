@@ -52,16 +52,15 @@ export interface Detector extends Resource<
  * detector is cheap; the rules, models, and detector versions that produce
  * predictions are provisioned separately.
  *
- * @resource
- * @section Creating a Detector
- * @example Basic Detector
+ * ### Creating a Detector
+ * **Example:** Basic Detector
  * ```typescript
  * const detector = yield* FraudDetector.Detector("checkout", {
  *   eventTypeName: purchase.name,
  * });
  * ```
  *
- * @example Detector with an Active Version
+ * **Example:** Detector with an Active Version
  * ```typescript
  * const detector = yield* FraudDetector.Detector("checkout", {
  *   eventTypeName: purchase.name,
@@ -80,12 +79,12 @@ export interface Detector extends Resource<
  * });
  * ```
  *
- * @section Runtime Predictions
+ * ### Runtime Predictions
  * Bind `GetEventPrediction` in the init phase (providing the
  * `GetEventPredictionHttp` layer on the Function effect) and score events at
  * runtime against the detector's `ACTIVE` version.
  *
- * @example Score an event from a Lambda
+ * **Example:** Score an event from a Lambda
  * ```typescript
  * // init
  * const getEventPrediction = yield* FraudDetector.GetEventPrediction(detector);
@@ -99,6 +98,8 @@ export interface Detector extends Resource<
  *   eventVariables: { email: "buyer@example.com", ip: "1.2.3.4" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Detector = Resource<Detector>("AWS.FraudDetector.Detector");
 
@@ -106,24 +107,16 @@ export const DetectorProvider = () =>
   Provider.effect(
     Detector,
     Effect.gen(function* () {
-      const createId = Effect.fn(function* (
-        id: string,
-        props: Partial<DetectorProps>,
-      ) {
+      const createId = Effect.fn(function* (id: string, props: Partial<DetectorProps>) {
         return (
-          props.detectorId ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
+          props.detectorId ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
         );
       });
 
       const get = Effect.fn(function* (detectorId: string) {
         const response = yield* frauddetector
           .getDetectors({ detectorId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.detectors?.[0];
       });
 
@@ -142,16 +135,14 @@ export const DetectorProvider = () =>
           const newId = yield* createId(id, news);
           if (
             oldId !== newId ||
-            (olds.eventTypeName ?? undefined) !==
-              (news.eventTypeName ?? undefined)
+            (olds.eventTypeName ?? undefined) !== (news.eventTypeName ?? undefined)
           ) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const detectorId =
-            output?.detectorId ?? (yield* createId(id, olds ?? {}));
+          const detectorId = output?.detectorId ?? (yield* createId(id, olds ?? {}));
           const detector = yield* get(detectorId);
           if (detector === undefined) return undefined;
           const attrs = toAttrs(detector);
@@ -189,9 +180,7 @@ export const DetectorProvider = () =>
           frauddetector.getDetectors.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.detectors ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.detectors ?? []).map(toAttrs)),
             ),
           ),
       };

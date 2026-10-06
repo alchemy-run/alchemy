@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { IdentityPool } from "./IdentityPool.ts";
 
-export interface ListIdentitiesRequest extends Omit<
-  ci.ListIdentitiesInput,
-  "IdentityPoolId"
-> {}
+export interface ListIdentitiesRequest extends Omit<ci.ListIdentitiesInput, "IdentityPoolId"> {}
 export interface LookupDeveloperIdentityRequest extends Omit<
   ci.LookupDeveloperIdentityInput,
   "IdentityPoolId"
@@ -45,24 +42,15 @@ export interface IdentityPoolAdminClient {
   /** Look up an identity by developer user identifier (or vice versa). */
   lookupDeveloperIdentity: (
     request: LookupDeveloperIdentityRequest,
-  ) => Effect.Effect<
-    ci.LookupDeveloperIdentityResponse,
-    ci.LookupDeveloperIdentityError
-  >;
+  ) => Effect.Effect<ci.LookupDeveloperIdentityResponse, ci.LookupDeveloperIdentityError>;
   /** Merge two developer-authenticated identities into one. */
   mergeDeveloperIdentities: (
     request: MergeDeveloperIdentitiesRequest,
-  ) => Effect.Effect<
-    ci.MergeDeveloperIdentitiesResponse,
-    ci.MergeDeveloperIdentitiesError
-  >;
+  ) => Effect.Effect<ci.MergeDeveloperIdentitiesResponse, ci.MergeDeveloperIdentitiesError>;
   /** Unlink a developer user identifier from an identity. */
   unlinkDeveloperIdentity: (
     request: UnlinkDeveloperIdentityRequest,
-  ) => Effect.Effect<
-    ci.UnlinkDeveloperIdentityResponse,
-    ci.UnlinkDeveloperIdentityError
-  >;
+  ) => Effect.Effect<ci.UnlinkDeveloperIdentityResponse, ci.UnlinkDeveloperIdentityError>;
   /** Mint an OpenID Connect token for a developer-authenticated identity
    * (server-side developer provider flow). */
   getOpenIdTokenForDeveloperIdentity: (
@@ -82,9 +70,8 @@ export interface IdentityPoolAdminClient {
  * minting. The binding grants the corresponding `cognito-identity:*` IAM
  * actions scoped to the pool's ARN and injects the pool ID into pool-scoped
  * calls.
- * @binding
- * @section Managing Identities
- * @example List and Describe Identities
+ * ### Managing Identities
+ * **Example:** List and Describe Identities
  * ```typescript
  * const identities = yield* Cognito.IdentityPoolAdmin(identityPool);
  *
@@ -97,13 +84,15 @@ export interface IdentityPoolAdminClient {
  * }
  * ```
  *
- * @section Developer-Authenticated Identities
- * @example Mint a Token for a Backend-Authenticated User
+ * ### Developer-Authenticated Identities
+ * **Example:** Mint a Token for a Backend-Authenticated User
  * ```typescript
  * const token = yield* identities.getOpenIdTokenForDeveloperIdentity({
  *   Logins: { "my.developer.provider": userId },
  * });
  * ```
+ *
+ * @binding
  */
 export interface IdentityPoolAdmin extends Binding.Service<
   IdentityPoolAdmin,

@@ -15,9 +15,8 @@ export interface DescribeFlowOperationRequest extends Omit<
  *
  * Provide `NetworkFirewall.DescribeFlowOperationHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Flow Operations
- * @example Poll a Flow Operation
+ * ### Flow Operations
+ * **Example:** Poll a Flow Operation
  * ```typescript
  * // init — grants network-firewall:DescribeFlowOperation on the firewall
  * const describeFlowOperation =
@@ -28,6 +27,8 @@ export interface DescribeFlowOperationRequest extends Omit<
  *   FlowOperationId: flowOperationId,
  * });
  * ```
+ *
+ * @binding
  */
 export interface DescribeFlowOperation extends Binding.Service<
   DescribeFlowOperation,
@@ -37,10 +38,7 @@ export interface DescribeFlowOperation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeFlowOperationRequest,
-    ) => Effect.Effect<
-      NFW.DescribeFlowOperationResponse,
-      NFW.DescribeFlowOperationError
-    >
+    ) => Effect.Effect<NFW.DescribeFlowOperationResponse, NFW.DescribeFlowOperationError>
   >
 > {}
 

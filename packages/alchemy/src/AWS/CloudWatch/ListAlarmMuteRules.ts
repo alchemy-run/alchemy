@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListAlarmMuteRulesRequest
-  extends cloudwatch.ListAlarmMuteRulesInput {}
+export interface ListAlarmMuteRulesRequest extends cloudwatch.ListAlarmMuteRulesInput {}
 
 /**
  * Runtime binding for `cloudwatch:ListAlarmMuteRules` — list the alarm
@@ -11,9 +10,8 @@ export interface ListAlarmMuteRulesRequest
  *
  * Provide `CloudWatch.ListAlarmMuteRulesHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Reading Mute Rules
- * @example List Alarm Mute Rules
+ * ### Reading Mute Rules
+ * **Example:** List Alarm Mute Rules
  * ```typescript
  * // init — grants cloudwatch:ListAlarmMuteRules
  * const listAlarmMuteRules = yield* AWS.CloudWatch.ListAlarmMuteRules();
@@ -22,6 +20,8 @@ export interface ListAlarmMuteRulesRequest
  * const result = yield* listAlarmMuteRules();
  * const summaries = result.AlarmMuteRuleSummaries ?? [];
  * ```
+ *
+ * @binding
  */
 export interface ListAlarmMuteRules extends Binding.Service<
   ListAlarmMuteRules,
@@ -29,10 +29,7 @@ export interface ListAlarmMuteRules extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListAlarmMuteRulesRequest,
-    ) => Effect.Effect<
-      cloudwatch.ListAlarmMuteRulesOutput,
-      cloudwatch.ListAlarmMuteRulesError
-    >
+    ) => Effect.Effect<cloudwatch.ListAlarmMuteRulesOutput, cloudwatch.ListAlarmMuteRulesError>
   >
 > {}
 

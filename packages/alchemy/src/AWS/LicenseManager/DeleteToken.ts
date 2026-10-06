@@ -14,9 +14,8 @@ export interface DeleteTokenRequest extends licensemanager.DeleteTokenRequest {}
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.DeleteTokenHttp)`.
- * @binding
- * @section License Checkout Data Plane
- * @example Revoke an Activation Token
+ * ### License Checkout Data Plane
+ * **Example:** Revoke an Activation Token
  * ```typescript
  * // init
  * const deleteToken = yield* AWS.LicenseManager.DeleteToken();
@@ -24,6 +23,8 @@ export interface DeleteTokenRequest extends licensemanager.DeleteTokenRequest {}
  * // runtime
  * yield* deleteToken({ TokenId: tokenId });
  * ```
+ *
+ * @binding
  */
 export interface DeleteToken extends Binding.Service<
   DeleteToken,
@@ -31,12 +32,7 @@ export interface DeleteToken extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteTokenRequest,
-    ) => Effect.Effect<
-      licensemanager.DeleteTokenResponse,
-      licensemanager.DeleteTokenError
-    >
+    ) => Effect.Effect<licensemanager.DeleteTokenResponse, licensemanager.DeleteTokenError>
   >
 > {}
-export const DeleteToken = Binding.Service<DeleteToken>(
-  "AWS.LicenseManager.DeleteToken",
-);
+export const DeleteToken = Binding.Service<DeleteToken>("AWS.LicenseManager.DeleteToken");

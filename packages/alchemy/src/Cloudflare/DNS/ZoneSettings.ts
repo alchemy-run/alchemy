@@ -1,7 +1,6 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -20,12 +19,7 @@ export interface ZoneDnsNameservers {
    * Nameserver kind: Cloudflare's standard pair, or custom nameservers
    * defined at the account, tenant, or zone level.
    */
-  type:
-    | "cloudflare.standard"
-    | "custom.account"
-    | "custom.tenant"
-    | "custom.zone"
-    | (string & {});
+  type: "cloudflare.standard" | "custom.account" | "custom.tenant" | "custom.zone" | (string & {});
   /**
    * Which configured nameserver set to use (for `custom.account` /
    * `custom.tenant`).
@@ -214,11 +208,8 @@ export type ZoneDnsSettings = Resource<
  * Some fields are plan-gated: `foundationDns` is a paid add-on,
  * `nameservers.type: "custom.*"` requires account custom nameservers,
  * `internalDns` and `secondaryOverrides` are Enterprise features.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Basic settings
- * @example Lower the NS record TTL
+ * ### Basic settings
+ * **Example:** Lower the NS record TTL
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
@@ -226,7 +217,7 @@ export type ZoneDnsSettings = Resource<
  * });
  * ```
  *
- * @example Flatten every CNAME in the zone
+ * **Example:** Flatten every CNAME in the zone
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
@@ -234,8 +225,8 @@ export type ZoneDnsSettings = Resource<
  * });
  * ```
  *
- * @section SOA tuning
- * @example Shorten the negative-caching TTL
+ * ### SOA tuning
+ * **Example:** Shorten the negative-caching TTL
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
@@ -243,14 +234,18 @@ export type ZoneDnsSettings = Resource<
  * });
  * ```
  *
- * @section Multi-provider DNS
- * @example Serve the zone alongside another DNS provider
+ * ### Multi-provider DNS
+ * **Example:** Serve the zone alongside another DNS provider
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   multiProvider: true,
  * });
  * ```
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneDnsSettings = Resource<ZoneDnsSettings>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneSettings"],
@@ -295,9 +290,7 @@ export const ZoneDnsSettingsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ZoneDnsSettingsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is ZoneDnsSettingsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
@@ -305,22 +298,15 @@ export const ZoneDnsSettingsProvider = () =>
       const n = news as ZoneDnsSettingsProps;
       // zoneId is the resource's identity (the settings object is a
       // zone singleton). Input<string> — compare only once concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* dns.getSettingZone({ zoneId }).pipe(
         // Zone deleted out-of-band — its settings are gone with it.
@@ -394,14 +380,11 @@ export const ZoneDnsSettingsProvider = () =>
 // Snapshot + diff helpers
 // ---------------------------------------------------------------------------
 
-type SettingsResponse =
-  | dns.GetSettingZoneResponse
-  | dns.PatchSettingZoneResponse;
+type SettingsResponse = dns.GetSettingZoneResponse | dns.PatchSettingZoneResponse;
 
 type PatchBody = Omit<dns.PatchSettingZoneRequest, "zoneId">;
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const toSnapshot = (r: SettingsResponse): ZoneDnsSettingsSnapshot => ({
   flattenAllCnames: r.flattenAllCnames,
@@ -410,7 +393,7 @@ const toSnapshot = (r: SettingsResponse): ZoneDnsSettingsSnapshot => ({
   multiProvider: r.multiProvider,
   nameservers: {
     type: r.nameservers.type,
-    nsSet: undef(r.nameservers.nsSet),
+    nsSet: "nsSet" in r.nameservers ? undef(r.nameservers.nsSet) : undefined,
   },
   nsTtl: r.nsTtl,
   secondaryOverrides: r.secondaryOverrides,
@@ -460,10 +443,7 @@ const mergedSoa = (
   ttl: desired.ttl ?? observed.ttl,
 });
 
-const soaDiffers = (
-  desired: ZoneDnsSoa,
-  observed: ZoneDnsSettingsSnapshot["soa"],
-): boolean =>
+const soaDiffers = (desired: ZoneDnsSoa, observed: ZoneDnsSettingsSnapshot["soa"]): boolean =>
   (desired.expire !== undefined && desired.expire !== observed.expire) ||
   (desired.minTtl !== undefined && desired.minTtl !== observed.minTtl) ||
   (desired.mname !== undefined && desired.mname !== observed.mname) ||
@@ -489,17 +469,11 @@ const computeDelta = (
 ): PatchBody | undefined => {
   const body: PatchBody = {};
   let dirty = false;
-  if (
-    news.flattenAllCnames !== undefined &&
-    news.flattenAllCnames !== observed.flattenAllCnames
-  ) {
+  if (news.flattenAllCnames !== undefined && news.flattenAllCnames !== observed.flattenAllCnames) {
     body.flattenAllCnames = news.flattenAllCnames;
     dirty = true;
   }
-  if (
-    news.foundationDns !== undefined &&
-    news.foundationDns !== observed.foundationDns
-  ) {
+  if (news.foundationDns !== undefined && news.foundationDns !== observed.foundationDns) {
     body.foundationDns = news.foundationDns;
     dirty = true;
   }
@@ -510,17 +484,11 @@ const computeDelta = (
     body.internalDns = { referenceZoneId: news.internalDns.referenceZoneId };
     dirty = true;
   }
-  if (
-    news.multiProvider !== undefined &&
-    news.multiProvider !== observed.multiProvider
-  ) {
+  if (news.multiProvider !== undefined && news.multiProvider !== observed.multiProvider) {
     body.multiProvider = news.multiProvider;
     dirty = true;
   }
-  if (
-    news.nameservers !== undefined &&
-    nameserversDiffer(news.nameservers, observed.nameservers)
-  ) {
+  if (news.nameservers !== undefined && nameserversDiffer(news.nameservers, observed.nameservers)) {
     body.nameservers = {
       type: news.nameservers.type,
       nsSet: news.nameservers.nsSet,
@@ -576,8 +544,7 @@ const computeRestore = (
         break;
       case "internalDns":
         if (
-          initial.internalDns.referenceZoneId !==
-            observed.internalDns.referenceZoneId &&
+          initial.internalDns.referenceZoneId !== observed.internalDns.referenceZoneId &&
           initial.internalDns.referenceZoneId !== undefined
         ) {
           body.internalDns = {

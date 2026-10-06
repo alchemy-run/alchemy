@@ -10,9 +10,8 @@ import type { Canary } from "./Canary.ts";
  *
  * Provide `Synthetics.StopCanaryHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Controlling the Canary
- * @example Stop the Canary
+ * ### Controlling the Canary
+ * **Example:** Stop the Canary
  * ```typescript
  * // init — grants synthetics:StopCanary on the canary
  * const stopCanary = yield* AWS.Synthetics.StopCanary(canary);
@@ -22,20 +21,15 @@ import type { Canary } from "./Canary.ts";
  *   Effect.catchTag("ConflictException", () => Effect.void),
  * );
  * ```
+ *
+ * @binding
  */
 export interface StopCanary extends Binding.Service<
   StopCanary,
   "AWS.Synthetics.StopCanary",
   (
     canary: Canary,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      synthetics.StopCanaryResponse,
-      synthetics.StopCanaryError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<synthetics.StopCanaryResponse, synthetics.StopCanaryError>>
 > {}
 
-export const StopCanary = Binding.Service<StopCanary>(
-  "AWS.Synthetics.StopCanary",
-);
+export const StopCanary = Binding.Service<StopCanary>("AWS.Synthetics.StopCanary");

@@ -9,23 +9,22 @@ export interface GetRunTaskRequest extends omics.GetRunTaskRequest {}
  *
  * An account-level run-control operation (no resource argument) that reads the status of a single task within a run.
  * Provide the implementation with `Effect.provide(AWS.Omics.GetRunTaskHttp)`.
- * @binding
- * @section Runs
- * @example Call GetRunTask
+ * ### Runs
+ * **Example:** Call GetRunTask
  * ```typescript
  * // init — account-level binding takes no resource
  * const getRunTask = yield* AWS.Omics.GetRunTask();
  * // runtime
  * const result = yield* getRunTask({ id: runId });
  * ```
+ *
+ * @binding
  */
 export interface GetRunTask extends Binding.Service<
   GetRunTask,
   "AWS.Omics.GetRunTask",
   () => Effect.Effect<
-    (
-      request?: GetRunTaskRequest,
-    ) => Effect.Effect<omics.GetRunTaskResponse, omics.GetRunTaskError>
+    (request?: GetRunTaskRequest) => Effect.Effect<omics.GetRunTaskResponse, omics.GetRunTaskError>
   >
 > {}
 

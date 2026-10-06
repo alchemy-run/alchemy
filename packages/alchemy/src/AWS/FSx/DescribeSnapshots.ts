@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * {@link CreateSnapshot} to poll a runtime-initiated snapshot until it
  * reaches `AVAILABLE`. Provide the implementation with
  * `Effect.provide(AWS.FSx.DescribeSnapshotsHttp)`.
- * @binding
- * @section Managing Snapshots at Runtime
- * @example List a volume's snapshots
+ * ### Managing Snapshots at Runtime
+ * **Example:** List a volume's snapshots
  * ```typescript
  * const describeSnapshots = yield* AWS.FSx.DescribeSnapshots();
  *
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * yield* Effect.log(`${response.Snapshots?.length ?? 0} snapshots`);
  * ```
+ *
+ * @binding
  */
 export interface DescribeSnapshots extends Binding.Service<
   DescribeSnapshots,
@@ -29,12 +30,7 @@ export interface DescribeSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: fsx.DescribeSnapshotsRequest,
-    ) => Effect.Effect<
-      fsx.DescribeSnapshotsResponse,
-      fsx.DescribeSnapshotsError
-    >
+    ) => Effect.Effect<fsx.DescribeSnapshotsResponse, fsx.DescribeSnapshotsError>
   >
 > {}
-export const DescribeSnapshots = Binding.Service<DescribeSnapshots>(
-  "AWS.FSx.DescribeSnapshots",
-);
+export const DescribeSnapshots = Binding.Service<DescribeSnapshots>("AWS.FSx.DescribeSnapshots");

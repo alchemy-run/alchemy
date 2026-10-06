@@ -16,9 +16,8 @@ export interface InvokeWithResponseStreamRequest extends Omit<
  *
  * Provide the `InvokeWithResponseStreamHttp` layer on the Function to
  * satisfy the binding.
- * @binding
- * @section Invoking Functions
- * @example Stream a function's response
+ * ### Invoking Functions
+ * **Example:** Stream a function's response
  * ```typescript
  * const invokeStream = yield* AWS.Lambda.InvokeWithResponseStream(target);
  *
@@ -27,6 +26,8 @@ export interface InvokeWithResponseStreamRequest extends Omit<
  * });
  * const chunks = yield* Stream.runCollect(response.EventStream!);
  * ```
+ *
+ * @binding
  */
 export interface InvokeWithResponseStream extends Binding.Service<
   InvokeWithResponseStream,
@@ -42,7 +43,6 @@ export interface InvokeWithResponseStream extends Binding.Service<
     >
   >
 > {}
-export const InvokeWithResponseStream =
-  Binding.Service<InvokeWithResponseStream>(
-    "AWS.Lambda.InvokeWithResponseStream",
-  );
+export const InvokeWithResponseStream = Binding.Service<InvokeWithResponseStream>(
+  "AWS.Lambda.InvokeWithResponseStream",
+);

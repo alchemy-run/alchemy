@@ -50,16 +50,15 @@ export interface Activity extends Resource<
  * Activities support worker-hosted task processing outside Lambda. For
  * most callback flows the `.waitForTaskToken` service-integration pattern
  * on a {@link StateMachine} Task state is preferred.
- * @resource
- * @section Creating Activities
- * @example Basic Activity
+ * ### Creating Activities
+ * **Example:** Basic Activity
  * ```typescript
  * import * as StepFunctions from "alchemy/AWS/StepFunctions";
  *
  * const activity = yield* StepFunctions.Activity("ApprovalActivity");
  * ```
  *
- * @example Reference an Activity from a State Machine
+ * **Example:** Reference an Activity from a State Machine
  * ```typescript
  * const machine = yield* StepFunctions.StateMachine("ApprovalFlow", {
  *   definition: {
@@ -75,8 +74,8 @@ export interface Activity extends Resource<
  * });
  * ```
  *
- * @section Completing Tasks at Runtime
- * @example Send a task result scoped to the activity
+ * ### Completing Tasks at Runtime
+ * **Example:** Send a task result scoped to the activity
  * ```typescript
  * // init
  * const sendTaskSuccess = yield* StepFunctions.SendTaskSuccess(activity);
@@ -87,15 +86,15 @@ export interface Activity extends Resource<
  *   output: JSON.stringify({ approved: true }),
  * });
  * ```
+ *
+ * @resource
  */
 export const Activity = Resource<Activity>("AWS.StepFunctions.Activity");
 
 const toSfnTags = (tags: Record<string, string>): sfn.Tag[] =>
   Object.entries(tags).map(([key, value]) => ({ key, value }));
 
-const fromSfnTags = (
-  tags: ReadonlyArray<sfn.Tag> | undefined,
-): Record<string, string> =>
+const fromSfnTags = (tags: ReadonlyArray<sfn.Tag> | undefined): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
       .filter(
@@ -113,10 +112,7 @@ export const ActivityProvider = () =>
         id: string,
         props: Pick<ActivityProps, "activityName">,
       ) {
-        return (
-          props.activityName ??
-          (yield* createPhysicalName({ id, maxLength: 80 }))
-        );
+        return props.activityName ?? (yield* createPhysicalName({ id, maxLength: 80 }));
       });
 
       const activityArnOf = (region: string, accountId: string, name: string) =>
@@ -125,19 +121,13 @@ export const ActivityProvider = () =>
       const describeOrUndefined = Effect.fn(function* (activityArn: string) {
         return yield* sfn
           .describeActivity({ activityArn })
-          .pipe(
-            Effect.catchTag("ActivityDoesNotExist", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ActivityDoesNotExist", () => Effect.succeed(undefined)));
       });
 
       const fetchObservedTags = Effect.fn(function* (resourceArn: string) {
         return yield* sfn.listTagsForResource({ resourceArn }).pipe(
           Effect.map((r) => fromSfnTags(r.tags)),
-          Effect.catchTag("ResourceNotFound", () =>
-            Effect.succeed({} as Record<string, string>),
-          ),
+          Effect.catchTag("ResourceNotFound", () => Effect.succeed({} as Record<string, string>)),
         );
       });
 
@@ -146,9 +136,7 @@ export const ActivityProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* sfn.listActivities
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* sfn.listActivities.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.activities ?? [])
               .map((activity) => ({
@@ -159,10 +147,8 @@ export const ActivityProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.activityName ?? (yield* createName(id, olds ?? {}));
-          const activityArn =
-            output?.activityArn ?? activityArnOf(region, accountId, name);
+          const name = output?.activityName ?? (yield* createName(id, olds ?? {}));
+          const activityArn = output?.activityArn ?? activityArnOf(region, accountId, name);
           const found = yield* describeOrUndefined(activityArn);
           if (!found) return undefined;
           const attrs = {
@@ -203,9 +189,7 @@ export const ActivityProvider = () =>
           if (observed === undefined) {
             yield* sfn
               .createActivity({ name, tags: toSfnTags(desiredTags) })
-              .pipe(
-                Effect.catchTag("ActivityAlreadyExists", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ActivityAlreadyExists", () => Effect.void));
           }
 
           // 3. SYNC TAGS — against OBSERVED cloud tags (create-time tags

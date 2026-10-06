@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Canary } from "./Canary.ts";
 
-export interface GetCanaryRunsRequest extends Omit<
-  synthetics.GetCanaryRunsRequest,
-  "Name"
-> {}
+export interface GetCanaryRunsRequest extends Omit<synthetics.GetCanaryRunsRequest, "Name"> {}
 
 /**
  * Runtime binding for `synthetics:GetCanaryRuns` — list the run results
@@ -15,9 +12,8 @@ export interface GetCanaryRunsRequest extends Omit<
  *
  * Provide `Synthetics.GetCanaryRunsHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Reading Canary Runs
- * @example List Recent Runs
+ * ### Reading Canary Runs
+ * **Example:** List Recent Runs
  * ```typescript
  * // init — grants synthetics:GetCanaryRuns on the canary
  * const getCanaryRuns = yield* AWS.Synthetics.GetCanaryRuns(canary);
@@ -26,6 +22,8 @@ export interface GetCanaryRunsRequest extends Omit<
  * const { CanaryRuns } = yield* getCanaryRuns({ MaxResults: 10 });
  * const failed = CanaryRuns?.filter((run) => run.Status?.State === "FAILED");
  * ```
+ *
+ * @binding
  */
 export interface GetCanaryRuns extends Binding.Service<
   GetCanaryRuns,
@@ -35,13 +33,8 @@ export interface GetCanaryRuns extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetCanaryRunsRequest,
-    ) => Effect.Effect<
-      synthetics.GetCanaryRunsResponse,
-      synthetics.GetCanaryRunsError
-    >
+    ) => Effect.Effect<synthetics.GetCanaryRunsResponse, synthetics.GetCanaryRunsError>
   >
 > {}
 
-export const GetCanaryRuns = Binding.Service<GetCanaryRuns>(
-  "AWS.Synthetics.GetCanaryRuns",
-);
+export const GetCanaryRuns = Binding.Service<GetCanaryRuns>("AWS.Synthetics.GetCanaryRuns");

@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
@@ -50,8 +51,12 @@ export interface ResourceClassLike<R extends ResourceLike> {
    * (see {@link ResourceOptions.aliases}). Copied onto the
    * `ProviderService` by `Provider.succeed`/`Provider.effect` so provider
    * lookup can resolve state persisted under a pre-rename type.
+   *
+   * `undefined` is accepted explicitly so `ResourceClass` (whose `Aliases`
+   * is `readonly string[] | undefined`) stays assignable to
+   * `ResourceClassLike` under `exactOptionalPropertyTypes`.
    */
-  Aliases?: readonly string[];
+  Aliases?: readonly string[] | undefined;
 }
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
@@ -62,27 +67,18 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
     Self: Self<R>;
     Provider: Provider<R>;
     Aliases: readonly string[] | undefined;
-    ref(
-      id: string,
-      options?: { stage?: string; stack?: string },
-    ): Effect.Effect<R>;
+    ref(id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R>;
   };
 
 export type ResourceClassWithMethods<
   R extends ResourceLike,
   Methods extends { [key: string]: any },
-> = ResourceConstructor<
-  R,
-  R["Providers"] extends undefined ? Provider<R> : R["Providers"]
-> &
+> = ResourceConstructor<R, R["Providers"] extends undefined ? Provider<R> : R["Providers"]> &
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
     Aliases: readonly string[] | undefined;
-    ref(
-      id: string,
-      options?: { stage?: string; stack?: string },
-    ): Effect.Effect<R>;
+    ref(id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R>;
   } & Methods;
 
 export type LogicalId = string;
@@ -138,6 +134,15 @@ export interface ResourceLike<
    */
   Mode: ProviderMode | undefined;
   /**
+   * Copied from {@link ResourceOptions.requiresImplementation} at
+   * registration: `true` for platform-typed resources, whose registrations
+   * must have resolved {@link Props} by plan time. `Plan.make` fails fast
+   * with {@link MissingImplementationError} when this is set and `Props`
+   * are still `undefined` after the whole program has evaluated — a bare
+   * tag was yielded but its `.make(props, impl)` Layer was never provided.
+   */
+  RequiresImplementation: boolean | undefined;
+  /**
    * Former FQNs this resource's state may still be persisted under,
    * captured from the ambient {@link RenamePolicy} at registration (via
    * `.pipe(renamedFrom("OldId"))`) and resolved against the same namespace
@@ -162,12 +167,7 @@ export const isResource = (value: any): value is ResourceLike => {
   // Locally-declared resources always expose both as own keys; refs
   // (`Resource.ref(...)`) deliberately report neither via `in` so they keep
   // routing through Output resolution.
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    "FQN" in value
-  );
+  return typeof value === "object" && value !== null && "Type" in value && "FQN" in value;
 };
 
 /**
@@ -255,7 +255,69 @@ export interface ResourceOptions {
    * ```
    */
   aliases?: string[];
+  /**
+   * Marks every registration of this type as requiring resolved props by
+   * plan time. Set by `Platform(...)` on its resource class: every
+   * legitimate platform construction (a `.make(props, impl)` Layer build,
+   * a tag declared with props, a plain `Worker("id", props)` call) produces
+   * defined `Props` — the only way a platform-typed registration reaches
+   * the planner with `Props === undefined` is a bare-tag FORWARD REFERENCE
+   * whose `.make` Layer never built. `Plan.make` fails fast with
+   * {@link MissingImplementationError} in that case, instead of letting a
+   * provider read `undefined` props. Plain (non-platform) resources leave
+   * this unset so a no-props reference yield (`yield* Queue("MyQueue")`)
+   * keeps planning as a noop.
+   */
+  requiresImplementation?: boolean;
 }
+
+/**
+ * A tagged platform resource declared with neither props nor an inline
+ * implementation was `yield*`ed, but its `.make(props, impl)` Layer never
+ * built.
+ *
+ * Such a tag carries no configuration on its own — props AND impl both live
+ * on the Layer — so its registration is a forward reference with `undefined`
+ * props that the Layer's build repairs (in either order; see the #874
+ * circular env-tag pattern). Props still `undefined` once the whole program
+ * has evaluated means the Layer was never provided; `Plan.make` fails fast
+ * with this error instead of letting the failure surface deep inside
+ * whichever provider first reads a prop (e.g. `TypeError: undefined is not
+ * an object (evaluating 'news.name')` in the Cloudflare Worker pre-create).
+ */
+export class MissingImplementationError extends Data.TaggedError("MissingImplementationError")<{
+  message: string;
+  /** Resource type of the platform, e.g. `Cloudflare.Worker`. */
+  type: string;
+  /** Logical id of the tagged resource (its class name by convention). */
+  id: string;
+}> {}
+
+export const missingImplementation = (type: string, id: string) =>
+  new MissingImplementationError({
+    type,
+    id,
+    message: [
+      `${type}<${id}> was yielded without its implementation.`,
+      "",
+      `\`${id}\` is declared as a bare tag — no props, no inline implementation — so both come from its \`.make(...)\` Layer:`,
+      "",
+      `  export class ${id} extends ${type}<${id}>()("${id}") {}`,
+      `  export const ${id}Live = ${id}.make({ /* props */ }, Effect.gen(function* () { /* ... */ }));`,
+      "",
+      `That Layer is not in scope where \`${id}\` is yielded. Provide it to the Stack's program:`,
+      "",
+      "  Alchemy.Stack(",
+      `    "my-stack",`,
+      "    { providers, state },",
+      "    Effect.gen(function* () {",
+      `      const instance = yield* ${id};`,
+      `    }).pipe(Effect.provide([${id}Live])),`,
+      "  )",
+      "",
+      `If \`${id}\` is not Effect-native, declare it with props instead: \`()("${id}", { /* props */ })\`.`,
+    ].join("\n"),
+  });
 
 /**
  * Creates a resource constructor for a concrete resource type.
@@ -272,10 +334,7 @@ export function Resource<R extends ResourceLike>(
   const defaultRemovalPolicy = options?.defaultRemovalPolicy ?? "destroy";
   type Props = Input<R["Props"]>;
   const self = Self<R>(type);
-  const constructor = (
-    id: string,
-    props: Props | Effect.Effect<Props> | undefined,
-  ) =>
+  const constructor = (id: string, props: Props | Effect.Effect<Props> | undefined) =>
     Effect.gen(function* () {
       const stack = yield* Stack;
       const namespace = yield* CurrentNamespace;
@@ -286,9 +345,7 @@ export function Resource<R extends ResourceLike>(
       // The Reference default is `undefined` — "no explicit decoration" —
       // which is distinct from an explicit `remote(false)`.
       const ambientPolicy = yield* ProviderModePolicy;
-      const ambientMode: ProviderMode | undefined = ambientPolicy
-        ? "live"
-        : undefined;
+      const ambientMode: ProviderMode | undefined = ambientPolicy ? "live" : undefined;
 
       const existing = stack.resources[fqn];
       if (existing) {
@@ -348,10 +405,7 @@ export function Resource<R extends ResourceLike>(
                     .join(", ");
                 }
 
-                if (
-                  arg &&
-                  (typeof arg === "object" || typeof arg === "function")
-                ) {
+                if (arg && (typeof arg === "object" || typeof arg === "function")) {
                   if ("LogicalId" in arg && typeof arg.LogicalId === "string") {
                     return arg.LogicalId;
                   }
@@ -368,9 +422,7 @@ export function Resource<R extends ResourceLike>(
                 `${(args[0] as TemplateStringsArray)
                   .flatMap((text, i) => {
                     const stringified = stringifyBindArg(args[i + 1]);
-                    return stringified !== undefined
-                      ? [text, stringified]
-                      : [text];
+                    return stringified !== undefined ? [text, stringified] : [text];
                   })
                   .join("")}`,
                 data,
@@ -387,10 +439,9 @@ export function Resource<R extends ResourceLike>(
         RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
           Effect.map(Option.getOrElse(() => defaultRemovalPolicy)),
         ),
-        Adopt: yield* Effect.serviceOption(AdoptPolicy).pipe(
-          Effect.map(Option.getOrUndefined),
-        ),
+        Adopt: yield* Effect.serviceOption(AdoptPolicy).pipe(Effect.map(Option.getOrUndefined)),
         Mode: ambientMode,
+        RequiresImplementation: options?.requiresImplementation || undefined,
         // Bare-string former ids resolve against the SAME namespace as the
         // resource's own id, so `renamedFrom("Site/Worker")` declared at the
         // caller's level claims `<callerNs>/Site/Worker`; the `{ fqn }` form
@@ -401,9 +452,7 @@ export function Resource<R extends ResourceLike>(
               onNone: () => undefined,
               onSome: (formerIds) =>
                 formerIds.map((formerId) =>
-                  typeof formerId === "string"
-                    ? toFqn(namespace, formerId)
-                    : formerId.fqn,
+                  typeof formerId === "string" ? toFqn(namespace, formerId) : formerId.fqn,
                 ),
             }),
           ),
@@ -431,10 +480,7 @@ export function Resource<R extends ResourceLike>(
         ? // @effect-diagnostics-next-line anyUnknownInErrorContext:off
           yield* props.pipe(
             Effect.provide(
-              Layer.mergeAll(
-                Layer.succeed(Self, Resource),
-                Layer.succeed(Self(type), Resource),
-              ),
+              Layer.mergeAll(Layer.succeed(Self, Resource), Layer.succeed(Self(type), Resource)),
             ),
           )
         : props;
@@ -452,10 +498,7 @@ export function Resource<R extends ResourceLike>(
      * (`ref.someAttr`) exactly the way it would for a locally-declared
      * resource.
      */
-    ref: (
-      id: string,
-      options?: { stage?: string; stack?: string },
-    ): Effect.Effect<R> =>
+    ref: (id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R> =>
       Effect.succeed(Output.of(makeRef<R>(id, options, type)) as unknown as R),
 
     Type: type,
@@ -475,10 +518,7 @@ export function Resource<R extends ResourceLike>(
     // `Effect.isEffect(MyResource)` is now true so `Effect.all`/`forEach` work.
     Effectable.Prototype({
       label: `Resource<${type}>`,
-      evaluate: () =>
-        Effect.succeed((id: string, props: R["Props"]) =>
-          constructor(id, props),
-        ),
+      evaluate: () => Effect.succeed((id: string, props: R["Props"]) => constructor(id, props)),
     }),
   ) as any;
 

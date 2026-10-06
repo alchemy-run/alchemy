@@ -54,35 +54,34 @@ export interface OptOutList extends Resource<
  * When an end user replies with a supported opt-out keyword (STOP,
  * CANCEL, OPTOUT, ...), their number is added to the list automatically
  * and further messages to it are suppressed.
- * @resource
- * @section Creating Opt-Out Lists
- * @example Basic Opt-Out List
+ * ### Creating Opt-Out Lists
+ * **Example:** Basic Opt-Out List
  * ```typescript
  * import * as PinpointSMSVoiceV2 from "alchemy/AWS/PinpointSMSVoiceV2";
  *
  * const optOuts = yield* PinpointSMSVoiceV2.OptOutList("OptOuts");
  * ```
  *
- * @example Named Opt-Out List with Tags
+ * **Example:** Named Opt-Out List with Tags
  * ```typescript
  * const optOuts = yield* PinpointSMSVoiceV2.OptOutList("OptOuts", {
  *   optOutListName: "marketing-opt-outs",
  *   tags: { team: "growth" },
  * });
  * ```
+ *
+ * @resource
  */
-export const OptOutList = Resource<OptOutList>(
-  "AWS.PinpointSMSVoiceV2.OptOutList",
-);
+export const OptOutList = Resource<OptOutList>("AWS.PinpointSMSVoiceV2.OptOutList");
 
 /**
  * Raised when an opt-out list cannot be observed immediately after it
  * was created — the create call succeeded (or raced a peer) but the
  * follow-up describe found nothing.
  */
-export class SmsVoiceOptOutListMissing extends Data.TaggedError(
-  "SmsVoiceOptOutListMissing",
-)<{ message: string }> {}
+export class SmsVoiceOptOutListMissing extends Data.TaggedError("SmsVoiceOptOutListMissing")<{
+  message: string;
+}> {}
 
 export const OptOutListProvider = () =>
   Provider.effect(
@@ -98,14 +97,10 @@ export const OptOutListProvider = () =>
        * typed `ResourceNotFoundException` for an unknown name.
        */
       const getByName = Effect.fn(function* (name: string) {
-        const result = yield* smsvoice
-          .describeOptOutLists({ OptOutListNames: [name] })
-          .pipe(
-            retrySmsVoiceThrottled,
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const result = yield* smsvoice.describeOptOutLists({ OptOutListNames: [name] }).pipe(
+          retrySmsVoiceThrottled,
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
         return result?.OptOutLists?.find((l) => l.OptOutListName === name);
       });
 
@@ -113,8 +108,7 @@ export const OptOutListProvider = () =>
         stables: ["optOutListName", "optOutListArn"],
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.optOutListName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.optOutListName ?? (yield* toName(id, olds ?? {}));
           const observed = yield* getByName(name);
           if (observed === undefined) return undefined;
           const attrs = {
@@ -174,13 +168,11 @@ export const OptOutListProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* smsvoice
-            .deleteOptOutList({ OptOutListName: output.optOutListName })
-            .pipe(
-              retrySmsVoiceThrottled,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.asVoid,
-            );
+          yield* smsvoice.deleteOptOutList({ OptOutListName: output.optOutListName }).pipe(
+            retrySmsVoiceThrottled,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.asVoid,
+          );
         }),
 
         list: () =>

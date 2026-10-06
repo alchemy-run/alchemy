@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
-export interface UpdateKeysRequest extends Omit<
-  kvs.UpdateKeysRequest,
-  "KvsARN"
-> {}
+export interface UpdateKeysRequest extends Omit<kvs.UpdateKeysRequest, "KvsARN"> {}
 
 /**
  * Runtime binding for `cloudfront-keyvaluestore:UpdateKeys`.
@@ -16,9 +13,8 @@ export interface UpdateKeysRequest extends Omit<
  * the store's current `ETag` as `IfMatch` (from
  * {@link DescribeKeyValueStore} or a previous write's response). Provide the
  * implementation with `Effect.provide(AWS.CloudFront.UpdateKeysHttp)`.
- * @binding
- * @section Writing KeyValueStore Data
- * @example Batch Put + Delete
+ * ### Writing KeyValueStore Data
+ * **Example:** Batch Put + Delete
  * ```typescript
  * // init — bind the operations to the store
  * const describeStore = yield* CloudFront.DescribeKeyValueStore(store);
@@ -32,6 +28,8 @@ export interface UpdateKeysRequest extends Omit<
  *   Deletes: [{ Key: "routes:/legacy" }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateKeys extends Binding.Service<
   UpdateKeys,
@@ -39,12 +37,8 @@ export interface UpdateKeys extends Binding.Service<
   (
     store: KeyValueStore,
   ) => Effect.Effect<
-    (
-      request: UpdateKeysRequest,
-    ) => Effect.Effect<kvs.UpdateKeysResponse, kvs.UpdateKeysError>
+    (request: UpdateKeysRequest) => Effect.Effect<kvs.UpdateKeysResponse, kvs.UpdateKeysError>
   >
 > {}
 
-export const UpdateKeys = Binding.Service<UpdateKeys>(
-  "AWS.CloudFront.UpdateKeys",
-);
+export const UpdateKeys = Binding.Service<UpdateKeys>("AWS.CloudFront.UpdateKeys");

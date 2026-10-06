@@ -10,15 +10,16 @@ import * as Binding from "../../Binding.ts";
  * can still be recovered with `RestoreBackup` for 7 days. Pair with
  * `DescribeBackups` to build a backup-pruning job. Provide the
  * implementation with `Effect.provide(AWS.CloudHSMV2.DeleteBackupHttp)`.
- * @binding
- * @section Managing Backups
- * @example Prune A Backup
+ * ### Managing Backups
+ * **Example:** Prune A Backup
  * ```typescript
  * const deleteBackup = yield* AWS.CloudHSMV2.DeleteBackup();
  *
  * const deleted = yield* deleteBackup({ BackupId: backupId });
  * // deleted.Backup?.BackupState === "PENDING_DELETION"
  * ```
+ *
+ * @binding
  */
 export interface DeleteBackup extends Binding.Service<
   DeleteBackup,
@@ -26,12 +27,7 @@ export interface DeleteBackup extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudhsm.DeleteBackupRequest,
-    ) => Effect.Effect<
-      cloudhsm.DeleteBackupResponse,
-      cloudhsm.DeleteBackupError
-    >
+    ) => Effect.Effect<cloudhsm.DeleteBackupResponse, cloudhsm.DeleteBackupError>
   >
 > {}
-export const DeleteBackup = Binding.Service<DeleteBackup>(
-  "AWS.CloudHSMV2.DeleteBackup",
-);
+export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.CloudHSMV2.DeleteBackup");

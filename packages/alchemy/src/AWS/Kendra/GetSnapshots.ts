@@ -6,10 +6,7 @@ import type { Index } from "./SearchIndex.ts";
 /**
  * `GetSnapshots` request with `IndexId` injected from the bound index.
  */
-export interface GetSnapshotsRequest extends Omit<
-  kendra.GetSnapshotsRequest,
-  "IndexId"
-> {}
+export interface GetSnapshotsRequest extends Omit<kendra.GetSnapshotsRequest, "IndexId"> {}
 
 /**
  * Runtime binding for the `GetSnapshots` operation (IAM action
@@ -20,9 +17,8 @@ export interface GetSnapshotsRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.GetSnapshotsHttp)`.
  *
- * @binding
- * @section Search Analytics
- * @example Fetch Search Metrics
+ * ### Search Analytics
+ * **Example:** Fetch Search Metrics
  * ```typescript
  * const getSnapshots = yield* AWS.Kendra.GetSnapshots(index);
  *
@@ -31,6 +27,8 @@ export interface GetSnapshotsRequest extends Omit<
  *   MetricType: "QUERIES_BY_COUNT",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetSnapshots extends Binding.Service<
   GetSnapshots,
@@ -43,6 +41,4 @@ export interface GetSnapshots extends Binding.Service<
     ) => Effect.Effect<kendra.GetSnapshotsResponse, kendra.GetSnapshotsError>
   >
 > {}
-export const GetSnapshots = Binding.Service<GetSnapshots>(
-  "AWS.Kendra.GetSnapshots",
-);
+export const GetSnapshots = Binding.Service<GetSnapshots>("AWS.Kendra.GetSnapshots");

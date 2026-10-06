@@ -66,8 +66,8 @@ export interface ResourceShareEventSourceProps extends EventRouteProps {
  * targeting the host. Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Resource Sharing Events
- * @example Alert on Resource Share Failures
+ * ### Consuming Resource Sharing Events
+ * **Example:** Alert on Resource Share Failures
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -100,12 +100,8 @@ export const consumeResourceShareEvents = <StreamReq = never, Req = never>(
       ...(props.events !== undefined || props.statuses !== undefined
         ? {
             detail: {
-              ...(props.events !== undefined
-                ? { event: [...props.events] }
-                : {}),
-              ...(props.statuses !== undefined
-                ? { status: [...props.statuses] }
-                : {}),
+              ...(props.events !== undefined ? { event: [...props.events] } : {}),
+              ...(props.statuses !== undefined ? { status: [...props.statuses] } : {}),
             },
           }
         : {}),

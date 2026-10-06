@@ -11,15 +11,16 @@ import type { Cluster } from "./Cluster.ts";
  * your application behaves during a MemoryDB failover (chaos testing), not
  * as a production remediation tool. Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.FailoverShardHttp)`.
- * @binding
- * @section Testing Failover
- * @example Fail Over a Shard
+ * ### Testing Failover
+ * **Example:** Fail Over a Shard
  * ```typescript
  * const failoverShard = yield* MemoryDB.FailoverShard(cluster);
  *
  * const result = yield* failoverShard({ ShardName: "0001" });
  * // result.Cluster.Status → "updating"
  * ```
+ *
+ * @binding
  */
 export interface FailoverShard extends Binding.Service<
   FailoverShard,
@@ -29,12 +30,7 @@ export interface FailoverShard extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<memorydb.FailoverShardRequest, "ClusterName">,
-    ) => Effect.Effect<
-      memorydb.FailoverShardResponse,
-      memorydb.FailoverShardError
-    >
+    ) => Effect.Effect<memorydb.FailoverShardResponse, memorydb.FailoverShardError>
   >
 > {}
-export const FailoverShard = Binding.Service<FailoverShard>(
-  "AWS.MemoryDB.FailoverShard",
-);
+export const FailoverShard = Binding.Service<FailoverShard>("AWS.MemoryDB.FailoverShard");

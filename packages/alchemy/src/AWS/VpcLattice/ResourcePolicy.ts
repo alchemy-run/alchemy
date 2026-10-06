@@ -4,10 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ResourcePolicyProps {
@@ -47,9 +44,8 @@ export interface ResourcePolicy extends Resource<
  * network — the policy AWS RAM manages when sharing Lattice resources across
  * accounts, attachable directly for fine-grained cross-account control.
  *
- * @resource
- * @section Attaching Resource Policies
- * @example Allow Another Account to Associate with a Service Network
+ * ### Attaching Resource Policies
+ * **Example:** Allow Another Account to Associate with a Service Network
  * ```typescript
  * const network = yield* ServiceNetwork("SharedNetwork", {});
  * const policy = yield* ResourcePolicy("SharePolicy", {
@@ -71,10 +67,10 @@ export interface ResourcePolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.VpcLattice.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.VpcLattice.ResourcePolicy");
 
 export const ResourcePolicyProvider = () =>
   Provider.effect(
@@ -86,9 +82,7 @@ export const ResourcePolicyProvider = () =>
       const observe = (resourceArn: string) =>
         vpclattice.getResourcePolicy({ resourceArn }).pipe(
           Effect.map((response) => response.policy),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const toDesired = (policy: PolicyDocument | string) =>
@@ -120,8 +114,7 @@ export const ResourcePolicyProvider = () =>
           const observed = yield* observe(resourceArn);
           if (
             observed === undefined ||
-            normalizePolicyDocument(observed) !==
-              normalizePolicyDocument(desired)
+            normalizePolicyDocument(observed) !== normalizePolicyDocument(desired)
           ) {
             yield* vpclattice.putResourcePolicy({
               resourceArn,
@@ -138,9 +131,7 @@ export const ResourcePolicyProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* vpclattice
             .deleteResourcePolicy({ resourceArn: output.resourceArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

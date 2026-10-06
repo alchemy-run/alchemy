@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  * effective policy are reported in `effectiveLifecyclePolicyErrorDetails`.
  * Provide the implementation with
  * `Effect.provide(AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicyHttp)`.
- * @binding
- * @section Account Settings
- * @example Resolve an index's effective retention
+ * ### Account Settings
+ * **Example:** Resolve an index's effective retention
  * ```typescript
  * const batchGetEffectiveLifecyclePolicy =
  *   yield* AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicy();
@@ -27,6 +26,8 @@ import * as Binding from "../../Binding.ts";
  * const effective = response.effectiveLifecyclePolicyDetails?.[0];
  * yield* Effect.log(`retention: ${effective?.retentionPeriod}`);
  * ```
+ *
+ * @binding
  */
 export interface BatchGetEffectiveLifecyclePolicy extends Binding.Service<
   BatchGetEffectiveLifecyclePolicy,
@@ -40,7 +41,6 @@ export interface BatchGetEffectiveLifecyclePolicy extends Binding.Service<
     >
   >
 > {}
-export const BatchGetEffectiveLifecyclePolicy =
-  Binding.Service<BatchGetEffectiveLifecyclePolicy>(
-    "AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicy",
-  );
+export const BatchGetEffectiveLifecyclePolicy = Binding.Service<BatchGetEffectiveLifecyclePolicy>(
+  "AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicy",
+);

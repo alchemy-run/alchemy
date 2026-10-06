@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface GetPublicKeyRequest extends Omit<
-  kms.GetPublicKeyRequest,
-  "KeyId"
-> {}
+export interface GetPublicKeyRequest extends Omit<kms.GetPublicKeyRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:GetPublicKey`.
@@ -17,15 +14,16 @@ export interface GetPublicKeyRequest extends Omit<
  * the `KeyId`. Returns the DER-encoded public key so callers can verify
  * signatures or encrypt locally without a KMS round-trip per operation.
  *
- * @binding
- * @section Signing
- * @example Download the Public Key
+ * ### Signing
+ * **Example:** Download the Public Key
  * ```typescript
  * const getPublicKey = yield* AWS.KMS.GetPublicKey(signingKey);
  *
  * const { PublicKey, SigningAlgorithms } = yield* getPublicKey({});
  * // PublicKey is the DER-encoded SubjectPublicKeyInfo
  * ```
+ *
+ * @binding
  */
 export interface GetPublicKey extends Binding.Service<
   GetPublicKey,
@@ -39,6 +37,4 @@ export interface GetPublicKey extends Binding.Service<
   >
 > {}
 
-export const GetPublicKey = Binding.Service<GetPublicKey>(
-  "AWS.KMS.GetPublicKey",
-);
+export const GetPublicKey = Binding.Service<GetPublicKey>("AWS.KMS.GetPublicKey");

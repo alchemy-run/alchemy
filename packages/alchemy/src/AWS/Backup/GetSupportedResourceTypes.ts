@@ -9,15 +9,16 @@ import * as Binding from "../../Binding.ts";
  * Returns the AWS resource types AWS Backup supports (e.g. `DynamoDB`,
  * `EBS`, `RDS`). Provide the implementation with
  * `Effect.provide(AWS.Backup.GetSupportedResourceTypesHttp)`.
- * @binding
- * @section Protected Resources
- * @example List Supported Resource Types
+ * ### Protected Resources
+ * **Example:** List Supported Resource Types
  * ```typescript
  * const getSupportedResourceTypes =
  *   yield* AWS.Backup.GetSupportedResourceTypes();
  *
  * const { ResourceTypes } = yield* getSupportedResourceTypes();
  * ```
+ *
+ * @binding
  */
 export interface GetSupportedResourceTypes extends Binding.Service<
   GetSupportedResourceTypes,
@@ -31,7 +32,6 @@ export interface GetSupportedResourceTypes extends Binding.Service<
     >
   >
 > {}
-export const GetSupportedResourceTypes =
-  Binding.Service<GetSupportedResourceTypes>(
-    "AWS.Backup.GetSupportedResourceTypes",
-  );
+export const GetSupportedResourceTypes = Binding.Service<GetSupportedResourceTypes>(
+  "AWS.Backup.GetSupportedResourceTypes",
+);

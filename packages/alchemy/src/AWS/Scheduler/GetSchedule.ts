@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
-export interface GetScheduleRequest extends Omit<
-  scheduler.GetScheduleInput,
-  "GroupName"
-> {}
+export interface GetScheduleRequest extends Omit<scheduler.GetScheduleInput, "GroupName"> {}
 
 /**
  * Runtime binding for `scheduler:GetSchedule`.
@@ -15,9 +12,8 @@ export interface GetScheduleRequest extends Omit<
  * deployed Lambda inspects schedules it minted at runtime (is the reminder
  * still pending?). Optionally scoped to a `ScheduleGroup`; without one it
  * covers the default group.
- * @binding
- * @section Reading Schedules At Runtime
- * @example Check A Pending Reminder
+ * ### Reading Schedules At Runtime
+ * **Example:** Check A Pending Reminder
  * ```typescript
  * const getSchedule = yield* AWS.Scheduler.GetSchedule();
  *
@@ -26,10 +22,12 @@ export interface GetScheduleRequest extends Omit<
  * console.log(schedule.State, schedule.ScheduleExpression);
  * ```
  *
- * @example Scope Reads To A Schedule Group
+ * **Example:** Scope Reads To A Schedule Group
  * ```typescript
  * const getSchedule = yield* AWS.Scheduler.GetSchedule(group);
  * ```
+ *
+ * @binding
  */
 export interface GetSchedule extends Binding.Service<
   GetSchedule,
@@ -42,6 +40,4 @@ export interface GetSchedule extends Binding.Service<
     ) => Effect.Effect<scheduler.GetScheduleOutput, scheduler.GetScheduleError>
   >
 > {}
-export const GetSchedule = Binding.Service<GetSchedule>(
-  "AWS.Scheduler.GetSchedule",
-);
+export const GetSchedule = Binding.Service<GetSchedule>("AWS.Scheduler.GetSchedule");

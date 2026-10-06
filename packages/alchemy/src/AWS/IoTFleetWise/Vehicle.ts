@@ -85,9 +85,8 @@ export interface Vehicle extends Resource<
  * An AWS IoT FleetWise vehicle — the digital twin of a physical vehicle,
  * created from an `ACTIVE` {@link ModelManifest} and
  * {@link DecoderManifest} pair and backed by an AWS IoT thing.
- * @resource
- * @section Creating a Vehicle
- * @example Vehicle with an Auto-Created IoT Thing
+ * ### Creating a Vehicle
+ * **Example:** Vehicle with an Auto-Created IoT Thing
  * ```typescript
  * const vehicle = yield* Vehicle("TestVehicle", {
  *   modelManifestArn: model.modelManifestArn,
@@ -95,7 +94,7 @@ export interface Vehicle extends Resource<
  * });
  * ```
  *
- * @example Vehicle with Attributes
+ * **Example:** Vehicle with Attributes
  * ```typescript
  * const vehicle = yield* Vehicle("TestVehicle", {
  *   modelManifestArn: model.modelManifestArn,
@@ -104,6 +103,8 @@ export interface Vehicle extends Resource<
  *   tags: { plant: "fremont" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Vehicle = Resource<Vehicle>("AWS.IoTFleetWise.Vehicle");
 
@@ -128,15 +129,11 @@ export const VehicleProvider = () =>
       const readVehicle = Effect.fn(function* (vehicleName: string) {
         return yield* iotfleetwise.getVehicle({ vehicleName }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
-      const toAttrs = Effect.fn(function* (
-        vehicle: iotfleetwise.GetVehicleResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (vehicle: iotfleetwise.GetVehicleResponse) {
         if (
           vehicle.vehicleName === undefined ||
           vehicle.arn === undefined ||
@@ -144,9 +141,7 @@ export const VehicleProvider = () =>
           vehicle.decoderManifestArn === undefined
         ) {
           return yield* Effect.fail(
-            new Error(
-              `Vehicle '${vehicle.vehicleName}' is missing required fields`,
-            ),
+            new Error(`Vehicle '${vehicle.vehicleName}' is missing required fields`),
           );
         }
         return {
@@ -200,8 +195,7 @@ export const VehicleProvider = () =>
                 modelManifestArn: news.modelManifestArn,
                 decoderManifestArn: news.decoderManifestArn,
                 attributes: news.attributes,
-                associationBehavior:
-                  news.associationBehavior ?? "CreateIotThing",
+                associationBehavior: news.associationBehavior ?? "CreateIotThing",
                 stateTemplates: news.stateTemplates,
                 tags: toFleetWiseTagList(desiredTags),
               })
@@ -225,24 +219,15 @@ export const VehicleProvider = () =>
             observed.decoderManifestArn !== news.decoderManifestArn;
           const attributesChanged =
             news.attributes !== undefined &&
-            !stableEquals(
-              toAttributeRecord(observed.attributes),
-              news.attributes,
-            );
+            !stableEquals(toAttributeRecord(observed.attributes), news.attributes);
           if (manifestChanged || attributesChanged) {
             yield* iotfleetwise
               .updateVehicle({
                 vehicleName: name,
-                modelManifestArn: manifestChanged
-                  ? news.modelManifestArn
-                  : undefined,
-                decoderManifestArn: manifestChanged
-                  ? news.decoderManifestArn
-                  : undefined,
+                modelManifestArn: manifestChanged ? news.modelManifestArn : undefined,
+                decoderManifestArn: manifestChanged ? news.decoderManifestArn : undefined,
                 attributes: attributesChanged ? news.attributes : undefined,
-                attributeUpdateMode: attributesChanged
-                  ? "Overwrite"
-                  : undefined,
+                attributeUpdateMode: attributesChanged ? "Overwrite" : undefined,
               })
               .pipe(inFleetWiseRegion);
             observed = yield* readVehicle(name).pipe(
@@ -265,20 +250,13 @@ export const VehicleProvider = () =>
             const observedByIdentifier = new Map(
               observedAssociations.map((a) => [a.identifier, a]),
             );
-            const desiredIdentifiers = new Set(
-              desired.map((a) => a.identifier),
-            );
-            const templatesToAdd = desired.filter(
-              (a) => !observedByIdentifier.has(a.identifier),
-            );
+            const desiredIdentifiers = new Set(desired.map((a) => a.identifier));
+            const templatesToAdd = desired.filter((a) => !observedByIdentifier.has(a.identifier));
             const templatesToUpdate = desired.filter((a) => {
               const current = observedByIdentifier.get(a.identifier);
               return (
                 current !== undefined &&
-                !stableEquals(
-                  current.stateTemplateUpdateStrategy,
-                  a.stateTemplateUpdateStrategy,
-                )
+                !stableEquals(current.stateTemplateUpdateStrategy, a.stateTemplateUpdateStrategy)
               );
             });
             const templatesToRemove = observedAssociations
@@ -292,16 +270,11 @@ export const VehicleProvider = () =>
               yield* iotfleetwise
                 .updateVehicle({
                   vehicleName: name,
-                  stateTemplatesToAdd:
-                    templatesToAdd.length > 0 ? templatesToAdd : undefined,
+                  stateTemplatesToAdd: templatesToAdd.length > 0 ? templatesToAdd : undefined,
                   stateTemplatesToUpdate:
-                    templatesToUpdate.length > 0
-                      ? templatesToUpdate
-                      : undefined,
+                    templatesToUpdate.length > 0 ? templatesToUpdate : undefined,
                   stateTemplatesToRemove:
-                    templatesToRemove.length > 0
-                      ? templatesToRemove
-                      : undefined,
+                    templatesToRemove.length > 0 ? templatesToRemove : undefined,
                 })
                 .pipe(inFleetWiseRegion);
               observed = yield* readVehicle(name).pipe(

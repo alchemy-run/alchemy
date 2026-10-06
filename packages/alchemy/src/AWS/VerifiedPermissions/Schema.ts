@@ -41,9 +41,8 @@ export interface Schema extends Resource<
  *
  * A policy store has at most one schema — `PutSchema` is an upsert that fully
  * replaces the previous schema.
- * @resource
- * @section Defining a Schema
- * @example Photo App Schema
+ * ### Defining a Schema
+ * **Example:** Photo App Schema
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -71,6 +70,8 @@ export interface Schema extends Resource<
  *   }),
  * });
  * ```
+ *
+ * @resource
  */
 export const Schema = Resource<Schema>("AWS.VerifiedPermissions.Schema");
 
@@ -89,11 +90,7 @@ export const SchemaProvider = () =>
           if (policyStoreId === undefined) return undefined;
           const schema = yield* avp
             .getSchema({ policyStoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (schema === undefined) return undefined;
           return { policyStoreId };
         }),

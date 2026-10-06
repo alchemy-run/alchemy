@@ -2,7 +2,6 @@ import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -133,13 +132,7 @@ export interface DnssecAttributes {
   initialUseNsec3: boolean | undefined;
 }
 
-export type Dnssec = Resource<
-  TypeId,
-  DnssecProps,
-  DnssecAttributes,
-  never,
-  Providers
->;
+export type Dnssec = Resource<TypeId, DnssecProps, DnssecAttributes, never, Providers>;
 
 /**
  * DNSSEC configuration for a Cloudflare zone
@@ -161,11 +154,8 @@ export type Dnssec = Resource<
  * Safety: when there is no prior state and DNSSEC is already enabled
  * on the zone, `read` reports it as `Unowned` and the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Enabling DNSSEC
- * @example Sign the zone
+ * ### Enabling DNSSEC
+ * **Example:** Sign the zone
  * ```typescript
  * const dnssec = yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
@@ -173,7 +163,7 @@ export type Dnssec = Resource<
  * // Paste `dnssec.ds` at your registrar to complete activation.
  * ```
  *
- * @example Multi-signer DNSSEC
+ * **Example:** Multi-signer DNSSEC
  * ```typescript
  * yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
@@ -181,14 +171,18 @@ export type Dnssec = Resource<
  * });
  * ```
  *
- * @section Disabling DNSSEC
- * @example Keep DNSSEC explicitly off
+ * ### Disabling DNSSEC
+ * **Example:** Keep DNSSEC explicitly off
  * ```typescript
  * yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  *   status: "disabled",
  * });
  * ```
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const Dnssec = Resource<Dnssec>(TypeId, {
   aliases: ["Cloudflare.Dns.Dnssec"],
@@ -240,22 +234,15 @@ export const DnssecProvider = () =>
       const n = news as DnssecProps;
       // zoneId is the resource's identity (DNSSEC is a zone singleton).
       // It is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* dns.getDnssec({ zoneId }).pipe(
         // Zone deleted out-of-band — DNSSEC config is gone with it.
@@ -380,9 +367,7 @@ interface InitialDnssec {
  * desired family (`pending` is on its way to `active`,
  * `pending-disabled` / `error` / unknown collapse to `disabled`).
  */
-const statusFamily = (
-  status: string | null | undefined,
-): DnssecDesiredStatus =>
+const statusFamily = (status: string | null | undefined): DnssecDesiredStatus =>
   status === "active" || status === "pending" ? "active" : "disabled";
 
 const flag = (v: boolean | null | undefined): boolean => v ?? false;
@@ -412,17 +397,13 @@ const matchesDesired = (
   ) {
     return false;
   }
-  if (
-    news.dnssecUseNsec3 !== undefined &&
-    news.dnssecUseNsec3 !== flag(observed.dnssecUseNsec3)
-  ) {
+  if (news.dnssecUseNsec3 !== undefined && news.dnssecUseNsec3 !== flag(observed.dnssecUseNsec3)) {
     return false;
   }
   return true;
 };
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const toAttributes = (
   zoneId: string,

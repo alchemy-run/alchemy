@@ -13,9 +13,8 @@ import * as Binding from "../../Binding.ts";
  * response's `error` field. Provide `AppSync.EvaluateCodeHttp` on the
  * hosting function's Effect to implement the binding.
  *
- * @binding
- * @section Evaluating Resolver Code
- * @example Run a resolver's request function against a mock context
+ * ### Evaluating Resolver Code
+ * **Example:** Run a resolver's request function against a mock context
  * ```typescript
  * // init — account-level binding takes no resource
  * const evaluateCode = yield* AppSync.EvaluateCode();
@@ -32,6 +31,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * // JSON.parse(result.evaluationResult!) → { payload: 5 }
  * ```
+ *
+ * @binding
  */
 export interface EvaluateCode extends Binding.Service<
   EvaluateCode,
@@ -42,6 +43,4 @@ export interface EvaluateCode extends Binding.Service<
     ) => Effect.Effect<appsync.EvaluateCodeResponse, appsync.EvaluateCodeError>
   >
 > {}
-export const EvaluateCode = Binding.Service<EvaluateCode>(
-  "AWS.AppSync.EvaluateCode",
-);
+export const EvaluateCode = Binding.Service<EvaluateCode>("AWS.AppSync.EvaluateCode");

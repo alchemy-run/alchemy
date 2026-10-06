@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * subscriptions.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.ListDataSetsHttp)`.
- * @binding
- * @section Reading Data Sets
- * @example List Entitled Data Sets
+ * ### Reading Data Sets
+ * **Example:** List Entitled Data Sets
  * ```typescript
  * // init — account-level binding, no resource argument
  * const listDataSets = yield* AWS.DataExchange.ListDataSets();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { DataSets } = yield* listDataSets({ Origin: "ENTITLED" });
  * ```
+ *
+ * @binding
  */
 export interface ListDataSets extends Binding.Service<
   ListDataSets,
@@ -27,12 +28,7 @@ export interface ListDataSets extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dataexchange.ListDataSetsRequest,
-    ) => Effect.Effect<
-      dataexchange.ListDataSetsResponse,
-      dataexchange.ListDataSetsError
-    >
+    ) => Effect.Effect<dataexchange.ListDataSetsResponse, dataexchange.ListDataSetsError>
   >
 > {}
-export const ListDataSets = Binding.Service<ListDataSets>(
-  "AWS.DataExchange.ListDataSets",
-);
+export const ListDataSets = Binding.Service<ListDataSets>("AWS.DataExchange.ListDataSets");

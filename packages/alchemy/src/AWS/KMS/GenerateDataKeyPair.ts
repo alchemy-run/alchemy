@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface GenerateDataKeyPairRequest extends Omit<
-  kms.GenerateDataKeyPairRequest,
-  "KeyId"
-> {}
+export interface GenerateDataKeyPairRequest extends Omit<kms.GenerateDataKeyPairRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:GenerateDataKeyPair`.
@@ -22,9 +19,8 @@ export interface GenerateDataKeyPairRequest extends Omit<
  * never leaks into logs — unwrap with `Redacted.value(...)` at the point of
  * use and discard it as soon as the local operation is done.
  *
- * @binding
- * @section Data Key Pairs
- * @example Generate an RSA Key Pair
+ * ### Data Key Pairs
+ * **Example:** Generate an RSA Key Pair
  * ```typescript
  * const generateDataKeyPair = yield* AWS.KMS.GenerateDataKeyPair(key);
  *
@@ -33,6 +29,8 @@ export interface GenerateDataKeyPairRequest extends Omit<
  * // pair.PrivateKeyPlaintext  — Redacted; use locally then discard
  * // pair.PrivateKeyCiphertextBlob — persist; recover via the Decrypt binding
  * ```
+ *
+ * @binding
  */
 export interface GenerateDataKeyPair extends Binding.Service<
   GenerateDataKeyPair,
@@ -42,10 +40,7 @@ export interface GenerateDataKeyPair extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GenerateDataKeyPairRequest,
-    ) => Effect.Effect<
-      kms.GenerateDataKeyPairResponse,
-      kms.GenerateDataKeyPairError
-    >
+    ) => Effect.Effect<kms.GenerateDataKeyPairResponse, kms.GenerateDataKeyPairError>
   >
 > {}
 

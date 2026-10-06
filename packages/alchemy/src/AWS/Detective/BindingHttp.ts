@@ -18,12 +18,7 @@ import type { Graph } from "./Graph.ts";
  * ARN, and the runtime half injects the graph's `GraphArn` into every
  * request.
  */
-export const makeDetectiveGraphHttpBinding = <
-  I extends { GraphArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDetectiveGraphHttpBinding = <I extends { GraphArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Detective.ListMembers`. */
   tag: string;
   /** The distilled operation. */

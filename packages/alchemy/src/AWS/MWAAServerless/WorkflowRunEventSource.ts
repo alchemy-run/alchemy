@@ -98,8 +98,8 @@ export interface WorkflowRunEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Workflow Run Events
- * @example Alert On Failed Runs
+ * ### Consuming Workflow Run Events
+ * **Example:** Alert On Failed Runs
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -135,9 +135,7 @@ export const consumeWorkflowRunEvents = <StreamReq = never, Req = never>(
         ...(props.runStates ?? ALL_RUN_STATES).map(
           (state) => `MWAA Serverless Workflow Run ${state}`,
         ),
-        ...(props.taskStates ?? []).map(
-          (state) => `MWAA Serverless Task ${state}`,
-        ),
+        ...(props.taskStates ?? []).map((state) => `MWAA Serverless Task ${state}`),
       ],
     },
     { description: props.description, state: props.state },

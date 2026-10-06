@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.CreateSolutionHttp)`.
  *
- * @binding
- * @section Retraining Loop
- * @example Create a Solution
+ * ### Retraining Loop
+ * **Example:** Create a Solution
  * ```typescript
  * // init
  * const createSolution = yield* Personalize.CreateSolution();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   datasetGroupArn,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateSolution extends Binding.Service<
   CreateSolution,
@@ -29,12 +30,7 @@ export interface CreateSolution extends Binding.Service<
   () => Effect.Effect<
     (
       request: personalize.CreateSolutionRequest,
-    ) => Effect.Effect<
-      personalize.CreateSolutionResponse,
-      personalize.CreateSolutionError
-    >
+    ) => Effect.Effect<personalize.CreateSolutionResponse, personalize.CreateSolutionError>
   >
 > {}
-export const CreateSolution = Binding.Service<CreateSolution>(
-  "AWS.Personalize.CreateSolution",
-);
+export const CreateSolution = Binding.Service<CreateSolution>("AWS.Personalize.CreateSolution");

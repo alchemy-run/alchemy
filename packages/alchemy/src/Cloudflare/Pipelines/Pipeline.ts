@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -55,13 +54,7 @@ export interface PipelineAttributes {
   modifiedAt: string;
 }
 
-export type Pipeline = Resource<
-  TypeId,
-  PipelineProps,
-  PipelineAttributes,
-  never,
-  Providers
->;
+export type Pipeline = Resource<TypeId, PipelineProps, PipelineAttributes, never, Providers>;
 
 /**
  * A Cloudflare SQL Pipeline — the transform of the Pipelines product. A
@@ -72,11 +65,8 @@ export type Pipeline = Resource<
  * The SQL is fixed at creation: changing it (or the name) triggers a
  * replacement. Nothing references a pipeline downstream, so replacements
  * are cheap.
- * @resource
- * @product Pipelines
- * @category Storage & Databases
- * @section Creating a Pipeline
- * @example Stream → Sink passthrough
+ * ### Creating a Pipeline
+ * **Example:** Stream → Sink passthrough
  * ```typescript
  * const stream = yield* Cloudflare.Pipelines.Stream("events", {});
  * const sink = yield* Cloudflare.Pipelines.Sink("events-sink", {
@@ -89,7 +79,7 @@ export type Pipeline = Resource<
  * });
  * ```
  *
- * @example Filtering transform
+ * **Example:** Filtering transform
  * ```typescript
  * const pipeline = yield* Cloudflare.Pipelines.Pipeline("errors-only", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name} WHERE level = 'error'`,
@@ -97,6 +87,10 @@ export type Pipeline = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/pipelines/
+ *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  */
 export const Pipeline = Resource<Pipeline>(TypeId);
 
@@ -175,10 +169,7 @@ export const PipelineProvider = () =>
         // race an `PipelineAlreadyExists` against the dying pipeline.
         yield* getPipeline(accountId, observed.id).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
             until: (p) => p === undefined,
           }),
         );
@@ -192,24 +183,17 @@ export const PipelineProvider = () =>
       //    no sync step: the SQL is immutable, so changes arrive as
       //    replacements (diff).
       if (!observed) {
-        observed = yield* pipelines
-          .createV1Pipeline({ accountId, name, sql })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "TableNotFound",
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(6),
-              ]),
-            }),
-            Effect.catchTag("PipelineAlreadyExists", (error) =>
-              findPipelineByName(accountId, name).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
-              ),
+        observed = yield* pipelines.createV1Pipeline({ accountId, name, sql }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "TableNotFound",
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
+          }),
+          Effect.catchTag("PipelineAlreadyExists", (error) =>
+            findPipelineByName(accountId, name).pipe(
+              Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
             ),
-          );
+          ),
+        );
       }
 
       return toAttributes(observed, accountId);
@@ -286,10 +270,7 @@ const findPipelineByName = (accountId: string, name: string) =>
     ),
   );
 
-const toAttributes = (
-  observed: ObservedPipeline,
-  accountId: string,
-): PipelineAttributes => ({
+const toAttributes = (observed: ObservedPipeline, accountId: string): PipelineAttributes => ({
   pipelineId: observed.id,
   accountId,
   name: observed.name,

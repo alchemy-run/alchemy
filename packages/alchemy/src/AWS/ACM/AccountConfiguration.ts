@@ -1,5 +1,5 @@
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -49,16 +49,15 @@ export interface AccountConfiguration extends Resource<
  * Like the {@link Certificate} resource, the provider pins its API calls to
  * `us-east-1`.
  *
- * @resource
- * @section Configuring Expiry Events
- * @example Start Expiry Events 30 Days Before Expiration
+ * ### Configuring Expiry Events
+ * **Example:** Start Expiry Events 30 Days Before Expiration
  * ```typescript
  * const config = yield* AccountConfiguration("AcmAccount", {
  *   daysBeforeExpiry: "30 days",
  * });
  * ```
  *
- * @example Consume the Expiry Events
+ * **Example:** Consume the Expiry Events
  * ```typescript
  * // The events arrive on the default EventBridge bus with source "aws.acm".
  * yield* AWS.ACM.consumeExpiryEvents({}, (events) =>
@@ -69,10 +68,10 @@ export interface AccountConfiguration extends Resource<
  *   ),
  * );
  * ```
+ *
+ * @resource
  */
-export const AccountConfiguration = Resource<AccountConfiguration>(
-  "AWS.ACM.AccountConfiguration",
-);
+export const AccountConfiguration = Resource<AccountConfiguration>("AWS.ACM.AccountConfiguration");
 
 /** The AWS account default for `DaysBeforeExpiry`. */
 const DEFAULT_DAYS_BEFORE_EXPIRY = 45;
@@ -102,9 +101,7 @@ export const AccountConfigurationProvider = () =>
       const observe = withAcmRegion(
         acm.getAccountConfiguration({}).pipe(
           Effect.map((response) => ({
-            daysBeforeExpiry:
-              response.ExpiryEvents?.DaysBeforeExpiry ??
-              DEFAULT_DAYS_BEFORE_EXPIRY,
+            daysBeforeExpiry: response.ExpiryEvents?.DaysBeforeExpiry ?? DEFAULT_DAYS_BEFORE_EXPIRY,
           })),
         ),
       );
@@ -120,19 +117,12 @@ export const AccountConfigurationProvider = () =>
             acm
               .putAccountConfiguration({
                 ExpiryEvents: { DaysBeforeExpiry: desiredDays },
-                IdempotencyToken: idempotencyToken(
-                  tokenSeed,
-                  desiredDays,
-                  attempt,
-                ),
+                IdempotencyToken: idempotencyToken(tokenSeed, desiredDays, attempt),
               })
               .pipe(
                 Effect.retry({
                   while: (e): boolean => e._tag === "ThrottlingException",
-                  schedule: Schedule.max([
-                    Schedule.exponential("1 second"),
-                    Schedule.recurs(5),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
                 }),
               ),
           );
@@ -156,8 +146,7 @@ export const AccountConfigurationProvider = () =>
           return yield* observe;
         }),
         reconcile: Effect.fn(function* ({ instanceId, news, session }) {
-          const desiredDays =
-            toWireDays(news.daysBeforeExpiry) ?? DEFAULT_DAYS_BEFORE_EXPIRY;
+          const desiredDays = toWireDays(news.daysBeforeExpiry) ?? DEFAULT_DAYS_BEFORE_EXPIRY;
 
           // Observe the live threshold; only call the API on a real delta.
           const observed = yield* observe;

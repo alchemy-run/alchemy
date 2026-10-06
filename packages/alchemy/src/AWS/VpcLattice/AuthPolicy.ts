@@ -4,10 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AuthPolicyProps {
@@ -51,9 +48,8 @@ export interface AuthPolicy extends Resource<
  * resource policy evaluated on every request when the target's `authType`
  * is `AWS_IAM`.
  *
- * @resource
- * @section Attaching Auth Policies
- * @example Allow Authenticated Invoke on a Service Network
+ * ### Attaching Auth Policies
+ * **Example:** Allow Authenticated Invoke on a Service Network
  * ```typescript
  * const network = yield* ServiceNetwork("SecureNetwork", {
  *   authType: "AWS_IAM",
@@ -74,7 +70,7 @@ export interface AuthPolicy extends Resource<
  * });
  * ```
  *
- * @example Raw JSON Escape Hatch
+ * **Example:** Raw JSON Escape Hatch
  * ```typescript
  * const authPolicy = yield* AuthPolicy("ServiceAuthPolicy", {
  *   resourceIdentifier: service.serviceId,
@@ -84,6 +80,8 @@ export interface AuthPolicy extends Resource<
  *   }),
  * });
  * ```
+ *
+ * @resource
  */
 export const AuthPolicy = Resource<AuthPolicy>("AWS.VpcLattice.AuthPolicy");
 
@@ -96,12 +94,8 @@ export const AuthPolicyProvider = () =>
       // latter, so treat an absent `policy` as non-existence.
       const observe = (resourceIdentifier: string) =>
         vpclattice.getAuthPolicy({ resourceIdentifier }).pipe(
-          Effect.map((response) =>
-            response.policy === undefined ? undefined : response,
-          ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.map((response) => (response.policy === undefined ? undefined : response)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const toDesired = (policy: PolicyDocument | string) =>
@@ -116,8 +110,7 @@ export const AuthPolicyProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const resourceIdentifier =
-            output?.resourceIdentifier ?? olds?.resourceIdentifier;
+          const resourceIdentifier = output?.resourceIdentifier ?? olds?.resourceIdentifier;
           if (!resourceIdentifier) return undefined;
           const observed = yield* observe(resourceIdentifier);
           if (!observed?.policy) return undefined;
@@ -139,8 +132,7 @@ export const AuthPolicyProvider = () =>
           let state = observed?.state;
           if (
             observed?.policy === undefined ||
-            normalizePolicyDocument(observed.policy) !==
-              normalizePolicyDocument(desired)
+            normalizePolicyDocument(observed.policy) !== normalizePolicyDocument(desired)
           ) {
             const put = yield* vpclattice.putAuthPolicy({
               resourceIdentifier,
@@ -160,9 +152,7 @@ export const AuthPolicyProvider = () =>
             .deleteAuthPolicy({
               resourceIdentifier: output.resourceIdentifier,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

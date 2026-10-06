@@ -41,9 +41,8 @@ export interface IdentityPoolRoleAttachment extends Resource<
  * Attaches the authenticated/unauthenticated IAM roles to an Amazon Cognito
  * identity pool. A singleton child of the pool — one attachment manages the
  * pool's role configuration.
- * @resource
- * @section Attaching Roles
- * @example Authenticated Role
+ * ### Attaching Roles
+ * **Example:** Authenticated Role
  * ```typescript
  * import * as Cognito from "alchemy/AWS/Cognito";
  *
@@ -70,6 +69,8 @@ export interface IdentityPoolRoleAttachment extends Resource<
  *   roles: { authenticated: role.roleArn },
  * });
  * ```
+ *
+ * @resource
  */
 export const IdentityPoolRoleAttachment = Resource<IdentityPoolRoleAttachment>(
   "AWS.Cognito.IdentityPoolRoleAttachment",
@@ -87,8 +88,7 @@ const retryThroughIamPropagation = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "InvalidParameterException" ||
-      e._tag === "ConcurrentModificationException",
+      e._tag === "InvalidParameterException" || e._tag === "ConcurrentModificationException",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
   });
 
@@ -110,11 +110,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
       const getRoles = Effect.fn(function* (identityPoolId: string) {
         return yield* ci
           .getIdentityPoolRoles({ IdentityPoolId: identityPoolId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return IdentityPoolRoleAttachment.Provider.of({
@@ -148,7 +144,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({ news, output, session }) {
+        reconcile: Effect.fn(function* ({ news, session }) {
           const identityPoolId = news.identityPoolId;
           const desired = desiredRoles(news);
 
@@ -164,14 +160,8 @@ export const IdentityPoolRoleAttachmentProvider = () =>
           // 2/3. ENSURE + SYNC — SetIdentityPoolRoles is a full PUT; skip it
           //      when the observed map already matches.
           const same =
-            JSON.stringify(
-              Object.entries(observedRoles).sort(([a], [b]) =>
-                a.localeCompare(b),
-              ),
-            ) ===
-            JSON.stringify(
-              Object.entries(desired).sort(([a], [b]) => a.localeCompare(b)),
-            );
+            JSON.stringify(Object.entries(observedRoles).sort(([a], [b]) => a.localeCompare(b))) ===
+            JSON.stringify(Object.entries(desired).sort(([a], [b]) => a.localeCompare(b)));
           if (!same) {
             yield* retryThroughIamPropagation(
               ci.setIdentityPoolRoles({
@@ -193,9 +183,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
               IdentityPoolId: output.identityPoolId,
               Roles: {},
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

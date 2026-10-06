@@ -2,7 +2,6 @@ import * as ssl from "@distilled.cloud/cloudflare/ssl";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -21,10 +20,7 @@ type TypeId = typeof TypeId;
  * - `lets_encrypt` — Let's Encrypt (no `cloudflareBranding`)
  * - `ssl_com` — SSL.com (supports `email` validation)
  */
-export type CertificatePackCertificateAuthority =
-  | "google"
-  | "lets_encrypt"
-  | "ssl_com";
+export type CertificatePackCertificateAuthority = "google" | "lets_encrypt" | "ssl_com";
 
 /**
  * Domain Control Validation method used to prove ownership of the
@@ -187,11 +183,8 @@ export type CertificatePack = Resource<
  * The pack's `certificateAuthority`, `hosts`, and `validityDays` are
  * immutable — changing any of them replaces the pack (a new order).
  * `validationMethod` and `cloudflareBranding` are updated in place.
- * @resource
- * @product SSL/TLS
- * @category SSL/TLS & Certificates
- * @section Ordering a certificate pack
- * @example Order an advanced certificate for the apex and a wildcard
+ * ### Ordering a certificate pack
+ * **Example:** Order an advanced certificate for the apex and a wildcard
  * ```typescript
  * const pack = yield* Cloudflare.Ssl.CertificatePack("ApexCert", {
  *   zoneId: zone.zoneId,
@@ -202,7 +195,7 @@ export type CertificatePack = Resource<
  * });
  * ```
  *
- * @example Order from Let's Encrypt with a short validity
+ * **Example:** Order from Let's Encrypt with a short validity
  * ```typescript
  * yield* Cloudflare.Ssl.CertificatePack("ShortLivedCert", {
  *   zoneId: zone.zoneId,
@@ -213,8 +206,8 @@ export type CertificatePack = Resource<
  * });
  * ```
  *
- * @section Completing validation
- * @example Create the DCV TXT records the order asks for
+ * ### Completing validation
+ * **Example:** Create the DCV TXT records the order asks for
  * ```typescript
  * const pack = yield* Cloudflare.Ssl.CertificatePack("ApexCert", {
  *   zoneId: zone.zoneId,
@@ -228,6 +221,10 @@ export type CertificatePack = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ssl/edge-certificates/advanced-certificate-manager/
+ *
+ * @resource
+ * @product SSL/TLS
+ * @category SSL/TLS & Certificates
  */
 export const CertificatePack = Resource<CertificatePack>(TypeId);
 
@@ -249,13 +246,8 @@ export const CertificatePackProvider = () =>
       // zoneId is the pack's scope; it is Input<string>, so compare only
       // once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ??
-        (typeof olds.zoneId === "string" ? olds.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        output?.zoneId ?? (typeof olds.zoneId === "string" ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       // The order is immutable in CA, hosts, and validity — any change is
@@ -272,9 +264,7 @@ export const CertificatePackProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
 
       // Owned path: refresh by our persisted pack id.
@@ -365,23 +355,21 @@ export const CertificatePackProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          ssl.listCertificatePacks
-            .pages({ zoneId: zone.id, status: "all" })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    .filter((pack) => pack.type === "advanced")
-                    .map((pack) => toAttributes(zone.id, pack)),
-                ),
-              ),
-              // A plan-gated zone (no ACM) rejects the route, and a freshly
-              // minted token may briefly answer Forbidden — skip either.
-              Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-                Effect.succeed([] as CertificatePackAttributes[]),
+          ssl.listCertificatePacks.pages({ zoneId: zone.id, status: "all" }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((pack) => pack.type === "advanced")
+                  .map((pack) => toAttributes(zone.id, pack)),
               ),
             ),
+            // A plan-gated zone (no ACM) rejects the route, and a freshly
+            // minted token may briefly answer Forbidden — skip either.
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+              Effect.succeed([] as CertificatePackAttributes[]),
+            ),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -419,9 +407,7 @@ type ObservedPack =
 const getPack = (zoneId: string, certificatePackId: string) =>
   ssl.getCertificatePack({ zoneId, certificatePackId }).pipe(
     Effect.map((pack): ssl.GetCertificatePackResponse | undefined => pack),
-    Effect.catchTag(["CertificatePackNotFound", "InvalidRoute"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["CertificatePackNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
   );
 
 /**
@@ -433,18 +419,13 @@ const findByHosts = (zoneId: string, hosts: string[]) =>
   ssl.listCertificatePacks.items({ zoneId, status: "all" }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (pack) => pack.type === "advanced" && sameHosts(pack.hosts, hosts),
-      ),
+      Array.from(chunk).find((pack) => pack.type === "advanced" && sameHosts(pack.hosts, hosts)),
     ),
     Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
   );
 
 /** Order-insensitive host set comparison. */
-const sameHosts = (
-  a: ReadonlyArray<string>,
-  b: ReadonlyArray<string>,
-): boolean => {
+const sameHosts = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean => {
   if (a.length !== b.length) return false;
   const set = new Set(a);
   return b.every((host) => set.has(host));

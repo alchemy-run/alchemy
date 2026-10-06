@@ -16,9 +16,8 @@ export interface CreatePresignedUrlRequest extends Omit<
  *
  * Creates a presigned upload URL for a file-upload card of the bound Q App. Provide the implementation with
  * `Effect.provide(AWS.QApps.CreatePresignedUrlHttp)`.
- * @binding
- * @section Files
- * @example Create a Presigned Upload URL
+ * ### Files
+ * **Example:** Create a Presigned Upload URL
  * ```typescript
  * // init — bind the operation to the Q App
  * const createPresignedUrl = yield* AWS.QApps.CreatePresignedUrl(app);
@@ -33,6 +32,8 @@ export interface CreatePresignedUrlRequest extends Omit<
  * });
  * console.log(upload.presignedUrl);
  * ```
+ *
+ * @binding
  */
 export interface CreatePresignedUrl extends Binding.Service<
   CreatePresignedUrl,
@@ -42,10 +43,7 @@ export interface CreatePresignedUrl extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreatePresignedUrlRequest,
-    ) => Effect.Effect<
-      qapps.CreatePresignedUrlOutput,
-      qapps.CreatePresignedUrlError
-    >
+    ) => Effect.Effect<qapps.CreatePresignedUrlOutput, qapps.CreatePresignedUrlError>
   >
 > {}
 

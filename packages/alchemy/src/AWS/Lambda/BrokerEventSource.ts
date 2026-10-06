@@ -35,9 +35,7 @@ export const BrokerEventSource = Layer.effect(
     return Effect.fn(function* <Req = never>(
       broker: Broker,
       props: BrokerEventSourceProps,
-      process: (
-        stream: Stream.Stream<MQMessage>,
-      ) => Effect.Effect<void, never, Req>,
+      process: (stream: Stream.Stream<MQMessage>) => Effect.Effect<void, never, Req>,
     ) {
       // Deploy-time: grant IAM and create the event-source mapping. Skipped
       // once running inside the deployed Function (the global guard).
@@ -46,45 +44,41 @@ export const BrokerEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.MQ.BrokerEventSource(${broker}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: ["mq:DescribeBroker"],
-                    Resource: [broker.brokerArn],
-                  },
-                  {
-                    Effect: "Allow",
-                    Action: ["secretsmanager:GetSecretValue"],
-                    Resource: [props.credentialsSecretArn],
-                  },
-                  {
-                    // MQ event sources run in the broker's VPC; the poller
-                    // manages elastic network interfaces on the function's
-                    // behalf. These EC2 actions have no resource-level scoping.
-                    Effect: "Allow",
-                    Action: [
-                      "ec2:CreateNetworkInterface",
-                      "ec2:DeleteNetworkInterface",
-                      "ec2:DescribeNetworkInterfaces",
-                      "ec2:DescribeSecurityGroups",
-                      "ec2:DescribeSubnets",
-                      "ec2:DescribeVpcs",
-                    ],
-                    Resource: ["*"],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.MQ.BrokerEventSource(${broker}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["mq:DescribeBroker"],
+                  Resource: [broker.brokerArn],
+                },
+                {
+                  Effect: "Allow",
+                  Action: ["secretsmanager:GetSecretValue"],
+                  Resource: [props.credentialsSecretArn],
+                },
+                {
+                  // MQ event sources run in the broker's VPC; the poller
+                  // manages elastic network interfaces on the function's
+                  // behalf. These EC2 actions have no resource-level scoping.
+                  Effect: "Allow",
+                  Action: [
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DeleteNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeVpcs",
+                  ],
+                  Resource: ["*"],
+                },
+              ],
+            });
 
             yield* Mapping(`${broker.LogicalId}-EventSource`, {
               functionName: host.functionName,
               eventSourceArn: broker.brokerArn,
               queues: props.queues,
-              sourceAccessConfigurations: [
-                { Type: "BASIC_AUTH", URI: props.credentialsSecretArn },
-              ],
+              sourceAccessConfigurations: [{ Type: "BASIC_AUTH", URI: props.credentialsSecretArn }],
               batchSize: props.batchSize ?? 100,
               maximumBatchingWindow: props.maximumBatchingWindow,
               enabled: props.enabled ?? true,
@@ -97,9 +91,7 @@ export const BrokerEventSource = Layer.effect(
         Effect.gen(function* () {
           return (event: any) => {
             if (isMQEvent(event)) {
-              return process(Stream.fromArray(messagesOf(event))).pipe(
-                Effect.orDie,
-              );
+              return process(Stream.fromArray(messagesOf(event))).pipe(Effect.orDie);
             }
           };
         }),

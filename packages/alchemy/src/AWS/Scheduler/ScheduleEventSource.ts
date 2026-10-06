@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import type * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
-import { createHash } from "node:crypto";
 import * as Binding from "../../Binding.ts";
 import * as IAM from "../IAM/index.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
@@ -45,8 +45,7 @@ export interface ScheduleEvent {
  * by `consumeSchedule`.
  */
 export const isScheduleEvent = (event: any): event is ScheduleEvent =>
-  event?.source === "alchemy.scheduler" &&
-  typeof event?.scheduleId === "string";
+  event?.source === "alchemy.scheduler" && typeof event?.scheduleId === "string";
 
 export interface ScheduleRouteProps {
   /**
@@ -116,6 +115,7 @@ export interface ScheduleDescriptor {
  * provisions the backing `Schedule` (plus the synthesized execution role that
  * lets Scheduler invoke the host) and registers the runtime handler with a
  * typed event guard.
+ *
  * @binding
  */
 export interface ScheduleEventSource extends Binding.Service<
@@ -201,10 +201,7 @@ const toScheduleDescriptor = (
  * id. Computed identically at deploy time (to name the backing resources) and
  * at runtime (to match incoming events to the handler).
  */
-export const createScheduleRouteId = (
-  descriptor: ScheduleDescriptor,
-  fn: LambdaFunction,
-): string =>
+export const createScheduleRouteId = (descriptor: ScheduleDescriptor, fn: LambdaFunction): string =>
   descriptor.id ??
   `Scheduler${createHash("sha1")
     .update(
@@ -220,6 +217,7 @@ export const createScheduleRouteId = (
  * Deploy-time half of `consumeSchedule`: synthesize the execution role that
  * lets EventBridge Scheduler invoke the host Function and create the backing
  * `Schedule` whose `Input` template carries the typed event envelope.
+ *
  * @binding
  */
 export const createScheduleRoute = (

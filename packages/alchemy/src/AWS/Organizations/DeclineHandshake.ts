@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.DeclineHandshakeHttp)`.
- * @binding
- * @section Handshakes & Invitations
- * @example Decline an Invitation
+ * ### Handshakes & Invitations
+ * **Example:** Decline an Invitation
  * ```typescript
  * // init — account-level binding, no resource argument
  * const declineHandshake = yield* AWS.Organizations.DeclineHandshake();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { Handshake } = yield* declineHandshake({ HandshakeId: handshakeId });
  * ```
+ *
+ * @binding
  */
 export interface DeclineHandshake extends Binding.Service<
   DeclineHandshake,
@@ -26,10 +27,7 @@ export interface DeclineHandshake extends Binding.Service<
   () => Effect.Effect<
     (
       request: organizations.DeclineHandshakeRequest,
-    ) => Effect.Effect<
-      organizations.DeclineHandshakeResponse,
-      organizations.DeclineHandshakeError
-    >
+    ) => Effect.Effect<organizations.DeclineHandshakeResponse, organizations.DeclineHandshakeError>
   >
 > {}
 export const DeclineHandshake = Binding.Service<DeclineHandshake>(

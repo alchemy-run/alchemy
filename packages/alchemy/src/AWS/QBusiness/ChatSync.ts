@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `ChatSync` request with `applicationId` injected from the bound application.
  */
-export interface ChatSyncRequest extends Omit<
-  qbusiness.ChatSyncInput,
-  "applicationId"
-> {}
+export interface ChatSyncRequest extends Omit<qbusiness.ChatSyncInput, "applicationId"> {}
 
 /**
  * Runtime binding for the `ChatSync` operation (IAM action
@@ -21,15 +18,16 @@ export interface ChatSyncRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.ChatSyncHttp)`.
  *
- * @binding
- * @section Chat
- * @example Ask a Question
+ * ### Chat
+ * **Example:** Ask a Question
  * ```typescript
  * const chat = yield* AWS.QBusiness.ChatSync(app);
  *
  * const reply = yield* chat({ userMessage: "What is our travel policy?" });
  * console.log(reply.systemMessage);
  * ```
+ *
+ * @binding
  */
 export interface ChatSync extends Binding.Service<
   ChatSync,
@@ -37,9 +35,7 @@ export interface ChatSync extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request?: ChatSyncRequest,
-    ) => Effect.Effect<qbusiness.ChatSyncOutput, qbusiness.ChatSyncError>
+    (request?: ChatSyncRequest) => Effect.Effect<qbusiness.ChatSyncOutput, qbusiness.ChatSyncError>
   >
 > {}
 export const ChatSync = Binding.Service<ChatSync>("AWS.QBusiness.ChatSync");

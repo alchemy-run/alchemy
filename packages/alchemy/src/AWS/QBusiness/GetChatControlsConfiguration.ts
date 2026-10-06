@@ -20,14 +20,15 @@ export interface GetChatControlsConfigurationRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.GetChatControlsConfigurationHttp)`.
  *
- * @binding
- * @section Admin Controls
- * @example Read Chat Controls
+ * ### Admin Controls
+ * **Example:** Read Chat Controls
  * ```typescript
  * const getControls = yield* AWS.QBusiness.GetChatControlsConfiguration(app);
  *
  * const { responseScope, blockedPhrases } = yield* getControls();
  * ```
+ *
+ * @binding
  */
 export interface GetChatControlsConfiguration extends Binding.Service<
   GetChatControlsConfiguration,
@@ -43,7 +44,6 @@ export interface GetChatControlsConfiguration extends Binding.Service<
     >
   >
 > {}
-export const GetChatControlsConfiguration =
-  Binding.Service<GetChatControlsConfiguration>(
-    "AWS.QBusiness.GetChatControlsConfiguration",
-  );
+export const GetChatControlsConfiguration = Binding.Service<GetChatControlsConfiguration>(
+  "AWS.QBusiness.GetChatControlsConfiguration",
+);

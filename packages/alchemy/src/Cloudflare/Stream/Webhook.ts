@@ -2,7 +2,6 @@ import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -41,13 +40,7 @@ export type WebhookAttributes = {
   secret: Redacted.Redacted<string>;
 };
 
-export type Webhook = Resource<
-  TypeId,
-  WebhookProps,
-  WebhookAttributes,
-  never,
-  Providers
->;
+export type Webhook = Resource<TypeId, WebhookProps, WebhookAttributes, never, Providers>;
 
 /**
  * The Cloudflare Stream webhook — an **account-level singleton** that
@@ -60,11 +53,8 @@ export type Webhook = Resource<
  * Destroying the resource deletes the webhook configuration.
  *
  * Requires the Stream subscription to be enabled on the account.
- * @resource
- * @product Stream
- * @category Media
- * @section Configuring the webhook
- * @example Receive Stream notifications
+ * ### Configuring the webhook
+ * **Example:** Receive Stream notifications
  * ```typescript
  * const webhook = yield* Cloudflare.Stream.Webhook("Notifications", {
  *   notificationUrl: "https://example.com/hooks/stream",
@@ -75,6 +65,10 @@ export type Webhook = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/stream/manage-video-library/using-webhooks/
+ *
+ * @resource
+ * @product Stream
+ * @category Media
  */
 export const Webhook = Resource<Webhook>(TypeId);
 
@@ -134,10 +128,7 @@ export const WebhookProvider = () =>
       // Sync — PUT is a true upsert, so create and update are the same
       // call. Skip the API entirely when the observed URL already
       // matches the desired one.
-      if (
-        observed !== undefined &&
-        observed.notificationUrl === news.notificationUrl
-      ) {
+      if (observed !== undefined && observed.notificationUrl === news.notificationUrl) {
         return toAttributes(observed, acct);
       }
       const updated = yield* stream.putWebhook({

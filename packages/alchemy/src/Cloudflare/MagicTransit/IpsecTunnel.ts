@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -129,22 +128,19 @@ export type IpsecTunnel = Resource<
  * The tunnel `name` is unique per account and immutable in practice —
  * changing it triggers a replacement. The `psk` is write-only: Cloudflare
  * never returns it, so the configured value is carried in state.
- * @resource
- * @product Magic Transit
- * @category Network
- * @section Creating an IPsec tunnel
- * @example Basic tunnel with a provided PSK
+ * ### Creating an IPsec tunnel
+ * **Example:** Basic tunnel with a provided PSK
  * ```typescript
  * const tunnel = yield* Cloudflare.MagicTransit.IpsecTunnel("branch", {
  *   name: "branch-ipsec-1",
  *   cloudflareEndpoint: "203.0.113.1",
  *   customerEndpoint: "198.51.100.1",
  *   interfaceAddress: "10.213.0.10/31",
- *   psk: yield* Config.redacted("IPSEC_PSK"),
+ *   psk: yield* Config.Redacted("IPSEC_PSK"),
  * });
  * ```
  *
- * @example Tunnel with replay protection and health checks
+ * **Example:** Tunnel with replay protection and health checks
  * ```typescript
  * const tunnel = yield* Cloudflare.MagicTransit.IpsecTunnel("branch", {
  *   name: "branch-ipsec-1",
@@ -156,6 +152,10 @@ export type IpsecTunnel = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/magic-wan/reference/tunnels/
+ *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  */
 export const IpsecTunnel = Resource<IpsecTunnel>(TypeId);
 
@@ -204,9 +204,7 @@ export const IpsecTunnelProvider = () =>
 
       // Observe — the id on `output` is a hint; fall through to the
       // unique-name lookup when it is gone.
-      let observed = output?.tunnelId
-        ? yield* getTunnel(accountId, output.tunnelId)
-        : undefined;
+      let observed = output?.tunnelId ? yield* getTunnel(accountId, output.tunnelId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, news.name);
       }
@@ -259,9 +257,7 @@ export const IpsecTunnelProvider = () =>
           healthCheck: toHealthCheckRequest(news.healthCheck),
         });
         observed =
-          updated.modifiedIpsecTunnel ??
-          (yield* getTunnel(accountId, observed.id)) ??
-          observed;
+          updated.modifiedIpsecTunnel ?? (yield* getTunnel(accountId, observed.id)) ?? observed;
       }
 
       return toAttributes(observed, accountId, news.psk);
@@ -282,21 +278,17 @@ export const IpsecTunnelProvider = () =>
     // returned, so it is `undefined` here — matching `read`'s cold-read shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* magicTransit
-        .listIpsecTunnels({ accountId, xMagicNewHcTarget: true })
-        .pipe(
-          Effect.map((r) =>
-            (r.ipsecTunnels ?? []).map((tunnel) =>
-              toAttributes(tunnel, accountId, undefined),
-            ),
-          ),
-          // Accounts that aren't onboarded onto Magic Transit (code 1012)
-          // or lack the entitlement can't enumerate tunnels — treat as none.
-          Effect.catchTag(
-            ["MagicTransitNotOnboarded", "Forbidden"],
-            (): Effect.Effect<IpsecTunnelAttributes[]> => Effect.succeed([]),
-          ),
-        );
+      return yield* magicTransit.listIpsecTunnels({ accountId, xMagicNewHcTarget: true }).pipe(
+        Effect.map((r) =>
+          (r.ipsecTunnels ?? []).map((tunnel) => toAttributes(tunnel, accountId, undefined)),
+        ),
+        // Accounts that aren't onboarded onto Magic Transit (code 1012)
+        // or lack the entitlement can't enumerate tunnels — treat as none.
+        Effect.catchTag(
+          ["MagicTransitNotOnboarded", "Forbidden"],
+          (): Effect.Effect<IpsecTunnelAttributes[]> => Effect.succeed([]),
+        ),
+      );
     }),
   });
 
@@ -314,10 +306,7 @@ interface ObservedIpsecTunnel {
     direction?: string | null;
     enabled?: boolean | null;
     rate?: string | null;
-    target?:
-      | { effective?: string | null; saved?: string | null }
-      | string
-      | null;
+    target?: { effective?: string | null; saved?: string | null } | string | null;
     type?: string | null;
   } | null;
   createdOn?: string | null;
@@ -329,14 +318,10 @@ interface ObservedIpsecTunnel {
  * error code 1032) to `undefined`.
  */
 const getTunnel = (accountId: string, ipsecTunnelId: string) =>
-  magicTransit
-    .getIpsecTunnel({ accountId, ipsecTunnelId, xMagicNewHcTarget: true })
-    .pipe(
-      Effect.map(
-        (r): ObservedIpsecTunnel | undefined => r.ipsecTunnel ?? undefined,
-      ),
-      Effect.catchTag("IpsecTunnelNotFound", () => Effect.succeed(undefined)),
-    );
+  magicTransit.getIpsecTunnel({ accountId, ipsecTunnelId, xMagicNewHcTarget: true }).pipe(
+    Effect.map((r): ObservedIpsecTunnel | undefined => r.ipsecTunnel ?? undefined),
+    Effect.catchTag("IpsecTunnelNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find a tunnel by exact name. Names are unique per account, so at most
@@ -379,18 +364,14 @@ const observedHealthTarget = (
   return target?.saved ?? undefined;
 };
 
-const dirty = (
-  observed: ObservedIpsecTunnel,
-  news: IpsecTunnelProps,
-): boolean =>
+const dirty = (observed: ObservedIpsecTunnel, news: IpsecTunnelProps): boolean =>
   observed.cloudflareEndpoint !== news.cloudflareEndpoint ||
   observed.interfaceAddress !== news.interfaceAddress ||
   (news.customerEndpoint !== undefined &&
     (observed.customerEndpoint ?? undefined) !== news.customerEndpoint) ||
   (news.interfaceAddress6 !== undefined &&
     (observed.interfaceAddress6 ?? undefined) !== news.interfaceAddress6) ||
-  (news.description !== undefined &&
-    (observed.description ?? undefined) !== news.description) ||
+  (news.description !== undefined && (observed.description ?? undefined) !== news.description) ||
   (news.replayProtection !== undefined &&
     (observed.replayProtection ?? false) !== news.replayProtection) ||
   healthCheckDirty(observed.healthCheck, news.healthCheck);
@@ -402,14 +383,11 @@ const healthCheckDirty = (
   if (desired === undefined) return false;
   const hc = observed ?? {};
   return (
-    (desired.enabled !== undefined &&
-      (hc.enabled ?? undefined) !== desired.enabled) ||
-    (desired.direction !== undefined &&
-      (hc.direction ?? undefined) !== desired.direction) ||
+    (desired.enabled !== undefined && (hc.enabled ?? undefined) !== desired.enabled) ||
+    (desired.direction !== undefined && (hc.direction ?? undefined) !== desired.direction) ||
     (desired.rate !== undefined && (hc.rate ?? undefined) !== desired.rate) ||
     (desired.type !== undefined && (hc.type ?? undefined) !== desired.type) ||
-    (desired.target !== undefined &&
-      observedHealthTarget(hc) !== desired.target)
+    (desired.target !== undefined && observedHealthTarget(hc) !== desired.target)
   );
 };
 

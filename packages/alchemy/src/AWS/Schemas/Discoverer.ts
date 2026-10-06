@@ -65,9 +65,8 @@ export interface Discoverer extends Resource<
  * events flowing through an event bus and publishes them (versioned) to the
  * AWS-managed `discovered-schemas` registry.
  *
- * @resource
- * @section Creating a Discoverer
- * @example Discover Schemas on an Event Bus
+ * ### Creating a Discoverer
+ * **Example:** Discover Schemas on an Event Bus
  * ```typescript
  * const bus = yield* AWS.EventBridge.EventBus("AppBus", {});
  *
@@ -77,7 +76,7 @@ export interface Discoverer extends Resource<
  * });
  * ```
  *
- * @example Stopped Discoverer
+ * **Example:** Stopped Discoverer
  * ```typescript
  * const discoverer = yield* AWS.Schemas.Discoverer("PausedDiscoverer", {
  *   sourceArn: bus.eventBusArn,
@@ -86,6 +85,8 @@ export interface Discoverer extends Resource<
  * ```
  * The discoverer is provisioned but paused; set `state: "STARTED"` (or omit
  * it) to resume discovery.
+ *
+ * @resource
  */
 export const Discoverer = Resource<Discoverer>("AWS.Schemas.Discoverer");
 
@@ -96,11 +97,7 @@ export const DiscovererProvider = () =>
       const describe = (discovererId: string) =>
         schemas
           .describeDiscoverer({ DiscovererId: discovererId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       const toAttrs = (d: {
         DiscovererId?: string;
@@ -124,10 +121,7 @@ export const DiscovererProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.Discoverers ?? [])
                   .filter(
-                    (d) =>
-                      d.DiscovererId != null &&
-                      d.DiscovererArn != null &&
-                      d.SourceArn != null,
+                    (d) => d.DiscovererId != null && d.DiscovererArn != null && d.SourceArn != null,
                   )
                   .map(toAttrs),
               ),
@@ -139,9 +133,7 @@ export const DiscovererProvider = () =>
             const found = yield* describe(output.discovererId);
             if (!found) return undefined;
             const attrs = toAttrs(found);
-            return (yield* hasAlchemyTags(id, found.Tags))
-              ? attrs
-              : Unowned(attrs);
+            return (yield* hasAlchemyTags(id, found.Tags)) ? attrs : Unowned(attrs);
           }
           // No cached id (the discoverer id is auto-assigned) — recover by
           // scanning for a discoverer branded with our ownership tags.

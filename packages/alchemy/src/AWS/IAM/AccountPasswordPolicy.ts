@@ -3,8 +3,8 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { toWireDays } from "../../Util/Duration.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface AccountPasswordPolicyProps extends Omit<
   iam.UpdateAccountPasswordPolicyRequest,
@@ -31,9 +31,8 @@ export interface AccountPasswordPolicy extends Resource<
  *
  * `AccountPasswordPolicy` manages the account-wide password requirements that
  * apply to IAM users with console passwords.
- * @resource
- * @section Managing Password Rules
- * @example Require Strong Passwords
+ * ### Managing Password Rules
+ * **Example:** Require Strong Passwords
  * ```typescript
  * const policy = yield* AccountPasswordPolicy("PasswordPolicy", {
  *   MinimumPasswordLength: 16,
@@ -44,6 +43,8 @@ export interface AccountPasswordPolicy extends Resource<
  *   AllowUsersToChangePassword: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const AccountPasswordPolicy = Resource<AccountPasswordPolicy>(
   "AWS.IAM.AccountPasswordPolicy",
@@ -54,11 +55,7 @@ export const AccountPasswordPolicyProvider = () =>
     read: Effect.fn(function* () {
       const response = yield* iam
         .getAccountPasswordPolicy({})
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       return response?.PasswordPolicy;
     }),
     // Account-level singleton: IAM exposes no enumeration API, only

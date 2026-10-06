@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide `AWS.ObservabilityAdmin.ListTelemetryRulesHttp` on the hosting
  * Lambda Function to satisfy the requirement.
- * @binding
- * @section Listing Telemetry Rules
- * @example Enumerate the account's telemetry rules
+ * ### Listing Telemetry Rules
+ * **Example:** Enumerate the account's telemetry rules
  * ```typescript
  * // init — grants observabilityadmin:ListTelemetryRules
  * const listTelemetryRules = yield* AWS.ObservabilityAdmin.ListTelemetryRules();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   yield* Effect.log(`${rule.RuleName}: ${rule.TelemetryType}`);
  * }
  * ```
+ *
+ * @binding
  */
 export interface ListTelemetryRules extends Binding.Service<
   ListTelemetryRules,
@@ -29,10 +30,7 @@ export interface ListTelemetryRules extends Binding.Service<
   () => Effect.Effect<
     (
       request?: obs.ListTelemetryRulesInput,
-    ) => Effect.Effect<
-      obs.ListTelemetryRulesOutput,
-      obs.ListTelemetryRulesError
-    >
+    ) => Effect.Effect<obs.ListTelemetryRulesOutput, obs.ListTelemetryRulesError>
   >
 > {}
 

@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `CreateUser` request with `applicationId` injected from the bound application.
  */
-export interface CreateUserRequest extends Omit<
-  qbusiness.CreateUserRequest,
-  "applicationId"
-> {}
+export interface CreateUserRequest extends Omit<qbusiness.CreateUserRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `CreateUser` operation (IAM action
@@ -21,9 +18,8 @@ export interface CreateUserRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.CreateUserHttp)`.
  *
- * @binding
- * @section User Management
- * @example Create a User with Aliases
+ * ### User Management
+ * **Example:** Create a User with Aliases
  * ```typescript
  * const createUser = yield* AWS.QBusiness.CreateUser(app);
  *
@@ -32,6 +28,8 @@ export interface CreateUserRequest extends Omit<
  *   userAliases: [{ userId: "corp\\user" }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateUser extends Binding.Service<
   CreateUser,
@@ -44,6 +42,4 @@ export interface CreateUser extends Binding.Service<
     ) => Effect.Effect<qbusiness.CreateUserResponse, qbusiness.CreateUserError>
   >
 > {}
-export const CreateUser = Binding.Service<CreateUser>(
-  "AWS.QBusiness.CreateUser",
-);
+export const CreateUser = Binding.Service<CreateUser>("AWS.QBusiness.CreateUser");

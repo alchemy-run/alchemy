@@ -20,8 +20,7 @@ const retryWhileInUse = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "BadRequestException" || e._tag === "ConflictException",
+    while: (e) => e._tag === "BadRequestException" || e._tag === "ConflictException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
@@ -31,9 +30,8 @@ type IdentifiedGroup = medialive.InputSecurityGroup & {
   Arn: string;
 };
 
-const hasIdentity = (
-  isg: medialive.InputSecurityGroup,
-): isg is IdentifiedGroup => isg.Id !== undefined && isg.Arn !== undefined;
+const hasIdentity = (isg: medialive.InputSecurityGroup): isg is IdentifiedGroup =>
+  isg.Id !== undefined && isg.Arn !== undefined;
 
 export interface InputSecurityGroupProps {
   /**
@@ -70,16 +68,15 @@ export interface InputSecurityGroup extends Resource<
  * gates which source networks may push content to attached PUSH inputs
  * (RTMP_PUSH, RTP_PUSH, UDP_PUSH).
  *
- * @resource
- * @section Creating an Input Security Group
- * @example Allow a single network
+ * ### Creating an Input Security Group
+ * **Example:** Allow a single network
  * ```typescript
  * const isg = yield* MediaLive.InputSecurityGroup("Allowlist", {
  *   whitelistRules: ["10.0.0.0/16"],
  * });
  * ```
  *
- * @example Open to the world (test-only)
+ * **Example:** Open to the world (test-only)
  * ```typescript
  * const isg = yield* MediaLive.InputSecurityGroup("Open", {
  *   whitelistRules: ["0.0.0.0/0"],
@@ -87,8 +84,8 @@ export interface InputSecurityGroup extends Resource<
  * });
  * ```
  *
- * @section Attaching to an Input
- * @example Gate an RTMP push input
+ * ### Attaching to an Input
+ * **Example:** Gate an RTMP push input
  * ```typescript
  * const input = yield* MediaLive.Input("Stream", {
  *   type: "RTMP_PUSH",
@@ -96,10 +93,10 @@ export interface InputSecurityGroup extends Resource<
  *   destinations: [{ StreamName: "live/stream" }],
  * });
  * ```
+ *
+ * @resource
  */
-export const InputSecurityGroup = Resource<InputSecurityGroup>(
-  "AWS.MediaLive.InputSecurityGroup",
-);
+export const InputSecurityGroup = Resource<InputSecurityGroup>("AWS.MediaLive.InputSecurityGroup");
 
 export const InputSecurityGroupProvider = () =>
   Provider.effect(
@@ -118,11 +115,7 @@ export const InputSecurityGroupProvider = () =>
       const getGroup = Effect.fn(function* (id: string) {
         const isg = yield* medialive
           .describeInputSecurityGroup({ InputSecurityGroupId: id })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         if (isg === undefined || isg.State === "DELETED") return undefined;
         if (!hasIdentity(isg)) return undefined;
         return isg;
@@ -161,8 +154,7 @@ export const InputSecurityGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk)
                 .filter(
-                  (isg): isg is IdentifiedGroup =>
-                    hasIdentity(isg) && isg.State !== "DELETED",
+                  (isg): isg is IdentifiedGroup => hasIdentity(isg) && isg.State !== "DELETED",
                 )
                 .map(toAttrs),
             ),
@@ -175,9 +167,7 @@ export const InputSecurityGroupProvider = () =>
               : yield* findByTags(id);
           if (isg === undefined) return undefined;
           const attrs = toAttrs(isg);
-          return (yield* hasAlchemyTags(id, toTagRecord(isg.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(isg.Tags))) ? attrs : Unowned(attrs);
         }),
 
         // No immutable props — every drift is an in-place update.

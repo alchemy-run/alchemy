@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface GroupProps {
@@ -67,9 +62,8 @@ export interface Group extends Resource<
 /**
  * An AWS X-Ray group that collects traces matching a filter expression, for
  * focused service maps, analytics, and insights.
- * @resource
- * @section Creating Groups
- * @example Group traces for one service
+ * ### Creating Groups
+ * **Example:** Group traces for one service
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -78,7 +72,7 @@ export interface Group extends Resource<
  * });
  * ```
  *
- * @example Group slow requests with insights enabled
+ * **Example:** Group slow requests with insights enabled
  * ```typescript
  * const group = yield* XRay.Group("SlowRequests", {
  *   filterExpression: "responsetime > 2",
@@ -86,6 +80,8 @@ export interface Group extends Resource<
  *   notificationsEnabled: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Group = Resource<Group>("AWS.XRay.Group");
 
@@ -93,16 +89,15 @@ export const Group = Resource<Group>("AWS.XRay.Group");
  * Raised when a `Group` is configured with the reserved group name
  * `Default`, which X-Ray uses for the built-in group matching all traces.
  */
-export class XRayReservedGroupName extends Data.TaggedError(
-  "XRayReservedGroupName",
-)<{ message: string }> {}
+export class XRayReservedGroupName extends Data.TaggedError("XRayReservedGroupName")<{
+  message: string;
+}> {}
 
 const validateGroupName = (props: Pick<GroupProps, "groupName">) =>
   props.groupName === "Default"
     ? Effect.fail(
         new XRayReservedGroupName({
-          message:
-            '"Default" is reserved for the built-in X-Ray group — choose another groupName.',
+          message: '"Default" is reserved for the built-in X-Ray group — choose another groupName.',
         }),
       )
     : Effect.void;
@@ -116,9 +111,7 @@ export const GroupProvider = () =>
         props: Pick<GroupProps, "groupName">,
       ) {
         // X-Ray group names are limited to 32 characters.
-        return (
-          props.groupName ?? (yield* createPhysicalName({ id, maxLength: 32 }))
-        );
+        return props.groupName ?? (yield* createPhysicalName({ id, maxLength: 32 }));
       });
 
       const desiredInsights = (props: GroupProps) => ({
@@ -136,9 +129,7 @@ export const GroupProvider = () =>
       const observedTags = (groupArn: string) =>
         xray.listTagsForResource.items({ ResourceARN: groupArn }).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Object.fromEntries(Array.from(chunk).map((t) => [t.Key, t.Value])),
-          ),
+          Effect.map((chunk) => Object.fromEntries(Array.from(chunk).map((t) => [t.Key, t.Value]))),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
           ),
@@ -148,9 +139,7 @@ export const GroupProvider = () =>
         stables: ["groupName", "groupArn"],
         list: () =>
           Effect.gen(function* () {
-            const groups = yield* xray.getGroups
-              .items({})
-              .pipe(Stream.runCollect);
+            const groups = yield* xray.getGroups.items({}).pipe(Stream.runCollect);
             return Array.from(groups).flatMap((group) =>
               group.GroupName && group.GroupARN && group.GroupName !== "Default"
                 ? [{ groupName: group.GroupName, groupArn: group.GroupARN }]
@@ -158,8 +147,7 @@ export const GroupProvider = () =>
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const groupName =
-            output?.groupName ?? (yield* createGroupName(id, olds ?? {}));
+          const groupName = output?.groupName ?? (yield* createGroupName(id, olds ?? {}));
           const found = yield* observeGroup(groupName);
           if (!found?.GroupARN) return undefined;
           const attrs = { groupName, groupArn: found.GroupARN };
@@ -178,8 +166,7 @@ export const GroupProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           yield* validateGroupName(news);
-          const groupName =
-            output?.groupName ?? (yield* createGroupName(id, news));
+          const groupName = output?.groupName ?? (yield* createGroupName(id, news));
           const insights = desiredInsights(news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -200,9 +187,7 @@ export const GroupProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.Group),
-                Effect.catchTag("GroupAlreadyExists", () =>
-                  observeGroup(groupName),
-                ),
+                Effect.catchTag("GroupAlreadyExists", () => observeGroup(groupName)),
               );
           }
 
@@ -212,10 +197,8 @@ export const GroupProvider = () =>
           const inSync =
             live !== undefined &&
             live.FilterExpression === news.filterExpression &&
-            (observedInsights.InsightsEnabled ?? false) ===
-              insights.InsightsEnabled &&
-            (observedInsights.NotificationsEnabled ?? false) ===
-              insights.NotificationsEnabled;
+            (observedInsights.InsightsEnabled ?? false) === insights.InsightsEnabled &&
+            (observedInsights.NotificationsEnabled ?? false) === insights.NotificationsEnabled;
           if (!inSync) {
             live = yield* xray
               .updateGroup({

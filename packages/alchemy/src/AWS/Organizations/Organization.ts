@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOrganizations } from "./common.ts";
+import { retryOrganizations, unredact } from "./common.ts";
 
 export type OrganizationId = string;
 export type OrganizationArn = string;
@@ -45,9 +45,7 @@ export interface Organization extends Resource<
     /**
      * Email address of the management account.
      */
-    managementAccountEmail:
-      | organizations.Organization["MasterAccountEmail"]
-      | undefined;
+    managementAccountEmail: string | undefined;
     /**
      * Policy types available to the organization.
      */
@@ -62,18 +60,17 @@ export interface Organization extends Resource<
  *
  * This is a singleton-style resource. If an organization already exists,
  * Alchemy adopts and reconciles it instead of creating a second one.
- * @resource
- * @section Creating An Organization
- * @example Full Features Organization
+ * ### Creating An Organization
+ * **Example:** Full Features Organization
  * ```typescript
  * const organization = yield* Organization("Org", {
  *   featureSet: "ALL",
  * });
  * ```
+ *
+ * @resource
  */
-export const Organization = Resource<Organization>(
-  "AWS.Organizations.Organization",
-);
+export const Organization = Resource<Organization>("AWS.Organizations.Organization");
 
 export const OrganizationProvider = () =>
   Provider.effect(
@@ -113,16 +110,12 @@ export const OrganizationProvider = () =>
               }),
             ).pipe(
               Effect.map((response) => response.Organization),
-              Effect.catchTag("AlreadyInOrganizationException", () =>
-                readOrganization(),
-              ),
+              Effect.catchTag("AlreadyInOrganizationException", () => readOrganization()),
             );
           }
 
           if (!org?.Id || !org.Arn) {
-            return yield* Effect.fail(
-              new Error("failed to resolve organization after reconcile"),
-            );
+            return yield* Effect.fail(new Error("failed to resolve organization after reconcile"));
           }
 
           const orgArn = org.Arn;
@@ -142,27 +135,20 @@ export const OrganizationProvider = () =>
           yield* retryOrganizations(
             organizations
               .deleteOrganization({})
-              .pipe(
-                Effect.catchTag(
-                  "AWSOrganizationsNotInUseException",
-                  () => Effect.void,
-                ),
-              ),
+              .pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.void)),
           );
         }),
       };
     }),
   );
 
-const toAttrs = (
-  org: organizations.Organization,
-): Organization["Attributes"] => ({
+const toAttrs = (org: organizations.Organization): Organization["Attributes"] => ({
   organizationId: org.Id ?? "",
   organizationArn: org.Arn ?? "",
   featureSet: org.FeatureSet,
   managementAccountArn: org.MasterAccountArn,
   managementAccountId: org.MasterAccountId,
-  managementAccountEmail: org.MasterAccountEmail,
+  managementAccountEmail: unredact(org.MasterAccountEmail),
   availablePolicyTypes: org.AvailablePolicyTypes ?? [],
 });
 
@@ -170,9 +156,7 @@ const readOrganization = () =>
   retryOrganizations(
     organizations.describeOrganization({}).pipe(
       Effect.map((response) => response.Organization),
-      Effect.catchTag("AWSOrganizationsNotInUseException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.succeed(undefined)),
     ),
   );
 
@@ -188,10 +172,7 @@ const ensureFeatureSet = Effect.fn(function* ({
     return current;
   }
 
-  if (
-    desiredFeatureSet === "ALL" &&
-    current.FeatureSet === "CONSOLIDATED_BILLING"
-  ) {
+  if (desiredFeatureSet === "ALL" && current.FeatureSet === "CONSOLIDATED_BILLING") {
     yield* retryOrganizations(organizations.enableAllFeatures({}));
 
     const updated = yield* readOrganization();

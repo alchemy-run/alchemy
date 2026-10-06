@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Channel } from "./Channel.ts";
 
-export interface InsertAdBreakRequest extends Omit<
-  ivs.InsertAdBreakRequest,
-  "channelArn"
-> {}
+export interface InsertAdBreakRequest extends Omit<ivs.InsertAdBreakRequest, "channelArn"> {}
 
 /**
  * Runtime binding for `ivs:InsertAdBreak`.
@@ -17,9 +14,8 @@ export interface InsertAdBreakRequest extends Omit<
  * tag when the channel is not live. The channel ARN is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.IVS.InsertAdBreakHttp)`.
- * @binding
- * @section Inserting Ad Breaks
- * @example Trigger a 30-Second Ad Break
+ * ### Inserting Ad Breaks
+ * **Example:** Trigger a 30-Second Ad Break
  * ```typescript
  * // init — bind the operation to the channel
  * const insertAdBreak = yield* AWS.IVS.InsertAdBreak(channel);
@@ -27,6 +23,8 @@ export interface InsertAdBreakRequest extends Omit<
  * // runtime
  * const { adBreakId } = yield* insertAdBreak({ durationSeconds: 30 });
  * ```
+ *
+ * @binding
  */
 export interface InsertAdBreak extends Binding.Service<
   InsertAdBreak,
@@ -39,6 +37,4 @@ export interface InsertAdBreak extends Binding.Service<
     ) => Effect.Effect<ivs.InsertAdBreakResponse, ivs.InsertAdBreakError>
   >
 > {}
-export const InsertAdBreak = Binding.Service<InsertAdBreak>(
-  "AWS.IVS.InsertAdBreak",
-);
+export const InsertAdBreak = Binding.Service<InsertAdBreak>("AWS.IVS.InsertAdBreak");

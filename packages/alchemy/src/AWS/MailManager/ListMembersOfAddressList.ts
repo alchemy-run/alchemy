@@ -9,15 +9,16 @@ import type { AddressList } from "./AddressList.ts";
  * Lists the members of the bound address list, optionally filtered by
  * address prefix. The address list id is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.MailManager.ListMembersOfAddressListHttp)`.
- * @binding
- * @section Managing Address List Members
- * @example Enumerate the Block List
+ * ### Managing Address List Members
+ * **Example:** Enumerate the Block List
  * ```typescript
  * const listMembers = yield* MailManager.ListMembersOfAddressList(blockList);
  *
  * // runtime
  * const { Addresses } = yield* listMembers({});
  * ```
+ *
+ * @binding
  */
 export interface ListMembersOfAddressList extends Binding.Service<
   ListMembersOfAddressList,
@@ -27,13 +28,9 @@ export interface ListMembersOfAddressList extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.ListMembersOfAddressListRequest, "AddressListId">,
-    ) => Effect.Effect<
-      mm.ListMembersOfAddressListResponse,
-      mm.ListMembersOfAddressListError
-    >
+    ) => Effect.Effect<mm.ListMembersOfAddressListResponse, mm.ListMembersOfAddressListError>
   >
 > {}
-export const ListMembersOfAddressList =
-  Binding.Service<ListMembersOfAddressList>(
-    "AWS.MailManager.ListMembersOfAddressList",
-  );
+export const ListMembersOfAddressList = Binding.Service<ListMembersOfAddressList>(
+  "AWS.MailManager.ListMembersOfAddressList",
+);

@@ -107,9 +107,8 @@ export interface FileSystem extends Resource<
  * token derived from the app, stage, and logical id; if state is lost, the
  * file system is re-discovered by its internal Alchemy tags.
  *
- * @resource
- * @section Creating File Systems
- * @example Lustre scratch file system (cheapest / fastest)
+ * ### Creating File Systems
+ * **Example:** Lustre scratch file system (cheapest / fastest)
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -121,7 +120,7 @@ export interface FileSystem extends Resource<
  * });
  * ```
  *
- * @example Persistent Lustre with S3 data repository
+ * **Example:** Persistent Lustre with S3 data repository
  * ```typescript
  * const files = yield* AWS.FSx.FileSystem("Files", {
  *   fileSystemType: "LUSTRE",
@@ -135,7 +134,7 @@ export interface FileSystem extends Resource<
  * });
  * ```
  *
- * @example OpenZFS file system
+ * **Example:** OpenZFS file system
  * ```typescript
  * const zfs = yield* AWS.FSx.FileSystem("Zfs", {
  *   fileSystemType: "OPENZFS",
@@ -147,17 +146,15 @@ export interface FileSystem extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const FileSystem = Resource<FileSystem>("AWS.FSx.FileSystem");
 
-const fsxTagsToRecord = (
-  tags: readonly fsx.Tag[] | undefined,
-): Record<string, string> =>
+const fsxTagsToRecord = (tags: readonly fsx.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
-const deleteConfigFor = (
-  type: fsx.FileSystemType,
-): Partial<fsx.DeleteFileSystemRequest> => {
+const deleteConfigFor = (type: fsx.FileSystemType): Partial<fsx.DeleteFileSystemRequest> => {
   switch (type) {
     case "LUSTRE":
       return { LustreConfiguration: { SkipFinalBackup: true } };
@@ -191,21 +188,15 @@ export const FileSystemProvider = () =>
       });
 
       const findById = Effect.fn(function* (fileSystemId: string) {
-        return yield* fsx
-          .describeFileSystems({ FileSystemIds: [fileSystemId] })
-          .pipe(
-            Effect.map((r) => r.FileSystems?.[0]),
-            Effect.catchTag("FileSystemNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* fsx.describeFileSystems({ FileSystemIds: [fileSystemId] }).pipe(
+          Effect.map((r) => r.FileSystems?.[0]),
+          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+        );
       });
 
       const listAll = fsx.describeFileSystems.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.FileSystems ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.FileSystems ?? [])),
       );
 
       // FSx has no creation-token lookup, so recover lost state by scanning
@@ -229,9 +220,7 @@ export const FileSystemProvider = () =>
               Effect.gen(function* () {
                 return {
                   fileSystemId: fs.FileSystemId!,
-                  fileSystemArn:
-                    fs.ResourceARN ??
-                    (yield* fileSystemArnOf(fs.FileSystemId!)),
+                  fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
                   fileSystemType: fs.FileSystemType ?? "LUSTRE",
                   dnsName: fs.DNSName,
                   vpcId: fs.VpcId,
@@ -249,15 +238,12 @@ export const FileSystemProvider = () =>
           }
           const attrs = {
             fileSystemId: fs.FileSystemId!,
-            fileSystemArn:
-              fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
+            fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
             fileSystemType: fs.FileSystemType ?? "LUSTRE",
             dnsName: fs.DNSName,
             vpcId: fs.VpcId,
           };
-          return (yield* hasAlchemyTags(id, fsxTagsToRecord(fs.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, fsxTagsToRecord(fs.Tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -307,9 +293,10 @@ export const FileSystemProvider = () =>
                 WindowsConfiguration: news.windowsConfiguration,
                 OntapConfiguration: news.ontapConfiguration,
                 OpenZFSConfiguration: news.openZFSConfiguration,
-                Tags: Object.entries({ ...news.tags, ...internalTags }).map(
-                  ([Key, Value]) => ({ Key, Value }),
-                ),
+                Tags: Object.entries({ ...news.tags, ...internalTags }).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
               })
               .pipe(Effect.map((r) => r.FileSystem!));
           }
@@ -353,8 +340,7 @@ export const FileSystemProvider = () =>
           yield* session.note(fileSystemId);
           return {
             fileSystemId,
-            fileSystemArn:
-              fs.ResourceARN ?? (yield* fileSystemArnOf(fileSystemId)),
+            fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fileSystemId)),
             fileSystemType: fs.FileSystemType ?? news.fileSystemType,
             dnsName: fs.DNSName,
             vpcId: fs.VpcId,

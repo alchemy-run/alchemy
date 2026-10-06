@@ -89,8 +89,8 @@ export interface ChannelEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Channel Events
- * @example Page an Operator When a Channel Raises an Alert
+ * ### Consuming Channel Events
+ * **Example:** Page an Operator When a Channel Raises an Alert
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -121,12 +121,8 @@ export const consumeChannelEvents = <StreamReq = never, Req = never>(
     props.id ?? "MediaLiveChannelEvents",
     {
       source: ["aws.medialive"],
-      "detail-type": (props.kinds ?? (["state-change"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.channelArns !== undefined
-        ? { resources: [...props.channelArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["state-change"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.channelArns !== undefined ? { resources: [...props.channelArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

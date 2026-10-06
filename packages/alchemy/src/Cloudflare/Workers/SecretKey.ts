@@ -112,14 +112,8 @@ export interface SecretKeyPayload {
   keyJwk?: SecretKeyJwk;
 }
 
-const unwrap = <A>(
-  value: A | Redacted.Redacted<A> | undefined,
-): A | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = <A>(value: A | Redacted.Redacted<A> | undefined): A | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
  * A Cloudflare Workers Secret Key binding — key material uploaded once and
@@ -134,11 +128,8 @@ const unwrap = <A>(
  * or `yield*` it inside an Effect-native Worker to attach the binding and
  * obtain a deferred {@link SecretKeyAccessor}.
  *
- * @binding
- * @product Workers
- * @category Workers & Compute
- * @section Binding inside an Effect-native Worker
- * @example HMAC sign and verify
+ * ### Binding inside an Effect-native Worker
+ * **Example:** HMAC sign and verify
  * ```typescript
  * Cloudflare.Worker(
  *   "SignerWorker",
@@ -169,7 +160,7 @@ const unwrap = <A>(
  * );
  * ```
  *
- * @example JSON Web Key format
+ * **Example:** JSON Web Key format
  * ```typescript
  * const jwkKey = yield* Cloudflare.Workers.SecretKey("HMAC_KEY_JWK", {
  *   format: "jwk",
@@ -183,8 +174,8 @@ const unwrap = <A>(
  * });
  * ```
  *
- * @section Declaring on a Worker's env
- * @example Async (non-Effect) Worker
+ * ### Declaring on a Worker's env
+ * **Example:** Async (non-Effect) Worker
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
@@ -215,12 +206,12 @@ const unwrap = <A>(
  * ```
  *
  * @see https://developers.cloudflare.com/workers/runtime-apis/bindings/secret-key/
+ *
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  */
-export interface SecretKey extends Binding.Service<
-  SecretKey,
-  TypeId,
-  SecretKeyAccessor
-> {
+export interface SecretKey extends Binding.Service<SecretKey, TypeId, SecretKeyAccessor> {
   /**
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @param props Key format, algorithm, usages, and the key material.

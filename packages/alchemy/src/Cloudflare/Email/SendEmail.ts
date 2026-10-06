@@ -41,10 +41,9 @@ export type SendEmailProps = {
  * through `Alchemy.remote()` to send through the live Cloudflare Email
  * service in dev — the same opt-out aspect resources use.
  *
- * @resource
  *
- * @section Binding to a Worker
- * @example Send to any verified destination
+ * ### Binding to a Worker
+ * **Example:** Send to any verified destination
  * ```typescript
  * const Email = Cloudflare.Email.SendEmail("Email");
  *
@@ -58,7 +57,7 @@ export type SendEmailProps = {
  * });
  * ```
  *
- * @example Restrict the sender address
+ * **Example:** Restrict the sender address
  * ```typescript
  * const Ops = Cloudflare.Email.SendEmail("OpsEmail", {
  *   allowedSenderAddresses: ["noreply@example.com"],
@@ -66,8 +65,8 @@ export type SendEmailProps = {
  * });
  * ```
  *
- * @section Local development
- * @example Send real mail from the dev loop
+ * ### Local development
+ * **Example:** Send real mail from the dev loop
  * ```typescript
  * // Default: `send()` lands in the local simulator under `alchemy dev`.
  * // Alchemy.remote() opts into the live Email service instead:
@@ -75,6 +74,8 @@ export type SendEmailProps = {
  *   allowedSenderAddresses: ["noreply@example.com"],
  * }).pipe(Alchemy.remote());
  * ```
+ *
+ * @resource
  */
 export type SendEmail = SendEmailProps & {
   kind: SendEmailTypeId;
@@ -94,24 +95,19 @@ export const isSendEmail = (value: unknown): value is SendEmail =>
   "kind" in value &&
   (value as SendEmail).kind === SendEmailTypeId;
 
-export const SendEmail: (
-  id: string,
-  props?: SendEmailProps,
-) => Effect.Effect<SendEmail> = Effect.fn(function* (
-  id: string,
-  props?: SendEmailProps,
-) {
-  // Capture the `Alchemy.remote()` decoration the same way resources do —
-  // at registration time, from the ambient ProviderModePolicy reference.
-  // `send_email` has no cloud-side resource (and thus no provider mode to
-  // stamp), so the captured flag rides on the descriptor instead.
-  const devRemote = (yield* ProviderModePolicy) === true || undefined;
-  return {
-    kind: SendEmailTypeId,
-    name: id,
-    destinationAddress: props?.destinationAddress,
-    allowedDestinationAddresses: props?.allowedDestinationAddresses,
-    allowedSenderAddresses: props?.allowedSenderAddresses,
-    devRemote,
-  } satisfies SendEmail;
-});
+export const SendEmail: (id: string, props?: SendEmailProps) => Effect.Effect<SendEmail> =
+  Effect.fn(function* (id: string, props?: SendEmailProps) {
+    // Capture the `Alchemy.remote()` decoration the same way resources do —
+    // at registration time, from the ambient ProviderModePolicy reference.
+    // `send_email` has no cloud-side resource (and thus no provider mode to
+    // stamp), so the captured flag rides on the descriptor instead.
+    const devRemote = (yield* ProviderModePolicy) === true || undefined;
+    return {
+      kind: SendEmailTypeId,
+      name: id,
+      destinationAddress: props?.destinationAddress,
+      allowedDestinationAddresses: props?.allowedDestinationAddresses,
+      allowedSenderAddresses: props?.allowedSenderAddresses,
+      devRemote,
+    } satisfies SendEmail;
+  });

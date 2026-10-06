@@ -6,11 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readMailManagerTags,
@@ -57,9 +53,8 @@ export interface AddressList extends Resource<
  * data managed at runtime via the member capabilities
  * ({@link RegisterMemberToAddressList}, {@link ListMembersOfAddressList},
  * ...) or bulk import jobs.
- * @resource
- * @section Creating Address Lists
- * @example Block List
+ * ### Creating Address Lists
+ * **Example:** Block List
  * ```typescript
  * import * as MailManager from "alchemy/AWS/MailManager";
  *
@@ -68,8 +63,8 @@ export interface AddressList extends Resource<
  * });
  * ```
  *
- * @section Managing Members at Runtime
- * @example Register and List Members from a Lambda
+ * ### Managing Members at Runtime
+ * **Example:** Register and List Members from a Lambda
  * ```typescript
  * // init — bind the member capabilities to the list
  * const registerMember = yield* MailManager.RegisterMemberToAddressList(blockList);
@@ -79,6 +74,8 @@ export interface AddressList extends Resource<
  * yield* registerMember({ Address: "spammer@example.com" });
  * const { Addresses } = yield* listMembers({});
  * ```
+ *
+ * @resource
  */
 export const AddressList = Resource<AddressList>("AWS.MailManager.AddressList");
 
@@ -86,24 +83,14 @@ export const AddressListProvider = () =>
   Provider.effect(
     AddressList,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { addressListName?: string },
-      ) {
-        return (
-          props.addressListName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { addressListName?: string }) {
+        return props.addressListName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const getById = (addressListId: string) =>
         mm
           .getAddressList({ AddressListId: addressListId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // Address lists have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -155,8 +142,7 @@ export const AddressListProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.addressListName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.addressListName ?? (yield* createName(id, olds ?? {}));
           const list = yield* observe(output, name);
           if (list === undefined) return undefined;
           const attrs = toAttrs(list);
@@ -169,10 +155,7 @@ export const AddressListProvider = () =>
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           if (olds === undefined) return undefined;
-          if (
-            news.addressListName !== undefined &&
-            olds.addressListName !== news.addressListName
-          ) {
+          if (news.addressListName !== undefined && olds.addressListName !== news.addressListName) {
             return { action: "replace" } as const;
           }
         }),
@@ -194,11 +177,7 @@ export const AddressListProvider = () =>
                 AddressListName: name,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             list =
               created !== undefined
                 ? yield* getById(created.AddressListId)
@@ -206,9 +185,7 @@ export const AddressListProvider = () =>
           }
           if (list === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Mail Manager address list '${name}' not found after create`,
-              ),
+              new Error(`Mail Manager address list '${name}' not found after create`),
             );
           }
 

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Memory } from "./Memory.ts";
 
-export interface ListActorsRequest extends Omit<
-  agentcore.ListActorsInput,
-  "memoryId"
-> {}
+export interface ListActorsRequest extends Omit<agentcore.ListActorsInput, "memoryId"> {}
 
 /**
  * Lists the actors that have recorded events in the memory.
@@ -15,9 +12,8 @@ export interface ListActorsRequest extends Omit<
  * AgentCore data-plane API against it. Provide `AgentCore.ListActorsHttp`
  * on the Function effect to implement the binding.
  *
- * @binding
- * @section Listing Actors
- * @example List Actors
+ * ### Listing Actors
+ * **Example:** List Actors
  * ```typescript
  * // init
  * const listActors = yield* AgentCore.ListActors(memory);
@@ -32,6 +28,8 @@ export interface ListActorsRequest extends Omit<
  *   }),
  * };
  * ```
+ *
+ * @binding
  */
 export interface ListActors extends Binding.Service<
   ListActors,
@@ -44,6 +42,4 @@ export interface ListActors extends Binding.Service<
     ) => Effect.Effect<agentcore.ListActorsOutput, agentcore.ListActorsError>
   >
 > {}
-export const ListActors = Binding.Service<ListActors>(
-  "AWS.BedrockAgentCore.ListActors",
-);
+export const ListActors = Binding.Service<ListActors>("AWS.BedrockAgentCore.ListActors");

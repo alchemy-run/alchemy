@@ -3,24 +3,22 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { RegionID } from "../Region.ts";
 import type { Providers } from "../Providers.ts";
+import type { RegionID } from "../Region.ts";
 import type { VolumeId } from "./Volume.ts";
 
 export type SnapshotId<ID extends string = string> = `snap-${ID}`;
 export const SnapshotId = <ID extends string>(id: ID): ID & SnapshotId<ID> =>
   `snap-${id}` as ID & SnapshotId<ID>;
 
-export type SnapshotArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
+export type SnapshotArn = `arn:aws:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
 
 export interface SnapshotProps {
   /**
@@ -102,9 +100,8 @@ export interface Snapshot extends Resource<
  * it. Creation is asynchronous — the resource waits for the snapshot to reach
  * the `completed` state before returning.
  *
- * @resource
- * @section Creating a Snapshot
- * @example Snapshot a Volume
+ * ### Creating a Snapshot
+ * **Example:** Snapshot a Volume
  * ```typescript
  * const snapshot = yield* AWS.EC2.Snapshot("DailyBackup", {
  *   volumeId: volume.volumeId,
@@ -116,8 +113,8 @@ export interface Snapshot extends Resource<
  * are incremental, only blocks changed since the previous snapshot of the same
  * volume are stored.
  *
- * @section Restoring from a Snapshot
- * @example Create a Volume from a Snapshot
+ * ### Restoring from a Snapshot
+ * **Example:** Create a Volume from a Snapshot
  * ```typescript
  * const restored = yield* AWS.EC2.Volume("Restored", {
  *   availabilityZone: "us-east-1a",
@@ -128,6 +125,8 @@ export interface Snapshot extends Resource<
  * Pass a snapshot's `snapshotId` to {@link Volume} to provision a new volume
  * pre-populated with the snapshot's data — the standard backup/restore and
  * clone-across-AZ pattern.
+ *
+ * @resource
  */
 export const Snapshot = Resource<Snapshot>("AWS.EC2.Snapshot");
 
@@ -226,21 +225,17 @@ export const SnapshotProvider = () =>
               .pages({ OwnerIds: ["self"] })
               .pipe(Stream.runCollect);
             return Array.from(chunk).flatMap((page) =>
-              (page.Snapshots ?? []).map((s) =>
-                toSnapshotAttributes(s, region, accountId),
-              ),
+              (page.Snapshots ?? []).map((s) => toSnapshotAttributes(s, region, accountId)),
             );
           }),
 
         delete: Effect.fn(function* ({ output, session }) {
           const snapshotId = output.snapshotId;
           yield* session.note(`Deleting snapshot: ${snapshotId}`);
-          yield* ec2
-            .deleteSnapshot({ SnapshotId: snapshotId, DryRun: false })
-            .pipe(
-              Effect.tapError(Effect.logDebug),
-              Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
-            );
+          yield* ec2.deleteSnapshot({ SnapshotId: snapshotId, DryRun: false }).pipe(
+            Effect.tapError(Effect.logDebug),
+            Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
+          );
           yield* session.note(`Snapshot ${snapshotId} deleted successfully`);
         }),
       };
@@ -255,8 +250,7 @@ const toSnapshotAttributes = (
   const snapshotId = snapshot.SnapshotId! as SnapshotId;
   return {
     snapshotId,
-    snapshotArn:
-      `arn:aws:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
+    snapshotArn: `arn:aws:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
     volumeId: snapshot.VolumeId! as VolumeId,
     volumeSize: snapshot.VolumeSize ?? 0,
     state: snapshot.State ?? "pending",
@@ -277,10 +271,7 @@ class SnapshotPending extends Data.TaggedError("SnapshotPending")<{
  * Wait for the snapshot to reach the `completed` state. Bounded so a slow
  * snapshot fails fast rather than hanging the deploy.
  */
-const waitForSnapshotCompleted = (
-  snapshotId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForSnapshotCompleted = (snapshotId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeSnapshots({
       SnapshotIds: [snapshotId],
@@ -294,9 +285,7 @@ const waitForSnapshotCompleted = (
     }
     if (snapshot.State === "error") {
       return yield* Effect.fail(
-        new Error(
-          `Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`,
-        ),
+        new Error(`Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`),
       );
     }
     return yield* new SnapshotPending({
@@ -313,9 +302,7 @@ const waitForSnapshotCompleted = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for snapshot to complete... (${(attempt + 1) * 3}s)`,
-              )
+            ? session.note(`Waiting for snapshot to complete... (${(attempt + 1) * 3}s)`)
             : Effect.void,
         ),
       ),

@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * rotation built with {@link CreateBackup}. Deleting an already-deleted
  * backup surfaces the typed `BackupNotFound`. Provide the implementation
  * with `Effect.provide(AWS.FSx.DeleteBackupHttp)`.
- * @binding
- * @section Managing Backups at Runtime
- * @example Rotate out an expired backup
+ * ### Managing Backups at Runtime
+ * **Example:** Rotate out an expired backup
  * ```typescript
  * const deleteBackup = yield* AWS.FSx.DeleteBackup();
  *
@@ -21,6 +20,8 @@ import * as Binding from "../../Binding.ts";
  *   Effect.catchTag("BackupNotFound", () => Effect.void),
  * );
  * ```
+ *
+ * @binding
  */
 export interface DeleteBackup extends Binding.Service<
   DeleteBackup,
@@ -31,6 +32,4 @@ export interface DeleteBackup extends Binding.Service<
     ) => Effect.Effect<fsx.DeleteBackupResponse, fsx.DeleteBackupError>
   >
 > {}
-export const DeleteBackup = Binding.Service<DeleteBackup>(
-  "AWS.FSx.DeleteBackup",
-);
+export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.FSx.DeleteBackup");

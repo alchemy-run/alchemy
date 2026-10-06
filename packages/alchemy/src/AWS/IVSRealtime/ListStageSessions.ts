@@ -13,9 +13,8 @@ export interface ListStageSessionsRequest extends Omit<
  * List all sessions (current and past) of the bound stage, most recent
  * first.
  *
- * @binding
- * @section Inspecting Stage Sessions
- * @example List a stage's sessions
+ * ### Inspecting Stage Sessions
+ * **Example:** List a stage's sessions
  * ```typescript
  * // init
  * const listStageSessions = yield* IVSRealtime.ListStageSessions(stage);
@@ -23,6 +22,8 @@ export interface ListStageSessionsRequest extends Omit<
  * // runtime
  * const { stageSessions } = yield* listStageSessions();
  * ```
+ *
+ * @binding
  */
 export interface ListStageSessions extends Binding.Service<
   ListStageSessions,
@@ -32,10 +33,7 @@ export interface ListStageSessions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListStageSessionsRequest,
-    ) => Effect.Effect<
-      ivsrealtime.ListStageSessionsResponse,
-      ivsrealtime.ListStageSessionsError
-    >
+    ) => Effect.Effect<ivsrealtime.ListStageSessionsResponse, ivsrealtime.ListStageSessionsError>
   >
 > {}
 export const ListStageSessions = Binding.Service<ListStageSessions>(

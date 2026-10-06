@@ -5,14 +5,15 @@ import type { Cluster } from "./Cluster.ts";
 
 /**
  * Runtime binding for `elasticmapreduce:TerminateSession` — terminates an interactive session on the bound cluster.
- * @binding
- * @section Interactive Sessions
- * @example Terminate a Session
+ * ### Interactive Sessions
+ * **Example:** Terminate a Session
  * ```typescript
  * const terminateSession = yield* AWS.EMR.TerminateSession(cluster);
  *
  * yield* terminateSession({ SessionId: sessionId });
  * ```
+ *
+ * @binding
  */
 export interface TerminateSession extends Binding.Service<
   TerminateSession,
@@ -25,6 +26,4 @@ export interface TerminateSession extends Binding.Service<
     ) => Effect.Effect<SVC.TerminateSessionOutput, SVC.TerminateSessionError>
   >
 > {}
-export const TerminateSession = Binding.Service<TerminateSession>(
-  "AWS.EMR.TerminateSession",
-);
+export const TerminateSession = Binding.Service<TerminateSession>("AWS.EMR.TerminateSession");

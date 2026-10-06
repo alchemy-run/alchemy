@@ -6,11 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, syncIotWirelessTags } from "./internal.ts";
 
@@ -75,9 +71,8 @@ export interface Destination extends Resource<
  * The destination name is its identity (changing it replaces the
  * destination); the expression, expression type, description, role, and
  * tags all update in place.
- * @resource
- * @section Creating Destinations
- * @example Route uplinks to an IoT rule
+ * ### Creating Destinations
+ * **Example:** Route uplinks to an IoT rule
  * ```typescript
  * import * as IoTWireless from "alchemy/AWS/IoTWireless";
  *
@@ -88,7 +83,7 @@ export interface Destination extends Resource<
  * });
  * ```
  *
- * @example Publish uplinks straight to an MQTT topic
+ * **Example:** Publish uplinks straight to an MQTT topic
  * ```typescript
  * const destination = yield* IoTWireless.Destination("Uplinks", {
  *   expressionType: "MqttTopic",
@@ -97,8 +92,8 @@ export interface Destination extends Resource<
  * });
  * ```
  *
- * @section Delivery Role
- * @example IAM role IoT Wireless assumes for delivery
+ * ### Delivery Role
+ * **Example:** IAM role IoT Wireless assumes for delivery
  * ```typescript
  * const deliveryRole = yield* IAM.Role("IotWirelessDelivery", {
  *   assumeRolePolicyDocument: {
@@ -123,13 +118,13 @@ export interface Destination extends Resource<
  * });
  * ```
  *
- * @section Consuming Uplinks in a Function
+ * ### Consuming Uplinks in a Function
  * Uplinks are delivered through AWS IoT Core. For a `RuleName` destination,
  * `IoTWireless.consumeUplinks` (see {@link DestinationEventSource}) creates
  * the named IoT rule targeting the current Lambda and invokes the handler
  * for every uplink. Alternatively, point an `MqttTopic` destination at a
  * topic and consume it with `AWS.IoT.consumeTopicMessages`.
- * @example Route Device Uplinks into a Lambda
+ * **Example:** Route Device Uplinks into a Lambda
  * ```typescript
  * const destination = yield* IoTWireless.Destination("Uplinks", {
  *   expressionType: "RuleName",
@@ -145,6 +140,8 @@ export interface Destination extends Resource<
  *   ),
  * );
  * ```
+ *
+ * @resource
  */
 export const Destination = Resource<Destination>("AWS.IoTWireless.Destination");
 
@@ -152,33 +149,19 @@ export const DestinationProvider = () =>
   Provider.effect(
     Destination,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const getDestination = (name: string) =>
         iotw
           .getDestination({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
-      const toAttrs = Effect.fn(function* (
-        destination: iotw.GetDestinationResponse,
-        name: string,
-      ) {
+      const toAttrs = Effect.fn(function* (destination: iotw.GetDestinationResponse, name: string) {
         if (destination.Arn === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `IoT Wireless destination '${name}' returned without Arn`,
-            ),
+            new Error(`IoT Wireless destination '${name}' returned without Arn`),
           );
         }
         return {
@@ -216,8 +199,7 @@ export const DestinationProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.destinationName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.destinationName ?? (yield* createName(id, olds ?? {}));
           const destination = yield* getDestination(name);
           if (destination === undefined) return undefined;
           const attrs = yield* toAttrs(destination, name);
@@ -263,9 +245,7 @@ export const DestinationProvider = () =>
           }
           if (destination === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless destination '${name}' not found after create`,
-              ),
+              new Error(`IoT Wireless destination '${name}' not found after create`),
             );
           }
 
@@ -275,8 +255,7 @@ export const DestinationProvider = () =>
             destination.Expression !== news.expression ||
             destination.ExpressionType !== news.expressionType;
           const descriptionDelta =
-            news.description !== undefined &&
-            destination.Description !== news.description;
+            news.description !== undefined && destination.Description !== news.description;
           const roleDelta = destination.RoleArn !== news.roleArn;
           if (expressionDelta || descriptionDelta || roleDelta) {
             yield* iotw.updateDestination({
@@ -290,9 +269,7 @@ export const DestinationProvider = () =>
           }
           if (destination === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless destination '${name}' vanished during update`,
-              ),
+              new Error(`IoT Wireless destination '${name}' vanished during update`),
             );
           }
 

@@ -22,9 +22,8 @@ export interface PutRumEventsRequest extends Omit<
  *
  * Provide `RUM.PutRumEventsHttp` on the hosting Lambda Function to satisfy
  * the requirement.
- * @binding
- * @section Sending RUM Events
- * @example Send a Session's Events Server-Side
+ * ### Sending RUM Events
+ * **Example:** Send a Session's Events Server-Side
  * ```typescript
  * // init — grants rum:PutRumEvents on the monitor
  * const putRumEvents = yield* AWS.RUM.PutRumEvents(monitor);
@@ -43,6 +42,8 @@ export interface PutRumEventsRequest extends Omit<
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutRumEvents extends Binding.Service<
   PutRumEvents,
@@ -50,12 +51,8 @@ export interface PutRumEvents extends Binding.Service<
   (
     monitor: AppMonitor,
   ) => Effect.Effect<
-    (
-      request: PutRumEventsRequest,
-    ) => Effect.Effect<rum.PutRumEventsResponse, rum.PutRumEventsError>
+    (request: PutRumEventsRequest) => Effect.Effect<rum.PutRumEventsResponse, rum.PutRumEventsError>
   >
 > {}
 
-export const PutRumEvents = Binding.Service<PutRumEvents>(
-  "AWS.RUM.PutRumEvents",
-);
+export const PutRumEvents = Binding.Service<PutRumEvents>("AWS.RUM.PutRumEvents");

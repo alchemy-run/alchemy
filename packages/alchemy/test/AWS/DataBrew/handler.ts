@@ -1,19 +1,33 @@
+import type * as databrew from "@distilled.cloud/aws/databrew";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import path from "pathe";
 import * as DataBrew from "@/AWS/DataBrew";
 import * as IAM from "@/AWS/IAM";
 import * as Lambda from "@/AWS/Lambda";
 import * as S3 from "@/AWS/S3";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
 export const SOURCE_KEY = "raw/data.csv";
+
+// DataBrew can observe a fresh role's grants at different times per operation.
+const authorizationPolicy = {
+  while: (
+    error:
+      | databrew.StartJobRunError
+      | databrew.PublishRecipeError
+      | databrew.StartProjectSessionError
+      | databrew.SendProjectSessionActionError,
+  ) => error._tag === "AccessDeniedException",
+  schedule: Schedule.spaced("3 seconds"),
+  times: 8,
+};
 
 /**
  * Shared foundation for the bindings fixture: bucket + DataBrew service role
@@ -84,7 +98,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
 export default DataBrewTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // Session start + action retries fan out SDK calls — AWS's 3s default
     // intermittently times out under cold starts.
     timeout: Duration.seconds(90),
@@ -118,8 +132,7 @@ export default DataBrewTestFunction.make(
     const publishRecipe = yield* DataBrew.PublishRecipe(base.recipe);
     // Interactive-session plane
     const startProjectSession = yield* DataBrew.StartProjectSession(project);
-    const sendProjectSessionAction =
-      yield* DataBrew.SendProjectSessionAction(project);
+    const sendProjectSessionAction = yield* DataBrew.SendProjectSessionAction(project);
 
     // Deploy-time: creates the EventBridge rule (default bus, source
     // aws.databrew) targeting this Function. Runtime firing rides on the
@@ -143,7 +156,9 @@ export default DataBrewTestFunction.make(
         switch (route) {
           // ---- job-run plane ----
           case "POST /run/start": {
-            const result = yield* errorTagged(startJobRun());
+            const result = yield* errorTagged(
+              startJobRun().pipe(Effect.retry(authorizationPolicy)),
+            );
             return yield* HttpServerResponse.json(
               "errorTag" in result ? result : { runId: result.RunId },
             );
@@ -157,9 +172,7 @@ export default DataBrewTestFunction.make(
             );
           }
           case "GET /run/get": {
-            const result = yield* errorTagged(
-              describeJobRun({ RunId: param("id") }),
-            );
+            const result = yield* errorTagged(describeJobRun({ RunId: param("id") }));
             return yield* HttpServerResponse.json(
               "errorTag" in result ? result : { state: result.State },
             );
@@ -175,7 +188,9 @@ export default DataBrewTestFunction.make(
           // ---- recipe plane ----
           case "POST /recipe/publish": {
             const result = yield* errorTagged(
-              publishRecipe({ Description: "published by bindings fixture" }),
+              publishRecipe({
+                Description: "published by bindings fixture",
+              }).pipe(Effect.retry(authorizationPolicy)),
             );
             return yield* HttpServerResponse.json(
               "errorTag" in result ? result : { name: result.Name },
@@ -185,13 +200,12 @@ export default DataBrewTestFunction.make(
           // ---- interactive-session plane ----
           case "POST /session/run": {
             const started = yield* errorTagged(
-              startProjectSession({ AssumeControl: true }),
+              startProjectSession({ AssumeControl: true }).pipe(Effect.retry(authorizationPolicy)),
             );
             if ("errorTag" in started) {
               return yield* HttpServerResponse.json({ started });
             }
-            // A fresh session takes a little while to become actionable —
-            // surfaced as ConflictException. Bounded retry (6 × 5s).
+            // Session readiness and IAM propagation share one bounded retry.
             const action = yield* errorTagged(
               sendProjectSessionAction({
                 Preview: true,
@@ -206,10 +220,7 @@ export default DataBrewTestFunction.make(
               }).pipe(
                 Effect.retry({
                   while: (e): boolean => e._tag === "ConflictException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("5 seconds"),
-                    Schedule.recurs(6),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(6)]),
                 }),
               ),
             );
@@ -218,18 +229,12 @@ export default DataBrewTestFunction.make(
                 name: started.Name,
                 hasSessionId: started.ClientSessionId !== undefined,
               },
-              action:
-                "errorTag" in action
-                  ? action
-                  : { actionId: action.ActionId ?? null },
+              action: "errorTag" in action ? action : { actionId: action.ActionId ?? null },
             });
           }
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

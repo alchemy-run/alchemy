@@ -8,13 +8,14 @@ import * as Binding from "../../Binding.ts";
  * Lists the notifications for the account — delegation requests,
  * control-set review handoffs, and completed report generation. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.ListNotificationsHttp)`.
- * @binding
- * @section Notifications
- * @example List Audit Manager Notifications
+ * ### Notifications
+ * **Example:** List Audit Manager Notifications
  * ```typescript
  * const listNotifications = yield* AWS.AuditManager.ListNotifications();
  * const result = yield* listNotifications({ maxResults: 20 });
  * ```
+ *
+ * @binding
  */
 export interface ListNotifications extends Binding.Service<
   ListNotifications,
@@ -22,10 +23,7 @@ export interface ListNotifications extends Binding.Service<
   () => Effect.Effect<
     (
       request?: auditmanager.ListNotificationsRequest,
-    ) => Effect.Effect<
-      auditmanager.ListNotificationsResponse,
-      auditmanager.ListNotificationsError
-    >
+    ) => Effect.Effect<auditmanager.ListNotificationsResponse, auditmanager.ListNotificationsError>
   >
 > {}
 

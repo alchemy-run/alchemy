@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface GetObjectAttributesRequest extends Omit<
-  S3.GetObjectAttributesRequest,
-  "Bucket"
-> {}
+export interface GetObjectAttributesRequest extends Omit<S3.GetObjectAttributesRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:GetObjectAttributes`.
@@ -17,9 +13,8 @@ export interface GetObjectAttributesRequest extends Omit<
  * fetching the body — the bucket name is injected automatically and the
  * object-read attribute actions are granted on the bucket's objects. Provide
  * the implementation with `Effect.provide(AWS.S3.GetObjectAttributesHttp)`.
- * @binding
- * @section Reading Objects
- * @example Read Object Size and ETag
+ * ### Reading Objects
+ * **Example:** Read Object Size and ETag
  * ```typescript
  * const getObjectAttributes = yield* AWS.S3.GetObjectAttributes(bucket);
  *
@@ -28,6 +23,8 @@ export interface GetObjectAttributesRequest extends Omit<
  *   ObjectAttributes: ["ObjectSize", "ETag", "StorageClass"],
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetObjectAttributes extends Binding.Service<
   GetObjectAttributes,
@@ -37,10 +34,7 @@ export interface GetObjectAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetObjectAttributesRequest,
-    ) => Effect.Effect<
-      S3.GetObjectAttributesOutput,
-      S3.GetObjectAttributesError
-    >
+    ) => Effect.Effect<S3.GetObjectAttributesOutput, S3.GetObjectAttributesError>
   >
 > {}
 export const GetObjectAttributes = Binding.Service<GetObjectAttributes>(

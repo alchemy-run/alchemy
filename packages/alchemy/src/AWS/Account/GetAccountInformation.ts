@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * date, and account state. Account Management is an account singleton, so the
  * binding takes no resource argument. Provide the implementation with
  * `Effect.provide(AWS.Account.GetAccountInformationHttp)`.
- * @binding
- * @section Reading Account Settings
- * @example Read the Account's Name and State
+ * ### Reading Account Settings
+ * **Example:** Read the Account's Name and State
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getAccountInformation = yield* AWS.Account.GetAccountInformation();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * const info = yield* getAccountInformation();
  * console.log(info.AccountId, info.AccountState);
  * ```
+ *
+ * @binding
  */
 export interface GetAccountInformation extends Binding.Service<
   GetAccountInformation,
@@ -27,10 +28,7 @@ export interface GetAccountInformation extends Binding.Service<
   () => Effect.Effect<
     (
       request?: account.GetAccountInformationRequest,
-    ) => Effect.Effect<
-      account.GetAccountInformationResponse,
-      account.GetAccountInformationError
-    >
+    ) => Effect.Effect<account.GetAccountInformationResponse, account.GetAccountInformationError>
   >
 > {}
 export const GetAccountInformation = Binding.Service<GetAccountInformation>(

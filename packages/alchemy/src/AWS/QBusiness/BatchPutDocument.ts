@@ -20,9 +20,8 @@ export interface BatchPutDocumentRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.BatchPutDocumentHttp)`.
  *
- * @binding
- * @section Document Ingestion
- * @example Push Documents into an Index
+ * ### Document Ingestion
+ * **Example:** Push Documents into an Index
  * ```typescript
  * const putDocuments = yield* AWS.QBusiness.BatchPutDocument(index);
  *
@@ -37,6 +36,8 @@ export interface BatchPutDocumentRequest extends Omit<
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface BatchPutDocument extends Binding.Service<
   BatchPutDocument,
@@ -46,12 +47,7 @@ export interface BatchPutDocument extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchPutDocumentRequest,
-    ) => Effect.Effect<
-      qbusiness.BatchPutDocumentResponse,
-      qbusiness.BatchPutDocumentError
-    >
+    ) => Effect.Effect<qbusiness.BatchPutDocumentResponse, qbusiness.BatchPutDocumentError>
   >
 > {}
-export const BatchPutDocument = Binding.Service<BatchPutDocument>(
-  "AWS.QBusiness.BatchPutDocument",
-);
+export const BatchPutDocument = Binding.Service<BatchPutDocument>("AWS.QBusiness.BatchPutDocument");

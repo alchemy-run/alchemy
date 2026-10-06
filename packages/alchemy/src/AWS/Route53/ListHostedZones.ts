@@ -10,14 +10,15 @@ import * as Binding from "../../Binding.ts";
  * Pages through the account's hosted zones — zone discovery for multi-tenant
  * DNS automation that resolves a zone id before editing records. Provide the
  * implementation with `Effect.provide(AWS.Route53.ListHostedZonesHttp)`.
- * @binding
- * @section Discovering Zones
- * @example List the account's zones
+ * ### Discovering Zones
+ * **Example:** List the account's zones
  * ```typescript
  * const listHostedZones = yield* AWS.Route53.ListHostedZones();
  *
  * const { HostedZones } = yield* listHostedZones({ MaxItems: 100 });
  * ```
+ *
+ * @binding
  */
 export interface ListHostedZones extends Binding.Service<
   ListHostedZones,
@@ -25,12 +26,7 @@ export interface ListHostedZones extends Binding.Service<
   () => Effect.Effect<
     (
       request?: route53.ListHostedZonesRequest,
-    ) => Effect.Effect<
-      route53.ListHostedZonesResponse,
-      route53.ListHostedZonesError
-    >
+    ) => Effect.Effect<route53.ListHostedZonesResponse, route53.ListHostedZonesError>
   >
 > {}
-export const ListHostedZones = Binding.Service<ListHostedZones>(
-  "AWS.Route53.ListHostedZones",
-);
+export const ListHostedZones = Binding.Service<ListHostedZones>("AWS.Route53.ListHostedZones");

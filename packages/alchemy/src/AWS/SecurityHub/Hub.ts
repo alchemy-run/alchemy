@@ -3,12 +3,7 @@ import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -67,13 +62,13 @@ export interface Hub extends Resource<
  * singleton: adopting a pre-existing Hub that Alchemy did not create requires
  * `--adopt`.
  *
- * @section Enabling Security Hub
- * @example Enable with default standards
+ * ### Enabling Security Hub
+ * **Example:** Enable with default standards
  * ```typescript
  * const hub = yield* SecurityHub.Hub("Hub", {});
  * ```
  *
- * @example Enable without default standards, auto-enable controls
+ * **Example:** Enable without default standards, auto-enable controls
  * ```typescript
  * const hub = yield* SecurityHub.Hub("Hub", {
  *   enableDefaultStandards: false,
@@ -126,8 +121,7 @@ export const HubProvider = () =>
 
         // Security Hub is an account/region singleton — `describeHub` returns
         // the single Hub or throws when unsubscribed.
-        list: () =>
-          describeHub.pipe(Effect.map((hub) => (hub ? [buildAttrs(hub)] : []))),
+        list: () => describeHub.pipe(Effect.map((hub) => (hub ? [buildAttrs(hub)] : []))),
 
         reconcile: Effect.fn(function* ({ id, news = {}, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;

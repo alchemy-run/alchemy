@@ -1,5 +1,6 @@
 import * as ses from "@distilled.cloud/aws/ses";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -92,9 +93,8 @@ export interface ReceiptRule extends Resource<
  *
  * Actions are passed as the raw distilled action shapes (no marshalling): the
  * caller supplies bucket names, topic ARNs, and function ARNs directly.
- * @resource
- * @section Creating Rules
- * @example Deliver Matching Mail to S3
+ * ### Creating Rules
+ * **Example:** Deliver Matching Mail to S3
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -108,7 +108,7 @@ export interface ReceiptRule extends Resource<
  * });
  * ```
  *
- * @example Invoke a Lambda and Add a Header
+ * **Example:** Invoke a Lambda and Add a Header
  * ```typescript
  * const rule = yield* SES.ReceiptRule("Process", {
  *   ruleSetName: ruleSet.ruleSetName,
@@ -121,8 +121,8 @@ export interface ReceiptRule extends Resource<
  * });
  * ```
  *
- * @section Ordering Rules
- * @example Place a Rule After Another
+ * ### Ordering Rules
+ * **Example:** Place a Rule After Another
  * ```typescript
  * // A BounceAction's Sender must be a verified SES identity — SES rejects the
  * // rule with IdentityNotVerified at create/update time otherwise.
@@ -140,6 +140,8 @@ export interface ReceiptRule extends Resource<
  *   } }],
  * });
  * ```
+ *
+ * @resource
  */
 export const ReceiptRule = Resource<ReceiptRule>("AWS.SES.ReceiptRule");
 
@@ -157,6 +159,21 @@ const observedPredecessor = (
   return rules[index - 1]?.Name;
 };
 
+/**
+ * An IAM role can exist before SES is able to assume it, so create and
+ * update retry that specific rejection while the role propagates.
+ */
+const retryRolePropagation = <A, R>(
+  effect: Effect.Effect<A, ses.CreateReceiptRuleError | ses.UpdateReceiptRuleError, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ReceiptRuleRoleNotAssumable",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 12,
+    }),
+  );
+
 export const ReceiptRuleProvider = () =>
   Provider.effect(
     ReceiptRule,
@@ -165,15 +182,10 @@ export const ReceiptRuleProvider = () =>
         id: string,
         props: Pick<ReceiptRuleProps, "ruleName">,
       ) {
-        return (
-          props.ruleName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.ruleName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
-      const describeRule = Effect.fn(function* (
-        ruleSetName: string,
-        ruleName: string,
-      ) {
+      const describeRule = Effect.fn(function* (ruleSetName: string, ruleName: string) {
         return yield* ses
           .describeReceiptRule({ RuleSetName: ruleSetName, RuleName: ruleName })
           .pipe(
@@ -184,10 +196,7 @@ export const ReceiptRuleProvider = () =>
           );
       });
 
-      const buildRule = (
-        ruleName: string,
-        props: ReceiptRuleProps,
-      ): ses.ReceiptRule => ({
+      const buildRule = (ruleName: string, props: ReceiptRuleProps): ses.ReceiptRule => ({
         Name: ruleName,
         // The classic API defaults an omitted Enabled/ScanEnabled to FALSE —
         // apply the documented defaults explicitly so an undeclared rule is
@@ -245,18 +254,23 @@ export const ReceiptRuleProvider = () =>
                 Rule: rule,
               })
               .pipe(
+                retryRolePropagation,
                 Effect.catchTag("AlreadyExistsException", () =>
-                  ses.updateReceiptRule({
-                    RuleSetName: ruleSetName,
-                    Rule: rule,
-                  }),
+                  ses
+                    .updateReceiptRule({
+                      RuleSetName: ruleSetName,
+                      Rule: rule,
+                    })
+                    .pipe(retryRolePropagation),
                 ),
               );
           } else {
-            yield* ses.updateReceiptRule({
-              RuleSetName: ruleSetName,
-              Rule: rule,
-            });
+            yield* ses
+              .updateReceiptRule({
+                RuleSetName: ruleSetName,
+                Rule: rule,
+              })
+              .pipe(retryRolePropagation);
           }
 
           // SYNC POSITION — updateReceiptRule never moves the rule, so diff the
@@ -265,10 +279,7 @@ export const ReceiptRuleProvider = () =>
           const ruleSet = yield* ses.describeReceiptRuleSet({
             RuleSetName: ruleSetName,
           });
-          const predecessor = observedPredecessor(
-            ruleSet.Rules ?? [],
-            ruleName,
-          );
+          const predecessor = observedPredecessor(ruleSet.Rules ?? [], ruleName);
           if (predecessor !== news.after) {
             yield* ses.setReceiptRulePosition({
               RuleSetName: ruleSetName,
@@ -288,12 +299,7 @@ export const ReceiptRuleProvider = () =>
               RuleSetName: output.ruleSetName,
               RuleName: output.ruleName,
             })
-            .pipe(
-              Effect.catchTag(
-                "RuleSetDoesNotExistException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("RuleSetDoesNotExistException", () => Effect.void));
         }),
       });
     }),

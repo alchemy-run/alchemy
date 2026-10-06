@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.CreateCollectionHttp)`.
  *
- * @binding
- * @section Face Collections
- * @example Create a Tenant Collection
+ * ### Face Collections
+ * **Example:** Create a Tenant Collection
  * ```typescript
  * // init
  * const createCollection = yield* AWS.Rekognition.CreateCollection();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * const created = yield* createCollection({ CollectionId: `tenant-${tenantId}` });
  * // created.CollectionArn, created.FaceModelVersion
  * ```
+ *
+ * @binding
  */
 export interface CreateCollection extends Binding.Service<
   CreateCollection,
@@ -29,10 +30,7 @@ export interface CreateCollection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.CreateCollectionRequest,
-    ) => Effect.Effect<
-      rekognition.CreateCollectionResponse,
-      rekognition.CreateCollectionError
-    >
+    ) => Effect.Effect<rekognition.CreateCollectionResponse, rekognition.CreateCollectionError>
   >
 > {}
 export const CreateCollection = Binding.Service<CreateCollection>(

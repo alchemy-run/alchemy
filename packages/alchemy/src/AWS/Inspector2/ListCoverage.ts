@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Inspector2.ListCoverageHttp)`.
- * @binding
- * @section Coverage & Vulnerability Intel
- * @example List Scan Coverage
+ * ### Coverage & Vulnerability Intel
+ * **Example:** List Scan Coverage
  * ```typescript
  * // init
  * const listCoverage = yield* AWS.Inspector2.ListCoverage();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { coveredResources } = yield* listCoverage();
  * ```
+ *
+ * @binding
  */
 export interface ListCoverage extends Binding.Service<
   ListCoverage,
@@ -26,12 +27,7 @@ export interface ListCoverage extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListCoverageRequest,
-    ) => Effect.Effect<
-      inspector2.ListCoverageResponse,
-      inspector2.ListCoverageError
-    >
+    ) => Effect.Effect<inspector2.ListCoverageResponse, inspector2.ListCoverageError>
   >
 > {}
-export const ListCoverage = Binding.Service<ListCoverage>(
-  "AWS.Inspector2.ListCoverage",
-);
+export const ListCoverage = Binding.Service<ListCoverage>("AWS.Inspector2.ListCoverage");

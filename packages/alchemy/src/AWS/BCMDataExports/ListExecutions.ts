@@ -7,10 +7,7 @@ import type { Export } from "./Export.ts";
  * Request for {@link ListExecutions} — the bound export's ARN is injected
  * automatically.
  */
-export interface ListExecutionsRequest extends Omit<
-  bcm.ListExecutionsRequest,
-  "ExportArn"
-> {}
+export interface ListExecutionsRequest extends Omit<bcm.ListExecutionsRequest, "ExportArn"> {}
 
 /**
  * Runtime binding for `bcm-data-exports:ListExecutions`.
@@ -20,9 +17,8 @@ export interface ListExecutionsRequest extends Omit<
  * Useful for delivery dashboards and monitors that scan for failed
  * refreshes. Provide the implementation with
  * `Effect.provide(AWS.BCMDataExports.ListExecutionsHttp)`.
- * @binding
- * @section Monitoring Executions
- * @example List Recent Executions
+ * ### Monitoring Executions
+ * **Example:** List Recent Executions
  * ```typescript
  * // init — bind the operation to the export
  * const listExecutions = yield* AWS.BCMDataExports.ListExecutions(cur);
@@ -34,6 +30,8 @@ export interface ListExecutionsRequest extends Omit<
  *     execution.ExecutionStatus.StatusCode === "DELIVERY_FAILURE",
  * );
  * ```
+ *
+ * @binding
  */
 export interface ListExecutions extends Binding.Service<
   ListExecutions,
@@ -47,6 +45,4 @@ export interface ListExecutions extends Binding.Service<
   >
 > {}
 
-export const ListExecutions = Binding.Service<ListExecutions>(
-  "AWS.BCMDataExports.ListExecutions",
-);
+export const ListExecutions = Binding.Service<ListExecutions>("AWS.BCMDataExports.ListExecutions");

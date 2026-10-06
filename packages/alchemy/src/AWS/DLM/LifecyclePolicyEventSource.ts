@@ -70,8 +70,8 @@ export interface LifecyclePolicyEventSourceProps extends EventRouteProps {
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on
  * the Function effect.
  *
- * @section Consuming Lifecycle Policy Events
- * @example Alert When A Policy Stops Running
+ * ### Consuming Lifecycle Policy Events
+ * **Example:** Alert When A Policy Stops Running
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -104,12 +104,8 @@ export const consumePolicyEvents = <StreamReq = never, Req = never>(
     props.id ?? "DLMPolicyEvents",
     {
       source: ["aws.dlm"],
-      "detail-type": (props.kinds ?? (["state-change"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.policyArns !== undefined
-        ? { resources: [...props.policyArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["state-change"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.policyArns !== undefined ? { resources: [...props.policyArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

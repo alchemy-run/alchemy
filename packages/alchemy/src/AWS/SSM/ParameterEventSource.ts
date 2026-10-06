@@ -73,8 +73,8 @@ export interface ParameterEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Parameter Events
- * @example React To Parameter Changes
+ * ### Consuming Parameter Events
+ * **Example:** React To Parameter Changes
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -105,9 +105,9 @@ export const consumeParameterEvents = <StreamReq = never, Req = never>(
     props.id ?? "SSMParameterEvents",
     {
       source: ["aws.ssm"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as ParameterEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as ParameterEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
       ...(props.names !== undefined && props.names.length > 0
         ? { detail: { name: [...props.names] } }
         : {}),

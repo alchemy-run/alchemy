@@ -9,12 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  databrewArn,
-  fetchObservedTags,
-  retryWhileConflict,
-  syncTags,
-} from "./internal.ts";
+import { databrewArn, fetchObservedTags, retryWhileConflict, syncTags } from "./internal.ts";
 
 /** An Amazon S3 location (bucket + optional key prefix). */
 export interface S3Location {
@@ -175,9 +170,8 @@ export interface Dataset extends Resource<
  * Glue Data Catalog table, or JDBC query) plus parsing options. The dataset
  * definition itself stores no data and is free; it is consumed by DataBrew
  * projects and jobs.
- * @resource
- * @section Creating Datasets
- * @example CSV Dataset from S3
+ * ### Creating Datasets
+ * **Example:** CSV Dataset from S3
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -193,7 +187,7 @@ export interface Dataset extends Resource<
  * });
  * ```
  *
- * @example JSON Dataset
+ * **Example:** JSON Dataset
  * ```typescript
  * const dataset = yield* AWS.DataBrew.Dataset("Events", {
  *   format: "JSON",
@@ -204,8 +198,8 @@ export interface Dataset extends Resource<
  * });
  * ```
  *
- * @section Glue Data Catalog
- * @example Dataset from a Catalog Table
+ * ### Glue Data Catalog
+ * **Example:** Dataset from a Catalog Table
  * ```typescript
  * const dataset = yield* AWS.DataBrew.Dataset("Curated", {
  *   input: {
@@ -216,6 +210,8 @@ export interface Dataset extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Dataset = Resource<Dataset>("AWS.DataBrew.Dataset");
 
@@ -231,9 +227,7 @@ const buildFilterExpression = (filter: FilterExpression) => ({
 });
 
 const buildInput = (input: DatasetInput) => ({
-  S3InputDefinition: input.s3InputDefinition
-    ? buildS3Location(input.s3InputDefinition)
-    : undefined,
+  S3InputDefinition: input.s3InputDefinition ? buildS3Location(input.s3InputDefinition) : undefined,
   DataCatalogInputDefinition: input.dataCatalogInputDefinition
     ? {
         CatalogId: input.dataCatalogInputDefinition.catalogId,
@@ -304,9 +298,7 @@ const buildPathOptions = (options: DatasetPathOptions | undefined) =>
                       }
                     : undefined,
                   CreateColumn: param.createColumn,
-                  Filter: param.filter
-                    ? buildFilterExpression(param.filter)
-                    : undefined,
+                  Filter: param.filter ? buildFilterExpression(param.filter) : undefined,
                 },
               ]),
             )
@@ -322,20 +314,13 @@ export const DatasetProvider = () =>
         id: string,
         props: { datasetName?: string | undefined },
       ) {
-        return (
-          props.datasetName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.datasetName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeDataset({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const buildDefinition = (props: DatasetProps) => ({
@@ -351,28 +336,21 @@ export const DatasetProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* databrew.listDatasets
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* databrew.listDatasets.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Datasets ?? [])
               .map((d) => ({
                 datasetName: d.Name,
-                datasetArn:
-                  d.ResourceArn ??
-                  databrewArn(region, accountId, "dataset", d.Name),
+                datasetArn: d.ResourceArn ?? databrewArn(region, accountId, "dataset", d.Name),
               }));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.datasetName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.datasetName ?? (yield* createName(id, olds ?? {}));
           const dataset = yield* observe(name);
           if (dataset === undefined) return undefined;
-          const arn =
-            dataset.ResourceArn ??
-            databrewArn(region, accountId, "dataset", name);
+          const arn = dataset.ResourceArn ?? databrewArn(region, accountId, "dataset", name);
           const attrs = { datasetName: name, datasetArn: arn };
           const tags = yield* fetchObservedTags(arn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -414,9 +392,7 @@ export const DatasetProvider = () =>
             });
           }
 
-          const arn =
-            dataset?.ResourceArn ??
-            databrewArn(region, accountId, "dataset", name);
+          const arn = dataset?.ResourceArn ?? databrewArn(region, accountId, "dataset", name);
 
           // 3b. SYNC TAGS against observed cloud tags
           const observedTags = yield* fetchObservedTags(arn);
@@ -429,12 +405,8 @@ export const DatasetProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // A ConflictException surfaces briefly after an associated project
           // or job is deleted (eventual consistency) — retry bounded.
-          yield* retryWhileConflict(
-            databrew.deleteDataset({ Name: output.datasetName }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+          yield* retryWhileConflict(databrew.deleteDataset({ Name: output.datasetName })).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
         }),
       });

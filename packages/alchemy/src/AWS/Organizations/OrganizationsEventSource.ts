@@ -91,8 +91,8 @@ export interface OrganizationsEventSourceProps extends EventRouteProps {
  * events. Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Organization Events
- * @example React to Completed Account Creations
+ * ### Consuming Organization Events
+ * **Example:** React to Completed Account Creations
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -125,9 +125,7 @@ export const consumeOrganizationsEvents = <StreamReq = never, Req = never>(
     props.id ?? "OrganizationsEvents",
     {
       source: ["aws.organizations"],
-      ...(props.events !== undefined
-        ? { detail: { eventName: [...props.events] } }
-        : {}),
+      ...(props.events !== undefined ? { detail: { eventName: [...props.events] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

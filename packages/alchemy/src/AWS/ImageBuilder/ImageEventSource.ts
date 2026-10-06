@@ -66,8 +66,8 @@ export interface ImageEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Image Events
- * @example React When a Build Completes
+ * ### Consuming Image Events
+ * **Example:** React When a Build Completes
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -90,9 +90,7 @@ export interface ImageEventSourceProps extends EventRouteProps {
  */
 export const consumeImageEvents = <StreamReq = never, Req = never>(
   props: ImageEventSourceProps,
-  process: (
-    events: Stream.Stream<ImageEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<ImageEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "ImageBuilderImageEvents",

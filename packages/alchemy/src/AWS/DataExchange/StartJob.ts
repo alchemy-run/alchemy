@@ -12,15 +12,16 @@ import * as Binding from "../../Binding.ts";
  * side of the transfer via the matching `AWS.S3` bindings.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.StartJobHttp)`.
- * @binding
- * @section Import & Export Jobs
- * @example Start A Created Job
+ * ### Import & Export Jobs
+ * **Example:** Start A Created Job
  * ```typescript
  * const startJob = yield* AWS.DataExchange.StartJob();
  *
  * // runtime
  * yield* startJob({ JobId: job.Id! });
  * ```
+ *
+ * @binding
  */
 export interface StartJob extends Binding.Service<
   StartJob,
@@ -28,10 +29,7 @@ export interface StartJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.StartJobRequest,
-    ) => Effect.Effect<
-      dataexchange.StartJobResponse,
-      dataexchange.StartJobError
-    >
+    ) => Effect.Effect<dataexchange.StartJobResponse, dataexchange.StartJobError>
   >
 > {}
 export const StartJob = Binding.Service<StartJob>("AWS.DataExchange.StartJob");

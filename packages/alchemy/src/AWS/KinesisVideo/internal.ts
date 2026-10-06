@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
  * Raised when a Kinesis Video stream or signaling channel fails to reach
  * `ACTIVE` within the bounded polling budget after a create/update.
  */
-export class KinesisVideoNotConverged extends Data.TaggedError(
-  "KinesisVideoNotConverged",
-)<{
+export class KinesisVideoNotConverged extends Data.TaggedError("KinesisVideoNotConverged")<{
   readonly resource: string;
   readonly status: string | undefined;
 }> {}
@@ -18,9 +16,7 @@ export class KinesisVideoNotConverged extends Data.TaggedError(
  * Raised when `GetSignalingChannelEndpoint` returns no endpoint for the
  * requested protocol.
  */
-export class SignalingEndpointUnavailable extends Data.TaggedError(
-  "SignalingEndpointUnavailable",
-)<{
+export class SignalingEndpointUnavailable extends Data.TaggedError("SignalingEndpointUnavailable")<{
   readonly channelArn: string;
   readonly protocol: string;
 }> {}
@@ -55,8 +51,7 @@ export const retryWhileSettling = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "ResourceInUseException" || e._tag === "StreamNotActive",
+    while: (e) => e._tag === "ResourceInUseException" || e._tag === "StreamNotActive",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });
 
@@ -82,11 +77,12 @@ export const retryWhileNotFound = <A, E extends { _tag: string }, R>(
 const untilConverged = <A, E, R>(
   self: Effect.Effect<A, E, R>,
   done: (a: A) => boolean,
+  times = 30,
 ): Effect.Effect<A, E, R> =>
   Effect.repeat(self, {
     schedule: Schedule.spaced("2 seconds"),
     until: done,
-    times: 30,
+    times,
   });
 
 /**
@@ -99,9 +95,10 @@ const untilConverged = <A, E, R>(
  * `previousVersion` after a mutation to also wait for the version bump, so
  * the returned `Version` is safe to use in the next versioned call.
  */
-export const waitForStreamActive = Effect.fn(
-  "AWS.KinesisVideo.waitForStreamActive",
-)(function* (streamName: string, previousVersion?: string) {
+export const waitForStreamActive = Effect.fn("AWS.KinesisVideo.waitForStreamActive")(function* (
+  streamName: string,
+  previousVersion?: string,
+) {
   const done = (info: kv.StreamInfo | undefined): boolean =>
     info?.Status === "ACTIVE" &&
     (previousVersion === undefined || info.Version !== previousVersion);
@@ -128,16 +125,17 @@ export const waitForStreamActive = Effect.fn(
  * Pass `previousVersion` after `UpdateSignalingChannel` to also wait for the
  * version bump (see {@link waitForStreamActive}).
  */
-export const waitForChannelActive = Effect.fn(
-  "AWS.KinesisVideo.waitForChannelActive",
-)(function* (channelName: string, previousVersion?: string) {
+export const waitForChannelActive = Effect.fn("AWS.KinesisVideo.waitForChannelActive")(function* (
+  channelName: string,
+  previousVersion?: string,
+) {
   const done = (info: kv.ChannelInfo | undefined): boolean =>
     info?.ChannelStatus === "ACTIVE" &&
     (previousVersion === undefined || info.Version !== previousVersion);
   const info = yield* untilConverged(
-    retryWhileNotFound(
-      kv.describeSignalingChannel({ ChannelName: channelName }),
-    ).pipe(Effect.map((r) => r.ChannelInfo)),
+    retryWhileNotFound(kv.describeSignalingChannel({ ChannelName: channelName })).pipe(
+      Effect.map((r) => r.ChannelInfo),
+    ),
     done,
   );
   if (!done(info)) {
@@ -156,17 +154,17 @@ export const waitForChannelActive = Effect.fn(
  * A stream in `DELETING` blocks re-creation of the same name with
  * `ResourceInUseException`, so reconcilers wait it out before recreating.
  */
-export const waitForStreamGone = Effect.fn(
-  "AWS.KinesisVideo.waitForStreamGone",
-)(function* (streamName: string) {
+export const waitForStreamGone = Effect.fn("AWS.KinesisVideo.waitForStreamGone")(function* (
+  streamName: string,
+) {
   const info = yield* untilConverged(
     kv.describeStream({ StreamName: streamName }).pipe(
       Effect.map((r) => r.StreamInfo),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     ),
     (i) => i === undefined,
+    // full purge can take noticeably longer than activation (~90s bound)
+    45,
   );
   if (info !== undefined) {
     return yield* Effect.fail(
@@ -182,17 +180,16 @@ export const waitForStreamGone = Effect.fn(
  * Poll `DescribeSignalingChannel` until the channel is fully purged
  * (NotFound) — see {@link waitForStreamGone}.
  */
-export const waitForChannelGone = Effect.fn(
-  "AWS.KinesisVideo.waitForChannelGone",
-)(function* (channelName: string) {
+export const waitForChannelGone = Effect.fn("AWS.KinesisVideo.waitForChannelGone")(function* (
+  channelName: string,
+) {
   const info = yield* untilConverged(
     kv.describeSignalingChannel({ ChannelName: channelName }).pipe(
       Effect.map((r) => r.ChannelInfo),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     ),
     (i) => i === undefined,
+    45,
   );
   if (info !== undefined) {
     return yield* Effect.fail(
@@ -286,9 +283,7 @@ export const discoverSignalingEndpoint = <E, R>(
       (item) => item.Protocol === protocol,
     )?.ResourceEndpoint;
     if (endpoint === undefined) {
-      return yield* Effect.fail(
-        new SignalingEndpointUnavailable({ channelArn, protocol }),
-      );
+      return yield* Effect.fail(new SignalingEndpointUnavailable({ channelArn, protocol }));
     }
     signalingEndpointCache.set(key, endpoint);
     return endpoint;

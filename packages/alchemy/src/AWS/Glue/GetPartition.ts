@@ -16,9 +16,8 @@ export interface GetPartitionRequest extends Omit<
  * does not exist. The database/table names and catalog id are injected from
  * the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.GetPartitionHttp)`.
- * @binding
- * @section Managing Partitions
- * @example Read One Partition
+ * ### Managing Partitions
+ * **Example:** Read One Partition
  * ```typescript
  * // init
  * const getPartition = yield* AWS.Glue.GetPartition(table);
@@ -28,6 +27,8 @@ export interface GetPartitionRequest extends Omit<
  *   PartitionValues: ["2026-01-01"],
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetPartition extends Binding.Service<
   GetPartition,
@@ -41,6 +42,4 @@ export interface GetPartition extends Binding.Service<
   >
 > {}
 
-export const GetPartition = Binding.Service<GetPartition>(
-  "AWS.Glue.GetPartition",
-);
+export const GetPartition = Binding.Service<GetPartition>("AWS.Glue.GetPartition");

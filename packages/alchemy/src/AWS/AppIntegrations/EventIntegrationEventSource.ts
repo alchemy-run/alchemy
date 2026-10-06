@@ -59,8 +59,8 @@ export interface IntegrationEventsProps {
  * Returns the created {@link EventIntegration} so it can be passed to other
  * bindings (e.g. `ListEventIntegrationAssociations`).
  *
- * @section Consuming Integration Events
- * @example Consume Partner Events on a Lambda Function
+ * ### Consuming Integration Events
+ * **Example:** Consume Partner Events on a Lambda Function
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  * import { consumeIntegrationEvents } from "alchemy/AWS/AppIntegrations";
@@ -77,7 +77,7 @@ export interface IntegrationEventsProps {
  * );
  * ```
  *
- * @example Narrow by Detail Type on a Custom Bus
+ * **Example:** Narrow by Detail Type on a Custom Bus
  * ```typescript
  * const bus = yield* AWS.EventBridge.EventBus("PartnerBus");
  * yield* consumeIntegrationEvents(
@@ -91,11 +91,7 @@ export interface IntegrationEventsProps {
  * );
  * ```
  */
-export const consumeIntegrationEvents = <
-  Detail = unknown,
-  StreamReq = never,
-  Req = never,
->(
+export const consumeIntegrationEvents = <Detail = unknown, StreamReq = never, Req = never>(
   id: string,
   props: IntegrationEventsProps,
   process: (
@@ -121,13 +117,7 @@ export const consumeIntegrationEvents = <
       ...(props.detailType ? { "detail-type": props.detailType } : {}),
     };
     yield* props.bus
-      ? consumeBusEvents(
-          `${id}-Events`,
-          props.bus,
-          pattern,
-          props.rule,
-          process,
-        )
+      ? consumeBusEvents(`${id}-Events`, props.bus, pattern, props.rule, process)
       : consumeBusEvents(`${id}-Events`, pattern, props.rule, process);
 
     return integration;

@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * deploy-time grant is account-level (`Resource: "*"`).
  * Provide the implementation with
  * `Effect.provide(AWS.SSMIncidents.DeleteIncidentRecordHttp)`.
- * @binding
- * @section Updating Incident Records
- * @example Delete An Incident Record
+ * ### Updating Incident Records
+ * **Example:** Delete An Incident Record
  * ```typescript
  * // init
  * const deleteIncidentRecord = yield* AWS.SSMIncidents.DeleteIncidentRecord();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* deleteIncidentRecord({ arn: incidentRecordArn });
  * ```
+ *
+ * @binding
  */
 export interface DeleteIncidentRecord extends Binding.Service<
   DeleteIncidentRecord,
@@ -27,10 +28,7 @@ export interface DeleteIncidentRecord extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.DeleteIncidentRecordInput,
-    ) => Effect.Effect<
-      incidents.DeleteIncidentRecordOutput,
-      incidents.DeleteIncidentRecordError
-    >
+    ) => Effect.Effect<incidents.DeleteIncidentRecordOutput, incidents.DeleteIncidentRecordError>
   >
 > {}
 export const DeleteIncidentRecord = Binding.Service<DeleteIncidentRecord>(

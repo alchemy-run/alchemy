@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * arguments and grants `comprehendmedical:StartEntitiesDetectionV2Job` on `*`. Provide the
  * implementation with `Effect.provide(AWS.ComprehendMedical.StartEntitiesDetectionV2JobHttp)`.
  *
- * @binding
- * @section Batch Entity Detection Jobs
- * @example Start a Batch Job
+ * ### Batch Entity Detection Jobs
+ * **Example:** Start a Batch Job
  * ```typescript
  * // init
  * const startEntitiesDetectionV2Job = yield* AWS.ComprehendMedical.StartEntitiesDetectionV2Job();
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  *   LanguageCode: "en",
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartEntitiesDetectionV2Job extends Binding.Service<
   StartEntitiesDetectionV2Job,
@@ -37,7 +38,6 @@ export interface StartEntitiesDetectionV2Job extends Binding.Service<
     >
   >
 > {}
-export const StartEntitiesDetectionV2Job =
-  Binding.Service<StartEntitiesDetectionV2Job>(
-    "AWS.ComprehendMedical.StartEntitiesDetectionV2Job",
-  );
+export const StartEntitiesDetectionV2Job = Binding.Service<StartEntitiesDetectionV2Job>(
+  "AWS.ComprehendMedical.StartEntitiesDetectionV2Job",
+);

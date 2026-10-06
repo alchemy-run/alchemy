@@ -1,6 +1,5 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
@@ -13,9 +12,8 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  * manually supplying the bucket name on every request. `s3:PutObject` is
  * granted on the bucket automatically. Provide the implementation with
  * `Effect.provide(AWS.S3.PutObjectHttp)`.
- * @binding
- * @section Writing Objects
- * @example Put an Object
+ * ### Writing Objects
+ * **Example:** Put an Object
  * ```typescript
  * const putObject = yield* PutObject(bucket);
  *
@@ -25,6 +23,8 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  *   ContentType: "text/plain",
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutObject extends Binding.Service<
   PutObject,
@@ -32,9 +32,7 @@ export interface PutObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: PutObjectRequest,
-    ) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError>
+    (request: PutObjectRequest) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError>
   >
 > {}
 export const PutObject = Binding.Service<PutObject>("AWS.S3.PutObject");

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CheckInLicense}.
  */
-export interface CheckInLicenseRequest
-  extends licensemanager.CheckInLicenseRequest {}
+export interface CheckInLicenseRequest extends licensemanager.CheckInLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:CheckInLicense` — return a
@@ -15,9 +14,8 @@ export interface CheckInLicenseRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.CheckInLicenseHttp)`.
- * @binding
- * @section License Checkout Data Plane
- * @example Check an Entitlement Back In
+ * ### License Checkout Data Plane
+ * **Example:** Check an Entitlement Back In
  * ```typescript
  * // init
  * const checkInLicense = yield* AWS.LicenseManager.CheckInLicense();
@@ -25,6 +23,8 @@ export interface CheckInLicenseRequest
  * // runtime
  * yield* checkInLicense({ LicenseConsumptionToken: token });
  * ```
+ *
+ * @binding
  */
 export interface CheckInLicense extends Binding.Service<
   CheckInLicense,
@@ -32,12 +32,7 @@ export interface CheckInLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: CheckInLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.CheckInLicenseResponse,
-      licensemanager.CheckInLicenseError
-    >
+    ) => Effect.Effect<licensemanager.CheckInLicenseResponse, licensemanager.CheckInLicenseError>
   >
 > {}
-export const CheckInLicense = Binding.Service<CheckInLicense>(
-  "AWS.LicenseManager.CheckInLicense",
-);
+export const CheckInLicense = Binding.Service<CheckInLicense>("AWS.LicenseManager.CheckInLicense");

@@ -1,13 +1,13 @@
+import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Export } from "@/AWS/BCMDataExports/Export.ts";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,6 +26,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:bcmdataexports", "live"] },
 );
 
 const bucketName = "alchemy-test-bcm-export-dest";
@@ -53,17 +54,9 @@ const destinationBucket = (accountId: string) =>
       {
         Sid: "EnableAWSDataExportsToWriteToS3AndCheckPolicy",
         Effect: "Allow",
-        Principal: {
-          Service: [
-            "billingreports.amazonaws.com",
-            "bcm-data-exports.amazonaws.com",
-          ],
-        },
+        Principal: { Service: ["billingreports.amazonaws.com", "bcm-data-exports.amazonaws.com"] },
         Action: ["s3:PutObject", "s3:GetBucketPolicy"],
-        Resource: [
-          `arn:aws:s3:::${bucketName}`,
-          `arn:aws:s3:::${bucketName}/*`,
-        ],
+        Resource: [`arn:aws:s3:::${bucketName}`, `arn:aws:s3:::${bucketName}/*`],
         Condition: {
           StringLike: {
             "aws:SourceAccount": accountId,
@@ -80,9 +73,7 @@ const destinationBucket = (accountId: string) =>
 const getExportByArn = (arn: string) =>
   bcm.getExport({ ExportArn: arn }).pipe(
     Effect.map((r) => r.Export),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 // Typed wait-until-gone: bounded, declarative.
@@ -90,17 +81,10 @@ const assertExportGone = (arn: string) =>
   Effect.gen(function* () {
     const live = yield* getExportByArn(arn);
     if (live !== undefined) {
-      return yield* Effect.fail(
-        new Error(`export '${arn}' still exists after destroy`),
-      );
+      return yield* Effect.fail(new Error(`export '${arn}' still exists after destroy`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -119,11 +103,7 @@ test.provider(
             exportName,
             description: "alchemy bcm-data-exports test",
             dataQuery: { queryStatement, tableConfigurations },
-            s3Destination: {
-              s3Bucket: bucket.bucketName,
-              s3Prefix: "cur2",
-              s3Region: region,
-            },
+            s3Destination: { s3Bucket: bucket.bucketName, s3Prefix: "cur2", s3Region: region },
             tags: { fixture: "bcm-data-exports" },
           });
           return { exportArn: exp.exportArn, exportName: exp.exportName };
@@ -139,12 +119,8 @@ test.provider(
       expect(created?.Name).toBe(exportName);
       expect(created?.Description).toBe("alchemy bcm-data-exports test");
       expect(created?.DataQuery.QueryStatement).toBe(queryStatement);
-      expect(created?.DestinationConfigurations.S3Destination.S3Bucket).toBe(
-        bucketName,
-      );
-      expect(created?.DestinationConfigurations.S3Destination.S3Prefix).toBe(
-        "cur2",
-      );
+      expect(created?.DestinationConfigurations.S3Destination.S3Bucket).toBe(bucketName);
+      expect(created?.DestinationConfigurations.S3Destination.S3Prefix).toBe("cur2");
       expect(created?.RefreshCadence.Frequency).toBe("SYNCHRONOUS");
 
       // Tags: internal branding + user tag attached at create.
@@ -152,9 +128,7 @@ test.provider(
         .listTagsForResource({ ResourceArn: deployed.exportArn })
         .pipe(
           Effect.map((r) =>
-            Object.fromEntries(
-              (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
           ),
         );
       expect(tags.fixture).toBe("bcm-data-exports");
@@ -186,20 +160,14 @@ test.provider(
       expect(updated.exportArn).toBe(deployed.exportArn);
 
       const afterUpdate = yield* getExportByArn(deployed.exportArn);
-      expect(afterUpdate?.Description).toBe(
-        "alchemy bcm-data-exports test (updated)",
-      );
-      expect(
-        afterUpdate?.DestinationConfigurations.S3Destination.S3Prefix,
-      ).toBe("cur2-updated");
+      expect(afterUpdate?.Description).toBe("alchemy bcm-data-exports test (updated)");
+      expect(afterUpdate?.DestinationConfigurations.S3Destination.S3Prefix).toBe("cur2-updated");
 
       const tagsAfterUpdate = yield* bcm
         .listTagsForResource({ ResourceArn: deployed.exportArn })
         .pipe(
           Effect.map((r) =>
-            Object.fromEntries(
-              (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-            ),
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
           ),
         );
       expect(tagsAfterUpdate.phase).toBe("two");
@@ -230,5 +198,8 @@ test.provider(
       yield* stack.destroy();
       yield* assertExportGone(renamed.exportArn);
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:bcmdataexports", "provider:aws:s3", "live"],
+    timeout: 300_000,
+  },
 );

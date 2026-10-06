@@ -12,24 +12,21 @@ import type { Broker } from "./Broker.ts";
  * asynchronous — the broker transitions through `REBOOT_IN_PROGRESS` back to
  * `RUNNING`. Provide the implementation with
  * `Effect.provide(AWS.MQ.RebootBrokerHttp)`.
- * @binding
- * @section Managing a Broker
- * @example Apply Pending Changes with a Reboot
+ * ### Managing a Broker
+ * **Example:** Apply Pending Changes with a Reboot
  * ```typescript
  * const rebootBroker = yield* MQ.RebootBroker(broker);
  *
  * yield* rebootBroker();
  * ```
+ *
+ * @binding
  */
 export interface RebootBroker extends Binding.Service<
   RebootBroker,
   "AWS.MQ.RebootBroker",
   (
     broker: Broker,
-  ) => Effect.Effect<
-    () => Effect.Effect<mq.RebootBrokerResponse, mq.RebootBrokerError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<mq.RebootBrokerResponse, mq.RebootBrokerError>>
 > {}
-export const RebootBroker = Binding.Service<RebootBroker>(
-  "AWS.MQ.RebootBroker",
-);
+export const RebootBroker = Binding.Service<RebootBroker>("AWS.MQ.RebootBroker");

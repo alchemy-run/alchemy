@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface ExecuteTransactionRequest
-  extends DynamoDB.ExecuteTransactionInput {}
+export interface ExecuteTransactionRequest extends DynamoDB.ExecuteTransactionInput {}
 
 export type ExecuteTransactionTables = [Table, ...Table[]];
 
@@ -17,9 +16,8 @@ export type ExecuteTransactionTables = [Table, ...Table[]];
  * host is granted the transactional read/write actions on every bound table.
  * Provide the `ExecuteTransactionHttp` layer on the Function to satisfy the
  * binding.
- * @binding
- * @section PartiQL
- * @example Run a PartiQL Transaction
+ * ### PartiQL
+ * **Example:** Run a PartiQL Transaction
  * ```typescript
  * const executeTransaction = yield* AWS.DynamoDB.ExecuteTransaction(table);
  * const tableName = yield* table.tableName;
@@ -37,6 +35,8 @@ export type ExecuteTransactionTables = [Table, ...Table[]];
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface ExecuteTransaction extends Binding.Service<
   ExecuteTransaction,
@@ -46,10 +46,7 @@ export interface ExecuteTransaction extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExecuteTransactionRequest,
-    ) => Effect.Effect<
-      DynamoDB.ExecuteTransactionOutput,
-      DynamoDB.ExecuteTransactionError
-    >
+    ) => Effect.Effect<DynamoDB.ExecuteTransactionOutput, DynamoDB.ExecuteTransactionError>
   >
 > {}
 

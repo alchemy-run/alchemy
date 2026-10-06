@@ -121,9 +121,8 @@ export interface Workgroup extends Resource<
  * `AVAILABLE`. Because a running workgroup bills against its RPU floor, tear
  * it down promptly when you are done.
  *
- * @resource
- * @section Creating a Workgroup
- * @example Minimal (Cheapest) Workgroup
+ * ### Creating a Workgroup
+ * **Example:** Minimal (Cheapest) Workgroup
  * ```typescript
  * const namespace = yield* RedshiftServerless.Namespace("Analytics", {
  *   adminUsername: "admin",
@@ -136,8 +135,8 @@ export interface Workgroup extends Resource<
  * // workgroup.endpointAddress -> "<wg>.<account>.<region>.redshift-serverless.amazonaws.com"
  * ```
  *
- * @section Networking
- * @example Publicly Accessible with Explicit Subnets
+ * ### Networking
+ * **Example:** Publicly Accessible with Explicit Subnets
  * ```typescript
  * const workgroup = yield* RedshiftServerless.Workgroup("AnalyticsWg", {
  *   namespaceName: namespace.namespaceName,
@@ -148,10 +147,10 @@ export interface Workgroup extends Resource<
  *   enhancedVpcRouting: false,
  * });
  * ```
+ *
+ * @resource
  */
-export const Workgroup = Resource<Workgroup>(
-  "AWS.RedshiftServerless.Workgroup",
-);
+export const Workgroup = Resource<Workgroup>("AWS.RedshiftServerless.Workgroup");
 
 class WorkgroupNotSettled extends Data.TaggedError("WorkgroupNotSettled")<{
   readonly workgroupName: string;
@@ -189,11 +188,7 @@ export const WorkgroupProvider = () =>
       const readWorkgroup = Effect.fn(function* (name: string) {
         const response = yield* redshiftserverless
           .getWorkgroup({ workgroupName: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.workgroup;
       });
 
@@ -213,10 +208,7 @@ export const WorkgroupProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof WorkgroupNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(96),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(96)]),
           }),
         );
       });
@@ -235,10 +227,7 @@ export const WorkgroupProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof WorkgroupNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(96),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(96)]),
           }),
         );
       });
@@ -273,16 +262,11 @@ export const WorkgroupProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // A workgroup can't be reassigned to another namespace.
-          if (
-            (news?.namespaceName ?? undefined) !==
-            (olds?.namespaceName ?? undefined)
-          ) {
+          if ((news?.namespaceName ?? undefined) !== (olds?.namespaceName ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -336,18 +320,13 @@ export const WorkgroupProvider = () =>
           if (settled !== undefined) observed = settled;
           if (observed === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Redshift workgroup '${name}' disappeared while reconciling`,
-              ),
+              new Error(`Redshift workgroup '${name}' disappeared while reconciling`),
             );
           }
 
           // 3. Sync — one updateWorkgroup per drifted field (multi-field
           // updates are rejected). Only mutate fields the user specified.
-          if (
-            news.baseCapacity !== undefined &&
-            observed.baseCapacity !== baseCapacity
-          ) {
+          if (news.baseCapacity !== undefined && observed.baseCapacity !== baseCapacity) {
             observed = (yield* applyUpdate(name, { baseCapacity })) ?? observed;
           }
           if (
@@ -369,15 +348,11 @@ export const WorkgroupProvider = () =>
               })) ?? observed;
           }
           if (news.port !== undefined && observed.port !== news.port) {
-            observed =
-              (yield* applyUpdate(name, { port: news.port })) ?? observed;
+            observed = (yield* applyUpdate(name, { port: news.port })) ?? observed;
           }
           if (
             news.securityGroupIds !== undefined &&
-            !sameStringSet(
-              observed.securityGroupIds ?? [],
-              news.securityGroupIds,
-            )
+            !sameStringSet(observed.securityGroupIds ?? [], news.securityGroupIds)
           ) {
             observed =
               (yield* applyUpdate(name, {
@@ -394,20 +369,15 @@ export const WorkgroupProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* redshiftserverless
-            .deleteWorkgroup({ workgroupName: output.workgroupName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // A concurrent modification may still be settling — retry.
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
-              }),
-              Effect.catchTag("ConflictException", () => Effect.void),
-            );
+          yield* redshiftserverless.deleteWorkgroup({ workgroupName: output.workgroupName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            // A concurrent modification may still be settling — retry.
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
+            }),
+            Effect.catchTag("ConflictException", () => Effect.void),
+          );
           yield* waitUntilGone(output.workgroupName);
         }),
 

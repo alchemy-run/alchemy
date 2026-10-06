@@ -7,10 +7,7 @@ import type { Service } from "./Service.ts";
  * `ListInstances` request with `ServiceId` injected from the bound
  * {@link Service}.
  */
-export interface ListInstancesRequest extends Omit<
-  SD.ListInstancesRequest,
-  "ServiceId"
-> {}
+export interface ListInstancesRequest extends Omit<SD.ListInstancesRequest, "ServiceId"> {}
 
 /**
  * Runtime binding for `servicediscovery:ListInstances` — lists summary
@@ -19,9 +16,8 @@ export interface ListInstancesRequest extends Omit<
  * control-plane view: strongly consistent with registration, one page at a
  * time via `NextToken`. Provide the implementation with
  * `Effect.provide(AWS.CloudMap.ListInstancesHttp)`.
- * @binding
- * @section Reading Instances
- * @example List Registered Instances
+ * ### Reading Instances
+ * **Example:** List Registered Instances
  * ```typescript
  * const listInstances = yield* AWS.CloudMap.ListInstances(service);
  *
@@ -30,6 +26,8 @@ export interface ListInstancesRequest extends Omit<
  *   console.log(instance.Id, instance.Attributes);
  * }
  * ```
+ *
+ * @binding
  */
 export interface ListInstances extends Binding.Service<
   ListInstances,
@@ -42,6 +40,4 @@ export interface ListInstances extends Binding.Service<
     ) => Effect.Effect<SD.ListInstancesResponse, SD.ListInstancesError>
   >
 > {}
-export const ListInstances = Binding.Service<ListInstances>(
-  "AWS.CloudMap.ListInstances",
-);
+export const ListInstances = Binding.Service<ListInstances>("AWS.CloudMap.ListInstances");

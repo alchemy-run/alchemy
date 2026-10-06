@@ -71,9 +71,8 @@ export interface IdentityProvider extends Resource<
  * A third-party identity provider (SAML, OIDC, or social) attached to an
  * Amazon Cognito user pool, enabling federated sign-in through managed
  * login.
- * @resource
- * @section Creating Identity Providers
- * @example OIDC Provider
+ * ### Creating Identity Providers
+ * **Example:** OIDC Provider
  * ```typescript
  * import * as Cognito from "alchemy/AWS/Cognito";
  *
@@ -92,17 +91,17 @@ export interface IdentityProvider extends Resource<
  * });
  * ```
  *
- * @example Wire the IdP to an App Client
+ * **Example:** Wire the IdP to an App Client
  * ```typescript
  * const client = yield* Cognito.UserPoolClient("Web", {
  *   userPoolId: pool.userPoolId,
  *   supportedIdentityProviders: ["COGNITO", oidc.providerName],
  * });
  * ```
+ *
+ * @resource
  */
-export const IdentityProvider = Resource<IdentityProvider>(
-  "AWS.Cognito.IdentityProvider",
-);
+export const IdentityProvider = Resource<IdentityProvider>("AWS.Cognito.IdentityProvider");
 
 /** Unwrap any `Redacted` values (e.g. `client_secret`) into the plain
  * string record the Cognito wire API expects. */
@@ -126,11 +125,7 @@ const definedRecord = (
   );
 
 const canonicalRecord = (record: Record<string, string>) =>
-  JSON.stringify(
-    Object.fromEntries(
-      Object.entries(record).sort(([a], [b]) => a.localeCompare(b)),
-    ),
-  );
+  JSON.stringify(Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b))));
 
 export const IdentityProviderProvider = () =>
   Provider.effect(
@@ -152,10 +147,7 @@ export const IdentityProviderProvider = () =>
         return yield* createPhysicalName({ id, maxLength: 32 });
       });
 
-      const describeProvider = Effect.fn(function* (
-        userPoolId: string,
-        providerName: string,
-      ) {
+      const describeProvider = Effect.fn(function* (userPoolId: string, providerName: string) {
         return yield* cip
           .describeIdentityProvider({
             UserPoolId: userPoolId,
@@ -163,9 +155,7 @@ export const IdentityProviderProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.IdentityProvider),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -193,10 +183,7 @@ export const IdentityProviderProvider = () =>
           if (userPoolId === undefined) return undefined;
           const providerName =
             output?.providerName ??
-            (yield* createName(
-              id,
-              olds ?? { providerType: "OIDC" as const, providerDetails: {} },
-            ));
+            (yield* createName(id, olds ?? { providerType: "OIDC" as const, providerDetails: {} }));
           const observed = yield* describeProvider(userPoolId, providerName);
           return observed === undefined
             ? undefined
@@ -205,10 +192,8 @@ export const IdentityProviderProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldName =
-            olds === undefined ? undefined : yield* createName(id, olds);
-          const newName =
-            news === undefined ? undefined : yield* createName(id, news);
+          const oldName = olds === undefined ? undefined : yield* createName(id, olds);
+          const newName = news === undefined ? undefined : yield* createName(id, news);
           if (
             oldName !== newName ||
             olds?.providerType !== news?.providerType ||
@@ -219,8 +204,7 @@ export const IdentityProviderProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const providerName =
-            output?.providerName ?? (yield* createName(id, news));
+          const providerName = output?.providerName ?? (yield* createName(id, news));
           const userPoolId = news.userPoolId;
           const desiredDetails = plainDetails(news.providerDetails);
 
@@ -285,9 +269,7 @@ export const IdentityProviderProvider = () =>
               UserPoolId: output.userPoolId,
               ProviderName: output.providerName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

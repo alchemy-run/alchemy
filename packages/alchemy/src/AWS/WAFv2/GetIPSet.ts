@@ -9,9 +9,8 @@ import type { IPSet } from "./IPSet.ts";
  *
  * Provide `WAFv2.GetIPSetHttp` on the hosting Lambda Function to satisfy
  * the requirement.
- * @binding
- * @section Managing IP Sets at Runtime
- * @example Read the Current Block List
+ * ### Managing IP Sets at Runtime
+ * **Example:** Read the Current Block List
  * ```typescript
  * // init — grants wafv2:GetIPSet on the IP set
  * const getIPSet = yield* AWS.WAFv2.GetIPSet(blockList);
@@ -20,15 +19,13 @@ import type { IPSet } from "./IPSet.ts";
  * const { IPSet } = yield* getIPSet();
  * const addresses = IPSet?.Addresses ?? [];
  * ```
+ *
+ * @binding
  */
 export interface GetIPSet extends Binding.Service<
   GetIPSet,
   "AWS.WAFv2.GetIPSet",
-  (
-    ipSet: IPSet,
-  ) => Effect.Effect<
-    () => Effect.Effect<WAFV2.GetIPSetResponse, WAFV2.GetIPSetError>
-  >
+  (ipSet: IPSet) => Effect.Effect<() => Effect.Effect<WAFV2.GetIPSetResponse, WAFV2.GetIPSetError>>
 > {}
 
 export const GetIPSet = Binding.Service<GetIPSet>("AWS.WAFv2.GetIPSet");

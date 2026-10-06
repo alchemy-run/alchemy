@@ -31,8 +31,7 @@ export interface DeploymentStatusChangeDetail {
 }
 
 /** A deployment-status-change EventBridge event delivered to the handler. */
-export type DeploymentStatusChangeEvent =
-  EventRecord<DeploymentStatusChangeDetail>;
+export type DeploymentStatusChangeEvent = EventRecord<DeploymentStatusChangeDetail>;
 
 export interface DeploymentStatusChangeEventSourceProps extends EventRouteProps {
   /**
@@ -60,8 +59,8 @@ export interface DeploymentStatusChangeEventSourceProps extends EventRouteProps 
  * Function. Provide `AWS.Lambda.EventSource` on the Function effect to
  * implement the subscription.
  *
- * @section Reacting To Deployments
- * @example Alert on Failed Builds
+ * ### Reacting To Deployments
+ * **Example:** Alert on Failed Builds
  * ```typescript
  * yield* AWS.Amplify.consumeDeploymentStatusChanges(
  *   { jobStatus: ["FAILED"] },
@@ -75,7 +74,7 @@ export interface DeploymentStatusChangeEventSourceProps extends EventRouteProps 
  * );
  * ```
  *
- * @example Register the Event Source inside a Lambda Function
+ * **Example:** Register the Event Source inside a Lambda Function
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *

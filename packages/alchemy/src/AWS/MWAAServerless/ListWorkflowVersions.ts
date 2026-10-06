@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link ListWorkflowVersions} runtime callable.
  * The `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type ListWorkflowVersionsInput = Omit<
-  mwaa.ListWorkflowVersionsRequest,
-  "WorkflowArn"
->;
+export type ListWorkflowVersionsInput = Omit<mwaa.ListWorkflowVersionsRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:ListWorkflowVersions`.
@@ -20,9 +17,8 @@ export type ListWorkflowVersionsInput = Omit<
  * for pinning `StartWorkflowRun` to a specific version. Provide the
  * implementation with
  * `Effect.provide(AWS.MWAAServerless.ListWorkflowVersionsHttp)`.
- * @binding
- * @section Observing Workflows
- * @example List Workflow Versions
+ * ### Observing Workflows
+ * **Example:** List Workflow Versions
  * ```typescript
  * // init — bind the operation to the workflow
  * const listWorkflowVersions =
@@ -32,6 +28,8 @@ export type ListWorkflowVersionsInput = Omit<
  * const { WorkflowVersions } = yield* listWorkflowVersions();
  * const latest = WorkflowVersions?.find((v) => v.IsLatestVersion);
  * ```
+ *
+ * @binding
  */
 export interface ListWorkflowVersions extends Binding.Service<
   ListWorkflowVersions,
@@ -41,10 +39,7 @@ export interface ListWorkflowVersions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListWorkflowVersionsInput,
-    ) => Effect.Effect<
-      mwaa.ListWorkflowVersionsResponse,
-      mwaa.ListWorkflowVersionsError
-    >
+    ) => Effect.Effect<mwaa.ListWorkflowVersionsResponse, mwaa.ListWorkflowVersionsError>
   >
 > {}
 export const ListWorkflowVersions = Binding.Service<ListWorkflowVersions>(

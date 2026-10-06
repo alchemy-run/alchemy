@@ -1,7 +1,6 @@
 import * as fraud from "@distilled.cloud/cloudflare/fraud";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -118,11 +117,8 @@ export type DetectionSettings = Resource<
  * Fields that were never set by this resource are not touched.
  * `authenticationSettings` that did not exist before the first write
  * cannot be cleared and are left as-is.
- * @resource
- * @product Fraud Detection
- * @category Application Security
- * @section Fraud User Profiles
- * @example Enable user profiles with a username expression
+ * ### Fraud User Profiles
+ * **Example:** Enable user profiles with a username expression
  * ```typescript
  * yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
@@ -133,8 +129,8 @@ export type DetectionSettings = Resource<
  * });
  * ```
  *
- * @section Authentication outcome classification
- * @example Classify login success and failure by origin status code
+ * ### Authentication outcome classification
+ * **Example:** Classify login success and failure by origin status code
  * ```typescript
  * yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
@@ -146,8 +142,8 @@ export type DetectionSettings = Resource<
  * });
  * ```
  *
- * @section Username expressions only
- * @example Clear all username expressions
+ * ### Username expressions only
+ * **Example:** Clear all username expressions
  * ```typescript
  * yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
@@ -156,6 +152,10 @@ export type DetectionSettings = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/bots/additional-configurations/fraud-detection/
+ *
+ * @resource
+ * @product Fraud Detection
+ * @category Application Security
  */
 export const DetectionSettings = Resource<DetectionSettings>(TypeId, {
   aliases: ["Cloudflare.FraudDetectionSettings"],
@@ -164,20 +164,14 @@ export const DetectionSettings = Resource<DetectionSettings>(TypeId, {
 /**
  * Returns true if the given value is a DetectionSettings resource.
  */
-export const isDetectionSettings = (
-  value: unknown,
-): value is DetectionSettings =>
+export const isDetectionSettings = (value: unknown): value is DetectionSettings =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Every writable settings key, used to project observed cloud state and
  * user props into the only-send-what-is-set PUT body.
  */
-const SETTINGS_KEYS = [
-  "userProfiles",
-  "usernameExpressions",
-  "authenticationSettings",
-] as const;
+const SETTINGS_KEYS = ["userProfiles", "usernameExpressions", "authenticationSettings"] as const;
 
 type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
@@ -205,9 +199,7 @@ export const DetectionSettingsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is DetectionSettingsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is DetectionSettingsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -215,9 +207,7 @@ export const DetectionSettingsProvider = () =>
       // zoneId is Input<string>; compare only when both sides are concrete.
       const oldZone =
         output?.zoneId ??
-        (olds !== undefined && typeof olds.zoneId === "string"
-          ? olds.zoneId
-          : undefined);
+        (olds !== undefined && typeof olds.zoneId === "string" ? olds.zoneId : undefined);
       if (oldZone !== undefined && oldZone !== news.zoneId) {
         return { action: "replace" } as const;
       }
@@ -233,11 +223,7 @@ export const DetectionSettingsProvider = () =>
       // nothing to "own", so a cold read adopts freely (never `Unowned`).
       // The observed values at adoption time become the snapshot restored
       // on destroy.
-      return toAttributes(
-        zoneId,
-        observed,
-        output?.initialSettings ?? pickSettings(observed),
-      );
+      return toAttributes(zoneId, observed, output?.initialSettings ?? pickSettings(observed));
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -307,18 +293,12 @@ type ObservedFraudSettings = fraud.GetFraudResponse | fraud.PutFraudResponse;
  * (`InvalidRoute`, Cloudflare code 7003) to `undefined`.
  */
 const observe = (zoneId: string) =>
-  fraud
-    .getFraud({ zoneId })
-    .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+  fraud.getFraud({ zoneId }).pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const normalizeCriteria = (
-  criteria:
-    | { kind: "status_code"; statusCodes?: readonly number[] | null }
-    | null
-    | undefined,
+  criteria: { kind: "status_code"; statusCodes?: readonly number[] | null } | null | undefined,
 ): AuthenticationCriteria | undefined => {
   if (criteria == null) return undefined;
   const statusCodes = undef(criteria.statusCodes);
@@ -362,9 +342,7 @@ const pickSettings = (
   if (usernameExpressions !== undefined) {
     out.usernameExpressions = [...usernameExpressions];
   }
-  const authenticationSettings = normalizeAuthenticationSettings(
-    source.authenticationSettings,
-  );
+  const authenticationSettings = normalizeAuthenticationSettings(source.authenticationSettings);
   if (authenticationSettings !== undefined) {
     out.authenticationSettings = authenticationSettings;
   }
@@ -380,8 +358,7 @@ const settingsEqual = (
   observed: DetectionSettingsValues,
 ): boolean =>
   SETTINGS_KEYS.every(
-    (key) =>
-      desired[key] === undefined || deepEqual(desired[key], observed[key]),
+    (key) => desired[key] === undefined || deepEqual(desired[key], observed[key]),
   );
 
 const toAttributes = (

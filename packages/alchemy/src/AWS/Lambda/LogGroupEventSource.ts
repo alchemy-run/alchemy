@@ -1,8 +1,7 @@
+import { gunzipSync } from "node:zlib";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { gunzipSync } from "node:zlib";
-
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import type { LogGroup } from "../Logs/LogGroup.ts";
@@ -22,9 +21,8 @@ import { Permission as LambdaPermission } from "./Permission.ts";
  * Narrow an arbitrary Lambda invocation payload to a CloudWatch Logs
  * subscription event.
  */
-export const isCloudWatchLogsEvent = (
-  event: any,
-): event is CloudWatchLogsEvent => typeof event?.awslogs?.data === "string";
+export const isCloudWatchLogsEvent = (event: any): event is CloudWatchLogsEvent =>
+  typeof event?.awslogs?.data === "string";
 
 /**
  * Decode the gzipped, base64-encoded CloudWatch Logs subscription payload.
@@ -35,7 +33,7 @@ export const decodeCloudWatchLogsEvent = (
   Effect.try({
     try: () =>
       JSON.parse(
-        gunzipSync(Buffer.from(event.awslogs.data, "base64")).toString("utf8"),
+        gunzipSync(Buffer.from(event.awslogs.data, "base64")).toString(),
       ) as LogsSubscriptionPayload,
     catch: (cause) =>
       new Error("failed to decode CloudWatch Logs subscription payload", {
@@ -54,9 +52,8 @@ export const decodeCloudWatchLogsEvent = (
  * 2. At runtime it decodes the gzipped/base64 `awslogs.data` payload of
  *    incoming invocations and forwards each log event into the supplied
  *    handler as a typed `LogEventRecord` stream.
- * @binding
- * @section Consuming Log Events
- * @example Forward Another Function's Error Logs
+ * ### Consuming Log Events
+ * **Example:** Forward Another Function's Error Logs
  * ```typescript
  * yield* AWS.Logs.consumeLogEvents(
  *   logGroup,
@@ -67,6 +64,8 @@ export const decodeCloudWatchLogsEvent = (
  *     ),
  * );
  * ```
+ *
+ * @binding
  */
 export const LogGroupEventSource = Layer.effect(
   LogsLogGroupEventSource,
@@ -82,9 +81,7 @@ export const LogGroupEventSource = Layer.effect(
     return Effect.fn(function* <Req = never>(
       logGroup: LogGroup,
       props: LogGroupEventSourceProps,
-      process: (
-        events: Stream.Stream<LogEventRecord>,
-      ) => Effect.Effect<void, never, Req>,
+      process: (events: Stream.Stream<LogEventRecord>) => Effect.Effect<void, never, Req>,
     ) {
       // this adds it to the Lambda Function's environment variables
       const LogGroupName = yield* logGroup.logGroupName;
@@ -98,24 +95,18 @@ export const LogGroupEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* Permission(
-              `AWS.Logs.InvokePermission(${logGroup.LogicalId})`,
-              {
-                action: "lambda:InvokeFunction",
-                functionName: host.functionName,
-                principal: "logs.amazonaws.com",
-                sourceArn: Output.interpolate`${logGroup.logGroupArn}:*`,
-              },
-            );
-            yield* Filter(
-              `AWS.Logs.SubscriptionFilter(${logGroup.LogicalId})`,
-              {
-                logGroupName: logGroup.logGroupName,
-                filterName: props.filterName,
-                filterPattern: props.filterPattern ?? "",
-                destinationArn: host.functionArn,
-              },
-            );
+            yield* Permission(`AWS.Logs.InvokePermission(${logGroup.LogicalId})`, {
+              action: "lambda:InvokeFunction",
+              functionName: host.functionName,
+              principal: "logs.amazonaws.com",
+              sourceArn: Output.interpolate`${logGroup.logGroupArn}:*`,
+            });
+            yield* Filter(`AWS.Logs.SubscriptionFilter(${logGroup.LogicalId})`, {
+              logGroupName: logGroup.logGroupName,
+              filterName: props.filterName,
+              filterPattern: props.filterPattern ?? "",
+              destinationArn: host.functionArn,
+            });
           }),
         );
       }
@@ -127,25 +118,20 @@ export const LogGroupEventSource = Layer.effect(
             if (isCloudWatchLogsEvent(event)) {
               return Effect.gen(function* () {
                 const payload = yield* decodeCloudWatchLogsEvent(event);
-                if (
-                  payload.messageType !== "DATA_MESSAGE" ||
-                  payload.logGroup !== logGroupName
-                ) {
+                if (payload.messageType !== "DATA_MESSAGE" || payload.logGroup !== logGroupName) {
                   return;
                 }
                 yield* process(
                   Stream.fromArray(
-                    payload.logEvents.map(
-                      (logEvent): LogEventRecord => ({
-                        id: logEvent.id,
-                        timestamp: logEvent.timestamp,
-                        message: logEvent.message,
-                        logGroup: payload.logGroup,
-                        logStream: payload.logStream,
-                        owner: payload.owner,
-                        subscriptionFilters: payload.subscriptionFilters,
-                      }),
-                    ),
+                    payload.logEvents.map((logEvent): LogEventRecord => ({
+                      id: logEvent.id,
+                      timestamp: logEvent.timestamp,
+                      message: logEvent.message,
+                      logGroup: payload.logGroup,
+                      logStream: payload.logStream,
+                      owner: payload.owner,
+                      subscriptionFilters: payload.subscriptionFilters,
+                    })),
                   ),
                 );
               }).pipe(Effect.orDie);

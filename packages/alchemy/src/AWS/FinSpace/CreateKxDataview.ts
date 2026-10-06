@@ -7,9 +7,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * Runtime binding for `finspace:CreateKxDataview` — creates a dataview — a snapshot of a kdb database at a changeset, materialized onto volumes — in the bound environment.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.CreateKxDataviewHttp)`.
- * @binding
- * @section Managing Dataviews
- * @example Create a Dataview
+ * ### Managing Dataviews
+ * **Example:** Create a Dataview
  * ```typescript
  * const createDataview = yield* AWS.FinSpace.CreateKxDataview(kdb);
  *
@@ -22,6 +21,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  *   clientToken: crypto.randomUUID(),
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateKxDataview extends Binding.Service<
   CreateKxDataview,
@@ -34,6 +35,4 @@ export interface CreateKxDataview extends Binding.Service<
     ) => Effect.Effect<SVC.CreateKxDataviewResponse, SVC.CreateKxDataviewError>
   >
 > {}
-export const CreateKxDataview = Binding.Service<CreateKxDataview>(
-  "AWS.FinSpace.CreateKxDataview",
-);
+export const CreateKxDataview = Binding.Service<CreateKxDataview>("AWS.FinSpace.CreateKxDataview");

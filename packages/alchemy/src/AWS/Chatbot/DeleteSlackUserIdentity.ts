@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * chat identity from a Lambda triggered by your HR system). Provide the
  * implementation with
  * `Effect.provide(AWS.Chatbot.DeleteSlackUserIdentityHttp)`.
- * @binding
- * @section Slack Identity Management
- * @example Unlink a Slack user identity
+ * ### Slack Identity Management
+ * **Example:** Unlink a Slack user identity
  * ```typescript
  * const deleteSlackUserIdentity =
  *   yield* AWS.Chatbot.DeleteSlackUserIdentity();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   SlackUserId: "U012AB3CD",
  * });
  * ```
+ *
+ * @binding
  */
 export interface DeleteSlackUserIdentity extends Binding.Service<
   DeleteSlackUserIdentity,
@@ -29,10 +30,7 @@ export interface DeleteSlackUserIdentity extends Binding.Service<
   () => Effect.Effect<
     (
       request: chatbot.DeleteSlackUserIdentityRequest,
-    ) => Effect.Effect<
-      chatbot.DeleteSlackUserIdentityResult,
-      chatbot.DeleteSlackUserIdentityError
-    >
+    ) => Effect.Effect<chatbot.DeleteSlackUserIdentityResult, chatbot.DeleteSlackUserIdentityError>
   >
 > {}
 

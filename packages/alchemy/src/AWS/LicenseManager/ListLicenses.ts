@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListLicenses}.
  */
-export interface ListLicensesRequest
-  extends licensemanager.ListLicensesRequest {}
+export interface ListLicensesRequest extends licensemanager.ListLicensesRequest {}
 
 /**
  * Runtime binding for `license-manager:ListLicenses` — list the
@@ -14,9 +13,8 @@ export interface ListLicensesRequest
  *
  * Provide the implementation with
  * `Effect.provide(AWS.LicenseManager.ListLicensesHttp)`.
- * @binding
- * @section Reading Licenses and Grants
- * @example List Owned Licenses
+ * ### Reading Licenses and Grants
+ * **Example:** List Owned Licenses
  * ```typescript
  * // init
  * const listLicenses = yield* AWS.LicenseManager.ListLicenses();
@@ -24,6 +22,8 @@ export interface ListLicensesRequest
  * // runtime
  * const { Licenses } = yield* listLicenses();
  * ```
+ *
+ * @binding
  */
 export interface ListLicenses extends Binding.Service<
   ListLicenses,
@@ -31,12 +31,7 @@ export interface ListLicenses extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListLicensesRequest,
-    ) => Effect.Effect<
-      licensemanager.ListLicensesResponse,
-      licensemanager.ListLicensesError
-    >
+    ) => Effect.Effect<licensemanager.ListLicensesResponse, licensemanager.ListLicensesError>
   >
 > {}
-export const ListLicenses = Binding.Service<ListLicenses>(
-  "AWS.LicenseManager.ListLicenses",
-);
+export const ListLicenses = Binding.Service<ListLicenses>("AWS.LicenseManager.ListLicenses");

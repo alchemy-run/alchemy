@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `GetUser` request with `applicationId` injected from the bound application.
  */
-export interface GetUserRequest extends Omit<
-  qbusiness.GetUserRequest,
-  "applicationId"
-> {}
+export interface GetUserRequest extends Omit<qbusiness.GetUserRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `GetUser` operation (IAM action
@@ -19,14 +16,15 @@ export interface GetUserRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.GetUserHttp)`.
  *
- * @binding
- * @section User Management
- * @example Read a User
+ * ### User Management
+ * **Example:** Read a User
  * ```typescript
  * const getUser = yield* AWS.QBusiness.GetUser(app);
  *
  * const { userAliases } = yield* getUser({ userId: "user@example.com" });
  * ```
+ *
+ * @binding
  */
 export interface GetUser extends Binding.Service<
   GetUser,
@@ -34,9 +32,7 @@ export interface GetUser extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: GetUserRequest,
-    ) => Effect.Effect<qbusiness.GetUserResponse, qbusiness.GetUserError>
+    (request: GetUserRequest) => Effect.Effect<qbusiness.GetUserResponse, qbusiness.GetUserError>
   >
 > {}
 export const GetUser = Binding.Service<GetUser>("AWS.QBusiness.GetUser");

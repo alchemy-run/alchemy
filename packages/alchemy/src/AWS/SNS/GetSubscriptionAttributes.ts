@@ -17,9 +17,8 @@ export interface GetSubscriptionAttributesRequest extends Omit<
  * `sns:GetSubscriptionAttributes` on the subscription. Provide the
  * `GetSubscriptionAttributesHttp` layer on the Function to implement the
  * binding.
- * @binding
- * @section Reading Subscription Attributes
- * @example Read a Subscription's Attributes
+ * ### Reading Subscription Attributes
+ * **Example:** Read a Subscription's Attributes
  * ```typescript
  * // init (provide SNS.GetSubscriptionAttributesHttp on the Function)
  * const getSubscriptionAttributes =
@@ -29,6 +28,8 @@ export interface GetSubscriptionAttributesRequest extends Omit<
  * const response = yield* getSubscriptionAttributes();
  * const filterPolicy = response.Attributes?.FilterPolicy;
  * ```
+ *
+ * @binding
  */
 export interface GetSubscriptionAttributes extends Binding.Service<
   GetSubscriptionAttributes,
@@ -38,13 +39,9 @@ export interface GetSubscriptionAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetSubscriptionAttributesRequest,
-    ) => Effect.Effect<
-      sns.GetSubscriptionAttributesResponse,
-      sns.GetSubscriptionAttributesError
-    >
+    ) => Effect.Effect<sns.GetSubscriptionAttributesResponse, sns.GetSubscriptionAttributesError>
   >
 > {}
-export const GetSubscriptionAttributes =
-  Binding.Service<GetSubscriptionAttributes>(
-    "AWS.SNS.GetSubscriptionAttributes",
-  );
+export const GetSubscriptionAttributes = Binding.Service<GetSubscriptionAttributes>(
+  "AWS.SNS.GetSubscriptionAttributes",
+);

@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.ListCollectionsHttp)`.
  *
- * @binding
- * @section Face Collections
- * @example List Collections
+ * ### Face Collections
+ * **Example:** List Collections
  * ```typescript
  * // init
  * const listCollections = yield* AWS.Rekognition.ListCollections();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * const page = yield* listCollections({ MaxResults: 20 });
  * // page.CollectionIds, page.NextToken
  * ```
+ *
+ * @binding
  */
 export interface ListCollections extends Binding.Service<
   ListCollections,
@@ -29,12 +30,7 @@ export interface ListCollections extends Binding.Service<
   () => Effect.Effect<
     (
       request?: rekognition.ListCollectionsRequest,
-    ) => Effect.Effect<
-      rekognition.ListCollectionsResponse,
-      rekognition.ListCollectionsError
-    >
+    ) => Effect.Effect<rekognition.ListCollectionsResponse, rekognition.ListCollectionsError>
   >
 > {}
-export const ListCollections = Binding.Service<ListCollections>(
-  "AWS.Rekognition.ListCollections",
-);
+export const ListCollections = Binding.Service<ListCollections>("AWS.Rekognition.ListCollections");

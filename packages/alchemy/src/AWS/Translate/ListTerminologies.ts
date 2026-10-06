@@ -6,9 +6,8 @@ import * as Binding from "../../Binding.ts";
  * Runtime binding for `translate:ListTerminologies` — list the custom
  * terminologies in the account and region.
  *
- * @binding
- * @section Reading Terminologies
- * @example List terminologies
+ * ### Reading Terminologies
+ * **Example:** List terminologies
  * ```typescript
  * // init
  * const listTerminologies = yield* AWS.Translate.ListTerminologies();
@@ -17,6 +16,8 @@ import * as Binding from "../../Binding.ts";
  * const result = yield* listTerminologies({ MaxResults: 50 });
  * // result.TerminologyPropertiesList -> [{ Name, Arn, TermCount, … }, …]
  * ```
+ *
+ * @binding
  */
 export interface ListTerminologies extends Binding.Service<
   ListTerminologies,
@@ -24,10 +25,7 @@ export interface ListTerminologies extends Binding.Service<
   () => Effect.Effect<
     (
       request?: translate.ListTerminologiesRequest,
-    ) => Effect.Effect<
-      translate.ListTerminologiesResponse,
-      translate.ListTerminologiesError
-    >
+    ) => Effect.Effect<translate.ListTerminologiesResponse, translate.ListTerminologiesError>
   >
 > {}
 export const ListTerminologies = Binding.Service<ListTerminologies>(

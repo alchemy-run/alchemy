@@ -32,25 +32,14 @@ import { isTask, type Task } from "./Task.ts";
 const passRoleActions: string[] = ["iam:PassRole"];
 
 /** IAM resource scopes for cluster-bound ECS operations. */
-export type EcsClusterIamResource =
-  | "cluster"
-  | "task"
-  | "service"
-  | "container-instance";
+export type EcsClusterIamResource = "cluster" | "task" | "service" | "container-instance";
 
 const clusterSubresourcePattern = (
   cluster: Cluster,
   kind: Exclude<EcsClusterIamResource, "cluster">,
-) =>
-  Output.map(
-    cluster.clusterArn,
-    (arn) => `${arn.replace(":cluster/", `:${kind}/`)}/*`,
-  );
+) => Output.map(cluster.clusterArn, (arn) => `${arn.replace(":cluster/", `:${kind}/`)}/*`);
 
-const clusterIamResources = (
-  cluster: Cluster,
-  resources: readonly EcsClusterIamResource[],
-) =>
+const clusterIamResources = (cluster: Cluster, resources: readonly EcsClusterIamResource[]) =>
   resources.map((kind) =>
     kind === "cluster"
       ? Output.interpolate`${cluster.clusterArn}`
@@ -65,12 +54,7 @@ const clusterIamResources = (
  * when `resources` is `"cluster-condition"` — for list actions that have no
  * usable resource type on Fargate).
  */
-export const makeEcsClusterHttpBinding = <
-  I extends { cluster?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeEcsClusterHttpBinding = <I extends { cluster?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.ECS.DescribeServices`. */
   tag: string;
   /** The distilled operation; `cluster` is injected from the bound cluster. */
@@ -120,11 +104,26 @@ export const makeEcsClusterHttpBinding = <
   });
 
 /**
+ * Strip the revision suffix from a task-definition ARN. The bound
+ * `taskDefinitionArn` attribute pins whatever revision existed when the
+ * HOST was reconciled — for a circularly-bound task that is the pre-create
+ * STUB revision, not the real one registered afterwards. Launching by
+ * family makes ECS resolve the latest ACTIVE revision, which is the
+ * binding's intended semantics (like invoking a Lambda by name).
+ */
+const revisionlessTaskDefinitionArn = (arn: string) => arn.replace(/:\d+$/, "");
+
+/** The task-definition family name from its (possibly revisioned) ARN. */
+const taskDefinitionFamilyOf = (arn: string) =>
+  revisionlessTaskDefinitionArn(arn).split("/").pop()!;
+
+/**
  * Build the impl Effect for a task-launch operation (`RunTask`/`StartTask`):
  * the runtime callable injects the bound {@link Cluster}'s ARN as `cluster`
- * and the bound {@link Task}'s definition ARN as `taskDefinition`; the
- * deploy-time half grants `actions` on the task definition plus
- * `iam:PassRole` on the task and execution roles.
+ * and the bound {@link Task}'s definition family (revision-less ARN) as
+ * `taskDefinition`; the deploy-time half grants `actions` on every revision
+ * of the task definition plus `iam:PassRole` on the task and execution
+ * roles.
  */
 export const makeEcsTaskLaunchHttpBinding = <
   I extends { cluster?: string; taskDefinition: string },
@@ -148,53 +147,50 @@ export const makeEcsTaskLaunchHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host) || isTask(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}, ${task}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [task.taskDefinitionArn],
-                },
-                {
-                  Effect: "Allow",
-                  Action: passRoleActions,
-                  Resource: [task.taskRoleArn, task.executionRoleArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}, ${task}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                // All revisions: the launch resolves the latest ACTIVE
+                // revision, which may be registered after this grant.
+                Resource: [
+                  Output.map(
+                    task.taskDefinitionArn,
+                    (arn) => `${revisionlessTaskDefinitionArn(arn)}:*`,
+                  ),
+                ],
+              },
+              {
+                Effect: "Allow",
+                Action: passRoleActions,
+                Resource: [task.taskRoleArn, task.executionRoleArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `${options.tag}(${cluster.LogicalId}, ${task.LogicalId})`,
-      )(function* (request: Omit<I, "cluster" | "taskDefinition">) {
+      return Effect.fn(`${options.tag}(${cluster.LogicalId}, ${task.LogicalId})`)(function* (
+        request: Omit<I, "cluster" | "taskDefinition">,
+      ) {
         return yield* op({
           ...request,
           cluster: yield* ClusterArn,
-          taskDefinition: yield* TaskDefinitionArn,
+          // Family, not the pinned ARN: resolves the latest ACTIVE revision.
+          taskDefinition: taskDefinitionFamilyOf(yield* TaskDefinitionArn),
         } as I);
       });
     });
   });
 
 /** IAM resource scopes for service-bound ECS operations. */
-export type EcsServiceIamResource =
-  | "service"
-  | "service-deployment"
-  | "service-revision";
+export type EcsServiceIamResource = "service" | "service-deployment" | "service-revision";
 
-const serviceIamResources = (
-  service: Service,
-  resources: readonly EcsServiceIamResource[],
-) =>
+const serviceIamResources = (service: Service, resources: readonly EcsServiceIamResource[]) =>
   resources.map((kind) =>
     kind === "service"
       ? Output.interpolate`${service.serviceArn}`
-      : Output.map(
-          service.serviceArn,
-          (arn) => `${arn.replace(":service/", `:${kind}/`)}/*`,
-        ),
+      : Output.map(service.serviceArn, (arn) => `${arn.replace(":service/", `:${kind}/`)}/*`),
   );
 
 /**

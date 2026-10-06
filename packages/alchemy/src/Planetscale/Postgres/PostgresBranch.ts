@@ -1,16 +1,9 @@
 import { Resource } from "../../Resource.ts";
-import {
-  type BaseBranchAttributes,
-  type BaseBranchProps,
-  makeBranchProvider,
-} from "../Branch.ts";
+import { type BaseBranchAttributes, type BaseBranchProps, makeBranchProvider } from "../Branch.ts";
 import type { Providers } from "../Providers.ts";
 import type { PostgresClusterSize } from "./PostgresClusterSize.ts";
 import type { PostgresDatabase } from "./PostgresDatabase.ts";
-import {
-  runPostgresImports,
-  runPostgresMigrations,
-} from "./PostgresMigrations.ts";
+import { runPostgresImports, runPostgresMigrations } from "./PostgresMigrations.ts";
 
 /**
  * Properties for creating or updating a {@link PostgresBranch}.
@@ -24,7 +17,8 @@ export interface PostgresBranchProps extends BaseBranchProps {
 
   /**
    * PostgreSQL cluster size for the branch. Required if `backupId` is provided.
-   * Short sizes are expanded using the target branch region.
+   * Short NAS sizes are expanded using the target branch region. Metal
+   * requires the full SKU (e.g. `"M1_10_AWS_ARM_D_METAL_10"`).
    */
   clusterSize?: PostgresClusterSize;
 
@@ -50,8 +44,8 @@ export interface PostgresBranchAttributes extends BaseBranchAttributes {}
  * A PlanetScale branch of a {@link PostgresDatabase}. For MySQL branches
  * use {@link MySQLBranch} instead.
  *
- * @section Creating a Branch
- * @example Branch from main
+ * ### Creating a Branch
+ * **Example:** Branch from main
  * ```typescript
  * const branch = yield* Planetscale.PostgresBranch("Feature123", {
  *   database: "my-db",
@@ -59,7 +53,7 @@ export interface PostgresBranchAttributes extends BaseBranchAttributes {}
  * });
  * ```
  *
- * @example Branch from a PostgresDatabase resource
+ * **Example:** Branch from a PostgresDatabase resource
  * ```typescript
  * const db = yield* Planetscale.PostgresDatabase("MyDb", { clusterSize: "PS_10" });
  * const branch = yield* Planetscale.PostgresBranch("Feature456", {
@@ -68,8 +62,8 @@ export interface PostgresBranchAttributes extends BaseBranchAttributes {}
  * });
  * ```
  *
- * @section Migrations and seed data
- * @example Apply migrations on a branch
+ * ### Migrations and seed data
+ * **Example:** Apply migrations on a branch
  * ```typescript
  * const branch = yield* Planetscale.PostgresBranch("Feature123", {
  *   database: db,
@@ -88,9 +82,7 @@ export type PostgresBranch = Resource<
 >;
 
 /** @resource */
-export const PostgresBranch = Resource<PostgresBranch>(
-  "Planetscale.PostgresBranch",
-);
+export const PostgresBranch = Resource<PostgresBranch>("Planetscale.PostgresBranch");
 
 export const PostgresBranchProvider = () =>
   makeBranchProvider({

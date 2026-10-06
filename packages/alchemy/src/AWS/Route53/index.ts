@@ -24,19 +24,14 @@ export {
   type ListResourceRecordSetsRequest,
 } from "./ListResourceRecordSets.ts";
 export { ListResourceRecordSetsHttp } from "./ListResourceRecordSetsHttp.ts";
-export {
-  QueryLoggingConfig,
-  QueryLoggingConfigProvider,
-} from "./QueryLoggingConfig.ts";
+export { QueryLoggingConfig, QueryLoggingConfigProvider } from "./QueryLoggingConfig.ts";
 export { Record, RecordProvider } from "./Record.ts";
+export { Records, RecordsProvider, type RecordsBinding } from "./Records.ts";
 export { TestDNSAnswer, type TestDNSAnswerRequest } from "./TestDNSAnswer.ts";
 export { TestDNSAnswerHttp } from "./TestDNSAnswerHttp.ts";
 export {
   VpcAssociationAuthorization,
   VpcAssociationAuthorizationProvider,
 } from "./VpcAssociationAuthorization.ts";
-export {
-  ZoneVpcAssociation,
-  ZoneVpcAssociationProvider,
-} from "./ZoneVpcAssociation.ts";
+export { ZoneVpcAssociation, ZoneVpcAssociationProvider } from "./ZoneVpcAssociation.ts";
 // NOTE: BindingHttp.ts is shared scaffolding and intentionally NOT exported.

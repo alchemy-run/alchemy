@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetDataLakePrincipal}.
  */
-export interface GetDataLakePrincipalRequest
-  extends lf.GetDataLakePrincipalRequest {}
+export interface GetDataLakePrincipalRequest extends lf.GetDataLakePrincipalRequest {}
 
 /**
  * Runtime binding for `lakeformation:GetDataLakePrincipal`.
@@ -15,9 +14,8 @@ export interface GetDataLakePrincipalRequest
  * useful for logging/auditing which data-lake principal a function acts as.
  * Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.GetDataLakePrincipalHttp)`.
- * @binding
- * @section Identifying the Caller
- * @example Read the Calling Data Lake Principal
+ * ### Identifying the Caller
+ * **Example:** Read the Calling Data Lake Principal
  * ```typescript
  * // init — account-level binding takes no resource
  * const getDataLakePrincipal = yield* AWS.LakeFormation.GetDataLakePrincipal();
@@ -25,6 +23,8 @@ export interface GetDataLakePrincipalRequest
  * // runtime
  * const { Identity } = yield* getDataLakePrincipal();
  * ```
+ *
+ * @binding
  */
 export interface GetDataLakePrincipal extends Binding.Service<
   GetDataLakePrincipal,
@@ -32,10 +32,7 @@ export interface GetDataLakePrincipal extends Binding.Service<
   () => Effect.Effect<
     (
       request?: GetDataLakePrincipalRequest,
-    ) => Effect.Effect<
-      lf.GetDataLakePrincipalResponse,
-      lf.GetDataLakePrincipalError
-    >
+    ) => Effect.Effect<lf.GetDataLakePrincipalResponse, lf.GetDataLakePrincipalError>
   >
 > {}
 

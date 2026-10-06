@@ -1,7 +1,6 @@
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -42,13 +41,7 @@ export type SettingAttributes = {
   initialEnabled: boolean;
 };
 
-export type Setting = Resource<
-  TypeId,
-  SettingProps,
-  SettingAttributes,
-  never,
-  Providers
->;
+export type Setting = Resource<TypeId, SettingProps, SettingAttributes, never, Providers>;
 
 /**
  * The zone-level Authenticated Origin Pulls (AOP) toggle
@@ -64,16 +57,13 @@ export type Setting = Resource<
  * ({@link Certificate}) and your origin is configured to
  * verify it — enabling the flag alone does not break traffic unless the
  * origin enforces mTLS.
- * @resource
- * @product Origin TLS Client Auth
- * @category SSL/TLS & Certificates
- * @section Enabling Authenticated Origin Pulls
- * @example Enable zone-level AOP
+ * ### Enabling Authenticated Origin Pulls
+ * **Example:** Enable zone-level AOP
  * ```typescript
  * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
- *   privateKey: yield* Config.redacted("AOP_CLIENT_KEY"),
+ *   privateKey: yield* Config.Redacted("AOP_CLIENT_KEY"),
  * });
  *
  * yield* Cloudflare.OriginTlsClientAuth.Setting("Aop", {
@@ -82,7 +72,7 @@ export type Setting = Resource<
  * });
  * ```
  *
- * @example Pin AOP off
+ * **Example:** Pin AOP off
  * ```typescript
  * yield* Cloudflare.OriginTlsClientAuth.Setting("Aop", {
  *   zoneId: zone.zoneId,
@@ -91,6 +81,10 @@ export type Setting = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/
+ *
+ * @resource
+ * @product Origin TLS Client Auth
+ * @category SSL/TLS & Certificates
  */
 export const Setting = Resource<Setting>(TypeId);
 
@@ -132,13 +126,8 @@ export const SettingProvider = () =>
       const o = olds as SettingProps;
       const n = news as SettingProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -153,8 +142,7 @@ export const SettingProvider = () =>
       // default — there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialEnabled` restored on destroy.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : enabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
       return { zoneId, enabled, initialEnabled };
     }),
 
@@ -170,8 +158,7 @@ export const SettingProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is the
       //    zone's original.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : observedEnabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : observedEnabled;
 
       // 3. Sync — put only when the observed value differs.
       if (observedEnabled === news.enabled) {

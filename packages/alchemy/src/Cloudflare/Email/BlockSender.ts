@@ -2,7 +2,6 @@ import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -70,11 +69,8 @@ export type BlockSender = Resource<
  * All fields are mutable in place. Requires the Email Security enterprise
  * add-on; accounts without the entitlement receive the typed
  * `EmailSecurityNotEntitled` error.
- * @resource
- * @product Email Security
- * @category Email
- * @section Blocking Senders
- * @example Block a single email address
+ * ### Blocking Senders
+ * **Example:** Block a single email address
  * ```typescript
  * yield* Cloudflare.Email.BlockSender("KnownPhisher", {
  *   pattern: "phisher@malicious.example.com",
@@ -83,7 +79,7 @@ export type BlockSender = Resource<
  * });
  * ```
  *
- * @example Block a whole sending domain
+ * **Example:** Block a whole sending domain
  * ```typescript
  * yield* Cloudflare.Email.BlockSender("SpamDomain", {
  *   pattern: "spam-source.example.net",
@@ -91,7 +87,7 @@ export type BlockSender = Resource<
  * });
  * ```
  *
- * @example Block by regular expression
+ * **Example:** Block by regular expression
  * ```typescript
  * yield* Cloudflare.Email.BlockSender("LookalikeSenders", {
  *   pattern: ".*@examp1e\\.com$",
@@ -101,18 +97,20 @@ export type BlockSender = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
+ *
+ * @resource
+ * @product Email Security
+ * @category Email
  */
-export const BlockSender = Resource<BlockSender>(
-  EmailSecurityBlockSenderTypeId,
-  { aliases: ["Cloudflare.EmailSecurity.BlockSender"] },
-);
+export const BlockSender = Resource<BlockSender>(EmailSecurityBlockSenderTypeId, {
+  aliases: ["Cloudflare.EmailSecurity.BlockSender"],
+});
 
 /**
  * Returns true if the given value is an BlockSender resource.
  */
 export const isBlockSender = (value: unknown): value is BlockSender =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === EmailSecurityBlockSenderTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === EmailSecurityBlockSenderTypeId;
 
 export const BlockSenderProvider = () =>
   Provider.succeed(BlockSender, {
@@ -166,8 +164,7 @@ export const BlockSenderProvider = () =>
         (observed.pattern ?? "") !== news.pattern ||
         (observed.patternType ?? "") !== news.patternType ||
         (observed.isRegex ?? false) !== (news.isRegex ?? false) ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (news.comments !== undefined && (observed.comments ?? "") !== news.comments);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -200,20 +197,16 @@ export const BlockSenderProvider = () =>
     // enumerate and yield an empty array.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* emailSecurity.listSettingBlockSenders
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((entry) =>
-                toAttributes(entry, accountId),
-              ),
-            ),
+      return yield* emailSecurity.listSettingBlockSenders.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((entry) => toAttributes(entry, accountId)),
           ),
-          Effect.catchTag("EmailSecurityNotEntitled", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        Effect.catchTag("EmailSecurityNotEntitled", () => Effect.succeed([])),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
   });
 

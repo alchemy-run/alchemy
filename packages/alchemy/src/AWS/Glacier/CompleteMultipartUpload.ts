@@ -22,9 +22,8 @@ export interface CompleteMultipartUploadRequest extends Omit<
  * response carries the new `archiveId`.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.CompleteMultipartUploadHttp)`.
- * @binding
- * @section Uploading Archives
- * @example Complete a multipart upload
+ * ### Uploading Archives
+ * **Example:** Complete a multipart upload
  * ```typescript
  * const completeMultipartUpload =
  *   yield* AWS.Glacier.CompleteMultipartUpload(vault);
@@ -35,6 +34,8 @@ export interface CompleteMultipartUploadRequest extends Omit<
  *   checksum: treeHash,
  * });
  * ```
+ *
+ * @binding
  */
 export interface CompleteMultipartUpload extends Binding.Service<
   CompleteMultipartUpload,
@@ -44,10 +45,7 @@ export interface CompleteMultipartUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CompleteMultipartUploadRequest,
-    ) => Effect.Effect<
-      glacier.ArchiveCreationOutput,
-      glacier.CompleteMultipartUploadError
-    >
+    ) => Effect.Effect<glacier.ArchiveCreationOutput, glacier.CompleteMultipartUploadError>
   >
 > {}
 export const CompleteMultipartUpload = Binding.Service<CompleteMultipartUpload>(

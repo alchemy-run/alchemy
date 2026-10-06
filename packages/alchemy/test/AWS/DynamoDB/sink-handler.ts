@@ -1,20 +1,19 @@
-import * as AWS from "@/AWS";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 
-export class SinkTable extends Context.Service<
-  SinkTable,
-  { table: AWS.DynamoDB.Table }
->()("SinkTable") {}
+export class SinkTable extends Context.Service<SinkTable, { table: AWS.DynamoDB.Table }>()(
+  "SinkTable",
+) {}
 
 export const SinkTableLive = Layer.effect(
   SinkTable,
@@ -35,7 +34,7 @@ export class TableSinkFunction extends AWS.Lambda.Function<AWS.Lambda.Function>(
 export const TableSinkFunctionLive = TableSinkFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // The sink's bounded partial-failure retry can sleep up to ~6s, which
     // exceeds Lambda's 3s default timeout (see PATTERNS §7).
     timeout: Duration.seconds(30),
@@ -65,27 +64,23 @@ export const TableSinkFunctionLive = TableSinkFunction.make(
           };
 
           const entries: AWS.DynamoDB.TableSinkEntry[] = [
-            ...(body.puts ?? []).map(
-              (sk): AWS.DynamoDB.TableSinkEntry => ({
-                PutRequest: {
-                  Item: {
-                    pk: { S: body.pk },
-                    sk: { S: sk },
-                    data: { S: `payload-${sk}` },
-                  },
+            ...(body.puts ?? []).map((sk): AWS.DynamoDB.TableSinkEntry => ({
+              PutRequest: {
+                Item: {
+                  pk: { S: body.pk },
+                  sk: { S: sk },
+                  data: { S: `payload-${sk}` },
                 },
-              }),
-            ),
-            ...(body.deletes ?? []).map(
-              (sk): AWS.DynamoDB.TableSinkEntry => ({
-                DeleteRequest: {
-                  Key: {
-                    pk: { S: body.pk },
-                    sk: { S: sk },
-                  },
+              },
+            })),
+            ...(body.deletes ?? []).map((sk): AWS.DynamoDB.TableSinkEntry => ({
+              DeleteRequest: {
+                Key: {
+                  pk: { S: body.pk },
+                  sk: { S: sk },
                 },
-              }),
-            ),
+              },
+            })),
           ];
 
           // The sink is request-scoped: drain fully before responding.
@@ -104,9 +99,7 @@ export const TableSinkFunctionLive = TableSinkFunction.make(
       }).pipe(
         Effect.tapError(Console.log),
         Effect.catch(() =>
-          Effect.succeed(
-            HttpServerResponse.text("Internal server error", { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Internal server error", { status: 500 })),
         ),
       ),
     };

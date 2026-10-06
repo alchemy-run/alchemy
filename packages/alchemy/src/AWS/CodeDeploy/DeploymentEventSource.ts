@@ -80,8 +80,8 @@ export interface DeploymentEventSourceProps extends EventRouteProps {
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *
- * @section Consuming Deployment Events
- * @example Alert On Failed Deployments
+ * ### Consuming Deployment Events
+ * **Example:** Alert On Failed Deployments
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -112,16 +112,11 @@ export const consumeDeploymentEvents = <StreamReq = never, Req = never>(
     props.id ?? "CodeDeployEvents",
     {
       source: ["aws.codedeploy"],
-      "detail-type": (props.kinds ?? (["deployment"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.applications !== undefined ||
-      props.deploymentGroups !== undefined
+      "detail-type": (props.kinds ?? (["deployment"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.applications !== undefined || props.deploymentGroups !== undefined
         ? {
             detail: {
-              ...(props.applications !== undefined
-                ? { application: [...props.applications] }
-                : {}),
+              ...(props.applications !== undefined ? { application: [...props.applications] } : {}),
               ...(props.deploymentGroups !== undefined
                 ? { deploymentGroup: [...props.deploymentGroups] }
                 : {}),

@@ -12,9 +12,8 @@ import type { Collection } from "./Collection.ts";
  * granted `aoss:UpdateIndex` on the index pattern by a data
  * {@link AccessPolicy}. Provide the implementation with
  * `Effect.provide(AWS.OpenSearchServerless.UpdateIndexHttp)`.
- * @binding
- * @section Managing Indexes at Runtime
- * @example Add a field to an index
+ * ### Managing Indexes at Runtime
+ * **Example:** Add a field to an index
  * ```typescript
  * const updateIndex = yield* AWS.OpenSearchServerless.UpdateIndex(collection);
  *
@@ -25,6 +24,8 @@ import type { Collection } from "./Collection.ts";
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateIndex extends Binding.Service<
   UpdateIndex,
@@ -37,6 +38,4 @@ export interface UpdateIndex extends Binding.Service<
     ) => Effect.Effect<aoss.UpdateIndexResponse, aoss.UpdateIndexError>
   >
 > {}
-export const UpdateIndex = Binding.Service<UpdateIndex>(
-  "AWS.OpenSearchServerless.UpdateIndex",
-);
+export const UpdateIndex = Binding.Service<UpdateIndex>("AWS.OpenSearchServerless.UpdateIndex");

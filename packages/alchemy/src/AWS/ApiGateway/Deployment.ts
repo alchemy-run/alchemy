@@ -1,7 +1,7 @@
+import { createHash } from "node:crypto";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { createHash } from "node:crypto";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
@@ -74,15 +74,14 @@ export interface DeploymentType extends Resource<
 /**
  * A point-in-time snapshot of a REST API, ready to be served through a
  * `Stage`.
- * @resource
- * @section Creating a deployment
+ * ### Creating a deployment
  * A Deployment captures whatever methods, integrations, resources, and
  * authorizers currently exist on the REST API and produces an immutable
  * `deploymentId` that a `Stage` can point at. Pass the `RestApi` value on
  * `restApi` and Alchemy handles all the ordering for you — the deployment
  * will run after every method bound to the API.
  *
- * @example Deployment of a REST API
+ * **Example:** Deployment of a REST API
  * ```typescript
  * const api = yield* ApiGateway.RestApi("Api", {
  *   endpointConfiguration: { types: ["REGIONAL"] },
@@ -101,14 +100,14 @@ export interface DeploymentType extends Resource<
  * });
  * ```
  *
- * @section Forcing a redeploy
+ * ### Forcing a redeploy
  * Usually you do not have to: `restApi` already makes the Deployment
  * depend on every method, so any change to a method re-plans a new
  * deployment. Use `triggers` when you want to couple the deployment to a
  * signal Alchemy cannot see — for example, a manual version bump or a
  * hash of configuration computed outside the stack.
  *
- * @example Force redeploy on a version bump
+ * **Example:** Force redeploy on a version bump
  * ```typescript
  * const deployment = yield* ApiGateway.Deployment("Release", {
  *   restApi: api,
@@ -116,15 +115,15 @@ export interface DeploymentType extends Resource<
  * });
  * ```
  *
- * @section Why no DependsOn?
+ * ### Why no DependsOn?
  * CloudFormation's `AWS::ApiGateway::Deployment` famously requires a
  * hand-written `DependsOn: [Method1, Method2, ...]` listing every method.
  * Alchemy derives that list automatically from the bindings registered on
  * the `RestApi`, so adding a method never requires editing the deployment.
+ *
+ * @resource
  */
-export const DeploymentResource = Resource<DeploymentType>(
-  "AWS.ApiGateway.Deployment",
-);
+export const DeploymentResource = Resource<DeploymentType>("AWS.ApiGateway.Deployment");
 
 interface DeploymentInputProps {
   restApi?: RestApi;
@@ -152,8 +151,7 @@ export const Deployment = (id: string, props: DeploymentInputProps) =>
     const restApiId = rest.restApiId ?? restApi?.restApiId;
     if (!restApiId) {
       return yield* Effect.die(
-        "Deployment requires either `restApi` (preferred) or explicit " +
-          "`restApiId`.",
+        "Deployment requires either `restApi` (preferred) or explicit " + "`restApiId`.",
       );
     }
     let triggers: Record<string, Input<string>> | undefined = rest.triggers;
@@ -179,30 +177,20 @@ export const Deployment = (id: string, props: DeploymentInputProps) =>
  * surfaces the underlying resource FQNs to the dependency resolver.
  */
 const bindingDigest = (data: RestApiBinding): Input<string> => {
-  const entries = Object.entries(data as Record<string, unknown>).filter(
-    ([k]) => k !== "kind",
-  );
-  const values = entries.map(([, v]) =>
-    Output.asOutput(v as string | Output.Output<string>),
-  );
+  const entries = Object.entries(data as Record<string, unknown>).filter(([k]) => k !== "kind");
+  const values = entries.map(([, v]) => Output.asOutput(v as string | Output.Output<string>));
   return Output.map(Output.all(...values), (parts) =>
     [data.kind, ...(parts as unknown as unknown[]).map(String)].join("|"),
   );
 };
 
-const embedTriggers = (
-  description: string | undefined,
-  triggers?: Record<string, string>,
-) =>
+const embedTriggers = (description: string | undefined, triggers?: Record<string, string>) =>
   Effect.gen(function* () {
     if (!triggers || Object.keys(triggers).length === 0) {
       return description;
     }
     const fp = yield* Effect.sync(() =>
-      createHash("sha256")
-        .update(JSON.stringify(triggers))
-        .digest("hex")
-        .slice(0, 24),
+      createHash("sha256").update(JSON.stringify(triggers)).digest("hex").slice(0, 24),
     );
     const suffix = `@alchemy:triggers:${fp}`;
     return description ? `${description}\n${suffix}` : suffix;
@@ -223,9 +211,7 @@ export const DeploymentProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.items ?? [])
-                    .map((api) => api.id)
-                    .filter((id): id is string => id != null),
+                  (page.items ?? []).map((api) => api.id).filter((id): id is string => id != null),
                 ),
               ),
             );
@@ -237,10 +223,7 @@ export const DeploymentProvider = () =>
                   Effect.map((chunk) =>
                     Array.from(chunk).flatMap((page) =>
                       (page.items ?? [])
-                        .filter(
-                          (d): d is ag.Deployment & { id: string } =>
-                            d.id != null,
-                        )
+                        .filter((d): d is ag.Deployment & { id: string } => d.id != null)
                         .map((d) => ({
                           deploymentId: d.id,
                           restApiId,
@@ -285,11 +268,7 @@ export const DeploymentProvider = () =>
               restApiId: output.restApiId,
               deploymentId: output.deploymentId,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!d?.id) return undefined;
           return {
             deploymentId: d.id,
@@ -317,11 +296,7 @@ export const DeploymentProvider = () =>
                   restApiId,
                   deploymentId: output.deploymentId,
                 })
-                .pipe(
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
             : undefined;
 
           // Ensure — create a new deployment if there isn't one yet.
@@ -342,8 +317,7 @@ export const DeploymentProvider = () =>
                 tracingEnabled: news.tracingEnabled,
               }),
             );
-            if (!created.id)
-              return yield* Effect.die("createDeployment missing id");
+            if (!created.id) return yield* Effect.die("createDeployment missing id");
             yield* session.note(`Created deployment ${created.id}`);
             observed = yield* ag.getDeployment({
               restApiId: news.restApiId as string,

@@ -10,9 +10,8 @@ import type { ResolverRule } from "./ResolverRule.ts";
  *
  * Provide `Route53Resolver.GetResolverRuleHttp` on the hosting Lambda
  * Function to satisfy the requirement.
- * @binding
- * @section Reading Rule State
- * @example Read the Rule's Target IPs
+ * ### Reading Rule State
+ * **Example:** Read the Rule's Target IPs
  * ```typescript
  * // init — grants route53resolver:GetResolverRule on the rule
  * const getRule = yield* AWS.Route53Resolver.GetResolverRule(rule);
@@ -21,15 +20,15 @@ import type { ResolverRule } from "./ResolverRule.ts";
  * const { ResolverRule } = yield* getRule();
  * const targets = (ResolverRule?.TargetIps ?? []).map((t) => t.Ip);
  * ```
+ *
+ * @binding
  */
 export interface GetResolverRule extends Binding.Service<
   GetResolverRule,
   "AWS.Route53Resolver.GetResolverRule",
   (
     rule: ResolverRule,
-  ) => Effect.Effect<
-    () => Effect.Effect<r53r.GetResolverRuleResponse, r53r.GetResolverRuleError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<r53r.GetResolverRuleResponse, r53r.GetResolverRuleError>>
 > {}
 
 export const GetResolverRule = Binding.Service<GetResolverRule>(

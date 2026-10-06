@@ -80,9 +80,8 @@ export interface Index extends Resource<
  * metadata keys) is fixed at create time; changing any of them replaces the
  * index.
  *
- * @resource
- * @section Creating an Index
- * @example Cosine-Similarity Index
+ * ### Creating an Index
+ * **Example:** Cosine-Similarity Index
  * ```typescript
  * import * as S3Vectors from "alchemy/AWS/S3Vectors";
  *
@@ -93,6 +92,8 @@ export interface Index extends Resource<
  *   distanceMetric: "cosine",
  * });
  * ```
+ *
+ * @resource
  */
 export const Index = Resource<Index>("AWS.S3Vectors.Index");
 
@@ -101,23 +102,15 @@ const shapeKey = (props: IndexProps) =>
     dataType: props.dataType ?? "float32",
     dimension: props.dimension,
     distanceMetric: props.distanceMetric,
-    nonFilterableMetadataKeys: [
-      ...(props.nonFilterableMetadataKeys ?? []),
-    ].sort(),
+    nonFilterableMetadataKeys: [...(props.nonFilterableMetadataKeys ?? [])].sort(),
   });
 
 export const IndexProvider = () =>
   Provider.effect(
     Index,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<IndexProps, "indexName">,
-      ) {
-        return (
-          props.indexName ??
-          (yield* createPhysicalName({ id, maxLength: 63 })).toLowerCase()
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<IndexProps, "indexName">) {
+        return props.indexName ?? (yield* createPhysicalName({ id, maxLength: 63 })).toLowerCase();
       });
 
       const observe = (vectorBucketName: string, indexName: string) =>
@@ -134,9 +127,7 @@ export const IndexProvider = () =>
                 Object.entries(r.tags ?? {}).filter(([, v]) => v !== undefined),
               ) as Record<string, string>,
           ),
-          Effect.catchTag("NotFoundException", () =>
-            Effect.succeed({} as Record<string, string>),
-          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed({} as Record<string, string>)),
         );
 
       return Index.Provider.of({
@@ -146,8 +137,7 @@ export const IndexProvider = () =>
         // reads owned indexes via read() using the cached output identity.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const vectorBucketName =
-            output?.vectorBucketName ?? olds?.vectorBucketName;
+          const vectorBucketName = output?.vectorBucketName ?? olds?.vectorBucketName;
           if (vectorBucketName === undefined) return undefined;
           const name = output?.indexName ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(vectorBucketName, name);

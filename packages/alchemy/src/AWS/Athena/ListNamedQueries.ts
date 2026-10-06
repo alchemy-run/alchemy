@@ -9,9 +9,8 @@ import type { WorkGroup } from "./WorkGroup.ts";
  * Lists the IDs of the saved (named) queries in the bound workgroup — the
  * workgroup name is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Athena.ListNamedQueriesHttp)`.
- * @binding
- * @section Saved Queries
- * @example List the Workgroup's Named Queries
+ * ### Saved Queries
+ * **Example:** List the Workgroup's Named Queries
  * ```typescript
  * // init — bind the operation to the workgroup
  * const listNamedQueries = yield* AWS.Athena.ListNamedQueries(workGroup);
@@ -20,6 +19,8 @@ import type { WorkGroup } from "./WorkGroup.ts";
  * const res = yield* listNamedQueries({ MaxResults: 50 });
  * console.log(res.NamedQueryIds);
  * ```
+ *
+ * @binding
  */
 export interface ListNamedQueries extends Binding.Service<
   ListNamedQueries,
@@ -29,13 +30,8 @@ export interface ListNamedQueries extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<athena.ListNamedQueriesInput, "WorkGroup">,
-    ) => Effect.Effect<
-      athena.ListNamedQueriesOutput,
-      athena.ListNamedQueriesError
-    >
+    ) => Effect.Effect<athena.ListNamedQueriesOutput, athena.ListNamedQueriesError>
   >
 > {}
 
-export const ListNamedQueries = Binding.Service<ListNamedQueries>(
-  "AWS.Athena.ListNamedQueries",
-);
+export const ListNamedQueries = Binding.Service<ListNamedQueries>("AWS.Athena.ListNamedQueries");

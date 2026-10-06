@@ -26,11 +26,10 @@ export type Annotation = Resource<
  * Although typically created at deploy/release time (out-of-band of
  * regular IaC), modelling them as resources makes per-environment
  * annotation history reproducible.
- * @resource
  * @see https://axiom.co/docs/query-data/annotate-charts
  *
- * @section Creating an Annotation
- * @example Point-in-time deploy marker
+ * ### Creating an Annotation
+ * **Example:** Point-in-time deploy marker
  * ```typescript
  * yield* Axiom.Annotation("deploy-1.2.3", {
  *   type: "deploy",
@@ -42,7 +41,7 @@ export type Annotation = Resource<
  * });
  * ```
  *
- * @example Incident time-range
+ * **Example:** Incident time-range
  * ```typescript
  * yield* Axiom.Annotation("inc-2026-04-27", {
  *   type: "incident",
@@ -53,6 +52,9 @@ export type Annotation = Resource<
  *   url: "https://incident.io/incidents/abc123",
  * });
  * ```
+ *
+ * @resource
+ * @product Dataset
  */
 export const Annotation = Resource<Annotation>("Axiom.Annotation");
 
@@ -73,9 +75,7 @@ export const AnnotationProvider = () =>
         // response — the exact same shape `get`/`read` produce. Hand each
         // record back directly as the resource's Attributes.
         list: () =>
-          listAnnotations({}).pipe(
-            Effect.map((annotations) => annotations.map((a) => ({ ...a }))),
-          ),
+          listAnnotations({}).pipe(Effect.map((annotations) => annotations.map((a) => ({ ...a })))),
         reconcile: Effect.fn(function* ({ news, output }) {
           // Observe — Axiom assigns the annotation id server-side, so the
           // only handle to a previously-created annotation is the cached
@@ -103,9 +103,7 @@ export const AnnotationProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

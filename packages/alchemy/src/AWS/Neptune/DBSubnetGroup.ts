@@ -56,18 +56,17 @@ export interface DBSubnetGroup extends Resource<
  * cluster and its instances are placed into. Neptune is VPC-only, so a
  * subnet group spanning at least two Availability Zones is required before a
  * cluster can be created.
- * @resource
- * @section Creating a Subnet Group
- * @example Multi-AZ subnet group
+ * ### Creating a Subnet Group
+ * **Example:** Multi-AZ subnet group
  * ```typescript
  * const subnetGroup = yield* DBSubnetGroup("NeptuneSubnets", {
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
  * ```
+ *
+ * @resource
  */
-export const DBSubnetGroup = Resource<DBSubnetGroup>(
-  "AWS.Neptune.DBSubnetGroup",
-);
+export const DBSubnetGroup = Resource<DBSubnetGroup>("AWS.Neptune.DBSubnetGroup");
 
 export const DBSubnetGroupProvider = () =>
   Provider.effect(
@@ -83,11 +82,7 @@ export const DBSubnetGroupProvider = () =>
           .describeDBSubnetGroups({
             DBSubnetGroupName: groupName,
           })
-          .pipe(
-            Effect.catchTag("DBSubnetGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBSubnetGroups?.[0];
       });
 
@@ -95,20 +90,14 @@ export const DBSubnetGroupProvider = () =>
         stables: ["dbSubnetGroupArn", "dbSubnetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? { subnetIds: [] })) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? { subnetIds: [] })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbSubnetGroupName ??
-            (yield* toName(
-              id,
-              olds ?? ({ subnetIds: [] } as DBSubnetGroupProps),
-            ));
+            (yield* toName(id, olds ?? ({ subnetIds: [] } as DBSubnetGroupProps)));
           const group = yield* readGroup(name);
           if (!group?.DBSubnetGroupName) {
             return undefined;
@@ -126,8 +115,7 @@ export const DBSubnetGroupProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const dbSubnetGroupName =
-            output?.dbSubnetGroupName ?? (yield* toName(id, news));
+          const dbSubnetGroupName = output?.dbSubnetGroupName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -141,26 +129,18 @@ export const DBSubnetGroupProvider = () =>
             yield* neptune
               .createDBSubnetGroup({
                 DBSubnetGroupName: dbSubnetGroupName,
-                DBSubnetGroupDescription:
-                  news.description ?? "Managed by Alchemy",
+                DBSubnetGroupDescription: news.description ?? "Managed by Alchemy",
                 SubnetIds: news.subnetIds,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBSubnetGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBSubnetGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(dbSubnetGroupName);
             if (!observed?.DBSubnetGroupName) {
               return yield* Effect.fail(
-                new Error(
-                  `Failed to create DB subnet group '${dbSubnetGroupName}'`,
-                ),
+                new Error(`Failed to create DB subnet group '${dbSubnetGroupName}'`),
               );
             }
           } else {
@@ -169,16 +149,13 @@ export const DBSubnetGroupProvider = () =>
             // input.
             yield* neptune.modifyDBSubnetGroup({
               DBSubnetGroupName: dbSubnetGroupName,
-              DBSubnetGroupDescription:
-                news.description ?? "Managed by Alchemy",
+              DBSubnetGroupDescription: news.description ?? "Managed by Alchemy",
               SubnetIds: news.subnetIds,
             });
             observed = yield* readGroup(dbSubnetGroupName);
             if (!observed?.DBSubnetGroupName) {
               return yield* Effect.fail(
-                new Error(
-                  `DB subnet group '${dbSubnetGroupName}' not found after update`,
-                ),
+                new Error(`DB subnet group '${dbSubnetGroupName}' not found after update`),
               );
             }
           }
@@ -233,9 +210,7 @@ export const DBSubnetGroupProvider = () =>
                           dbSubnetGroupArn: group.DBSubnetGroupArn,
                           vpcId: group.VpcId,
                           subnetIds: (group.Subnets ?? []).flatMap((subnet) =>
-                            subnet.SubnetIdentifier
-                              ? [subnet.SubnetIdentifier]
-                              : [],
+                            subnet.SubnetIdentifier ? [subnet.SubnetIdentifier] : [],
                           ),
                           status: group.SubnetGroupStatus,
                           tags: {} as Record<string, string>,
@@ -251,9 +226,7 @@ export const DBSubnetGroupProvider = () =>
             .deleteDBSubnetGroup({
               DBSubnetGroupName: output.dbSubnetGroupName,
             })
-            .pipe(
-              Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.void));
         }),
       };
     }),

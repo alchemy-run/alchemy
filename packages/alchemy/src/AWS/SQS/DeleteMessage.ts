@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface DeleteMessageRequest extends Omit<
-  sqs.DeleteMessageRequest,
-  "QueueUrl"
-> {}
+export interface DeleteMessageRequest extends Omit<sqs.DeleteMessageRequest, "QueueUrl"> {}
 
 /**
  * Runtime binding for `sqs:DeleteMessage`.
@@ -15,9 +12,8 @@ export interface DeleteMessageRequest extends Omit<
  * a message after it has been received and processed. The binding grants the
  * host function `sqs:DeleteMessage` on the queue. Provide the
  * `DeleteMessageHttp` layer on the Function to implement the binding.
- * @binding
- * @section Deleting Messages
- * @example Delete a Processed Message
+ * ### Deleting Messages
+ * **Example:** Delete a Processed Message
  * ```typescript
  * // init (provide SQS.DeleteMessageHttp on the Function)
  * const deleteMessage = yield* SQS.DeleteMessage(queue);
@@ -29,6 +25,8 @@ export interface DeleteMessageRequest extends Omit<
  *   yield* deleteMessage({ ReceiptHandle: message.ReceiptHandle });
  * }
  * ```
+ *
+ * @binding
  */
 export interface DeleteMessage extends Binding.Service<
   DeleteMessage,
@@ -42,6 +40,4 @@ export interface DeleteMessage extends Binding.Service<
   >
 > {}
 
-export const DeleteMessage = Binding.Service<DeleteMessage>(
-  "AWS.SQS.DeleteMessage",
-);
+export const DeleteMessage = Binding.Service<DeleteMessage>("AWS.SQS.DeleteMessage");

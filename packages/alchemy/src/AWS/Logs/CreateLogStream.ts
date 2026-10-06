@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
-export interface CreateLogStreamRequest extends Omit<
-  Logs.CreateLogStreamRequest,
-  "logGroupName"
-> {}
+export interface CreateLogStreamRequest extends Omit<Logs.CreateLogStreamRequest, "logGroupName"> {}
 
 /**
  * Runtime binding for `logs:CreateLogStream`.
@@ -16,9 +13,8 @@ export interface CreateLogStreamRequest extends Omit<
  * writing to them with `PutLogEvents`, automatically injecting the log group
  * name. For a fixed stream known at deploy time, declare an
  * `AWS.Logs.LogStream` resource instead.
- * @binding
- * @section Writing Logs
- * @example Create a Per-Tenant Stream, Then Write
+ * ### Writing Logs
+ * **Example:** Create a Per-Tenant Stream, Then Write
  * ```typescript
  * const createLogStream = yield* AWS.Logs.CreateLogStream(logGroup);
  * const putLogEvents = yield* AWS.Logs.PutLogEvents(logGroup);
@@ -31,6 +27,8 @@ export interface CreateLogStreamRequest extends Omit<
  *   logEvents: [{ timestamp, message }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateLogStream extends Binding.Service<
   CreateLogStream,
@@ -43,6 +41,4 @@ export interface CreateLogStream extends Binding.Service<
     ) => Effect.Effect<Logs.CreateLogStreamResponse, Logs.CreateLogStreamError>
   >
 > {}
-export const CreateLogStream = Binding.Service<CreateLogStream>(
-  "AWS.Logs.CreateLogStream",
-);
+export const CreateLogStream = Binding.Service<CreateLogStream>("AWS.Logs.CreateLogStream");

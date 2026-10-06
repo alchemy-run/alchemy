@@ -121,9 +121,8 @@ export interface AppSyncDataSource extends Resource<
  * role is created automatically (unless an explicit `serviceRoleArn` is
  * given): `lambda:InvokeFunction` on the function, or the DynamoDB
  * read/write actions on the table and its indexes.
- * @resource
- * @section Creating Data Sources
- * @example Lambda data source (auto-created invoke role)
+ * ### Creating Data Sources
+ * **Example:** Lambda data source (auto-created invoke role)
  * ```typescript
  * const ds = yield* AppSync.DataSource("LambdaDS", {
  *   api,
@@ -132,7 +131,7 @@ export interface AppSyncDataSource extends Resource<
  * });
  * ```
  *
- * @example NONE data source (local compute)
+ * **Example:** NONE data source (local compute)
  * ```typescript
  * const local = yield* AppSync.DataSource("Local", {
  *   api,
@@ -140,7 +139,7 @@ export interface AppSyncDataSource extends Resource<
  * });
  * ```
  *
- * @example DynamoDB data source
+ * **Example:** DynamoDB data source
  * ```typescript
  * const ds = yield* AppSync.DataSource("TableDS", {
  *   api,
@@ -148,10 +147,10 @@ export interface AppSyncDataSource extends Resource<
  *   dynamodbConfig: { tableName: table.tableName },
  * });
  * ```
+ *
+ * @resource
  */
-export const DataSourceResource = Resource<AppSyncDataSource>(
-  "AWS.AppSync.DataSource",
-);
+export const DataSourceResource = Resource<AppSyncDataSource>("AWS.AppSync.DataSource");
 
 export interface DataSourceInputProps extends Omit<
   {
@@ -188,14 +187,8 @@ export const DataSourceProvider = () =>
   Provider.effect(
     DataSourceResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<DataSourceProps, "name">,
-      ) {
-        return (
-          props.name ??
-          sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<DataSourceProps, "name">) {
+        return props.name ?? sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getDataSourceSafe = (apiId: string, name: string) =>
@@ -222,10 +215,7 @@ export const DataSourceProvider = () =>
             Resource: /:function:[^:]+:/.test(arn) ? [arn] : [arn, `${arn}:*`],
           });
         }
-        if (
-          news.type === "AMAZON_DYNAMODB" &&
-          news.dynamodbConfig !== undefined
-        ) {
+        if (news.type === "AMAZON_DYNAMODB" && news.dynamodbConfig !== undefined) {
           const tableRegion = news.dynamodbConfig.awsRegion ?? region;
           const tableArn = `arn:aws:dynamodb:${tableRegion}:${accountId}:table/${news.dynamodbConfig.tableName}`;
           statements.push({
@@ -319,9 +309,7 @@ export const DataSourceProvider = () =>
                 RoleName: roleName,
                 PolicyName: policyName,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
           ),
           Stream.runDrain,
           Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -449,8 +437,7 @@ export const DataSourceProvider = () =>
                       : {
                           tableName: ds.dynamodbConfig.tableName,
                           awsRegion: ds.dynamodbConfig.awsRegion,
-                          useCallerCredentials:
-                            ds.dynamodbConfig.useCallerCredentials ?? false,
+                          useCallerCredentials: ds.dynamodbConfig.useCallerCredentials ?? false,
                           versioned: ds.dynamodbConfig.versioned ?? false,
                         },
                   httpConfig: ds.httpConfig,

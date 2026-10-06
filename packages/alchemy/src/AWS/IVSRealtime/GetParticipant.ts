@@ -13,9 +13,8 @@ export interface GetParticipantRequest extends Omit<
  * Read a participant's detail (state, join time, attributes, publish state,
  * recording state, connection metadata) for a session of the bound stage.
  *
- * @binding
- * @section Inspecting Participants
- * @example Look up a participant
+ * ### Inspecting Participants
+ * **Example:** Look up a participant
  * ```typescript
  * // init
  * const getParticipant = yield* IVSRealtime.GetParticipant(stage);
@@ -26,6 +25,8 @@ export interface GetParticipantRequest extends Omit<
  *   participantId: "abcDEF123",
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetParticipant extends Binding.Service<
   GetParticipant,
@@ -35,12 +36,7 @@ export interface GetParticipant extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetParticipantRequest,
-    ) => Effect.Effect<
-      ivsrealtime.GetParticipantResponse,
-      ivsrealtime.GetParticipantError
-    >
+    ) => Effect.Effect<ivsrealtime.GetParticipantResponse, ivsrealtime.GetParticipantError>
   >
 > {}
-export const GetParticipant = Binding.Service<GetParticipant>(
-  "AWS.IVSRealtime.GetParticipant",
-);
+export const GetParticipant = Binding.Service<GetParticipant>("AWS.IVSRealtime.GetParticipant");

@@ -14,9 +14,8 @@ export interface RejectSubscriptionRequestRequest extends Omit<
  * Rejects a pending subscription request in the bound domain. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.RejectSubscriptionRequestHttp)`.
- * @binding
- * @section Subscription Workflows
- * @example Reject a Request
+ * ### Subscription Workflows
+ * **Example:** Reject a Request
  * ```typescript
  * // init — bind the operation to the domain
  * const rejectSubscriptionRequest = yield* AWS.DataZone.RejectSubscriptionRequest(domain);
@@ -24,6 +23,8 @@ export interface RejectSubscriptionRequestRequest extends Omit<
  * // runtime
  * yield* rejectSubscriptionRequest({ identifier: requestId, decisionComment: "PII policy" });
  * ```
+ *
+ * @binding
  */
 export interface RejectSubscriptionRequest extends Binding.Service<
   RejectSubscriptionRequest,
@@ -39,7 +40,6 @@ export interface RejectSubscriptionRequest extends Binding.Service<
     >
   >
 > {}
-export const RejectSubscriptionRequest =
-  Binding.Service<RejectSubscriptionRequest>(
-    "AWS.DataZone.RejectSubscriptionRequest",
-  );
+export const RejectSubscriptionRequest = Binding.Service<RejectSubscriptionRequest>(
+  "AWS.DataZone.RejectSubscriptionRequest",
+);

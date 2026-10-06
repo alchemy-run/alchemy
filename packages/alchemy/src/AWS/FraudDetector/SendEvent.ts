@@ -8,10 +8,7 @@ import type { EventType } from "./EventType.ts";
  * everything else (the event id, timestamp, entities, variable values, and
  * optional label) is the raw distilled request.
  */
-export interface SendEventRequest extends Omit<
-  frauddetector.SendEventRequest,
-  "eventTypeName"
-> {}
+export interface SendEventRequest extends Omit<frauddetector.SendEventRequest, "eventTypeName"> {}
 
 /**
  * Store an event in Amazon Fraud Detector without generating a prediction —
@@ -20,14 +17,13 @@ export interface SendEventRequest extends Omit<
  * labeled later via `UpdateEventLabel`. The bound event type must have
  * `eventIngestion: "ENABLED"`.
  *
- * @binding
- * @section Ingesting Events
+ * ### Ingesting Events
  * Provide the `SendEventHttp` implementation layer on the Function effect,
  * bind the event type in the init phase, then call the returned client at
  * runtime. The binding grants `frauddetector:SendEvent` on the event type
  * and injects its `eventTypeName` automatically.
  *
- * @example Ingest from a Lambda
+ * **Example:** Ingest from a Lambda
  * ```typescript
  * // init
  * const sendEvent = yield* FraudDetector.SendEvent(eventType);
@@ -47,6 +43,8 @@ export interface SendEventRequest extends Omit<
  * // on the Function effect:
  * // .pipe(Effect.provide(FraudDetector.SendEventHttp))
  * ```
+ *
+ * @binding
  */
 export interface SendEvent extends Binding.Service<
   SendEvent,
@@ -56,12 +54,7 @@ export interface SendEvent extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendEventRequest,
-    ) => Effect.Effect<
-      frauddetector.SendEventResult,
-      frauddetector.SendEventError
-    >
+    ) => Effect.Effect<frauddetector.SendEventResult, frauddetector.SendEventError>
   >
 > {}
-export const SendEvent = Binding.Service<SendEvent>(
-  "AWS.FraudDetector.SendEvent",
-);
+export const SendEvent = Binding.Service<SendEvent>("AWS.FraudDetector.SendEvent");

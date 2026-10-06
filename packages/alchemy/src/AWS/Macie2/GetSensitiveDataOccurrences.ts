@@ -9,9 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Account-level operation — invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetSensitiveDataOccurrencesHttp)`.
- * @binding
- * @section Retrieving Sensitive Data Samples
- * @example Retrieve Samples for a Finding
+ * ### Retrieving Sensitive Data Samples
+ * **Example:** Retrieve Samples for a Finding
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getSensitiveDataOccurrences = yield* AWS.Macie2.GetSensitiveDataOccurrences();
@@ -19,6 +18,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { sensitiveDataOccurrences } = yield* getSensitiveDataOccurrences({ findingId });
  * ```
+ *
+ * @binding
  */
 export interface GetSensitiveDataOccurrences extends Binding.Service<
   GetSensitiveDataOccurrences,
@@ -32,7 +33,6 @@ export interface GetSensitiveDataOccurrences extends Binding.Service<
     >
   >
 > {}
-export const GetSensitiveDataOccurrences =
-  Binding.Service<GetSensitiveDataOccurrences>(
-    "AWS.Macie2.GetSensitiveDataOccurrences",
-  );
+export const GetSensitiveDataOccurrences = Binding.Service<GetSensitiveDataOccurrences>(
+  "AWS.Macie2.GetSensitiveDataOccurrences",
+);

@@ -11,9 +11,8 @@ import type { RuleGroup } from "./RuleGroup.ts";
  *
  * Provide `WAFv2.GetPermissionPolicyHttp` on the hosting Lambda Function to
  * satisfy the requirement.
- * @binding
- * @section Sharing Rule Groups
- * @example Read the Sharing Policy
+ * ### Sharing Rule Groups
+ * **Example:** Read the Sharing Policy
  * ```typescript
  * // init — grants wafv2:GetPermissionPolicy on the rule group
  * const getPermissionPolicy = yield* AWS.WAFv2.GetPermissionPolicy(group);
@@ -25,6 +24,8 @@ import type { RuleGroup } from "./RuleGroup.ts";
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetPermissionPolicy extends Binding.Service<
   GetPermissionPolicy,
@@ -32,10 +33,7 @@ export interface GetPermissionPolicy extends Binding.Service<
   (
     ruleGroup: RuleGroup,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      WAFV2.GetPermissionPolicyResponse,
-      WAFV2.GetPermissionPolicyError
-    >
+    () => Effect.Effect<WAFV2.GetPermissionPolicyResponse, WAFV2.GetPermissionPolicyError>
   >
 > {}
 

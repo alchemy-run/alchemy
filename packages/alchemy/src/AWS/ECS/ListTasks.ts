@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface ListTasksRequest extends Omit<
-  ECS.ListTasksRequest,
-  "cluster"
-> {}
+export interface ListTasksRequest extends Omit<ECS.ListTasksRequest, "cluster"> {}
 
 /**
  * Runtime binding for `ecs:ListTasks`.
@@ -14,9 +11,8 @@ export interface ListTasksRequest extends Omit<
  * Bind this operation to a `Cluster` inside a function runtime to get a
  * callable that lists task ARNs in the bound cluster. The cluster ARN is
  * injected automatically and the grant is conditioned on the bound cluster.
- * @binding
- * @section Listing Tasks
- * @example List Stopped Tasks
+ * ### Listing Tasks
+ * **Example:** List Stopped Tasks
  * ```typescript
  * const listTasks = yield* AWS.ECS.ListTasks(cluster);
  *
@@ -25,6 +21,8 @@ export interface ListTasksRequest extends Omit<
  * });
  * const taskArns = response.taskArns ?? [];
  * ```
+ *
+ * @binding
  */
 export interface ListTasks extends Binding.Service<
   ListTasks,
@@ -32,9 +30,7 @@ export interface ListTasks extends Binding.Service<
   (
     cluster: Cluster,
   ) => Effect.Effect<
-    (
-      request: ListTasksRequest,
-    ) => Effect.Effect<ECS.ListTasksResponse, ECS.ListTasksError>
+    (request: ListTasksRequest) => Effect.Effect<ECS.ListTasksResponse, ECS.ListTasksError>
   >
 > {}
 export const ListTasks = Binding.Service<ListTasks>("AWS.ECS.ListTasks");

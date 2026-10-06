@@ -79,9 +79,8 @@ export interface RealtimeLogConfig extends Resource<
  * Real-time logs deliver per-request records to a Kinesis data stream within
  * seconds. Attach the configuration to a distribution's cache behavior via
  * `Distribution` (`realtimeLogConfigArn`).
- * @resource
- * @section Creating Real-Time Log Configs
- * @example Stream Viewer Requests to Kinesis
+ * ### Creating Real-Time Log Configs
+ * **Example:** Stream Viewer Requests to Kinesis
  * ```typescript
  * const stream = yield* Kinesis.Stream("EdgeLogs", {});
  *
@@ -121,15 +120,13 @@ export interface RealtimeLogConfig extends Resource<
  *   endpoints: [{ streamArn: stream.streamArn, roleArn: role.roleArn }],
  * });
  * ```
+ *
+ * @resource
  */
-export const RealtimeLogConfig = Resource<RealtimeLogConfig>(
-  "AWS.CloudFront.RealtimeLogConfig",
-);
+export const RealtimeLogConfig = Resource<RealtimeLogConfig>("AWS.CloudFront.RealtimeLogConfig");
 
 const createName = (id: string, props: RealtimeLogConfigProps) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 64 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
 const toEndPoints = (endpoints: RealtimeLogEndpoint[]): cloudfront.EndPoint[] =>
   endpoints.map((endpoint) => ({
@@ -140,9 +137,7 @@ const toEndPoints = (endpoints: RealtimeLogEndpoint[]): cloudfront.EndPoint[] =>
     },
   }));
 
-const fromEndPoints = (
-  endpoints: cloudfront.EndPoint[] | undefined,
-): RealtimeLogEndpoint[] =>
+const fromEndPoints = (endpoints: cloudfront.EndPoint[] | undefined): RealtimeLogEndpoint[] =>
   (endpoints ?? []).flatMap((endpoint) =>
     endpoint.KinesisStreamConfig
       ? [
@@ -154,9 +149,7 @@ const fromEndPoints = (
       : [],
   );
 
-const toAttrs = (
-  config: cloudfront.RealtimeLogConfig,
-): RealtimeLogConfig["Attributes"] => ({
+const toAttrs = (config: cloudfront.RealtimeLogConfig): RealtimeLogConfig["Attributes"] => ({
   arn: config.ARN,
   name: config.Name,
   samplingRate: config.SamplingRate,
@@ -168,8 +161,7 @@ const sameEndpoints = (a: RealtimeLogEndpoint[], b: RealtimeLogEndpoint[]) =>
   a.length === b.length &&
   a.every(
     (endpoint, index) =>
-      endpoint.streamArn === b[index]?.streamArn &&
-      endpoint.roleArn === b[index]?.roleArn,
+      endpoint.streamArn === b[index]?.streamArn && endpoint.roleArn === b[index]?.roleArn,
   );
 
 // CloudFront canonicalizes (reorders) the field list, so compare as sets.
@@ -223,11 +215,7 @@ export const RealtimeLogConfigProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         const response = yield* cloudfront
           .getRealtimeLogConfig({ Name: name })
-          .pipe(
-            Effect.catchTag("NoSuchRealtimeLogConfig", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchRealtimeLogConfig", () => Effect.succeed(undefined)));
         return response?.RealtimeLogConfig;
       });
 
@@ -264,8 +252,7 @@ export const RealtimeLogConfigProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
-            output?.name ??
-            (yield* createName(id, olds ?? ({} as RealtimeLogConfigProps)));
+            output?.name ?? (yield* createName(id, olds ?? ({} as RealtimeLogConfigProps)));
           const observed = yield* observe(name);
           if (!observed) {
             return undefined;
@@ -293,9 +280,7 @@ export const RealtimeLogConfigProvider = () =>
               }),
             ).pipe(
               Effect.map((response) => response.RealtimeLogConfig),
-              Effect.catchTag("RealtimeLogConfigAlreadyExists", () =>
-                observe(name),
-              ),
+              Effect.catchTag("RealtimeLogConfigAlreadyExists", () => observe(name)),
             );
             if (!observed) {
               return yield* Effect.die(
@@ -332,9 +317,7 @@ export const RealtimeLogConfigProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryConfigInUse(
-            cloudfront
-              .deleteRealtimeLogConfig({ Name: output.name })
-              .pipe(Effect.asVoid),
+            cloudfront.deleteRealtimeLogConfig({ Name: output.name }).pipe(Effect.asVoid),
           ).pipe(Effect.catchTag("NoSuchRealtimeLogConfig", () => Effect.void));
         }),
       };

@@ -81,9 +81,8 @@ export interface Flow extends Resource<
  * the flow is created — AppFlow validates connectivity by listing the source
  * at `CreateFlow` time and rejects an empty prefix with
  * `ConnectorServerException`.
- * @resource
- * @section Creating a Flow
- * @example S3 to S3 On-Demand Flow
+ * ### Creating a Flow
+ * **Example:** S3 to S3 On-Demand Flow
  * ```typescript
  * const flow = yield* AppFlow.Flow("Copy", {
  *   triggerConfig: { triggerType: "OnDemand" },
@@ -111,6 +110,8 @@ export interface Flow extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const Flow = Resource<Flow>("AWS.AppFlow.Flow");
 
@@ -139,13 +140,8 @@ export const FlowProvider = () =>
           const name = output?.flowName ?? (yield* toName(id, olds ?? {}));
           const flow = yield* appflow
             .describeFlow({ flowName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          if (flow === undefined || flow.flowArn === undefined)
-            return undefined;
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          if (flow === undefined || flow.flowArn === undefined) return undefined;
           const attrs = {
             flowName: name,
             flowArn: flow.flowArn,
@@ -164,11 +160,7 @@ export const FlowProvider = () =>
           // 1. Observe.
           let live = yield* appflow
             .describeFlow({ flowName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // 2. Ensure — create if missing. Tolerate an AlreadyExists race by
           // falling back to describe.
@@ -218,9 +210,7 @@ export const FlowProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* appflow
             .deleteFlow({ flowName: output.flowName, forceDelete: true })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

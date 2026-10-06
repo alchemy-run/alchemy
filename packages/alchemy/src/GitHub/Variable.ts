@@ -70,12 +70,11 @@ export interface Variable extends Resource<
  * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
- * @resource
- * @section Repository Variables
+ * ### Repository Variables
  * Store variables accessible to all GitHub Actions workflows in the
  * repository.
  *
- * @example Create a Repository Variable
+ * **Example:** Create a Repository Variable
  * ```typescript
  * yield* GitHub.Variable("aws-region", {
  *   owner: "my-org",
@@ -85,12 +84,12 @@ export interface Variable extends Resource<
  * });
  * ```
  *
- * @section Environment Variables
+ * ### Environment Variables
  * Scope a variable to a specific GitHub Actions environment (e.g.
  * `production`, `staging`). Use `GitHub.Environment` to manage the
  * environment itself.
  *
- * @example Create an Environment Variable
+ * **Example:** Create an Environment Variable
  * ```typescript
  * yield* GitHub.Variable("region", {
  *   owner: "my-org",
@@ -101,11 +100,11 @@ export interface Variable extends Resource<
  * });
  * ```
  *
- * @section Wiring with Other Resources
+ * ### Wiring with Other Resources
  * Pass output attributes from other resources into GitHub variables so
  * that CI workflows can reference them.
  *
- * @example Store a Worker URL for CI
+ * **Example:** Store a Worker URL for CI
  * ```typescript
  * const worker = yield* Cloudflare.Worker("Api", { ... });
  *
@@ -117,7 +116,7 @@ export interface Variable extends Resource<
  * });
  * ```
  *
- * @example Multiple Variables
+ * **Example:** Multiple Variables
  * ```typescript
  * yield* GitHub.Variable("region", {
  *   owner: "my-org",
@@ -133,6 +132,9 @@ export interface Variable extends Resource<
  *   value: "production",
  * });
  * ```
+ *
+ * @resource
+ * @product Actions
  */
 export const Variable = Resource<Variable>("GitHub.Variable");
 
@@ -151,8 +153,7 @@ export const VariableProvider = () =>
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         news.name !== olds.name ||
-        resolveEnvironmentName(news.environment) !==
-          resolveEnvironmentName(olds.environment) ||
+        resolveEnvironmentName(news.environment) !== resolveEnvironmentName(olds.environment) ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
         return { action: "replace" };
@@ -167,8 +168,7 @@ export const VariableProvider = () =>
       // variable from its old location before converging the new one.
       if (
         olds !== undefined &&
-        resolveEnvironmentName(olds.environment) !==
-          resolveEnvironmentName(news.environment)
+        resolveEnvironmentName(olds.environment) !== resolveEnvironmentName(news.environment)
       ) {
         yield* deleteVariable(olds);
       }
@@ -218,14 +218,11 @@ export const VariableProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const variables = await octokit.paginate(
-                  octokit.rest.actions.listRepoVariables,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const variables = await octokit.paginate(octokit.rest.actions.listRepoVariables, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return variables.map((v) => ({ updatedAt: v.updated_at }));
               } catch (error: any) {
                 // Repos with Actions disabled, or where the token lacks the

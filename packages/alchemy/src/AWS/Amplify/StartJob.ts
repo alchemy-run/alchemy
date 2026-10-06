@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface StartJobRequest extends Omit<
-  amplify.StartJobRequest,
-  "appId"
-> {}
+export interface StartJobRequest extends Omit<amplify.StartJobRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:StartJob`.
@@ -18,9 +15,8 @@ export interface StartJobRequest extends Omit<
  *
  * The canonical use is a webhook Lambda that rebuilds the site when upstream
  * content changes (a CMS publish, a data refresh, etc.).
- * @binding
- * @section Starting Jobs
- * @example Rebuild a Branch on Content Change
+ * ### Starting Jobs
+ * **Example:** Rebuild a Branch on Content Change
  * ```typescript
  * // init — bind the operation to the app
  * const startJob = yield* AWS.Amplify.StartJob(app);
@@ -32,6 +28,8 @@ export interface StartJobRequest extends Omit<
  *   jobReason: "CMS content published",
  * });
  * ```
+ *
+ * @binding
  */
 export interface StartJob extends Binding.Service<
   StartJob,
@@ -39,9 +37,7 @@ export interface StartJob extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: StartJobRequest,
-    ) => Effect.Effect<amplify.StartJobResult, amplify.StartJobError>
+    (request: StartJobRequest) => Effect.Effect<amplify.StartJobResult, amplify.StartJobError>
   >
 > {}
 

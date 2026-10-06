@@ -4,10 +4,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface RegistryPolicyProps {
@@ -39,9 +36,8 @@ export interface RegistryPolicy extends Resource<
  * account/region **singleton** used to grant other AWS accounts
  * registry-level permissions (most commonly `ecr:ReplicateImage` when
  * configuring cross-account replication).
- * @resource
- * @section Managing the Registry Policy
- * @example Allow Cross-Account Replication
+ * ### Managing the Registry Policy
+ * **Example:** Allow Cross-Account Replication
  * ```typescript
  * const policy = yield* RegistryPolicy("ReplicationPolicy", {
  *   policy: {
@@ -58,10 +54,10 @@ export interface RegistryPolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const RegistryPolicy = Resource<RegistryPolicy>(
-  "AWS.ECR.RegistryPolicy",
-);
+export const RegistryPolicy = Resource<RegistryPolicy>("AWS.ECR.RegistryPolicy");
 
 export const RegistryPolicyProvider = () =>
   Provider.effect(
@@ -69,11 +65,7 @@ export const RegistryPolicyProvider = () =>
     Effect.gen(function* () {
       const readPolicy = ecr
         .getRegistryPolicy({})
-        .pipe(
-          Effect.catchTag("RegistryPolicyNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("RegistryPolicyNotFoundException", () => Effect.succeed(undefined)));
 
       const toPolicyText = (policy: PolicyDocument | string) =>
         typeof policy === "string" ? policy : stringifyPolicyDocument(policy);
@@ -84,8 +76,7 @@ export const RegistryPolicyProvider = () =>
           const observed = yield* readPolicy;
           if (observed?.policyText === undefined) return undefined;
           return {
-            registryId:
-              observed.registryId ?? (yield* AWSEnvironment.current).accountId,
+            registryId: observed.registryId ?? (yield* AWSEnvironment.current).accountId,
             policy: observed.policyText,
           };
         }),
@@ -97,9 +88,7 @@ export const RegistryPolicyProvider = () =>
             if (observed?.policyText === undefined) return [];
             return [
               {
-                registryId:
-                  observed.registryId ??
-                  (yield* AWSEnvironment.current).accountId,
+                registryId: observed.registryId ?? (yield* AWSEnvironment.current).accountId,
                 policy: observed.policyText,
               },
             ];
@@ -114,8 +103,7 @@ export const RegistryPolicyProvider = () =>
           let registryId = observed?.registryId;
           if (
             observed?.policyText === undefined ||
-            normalizePolicyDocument(observed.policyText) !==
-              normalizePolicyDocument(desired)
+            normalizePolicyDocument(observed.policyText) !== normalizePolicyDocument(desired)
           ) {
             const put = yield* ecr.putRegistryPolicy({ policyText: desired });
             registryId = put.registryId ?? registryId;
@@ -128,12 +116,7 @@ export const RegistryPolicyProvider = () =>
         delete: Effect.fn(function* () {
           yield* ecr
             .deleteRegistryPolicy({})
-            .pipe(
-              Effect.catchTag(
-                "RegistryPolicyNotFoundException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("RegistryPolicyNotFoundException", () => Effect.void));
         }),
       };
     }),

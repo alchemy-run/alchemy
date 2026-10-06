@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * their identifiers are unknown at deploy time). Provide the
  * implementation with `Effect.provide(AWS.Rekognition.SearchUsersByImageHttp)`.
  *
- * @binding
- * @section User Search
- * @example Search Users by Image
+ * ### User Search
+ * **Example:** Search Users by Image
  * ```typescript
  * // init
  * const searchUsersByImage = yield* AWS.Rekognition.SearchUsersByImage();
@@ -25,6 +24,8 @@ import * as Binding from "../../Binding.ts";
  * });
  * const bestUser = result.UserMatches?.[0]?.User?.UserId;
  * ```
+ *
+ * @binding
  */
 export interface SearchUsersByImage extends Binding.Service<
   SearchUsersByImage,
@@ -32,10 +33,7 @@ export interface SearchUsersByImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.SearchUsersByImageRequest,
-    ) => Effect.Effect<
-      rekognition.SearchUsersByImageResponse,
-      rekognition.SearchUsersByImageError
-    >
+    ) => Effect.Effect<rekognition.SearchUsersByImageResponse, rekognition.SearchUsersByImageError>
   >
 > {}
 export const SearchUsersByImage = Binding.Service<SearchUsersByImage>(

@@ -14,9 +14,8 @@ export interface SearchListingsRequest extends Omit<
  * Searches published listings (the catalog of subscribable assets and data products) in the bound domain. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.SearchListingsHttp)`.
- * @binding
- * @section Searching the Catalog
- * @example Find Subscribable Listings
+ * ### Searching the Catalog
+ * **Example:** Find Subscribable Listings
  * ```typescript
  * // init — bind the operation to the domain
  * const searchListings = yield* AWS.DataZone.SearchListings(domain);
@@ -25,6 +24,8 @@ export interface SearchListingsRequest extends Omit<
  * const result = yield* searchListings({ searchText: "customer" });
  * const listings = result.items?.map((i) => i.assetListing?.name);
  * ```
+ *
+ * @binding
  */
 export interface SearchListings extends Binding.Service<
   SearchListings,
@@ -34,12 +35,7 @@ export interface SearchListings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: SearchListingsRequest,
-    ) => Effect.Effect<
-      datazone.SearchListingsOutput,
-      datazone.SearchListingsError
-    >
+    ) => Effect.Effect<datazone.SearchListingsOutput, datazone.SearchListingsError>
   >
 > {}
-export const SearchListings = Binding.Service<SearchListings>(
-  "AWS.DataZone.SearchListings",
-);
+export const SearchListings = Binding.Service<SearchListings>("AWS.DataZone.SearchListings");

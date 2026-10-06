@@ -10,9 +10,8 @@ export interface ListStreamsRequest extends Kinesis.ListStreamsInput {}
  * An account-level operation (no stream argument) that enumerates all
  * Kinesis streams in the region. Provide the implementation with
  * `Effect.provide(AWS.Kinesis.ListStreamsHttp)`.
- * @binding
- * @section Inspecting Streams
- * @example List Streams in the Region
+ * ### Inspecting Streams
+ * **Example:** List Streams in the Region
  * ```typescript
  * // init — account-level binding takes no resource
  * const listStreams = yield* AWS.Kinesis.ListStreams();
@@ -21,6 +20,8 @@ export interface ListStreamsRequest extends Kinesis.ListStreamsInput {}
  * const result = yield* listStreams();
  * yield* Effect.log(result.StreamNames);
  * ```
+ *
+ * @binding
  */
 export interface ListStreams extends Binding.Service<
   ListStreams,
@@ -31,6 +32,4 @@ export interface ListStreams extends Binding.Service<
     ) => Effect.Effect<Kinesis.ListStreamsOutput, Kinesis.ListStreamsError>
   >
 > {}
-export const ListStreams = Binding.Service<ListStreams>(
-  "AWS.Kinesis.ListStreams",
-);
+export const ListStreams = Binding.Service<ListStreams>("AWS.Kinesis.ListStreams");

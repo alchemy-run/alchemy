@@ -12,9 +12,8 @@ import type { Input } from "./Input.ts";
  * the RTMP endpoint to push to. The input id is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.MediaLive.DescribeInputHttp)`.
- * @binding
- * @section Observing Inputs
- * @example Read the Input's Ingest Endpoints
+ * ### Observing Inputs
+ * **Example:** Read the Input's Ingest Endpoints
  * ```typescript
  * // init — bind the operation to the input
  * const describeInput = yield* AWS.MediaLive.DescribeInput(input);
@@ -23,6 +22,8 @@ import type { Input } from "./Input.ts";
  * const { Destinations } = yield* describeInput();
  * const ingestUrl = Destinations?.[0]?.Url;
  * ```
+ *
+ * @binding
  */
 export interface DescribeInput extends Binding.Service<
   DescribeInput,
@@ -30,12 +31,7 @@ export interface DescribeInput extends Binding.Service<
   (
     input: Input,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      medialive.DescribeInputResponse,
-      medialive.DescribeInputError
-    >
+    () => Effect.Effect<medialive.DescribeInputResponse, medialive.DescribeInputError>
   >
 > {}
-export const DescribeInput = Binding.Service<DescribeInput>(
-  "AWS.MediaLive.DescribeInput",
-);
+export const DescribeInput = Binding.Service<DescribeInput>("AWS.MediaLive.DescribeInput");

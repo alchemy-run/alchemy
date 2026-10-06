@@ -44,15 +44,16 @@ export interface Label extends Resource<
  * used to tag stored events for supervised model training. Event types
  * reference labels; they are cheap metadata objects.
  *
- * @resource
- * @section Creating a Label
- * @example Fraud and Legit Labels
+ * ### Creating a Label
+ * **Example:** Fraud and Legit Labels
  * ```typescript
  * const fraud = yield* FraudDetector.Label("fraud", {
  *   description: "confirmed fraudulent event",
  * });
  * const legit = yield* FraudDetector.Label("legit", {});
  * ```
+ *
+ * @resource
  */
 export const Label = Resource<Label>("AWS.FraudDetector.Label");
 
@@ -61,21 +62,14 @@ export const LabelProvider = () =>
     Label,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: LabelProps) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
       /** Look a label up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getLabels({ name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.labels?.[0];
       });
 
@@ -137,9 +131,7 @@ export const LabelProvider = () =>
           frauddetector.getLabels.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.labels ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.labels ?? []).map(toAttrs)),
             ),
           ),
       };

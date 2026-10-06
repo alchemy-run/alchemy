@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -71,9 +66,8 @@ export interface DedicatedIpPool extends Resource<
  *
  * `STANDARD` → `MANAGED` is an in-place scaling change. `MANAGED` → `STANDARD`
  * is not supported by AWS and replaces the pool.
- * @resource
- * @section Creating Pools
- * @example Standard Pool
+ * ### Creating Pools
+ * **Example:** Standard Pool
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -82,14 +76,14 @@ export interface DedicatedIpPool extends Resource<
  * });
  * ```
  *
- * @example Managed Pool
+ * **Example:** Managed Pool
  * ```typescript
  * const pool = yield* SES.DedicatedIpPool("Transactional", {
  *   scalingMode: "MANAGED",
  * });
  * ```
  *
- * @example Explicit Pool Name
+ * **Example:** Explicit Pool Name
  * ```typescript
  * // Without poolName a deterministic lowercase name is derived from
  * // app/stage/id. Pool names allow lowercase letters, numbers, and dashes.
@@ -98,8 +92,8 @@ export interface DedicatedIpPool extends Resource<
  * });
  * ```
  *
- * @section Changing the Scaling Mode
- * @example Migrate a Standard Pool to Managed
+ * ### Changing the Scaling Mode
+ * **Example:** Migrate a Standard Pool to Managed
  * ```typescript
  * // STANDARD -> MANAGED is applied in place — the pool keeps its name and
  * // its dedicated IPs.
@@ -111,8 +105,8 @@ export interface DedicatedIpPool extends Resource<
  * // is created and the old one deleted, dropping its dedicated IPs.
  * ```
  *
- * @section Isolating Reputation
- * @example Separate Marketing and Transactional Reputation
+ * ### Isolating Reputation
+ * **Example:** Separate Marketing and Transactional Reputation
  * ```typescript
  * // Give each kind of mail its own pool so a marketing reputation hit
  * // cannot take down password resets.
@@ -123,26 +117,22 @@ export interface DedicatedIpPool extends Resource<
  *   scalingMode: "MANAGED",
  * });
  * ```
+ *
+ * @resource
  */
-export const DedicatedIpPool = Resource<DedicatedIpPool>(
-  "AWS.SES.DedicatedIpPool",
-);
+export const DedicatedIpPool = Resource<DedicatedIpPool>("AWS.SES.DedicatedIpPool");
 
 const DEFAULT_SCALING_MODE = "STANDARD" as const;
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 // Dedicated IP pools are taggable but their API never returns an ARN — not
 // from getDedicatedIpPool, not from listDedicatedIpPools — so the ARN that
 // listTagsForResource requires has to be derived.
-const dedicatedIpPoolArnOf = (
-  region: string,
-  accountId: string,
-  name: string,
-) => `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${name}`;
+const dedicatedIpPoolArnOf = (region: string, accountId: string, name: string) =>
+  `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${name}`;
 
 export const DedicatedIpPoolProvider = () =>
   Provider.effect(
@@ -153,8 +143,7 @@ export const DedicatedIpPoolProvider = () =>
         props: Pick<DedicatedIpPoolProps, "poolName">,
       ) {
         return (
-          props.poolName ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
+          props.poolName ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
         );
       });
 
@@ -194,19 +183,13 @@ export const DedicatedIpPoolProvider = () =>
         // shape as `read`, and reporting every pool as STANDARD would
         // misdescribe a MANAGED one. Pools that vanish mid-walk drop out.
         list: Effect.fn(function* () {
-          const pages = yield* sesv2.listDedicatedIpPools
-            .pages({})
-            .pipe(Stream.runCollect);
-          const poolNames = Array.from(pages).flatMap(
-            (page) => page.DedicatedIpPools ?? [],
-          );
+          const pages = yield* sesv2.listDedicatedIpPools.pages({}).pipe(Stream.runCollect);
+          const poolNames = Array.from(pages).flatMap((page) => page.DedicatedIpPools ?? []);
           const pools = yield* Effect.forEach(
             poolNames,
             (poolName) =>
               getPool(poolName).pipe(
-                Effect.map((pool) =>
-                  pool ? [{ poolName, scalingMode: pool.ScalingMode }] : [],
-                ),
+                Effect.map((pool) => (pool ? [{ poolName, scalingMode: pool.ScalingMode }] : [])),
               ),
             { concurrency: 2 },
           );
@@ -236,10 +219,7 @@ export const DedicatedIpPoolProvider = () =>
           // A rename replaces the pool. So does a MANAGED → STANDARD switch,
           // which AWS has no API to perform in place (STANDARD → MANAGED is a
           // supported in-place scaling change, handled in reconcile).
-          if (
-            oldName !== newName ||
-            (oldMode === "MANAGED" && newMode === "STANDARD")
-          ) {
+          if (oldName !== newName || (oldMode === "MANAGED" && newMode === "STANDARD")) {
             return { action: "replace" } as const;
           }
         }),
@@ -263,11 +243,7 @@ export const DedicatedIpPoolProvider = () =>
                 ScalingMode: desiredMode,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
             // Not always readable the instant create returns, and on the
             // AlreadyExists race another writer may still be mid-create.
             observed = yield* getPool(name).pipe(

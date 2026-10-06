@@ -9,15 +9,16 @@ import * as Binding from "../../Binding.ts";
  * useful for identity/workspace audit automation. Provide the
  * implementation with
  * `Effect.provide(AWS.Chatbot.DescribeSlackWorkspacesHttp)`.
- * @binding
- * @section Slack Identity Management
- * @example List authorized Slack workspaces
+ * ### Slack Identity Management
+ * **Example:** List authorized Slack workspaces
  * ```typescript
  * const describeSlackWorkspaces =
  *   yield* AWS.Chatbot.DescribeSlackWorkspaces();
  * const result = yield* describeSlackWorkspaces();
  * const teamIds = (result.SlackWorkspaces ?? []).map((w) => w.SlackTeamId);
  * ```
+ *
+ * @binding
  */
 export interface DescribeSlackWorkspaces extends Binding.Service<
   DescribeSlackWorkspaces,
@@ -25,10 +26,7 @@ export interface DescribeSlackWorkspaces extends Binding.Service<
   () => Effect.Effect<
     (
       request?: chatbot.DescribeSlackWorkspacesRequest,
-    ) => Effect.Effect<
-      chatbot.DescribeSlackWorkspacesResult,
-      chatbot.DescribeSlackWorkspacesError
-    >
+    ) => Effect.Effect<chatbot.DescribeSlackWorkspacesResult, chatbot.DescribeSlackWorkspacesError>
   >
 > {}
 

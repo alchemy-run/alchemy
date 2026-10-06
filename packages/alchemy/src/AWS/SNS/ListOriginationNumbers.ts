@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListOriginationNumbersRequest
-  extends sns.ListOriginationNumbersRequest {}
+export interface ListOriginationNumbersRequest extends sns.ListOriginationNumbersRequest {}
 
 /**
  * Runtime binding for `sns:ListOriginationNumbers`.
@@ -11,13 +10,14 @@ export interface ListOriginationNumbersRequest
  * An account-scoped operation — lists the origination phone numbers
  * available to send SMS from this account.
  * Provide the `ListOriginationNumbersHttp` layer on the Function to implement the binding.
- * @binding
- * @section SMS Account Settings
- * @example List Origination Numbers
+ * ### SMS Account Settings
+ * **Example:** List Origination Numbers
  * ```typescript
  * const listOriginationNumbers = yield* SNS.ListOriginationNumbers();
  * const { PhoneNumbers } = yield* listOriginationNumbers();
  * ```
+ *
+ * @binding
  */
 export interface ListOriginationNumbers extends Binding.Service<
   ListOriginationNumbers,
@@ -25,10 +25,7 @@ export interface ListOriginationNumbers extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListOriginationNumbersRequest,
-    ) => Effect.Effect<
-      sns.ListOriginationNumbersResult,
-      sns.ListOriginationNumbersError
-    >
+    ) => Effect.Effect<sns.ListOriginationNumbersResult, sns.ListOriginationNumbersError>
   >
 > {}
 

@@ -5,14 +5,15 @@ import type { Cluster } from "./Cluster.ts";
 
 /**
  * Runtime binding for `elasticmapreduce:RemoveAutoScalingPolicy` — detaches the automatic scaling policy from an instance group of the bound cluster.
- * @binding
- * @section Scaling the Cluster
- * @example Remove a Group's Auto Scaling
+ * ### Scaling the Cluster
+ * **Example:** Remove a Group's Auto Scaling
  * ```typescript
  * const removeAutoScaling = yield* AWS.EMR.RemoveAutoScalingPolicy(cluster);
  *
  * yield* removeAutoScaling({ InstanceGroupId: taskGroupId });
  * ```
+ *
+ * @binding
  */
 export interface RemoveAutoScalingPolicy extends Binding.Service<
   RemoveAutoScalingPolicy,
@@ -22,10 +23,7 @@ export interface RemoveAutoScalingPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.RemoveAutoScalingPolicyInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.RemoveAutoScalingPolicyOutput,
-      SVC.RemoveAutoScalingPolicyError
-    >
+    ) => Effect.Effect<SVC.RemoveAutoScalingPolicyOutput, SVC.RemoveAutoScalingPolicyError>
   >
 > {}
 export const RemoveAutoScalingPolicy = Binding.Service<RemoveAutoScalingPolicy>(

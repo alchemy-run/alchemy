@@ -8,8 +8,7 @@ import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
  * Scaling resolves the instance's owning group for authorization, which the
  * binding grants on the bound {@link AutoScalingGroup}'s ARN.
  */
-export interface SetInstanceHealthRequest
-  extends autoscaling.SetInstanceHealthQuery {}
+export interface SetInstanceHealthRequest extends autoscaling.SetInstanceHealthQuery {}
 
 /**
  * Runtime binding for the `SetInstanceHealth` operation (IAM action
@@ -19,9 +18,8 @@ export interface SetInstanceHealthRequest
  * health checks: a watchdog Lambda (or the instance itself) flags an instance
  * `Unhealthy` and the group replaces it. Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.SetInstanceHealthHttp)`.
- * @binding
- * @section Custom Health Checks
- * @example Flag a failing instance for replacement
+ * ### Custom Health Checks
+ * **Example:** Flag a failing instance for replacement
  * ```typescript
  * // init — bind the operation to the group
  * const setInstanceHealth = yield* AWS.AutoScaling.SetInstanceHealth(group);
@@ -32,6 +30,8 @@ export interface SetInstanceHealthRequest
  *   HealthStatus: "Unhealthy",
  * });
  * ```
+ *
+ * @binding
  */
 export interface SetInstanceHealth extends Binding.Service<
   SetInstanceHealth,
@@ -41,10 +41,7 @@ export interface SetInstanceHealth extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetInstanceHealthRequest,
-    ) => Effect.Effect<
-      autoscaling.SetInstanceHealthResponse,
-      autoscaling.SetInstanceHealthError
-    >
+    ) => Effect.Effect<autoscaling.SetInstanceHealthResponse, autoscaling.SetInstanceHealthError>
   >
 > {}
 

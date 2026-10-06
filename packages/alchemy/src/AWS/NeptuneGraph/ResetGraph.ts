@@ -9,14 +9,15 @@ import type { Graph } from "./Graph.ts";
  *
  * Empties all data from the bound graph while keeping the graph itself (and optionally snapshotting first) — e.g. refresh a demo or staging dataset before a re-import. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.ResetGraphHttp)`.
- * @binding
- * @section Resetting a Graph
- * @example Wipe all data from a graph
+ * ### Resetting a Graph
+ * **Example:** Wipe all data from a graph
  * ```typescript
  * const resetGraph = yield* NeptuneGraph.ResetGraph(graph);
  *
  * yield* resetGraph({ skipSnapshot: true });
  * ```
+ *
+ * @binding
  */
 export interface ResetGraph extends Binding.Service<
   ResetGraph,
@@ -26,12 +27,7 @@ export interface ResetGraph extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<neptunegraph.ResetGraphInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.ResetGraphOutput,
-      neptunegraph.ResetGraphError
-    >
+    ) => Effect.Effect<neptunegraph.ResetGraphOutput, neptunegraph.ResetGraphError>
   >
 > {}
-export const ResetGraph = Binding.Service<ResetGraph>(
-  "AWS.NeptuneGraph.ResetGraph",
-);
+export const ResetGraph = Binding.Service<ResetGraph>("AWS.NeptuneGraph.ResetGraph");

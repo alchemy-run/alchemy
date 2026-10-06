@@ -11,14 +11,15 @@ import * as Binding from "../../Binding.ts";
  * grants `mediatailor:ListAlerts` on `*`. Provide the implementation with
  * `Effect.provide(AWS.MediaTailor.ListAlertsHttp)`.
  *
- * @binding
- * @section Channel Assembly
- * @example Check a channel for alerts
+ * ### Channel Assembly
+ * **Example:** Check a channel for alerts
  * ```typescript
  * const listAlerts = yield* AWS.MediaTailor.ListAlerts();
  *
  * const { Items } = yield* listAlerts({ ResourceArn: channelArn });
  * ```
+ *
+ * @binding
  */
 export interface ListAlerts extends Binding.Service<
   ListAlerts,
@@ -26,12 +27,7 @@ export interface ListAlerts extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.ListAlertsRequest,
-    ) => Effect.Effect<
-      mediatailor.ListAlertsResponse,
-      mediatailor.ListAlertsError
-    >
+    ) => Effect.Effect<mediatailor.ListAlertsResponse, mediatailor.ListAlertsError>
   >
 > {}
-export const ListAlerts = Binding.Service<ListAlerts>(
-  "AWS.MediaTailor.ListAlerts",
-);
+export const ListAlerts = Binding.Service<ListAlerts>("AWS.MediaTailor.ListAlerts");

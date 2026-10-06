@@ -1,14 +1,10 @@
 import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import {
-  type ApiGatewayResource,
-  GatewayResource,
-} from "../ApiGateway/GatewayResource.ts";
+import { type ApiGatewayResource, GatewayResource } from "../ApiGateway/GatewayResource.ts";
 import { MethodResource } from "../ApiGateway/Method.ts";
 import type { RestApi } from "../ApiGateway/RestApi.ts";
 import {
@@ -21,9 +17,7 @@ import {
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
-export const isRestApiEvent = (
-  event: any,
-): event is lambda.APIGatewayProxyEvent =>
+export const isRestApiEvent = (event: any): event is lambda.APIGatewayProxyEvent =>
   typeof event?.httpMethod === "string" &&
   typeof event?.resource === "string" &&
   typeof event?.requestContext?.apiId === "string" &&
@@ -43,9 +37,8 @@ const sanitizePathKey = (path: string, httpMethod: string) =>
  * `RestApiBinding` on the API so any `Deployment` of the same API is
  * ordered after them. At runtime it dispatches matching REST proxy events
  * to the registered handler.
- * @binding
- * @section Handling REST API routes
- * @example JSON endpoint
+ * ### Handling REST API routes
+ * **Example:** JSON endpoint
  * ```typescript
  * yield* AWS.ApiGateway.onRestApiRoute(
  *   api,
@@ -57,6 +50,8 @@ const sanitizePathKey = (path: string, httpMethod: string) =>
  *     }),
  * );
  * ```
+ *
+ * @binding
  */
 export const RestApiEventSource = Layer.effect(
   AGRestApiEventSource,
@@ -70,9 +65,7 @@ export const RestApiEventSource = Layer.effect(
     return Effect.fn(function* <Req = never>(
       api: RestApi,
       props: RestApiRouteProps,
-      handler: (
-        event: RestApiEvent,
-      ) => Effect.Effect<RestApiResult, never, Req>,
+      handler: (event: RestApiEvent) => Effect.Effect<RestApiResult, never, Req>,
     ) {
       const path = props.path ?? "/";
       const httpMethod = (props.httpMethod ?? "ANY").toUpperCase();
@@ -94,8 +87,7 @@ export const RestApiEventSource = Layer.effect(
             let prefix = "";
             for (const segment of path.split("/").filter(Boolean)) {
               prefix += `/${segment}`;
-              const resourceKey =
-                prefix.replace(/[^A-Za-z0-9]+/g, "") || "root";
+              const resourceKey = prefix.replace(/[^A-Za-z0-9]+/g, "") || "root";
               // Explicit annotation: `resource` feeds `parentId` for the next
               // loop iteration's `Resource(...)` call, which TS 7 otherwise
               // flags as a self-referential inference cycle (TS7022).

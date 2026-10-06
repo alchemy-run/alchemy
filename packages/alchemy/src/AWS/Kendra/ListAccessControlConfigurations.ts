@@ -19,15 +19,16 @@ export interface ListAccessControlConfigurationsRequest extends Omit<
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.ListAccessControlConfigurationsHttp)`.
  *
- * @binding
- * @section Access Control Configurations
- * @example List Runtime ACLs
+ * ### Access Control Configurations
+ * **Example:** List Runtime ACLs
  * ```typescript
  * const listAcls =
  *   yield* AWS.Kendra.ListAccessControlConfigurations(index);
  *
  * const { AccessControlConfigurations } = yield* listAcls();
  * ```
+ *
+ * @binding
  */
 export interface ListAccessControlConfigurations extends Binding.Service<
   ListAccessControlConfigurations,
@@ -43,7 +44,6 @@ export interface ListAccessControlConfigurations extends Binding.Service<
     >
   >
 > {}
-export const ListAccessControlConfigurations =
-  Binding.Service<ListAccessControlConfigurations>(
-    "AWS.Kendra.ListAccessControlConfigurations",
-  );
+export const ListAccessControlConfigurations = Binding.Service<ListAccessControlConfigurations>(
+  "AWS.Kendra.ListAccessControlConfigurations",
+);

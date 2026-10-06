@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * (typically from `ListInvitations`) rather than from a bound resource.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.AcceptInvitationHttp)`.
- * @binding
- * @section Responding to Invitations
- * @example Auto-Accept An Invitation
+ * ### Responding to Invitations
+ * **Example:** Auto-Accept An Invitation
  * ```typescript
  * // init — account-level binding, no resource argument
  * const acceptInvitation = yield* AWS.Detective.AcceptInvitation();
@@ -20,6 +19,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * yield* acceptInvitation({ GraphArn: invitation.GraphArn! });
  * ```
+ *
+ * @binding
  */
 export interface AcceptInvitation extends Binding.Service<
   AcceptInvitation,
@@ -27,12 +28,7 @@ export interface AcceptInvitation extends Binding.Service<
   () => Effect.Effect<
     (
       request: detective.AcceptInvitationRequest,
-    ) => Effect.Effect<
-      detective.AcceptInvitationResponse,
-      detective.AcceptInvitationError
-    >
+    ) => Effect.Effect<detective.AcceptInvitationResponse, detective.AcceptInvitationError>
   >
 > {}
-export const AcceptInvitation = Binding.Service<AcceptInvitation>(
-  "AWS.Detective.AcceptInvitation",
-);
+export const AcceptInvitation = Binding.Service<AcceptInvitation>("AWS.Detective.AcceptInvitation");
