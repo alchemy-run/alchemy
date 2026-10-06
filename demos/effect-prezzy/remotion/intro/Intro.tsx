@@ -8,21 +8,26 @@ import {
   watchStaticFile,
   type CalculateMetadataFunction,
 } from "remotion";
-import { introTimeline, type CodeStep, type IntroJson, type IntroStep } from "../../shared/intro.ts";
+import {
+  introTimeline,
+  type CodeStep,
+  type IntroJson,
+  type IntroStep,
+} from "../../shared/intro.ts";
 import { VIDEO } from "../../shared/types.ts";
 import { hand, sans } from "../fonts.ts";
 import { Slide } from "../slides/Slide.tsx";
 import { brand } from "../theme.ts";
+import { ArchView } from "./Arch.tsx";
 import { Board } from "./boards.tsx";
 import { CodeSlide, SPLIT } from "./CodeSlide.tsx";
+import { DashView } from "./Dash.tsx";
 import { LinksView } from "./Links.tsx";
 import { LoopView } from "./Loop.tsx";
+import { BrowserPane, TerminalPane } from "./Panes.tsx";
 import { PullRequestView } from "./PullRequest.tsx";
 import { PyramidView } from "./Pyramid.tsx";
 import { RollView } from "./Roll.tsx";
-import { ArchView } from "./Arch.tsx";
-import { DashView } from "./Dash.tsx";
-import { BrowserPane, TerminalPane } from "./Panes.tsx";
 
 /** Width available to a step title (the frame minus its side margins). */
 const TITLE_WIDTH = 1920 - 2 * 110;
@@ -62,11 +67,27 @@ const GeneratedArrow = ({ label, progress }: { label: string; progress: number }
   const y = y1 + (y2 - y1) * progress;
   return (
     <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0 }}>
-      <g opacity={progress > 0 ? 1 : 0} stroke="#e0a86b" strokeWidth={5} strokeLinecap="round" fill="none">
+      <g
+        opacity={progress > 0 ? 1 : 0}
+        stroke="#e0a86b"
+        strokeWidth={5}
+        strokeLinecap="round"
+        fill="none"
+      >
         <path d={`M ${x} ${y1} L ${x} ${y}`} />
-        {progress >= 1 ? <path d={`M ${x - 14} ${y2 - 18} L ${x} ${y2} L ${x + 14} ${y2 - 18}`} /> : null}
+        {progress >= 1 ? (
+          <path d={`M ${x - 14} ${y2 - 18} L ${x} ${y2} L ${x + 14} ${y2 - 18}`} />
+        ) : null}
       </g>
-      <text x={x + 30} y={(y1 + y2) / 2 + 12} fontFamily={hand} fontWeight={700} fontSize={40} fill="#e0a86b" opacity={progress}>
+      <text
+        x={x + 30}
+        y={(y1 + y2) / 2 + 12}
+        fontFamily={hand}
+        fontWeight={700}
+        fontSize={40}
+        fill="#e0a86b"
+        opacity={progress}
+      >
         {label}
       </text>
     </svg>
@@ -86,16 +107,30 @@ export const Intro = ({ intro }: IntroProps) => {
   const frame = useCurrentFrame();
   if (!intro) return null;
   const ranges = introTimeline(intro.steps);
-  const index = Math.max(0, ranges.findIndex((r) => frame >= r.from && frame < r.to));
+  const index = Math.max(
+    0,
+    ranges.findIndex((r) => frame >= r.from && frame < r.to),
+  );
   const at = index < 0 ? intro.steps.length - 1 : index;
   const step = intro.steps[at]!;
   const local = frame - ranges[at]!.from;
   const prev: IntroStep | undefined = intro.steps[at - 1];
   const prevCode = prev?.kind === "code" ? prev : undefined;
-  const prev2Code = intro.steps[at - 2]?.kind === "code" ? (intro.steps[at - 2] as CodeStep) : undefined;
+  const prev2Code =
+    intro.steps[at - 2]?.kind === "code" ? (intro.steps[at - 2] as CodeStep) : undefined;
 
   if (step.kind === "slide") {
-    return <Slide layout={step.layout} props={{ eyebrow: step.eyebrow, heading: step.heading, subtitle: step.subtitle, footer: step.footer }} />;
+    return (
+      <Slide
+        layout={step.layout}
+        props={{
+          eyebrow: step.eyebrow,
+          heading: step.heading,
+          subtitle: step.subtitle,
+          footer: step.footer,
+        }}
+      />
+    );
   }
   // The caption stays put across steps that share it.
   // The step's title is the slide's heading; it changes with every step.
@@ -121,16 +156,39 @@ export const Intro = ({ intro }: IntroProps) => {
                 local={local}
                 area={SPLIT.right}
               />
-              <LinksView step={step} prev={prevCode} left={step.under ? SPLIT.leftTop : SPLIT.left} right={SPLIT.right} local={local} delay={8} />
+              <LinksView
+                step={step}
+                prev={prevCode}
+                left={step.under ? SPLIT.leftTop : SPLIT.left}
+                right={SPLIT.right}
+                local={local}
+                delay={8}
+              />
             </>
           ) : null}
           {step.under && step.beside ? (
             <>
-              <CodeSlide step={step.under.step} prev={prevCode?.under?.step} local={local} area={SPLIT.leftBottom} />
-              <GeneratedArrow label={step.under.label} progress={prevCode?.under ? 1 : Math.min(1, Math.max(0, (local - 2) / 8))} />
+              <CodeSlide
+                step={step.under.step}
+                prev={prevCode?.under?.step}
+                local={local}
+                area={SPLIT.leftBottom}
+              />
+              <GeneratedArrow
+                label={step.under.label}
+                progress={prevCode?.under ? 1 : Math.min(1, Math.max(0, (local - 2) / 8))}
+              />
               <LinksView
                 step={{ ...step.under.step, links: step.under.links, beside: step.beside }}
-                prev={prevCode?.under ? { ...prevCode.under.step, links: prevCode.under.links, beside: prevCode.beside } : undefined}
+                prev={
+                  prevCode?.under
+                    ? {
+                        ...prevCode.under.step,
+                        links: prevCode.under.links,
+                        beside: prevCode.beside,
+                      }
+                    : undefined
+                }
                 left={SPLIT.leftBottom}
                 right={SPLIT.right}
                 local={local}
@@ -154,7 +212,11 @@ export const Intro = ({ intro }: IntroProps) => {
       ) : step.kind === "pyramid" ? (
         <PyramidView step={step} prev={lastOf(intro.steps, at, "pyramid")} local={local} />
       ) : step.kind === "comment" ? (
-        <PullRequestView step={step} prev={prev?.kind === "comment" ? prev : undefined} local={local} />
+        <PullRequestView
+          step={step}
+          prev={prev?.kind === "comment" ? prev : undefined}
+          local={local}
+        />
       ) : (
         <Board board={step.board} stage={step.stage} local={local} />
       )}

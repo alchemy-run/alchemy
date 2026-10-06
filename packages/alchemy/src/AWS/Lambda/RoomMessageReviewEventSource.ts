@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Room } from "../IVSChat/Room.ts";
 import {
   RoomMessageReviewEventSource as IVSChatRoomMessageReviewEventSource,
   type RoomMessageEvent,
@@ -9,7 +10,6 @@ import {
   type RoomMessageReviewHandlerFn,
   type RoomMessageReviewProps,
 } from "../IVSChat/RoomMessageReviewEventSource.ts";
-import type { Room } from "../IVSChat/Room.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -82,16 +82,13 @@ export const RoomMessageReviewEventSource = Layer.effect(
                 accountId: string;
                 region: string;
               }>;
-            const permission = yield* Permission(
-              `${room.LogicalId}-MessageReview-Permission`,
-              {
-                action: "lambda:InvokeFunction",
-                functionName: host.functionArn,
-                principal: "ivschat.amazonaws.com",
-                sourceAccount: accountId,
-                sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
-              },
-            );
+            const permission = yield* Permission(`${room.LogicalId}-MessageReview-Permission`, {
+              action: "lambda:InvokeFunction",
+              functionName: host.functionArn,
+              principal: "ivschat.amazonaws.com",
+              sourceAccount: accountId,
+              sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
+            });
 
             // The Permission echoes the `functionName` prop (the function
             // ARN) as an attribute — threading it as the handler `uri`

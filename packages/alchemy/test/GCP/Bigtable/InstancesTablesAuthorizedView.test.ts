@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Lifecycles provision a Bigtable instance; skipped with --fast.
 const runLifecycle = !process.env.FAST;
@@ -71,19 +68,16 @@ test.provider.skipIf(!runLifecycle)(
             instance: instance.name,
             columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
           });
-          const view = yield* GCP.Bigtable.InstancesTablesAuthorizedView(
-            "Public",
-            {
-              instance: instance.name,
-              table: table.name,
-              subsetView: {
-                rowPrefixes: [""],
-                familySubsets: {
-                  cf: { qualifierPrefixes: [""] },
-                },
+          const view = yield* GCP.Bigtable.InstancesTablesAuthorizedView("Public", {
+            instance: instance.name,
+            table: table.name,
+            subsetView: {
+              rowPrefixes: [""],
+              familySubsets: {
+                cf: { qualifierPrefixes: [""] },
               },
             },
-          );
+          });
           return { instance, table, view };
         }),
       );
@@ -94,12 +88,10 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.view.deletionProtection).toEqual(false);
       expect(created.view.subsetView?.familySubsets?.cf).toBeDefined();
 
-      const fetched = yield* bigtable.getProjectsInstancesTablesAuthorizedViews(
-        {
-          name: created.view.name,
-          view: "FULL",
-        },
-      );
+      const fetched = yield* bigtable.getProjectsInstancesTablesAuthorizedViews({
+        name: created.view.name,
+        view: "FULL",
+      });
       expect(fetched.name).toEqual(created.view.name);
 
       const updated = yield* stack.deploy(
@@ -121,21 +113,18 @@ test.provider.skipIf(!runLifecycle)(
             tableId: created.table.tableId,
             columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
           });
-          const view = yield* GCP.Bigtable.InstancesTablesAuthorizedView(
-            "Public",
-            {
-              instance: instance.name,
-              table: table.name,
-              authorizedViewId: created.view.authorizedViewId,
-              subsetView: {
-                rowPrefixes: [""],
-                familySubsets: {
-                  cf: { qualifierPrefixes: [""] },
-                },
+          const view = yield* GCP.Bigtable.InstancesTablesAuthorizedView("Public", {
+            instance: instance.name,
+            table: table.name,
+            authorizedViewId: created.view.authorizedViewId,
+            subsetView: {
+              rowPrefixes: [""],
+              familySubsets: {
+                cf: { qualifierPrefixes: [""] },
               },
-              deletionProtection: true,
             },
-          );
+            deletionProtection: true,
+          });
           return { instance, table, view };
         }),
       );
@@ -143,11 +132,10 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.view.name).toEqual(created.view.name);
       expect(updated.view.deletionProtection).toEqual(true);
 
-      const refetched =
-        yield* bigtable.getProjectsInstancesTablesAuthorizedViews({
-          name: created.view.name,
-          view: "FULL",
-        });
+      const refetched = yield* bigtable.getProjectsInstancesTablesAuthorizedViews({
+        name: created.view.name,
+        view: "FULL",
+      });
       expect(refetched.deletionProtection).toEqual(true);
 
       yield* stack.destroy();

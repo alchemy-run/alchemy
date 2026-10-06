@@ -1,8 +1,8 @@
 import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
@@ -59,10 +59,8 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -88,29 +86,18 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   const servicesAt = parts.lastIndexOf("services");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    serviceId:
-      servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    serviceId: servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -141,9 +128,8 @@ export const stringMap = (
     ),
   );
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -166,13 +152,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -228,11 +211,7 @@ export const waitUntilExists = <A, E, R>(
 export const waitUntilReady = <A extends { reconciling?: boolean }, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceReconciling,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceReconciling, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
@@ -244,8 +223,7 @@ export const waitUntilReady = <A extends { reconciling?: boolean }, E, R>(
     ),
     Effect.retry({
       while: (error) =>
-        error instanceof ResourceNotResolved ||
-        error instanceof ResourceReconciling,
+        error instanceof ResourceNotResolved || error instanceof ResourceReconciling,
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -322,8 +300,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

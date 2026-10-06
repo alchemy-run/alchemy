@@ -19,11 +19,11 @@ export default Cloudflare.Worker(
     };
   }),
   Effect.gen(function* () {
-  // #endregion top
+    // #endregion top
     return {
       fetch: Effect.succeed(HttpServerResponse.text("hello")),
     };
-  // #region bottom
+    // #region bottom
   }),
 );
 // #endregion bottom

@@ -1,16 +1,14 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import ArtifactRegistryBindingsHost, {
-  Images,
-} from "./fixtures/bindings-host.ts";
+import ArtifactRegistryBindingsHost, { Images } from "./fixtures/bindings-host.ts";
 import { IMAGE, pushDockerVersion } from "./registry.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -35,9 +33,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -47,12 +43,7 @@ const projectGrantsOf = (account: string) =>
 describe.skipIf(!dockerAvailable)(
   "ArtifactRegistry Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:artifactregistry",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:artifactregistry", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -101,24 +92,17 @@ describe.skipIf(!dockerAvailable)(
                 times: 10,
               }),
             );
-            expect((page.dockerImages ?? []).map((image) => image.uri)).toEqual(
-              [
-                `${repository.location}-docker.pkg.dev/${repository.project}/${repository.repositoryId}/${IMAGE}@${digest}`,
-              ],
-            );
+            expect((page.dockerImages ?? []).map((image) => image.uri)).toEqual([
+              `${repository.location}-docker.pkg.dev/${repository.project}/${repository.repositoryId}/${IMAGE}@${digest}`,
+            ]);
 
-            const policy =
-              yield* artifactregistry.getIamPolicyProjectsLocationsRepositories(
-                {
-                  resource: repository.name,
-                  "options.requestedPolicyVersion": 3,
-                },
-              );
+            const policy = yield* artifactregistry.getIamPolicyProjectsLocationsRepositories({
+              resource: repository.name,
+              "options.requestedPolicyVersion": 3,
+            });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => binding.role);
             expect(roles).toEqual(["roles/artifactregistry.reader"]);

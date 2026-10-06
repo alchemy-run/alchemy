@@ -169,10 +169,7 @@ const toAttrs = (source: cloudsearch.DataSource, project: string) => {
   };
 };
 
-const lookupName = (
-  datasourceId: string | undefined,
-  existingName: string | undefined,
-) => {
+const lookupName = (datasourceId: string | undefined, existingName: string | undefined) => {
   if (datasourceId !== undefined && datasourceId.length > 0) {
     return toDatasourceName(datasourceId);
   }
@@ -188,8 +185,7 @@ export const SettingsDatasourceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previous =
-        olds?.datasourceId ?? output?.datasourceId ?? output?.name;
+      const previous = olds?.datasourceId ?? output?.datasourceId ?? output?.name;
       if (
         previous !== undefined &&
         news.datasourceId !== undefined &&
@@ -204,10 +200,7 @@ export const SettingsDatasourceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const name = lookupName(
-        olds?.datasourceId ?? output?.datasourceId,
-        output?.name,
-      );
+      const name = lookupName(olds?.datasourceId ?? output?.datasourceId, output?.name);
       let existing = yield* getDatasource(name);
       if (existing !== undefined) return toAttrs(existing, env.project);
       if (olds === undefined) return undefined;
@@ -222,11 +215,10 @@ export const SettingsDatasourceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const displayName = (yield* toGeneratedName(
-        id,
-        news.displayName,
-        output?.displayName,
-      )).slice(0, MAX_DISPLAY_NAME_LENGTH);
+      const displayName = (yield* toGeneratedName(id, news.displayName, output?.displayName)).slice(
+        0,
+        MAX_DISPLAY_NAME_LENGTH,
+      );
       const name = lookupName(news.datasourceId, output?.name);
 
       let current = yield* getDatasource(name);
@@ -262,10 +254,7 @@ export const SettingsDatasourceProvider = () =>
           const done = yield* waitForOperation(created);
           const createdName = operationResourceName(done);
           if (createdName !== undefined) {
-            current = yield* waitUntilExists(
-              getDatasource(createdName),
-              createdName,
-            ).pipe(
+            current = yield* waitUntilExists(getDatasource(createdName), createdName).pipe(
               Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () =>
                 Effect.succeed(undefined),
               ),
@@ -290,22 +279,13 @@ export const SettingsDatasourceProvider = () =>
         current.disableModifications,
         desiredDisableModifications,
       );
-      const servingChanged = !sameBoolean(
-        current.disableServing,
-        desiredDisableServing,
-      );
+      const servingChanged = !sameBoolean(current.disableServing, desiredDisableServing);
       const thumbnailsChanged = !sameBoolean(
         current.returnThumbnailUrls,
         desiredReturnThumbnailUrls,
       );
-      const accountsChanged = !jsonEqual(
-        current.indexingServiceAccounts ?? [],
-        desiredAccounts,
-      );
-      const visibilityChanged = !jsonEqual(
-        current.itemsVisibility ?? [],
-        desiredVisibility,
-      );
+      const accountsChanged = !jsonEqual(current.indexingServiceAccounts ?? [], desiredAccounts);
+      const visibilityChanged = !jsonEqual(current.itemsVisibility ?? [], desiredVisibility);
 
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
@@ -324,10 +304,7 @@ export const SettingsDatasourceProvider = () =>
           body: desired,
         });
         yield* waitForOperation(patched);
-        const refreshed = yield* waitUntilExists(
-          getDatasource(resourceName),
-          resourceName,
-        );
+        const refreshed = yield* waitUntilExists(getDatasource(resourceName), resourceName);
         current = refreshed;
       }
 

@@ -1,17 +1,13 @@
 import * as Effect from "effect/Effect";
-import type { CryptoKey } from "./CryptoKey.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import type { CryptoKey } from "./CryptoKey.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud KMS CryptoKey bindings.
  * NOT exported from index.ts.
  */
-export const makeCryptoKeyHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeCryptoKeyHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -25,9 +21,7 @@ export const makeCryptoKeyHttpBinding = <
         iam: [grantFor(options.iam, key.name)],
       });
       const name = yield* key.name;
-      return Effect.fn(`${options.tag}(${key.LogicalId})`)(function* (
-        request?: Omit<I, "name">,
-      ) {
+      return Effect.fn(`${options.tag}(${key.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
           ...(request as I),
           name: yield* name,

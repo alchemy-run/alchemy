@@ -8,11 +8,7 @@ export const DeleteTopicHttp = Layer.effect(
   makeKafkaClusterHttpBinding({
     tag: "AWS.Kafka.DeleteTopic",
     operation: kafka.deleteTopic,
-    actions: [
-      "kafka:DeleteTopic",
-      "kafka-cluster:Connect",
-      "kafka-cluster:DeleteTopic",
-    ],
+    actions: ["kafka:DeleteTopic", "kafka-cluster:Connect", "kafka-cluster:DeleteTopic"],
     topicScoped: true,
   }),
 );

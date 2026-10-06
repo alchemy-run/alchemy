@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
-export interface UpdateKeysRequest extends Omit<
-  kvs.UpdateKeysRequest,
-  "KvsARN"
-> {}
+export interface UpdateKeysRequest extends Omit<kvs.UpdateKeysRequest, "KvsARN"> {}
 
 /**
  * Runtime binding for `cloudfront-keyvaluestore:UpdateKeys`.
@@ -40,12 +37,8 @@ export interface UpdateKeys extends Binding.Service<
   (
     store: KeyValueStore,
   ) => Effect.Effect<
-    (
-      request: UpdateKeysRequest,
-    ) => Effect.Effect<kvs.UpdateKeysResponse, kvs.UpdateKeysError>
+    (request: UpdateKeysRequest) => Effect.Effect<kvs.UpdateKeysResponse, kvs.UpdateKeysError>
   >
 > {}
 
-export const UpdateKeys = Binding.Service<UpdateKeys>(
-  "AWS.CloudFront.UpdateKeys",
-);
+export const UpdateKeys = Binding.Service<UpdateKeys>("AWS.CloudFront.UpdateKeys");

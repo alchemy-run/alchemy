@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -32,8 +27,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type DataAttributeBindingPath =
-  dataplex.GoogleCloudDataplexV1DataAttributeBindingPath;
+export type DataAttributeBindingPath = dataplex.GoogleCloudDataplexV1DataAttributeBindingPath;
 
 export type DataAttributeBindingProps = {
   /**
@@ -137,17 +131,10 @@ export const DataAttributeBinding = Resource<DataAttributeBinding>(
   "GCP.Dataplex.DataAttributeBinding",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  dataAttributeBindingId: string,
-) =>
+const resourceName = (project: string, location: string, dataAttributeBindingId: string) =>
   `projects/${project}/locations/${location}/dataAttributeBindings/${dataAttributeBindingId}`;
 
-const toAttrs = (
-  binding: dataplex.GoogleCloudDataplexV1DataAttributeBinding,
-  project: string,
-) => {
+const toAttrs = (binding: dataplex.GoogleCloudDataplexV1DataAttributeBinding, project: string) => {
   const name = binding.name ?? "";
   const parsed = parseName(name, "dataAttributeBindings");
   return {
@@ -182,9 +169,7 @@ const listBindings = (project: string, region: string) => {
       }),
       (page) => page.dataAttributeBindings,
     ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
+      Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
   return listAtLocation(project, region, collect);
@@ -206,16 +191,12 @@ export const DataAttributeBindingProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
-        previousId:
-          olds?.dataAttributeBindingId ?? output?.dataAttributeBindingId,
+        previousId: olds?.dataAttributeBindingId ?? output?.dataAttributeBindingId,
         nextId:
           news.dataAttributeBindingId ??
           olds?.dataAttributeBindingId ??
           output?.dataAttributeBindingId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -234,19 +215,12 @@ export const DataAttributeBindingProvider = () =>
         output?.dataAttributeBindingId,
         "attrbinding",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, dataAttributeBindingId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, dataAttributeBindingId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -264,10 +238,7 @@ export const DataAttributeBindingProvider = () =>
         output?.dataAttributeBindingId,
         "attrbinding",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, dataAttributeBindingId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -304,15 +275,12 @@ export const DataAttributeBindingProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const attributesChanged =
         fingerprint([...(current.attributes ?? [])].sort()) !==
         fingerprint([...(news.attributes ?? [])].sort());
-      const pathsChanged =
-        fingerprint(current.paths) !== fingerprint(news.paths);
+      const pathsChanged = fingerprint(current.paths) !== fingerprint(news.paths);
 
       if (
         labelsChanged ||
@@ -321,33 +289,29 @@ export const DataAttributeBindingProvider = () =>
         attributesChanged ||
         pathsChanged
       ) {
-        const operation =
-          yield* dataplex.patchProjectsLocationsDataAttributeBindings({
+        const operation = yield* dataplex.patchProjectsLocationsDataAttributeBindings({
+          name: current.name ?? name,
+          updateMask: [
+            labelsChanged ? "labels" : undefined,
+            descriptionChanged ? "description" : undefined,
+            displayNameChanged ? "displayName" : undefined,
+            attributesChanged ? "attributes" : undefined,
+            pathsChanged ? "paths" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: [
-              labelsChanged ? "labels" : undefined,
-              descriptionChanged ? "description" : undefined,
-              displayNameChanged ? "displayName" : undefined,
-              attributesChanged ? "attributes" : undefined,
-              pathsChanged ? "paths" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              displayName: news.displayName,
-              attributes: news.attributes,
-              paths: news.paths,
-            },
-          });
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            displayName: news.displayName,
+            attributes: news.attributes,
+            paths: news.paths,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

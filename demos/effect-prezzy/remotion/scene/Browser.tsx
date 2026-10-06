@@ -26,11 +26,7 @@ interface BrowserState {
   focusRing?: { x: number; y: number; width: number; height: number; opacity: number };
 }
 
-const browserState = (
-  capture: SceneCapture,
-  plan: SceneSchedule,
-  frame: number,
-): BrowserState => {
+const browserState = (capture: SceneCapture, plan: SceneSchedule, frame: number): BrowserState => {
   let state: BrowserState = {
     address: capture.start.browser?.url ?? "",
     focused: false,
@@ -46,16 +42,28 @@ const browserState = (
       state = {
         ...state,
         page: { ...state.page, title: beat.title, screenshot: beat.screenshot },
-        reveal: interpolate(since, [0, 4], [0.85, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+        reveal: interpolate(since, [0, 4], [0.85, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        }),
       };
       continue;
     }
     if (beat.kind === "browser.action" && state.page) {
       const local = frame - segment.from - segment.switchFrames;
       const { move, act } = TIMING.browserAction;
-      const target = { x: beat.target.x + beat.target.width / 2, y: beat.target.y + beat.target.height / 2 };
-      const from = state.pointer ?? { x: BROWSER_VIEWPORT.width * 0.62, y: BROWSER_VIEWPORT.height * 0.78 };
-      const t = interpolate(local, [0, move], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+      const target = {
+        x: beat.target.x + beat.target.width / 2,
+        y: beat.target.y + beat.target.height / 2,
+      };
+      const from = state.pointer ?? {
+        x: BROWSER_VIEWPORT.width * 0.62,
+        y: BROWSER_VIEWPORT.height * 0.78,
+      };
+      const t = interpolate(local, [0, move], [0, 1], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      });
       const ease = 1 - (1 - t) ** 3;
       const acted = local >= move + act / 2;
       state = {
@@ -73,12 +81,19 @@ const browserState = (
         },
         focusRing: {
           ...beat.target,
-          opacity: interpolate(local, [move - 4, move, move + act + 10, move + act + 20], [0, 1, 1, 0], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-          }),
+          opacity: interpolate(
+            local,
+            [move - 4, move, move + act + 10, move + act + 20],
+            [0, 1, 1, 0],
+            {
+              extrapolateLeft: "clamp",
+              extrapolateRight: "clamp",
+            },
+          ),
         },
-        page: acted ? { ...state.page, title: beat.title, screenshot: beat.screenshot } : state.page,
+        page: acted
+          ? { ...state.page, title: beat.title, screenshot: beat.screenshot }
+          : state.page,
       };
       continue;
     }
@@ -115,7 +130,16 @@ const CHROME_BG = "#202124";
 const TAB_BG = "#35363a";
 
 const Icon = ({ d }: { d: string }) => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c4c7c5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="22"
+    height="22"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="#c4c7c5"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d={d} />
   </svg>
 );
@@ -142,9 +166,21 @@ const Pointer = ({ x, y, pressed }: { x: number; y: number; pressed: number }) =
       width="28"
       height="34"
       viewBox="0 0 28 34"
-      style={{ position: "absolute", left: -3, top: -2, transform: `scale(${1 - pressed * 0.12})`, filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.5))" }}
+      style={{
+        position: "absolute",
+        left: -3,
+        top: -2,
+        transform: `scale(${1 - pressed * 0.12})`,
+        filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.5))",
+      }}
     >
-      <path d="M3 2 L3 26 L9.5 20 L14 31 L18.5 29 L14 18.5 L23 18.5 Z" fill="#111" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
+      <path
+        d="M3 2 L3 26 L9.5 20 L14 31 L18.5 29 L14 18.5 L23 18.5 Z"
+        fill="#111"
+        stroke="#fff"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
     </svg>
   </div>
 );
@@ -162,7 +198,15 @@ export const Browser = ({
   const caretVisible = state.focused && frame % 30 < 18;
   const bar = (
     <div style={{ flex: "none", background: CHROME_BG, fontFamily: sans }}>
-      <div style={{ height: 44, display: "flex", alignItems: "flex-end", padding: "0 12px 0 18px", gap: 18 }}>
+      <div
+        style={{
+          height: 44,
+          display: "flex",
+          alignItems: "flex-end",
+          padding: "0 12px 0 18px",
+          gap: 18,
+        }}
+      >
         <div style={{ alignSelf: "center" }}>
           <TrafficLights />
         </div>
@@ -180,14 +224,32 @@ export const Browser = ({
             fontSize: 14,
           }}
         >
-          <div style={{ width: 16, height: 16, borderRadius: 8, background: state.page ? "#8ab4f8" : "#5f6368", flex: "none" }} />
+          <div
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              background: state.page ? "#8ab4f8" : "#5f6368",
+              flex: "none",
+            }}
+          />
           <span style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
             {state.progress !== undefined ? "Loading…" : (state.page?.title ?? "New Tab")}
           </span>
         </div>
         <span style={{ alignSelf: "center", color: "#c4c7c5", fontSize: 22 }}>+</span>
       </div>
-      <div style={{ height: 48, display: "flex", alignItems: "center", gap: 14, padding: "0 16px", background: TAB_BG, position: "relative" }}>
+      <div
+        style={{
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          padding: "0 16px",
+          background: TAB_BG,
+          position: "relative",
+        }}
+      >
         <Icon d="M19 12H5M12 19l-7-7 7-7" />
         <Icon d="M5 12h14M12 5l7 7-7 7" />
         <Icon d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5" />
@@ -209,7 +271,9 @@ export const Browser = ({
           <Icon d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z" />
           <span>
             {state.address}
-            {caretVisible ? <span style={{ borderLeft: "2px solid #e8eaed", marginLeft: 1 }} /> : null}
+            {caretVisible ? (
+              <span style={{ borderLeft: "2px solid #e8eaed", marginLeft: 1 }} />
+            ) : null}
           </span>
         </div>
         {state.progress !== undefined ? (

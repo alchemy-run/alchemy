@@ -157,26 +157,15 @@ export const MattersExportProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousId = olds?.exportId ?? output?.exportId;
-      if (
-        previousId !== undefined &&
-        news.exportId !== undefined &&
-        news.exportId !== previousId
-      ) {
+      if (previousId !== undefined && news.exportId !== undefined && news.exportId !== previousId) {
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousName = olds?.name ?? output?.name;
-      if (
-        news.name !== undefined &&
-        previousName !== undefined &&
-        news.name !== previousName
-      ) {
+      if (news.name !== undefined && previousName !== undefined && news.name !== previousName) {
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousQuery = olds?.query ?? output?.query;
-      if (
-        previousQuery !== undefined &&
-        !jsonEqual(previousQuery, news.query)
-      ) {
+      if (previousQuery !== undefined && !jsonEqual(previousQuery, news.query)) {
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousOptions = olds?.exportOptions ?? output?.exportOptions;
@@ -209,9 +198,7 @@ export const MattersExportProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.name))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.name)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -237,27 +224,15 @@ export const MattersExportProvider = () =>
       const env = yield* GcpEnvironment.current;
       const matterId = news.matterId;
       const ownership = yield* ownershipLabels(id);
-      const displayName = yield* toGeneratedName(
-        id,
-        news.name,
-        output?.name,
-        40,
-      );
-      const name = encodeOwnershipLine(
-        ownership,
-        displayName,
-        MAX_EXPORT_NAME_LENGTH,
-      );
+      const displayName = yield* toGeneratedName(id, news.name, output?.name, 40);
+      const name = encodeOwnershipLine(ownership, displayName, MAX_EXPORT_NAME_LENGTH);
       const desired: vault.Export = {
         name,
         query: news.query,
         exportOptions: news.exportOptions,
       };
 
-      let current = yield* getExport(
-        matterId,
-        news.exportId ?? output?.exportId ?? "",
-      );
+      let current = yield* getExport(matterId, news.exportId ?? output?.exportId ?? "");
       if (current === undefined) {
         current = yield* findExportByName(matterId, name);
       }
@@ -271,9 +246,7 @@ export const MattersExportProvider = () =>
             matterId,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => findExportByName(matterId, name)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findExportByName(matterId, name)));
         current = created ?? undefined;
       }
 

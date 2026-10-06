@@ -207,13 +207,10 @@ const getByName = (name: string) =>
 const waitUntilPresent = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      link
-        ? Effect.succeed(link)
-        : Effect.fail(new BucketsDatasetsLinkNotResolved({ name })),
+      link ? Effect.succeed(link) : Effect.fail(new BucketsDatasetsLinkNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Observability.BucketsDatasetsLinkNotResolved",
+      while: (error) => error._tag === "GCP.Observability.BucketsDatasetsLinkNotResolved",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -222,20 +219,14 @@ const waitUntilPresent = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      link === undefined
-        ? Effect.void
-        : Effect.fail(new BucketsDatasetsLinkStillExists({ name })),
+      link === undefined ? Effect.void : Effect.fail(new BucketsDatasetsLinkStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Observability.BucketsDatasetsLinkStillExists",
+      while: (error) => error._tag === "GCP.Observability.BucketsDatasetsLinkStillExists",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag(
-      "GCP.Observability.BucketsDatasetsLinkStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Observability.BucketsDatasetsLinkStillExists", () => Effect.void),
   );
 
 export const BucketsDatasetsLinkProvider = () =>
@@ -256,9 +247,7 @@ export const BucketsDatasetsLinkProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.linkId ?? output?.linkId;
       const idChanged =
-        previousId !== undefined &&
-        news.linkId !== undefined &&
-        news.linkId !== previousId;
+        previousId !== undefined && news.linkId !== undefined && news.linkId !== previousId;
       const previousDataset = olds?.dataset ?? output?.dataset;
       const datasetChanged =
         previousDataset !== undefined &&
@@ -337,12 +326,7 @@ export const BucketsDatasetsLinkProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = news.location ?? output?.location ?? env.region;
-      const parent = resolveDatasetParent(
-        news.dataset,
-        news.bucket,
-        location,
-        env.project,
-      );
+      const parent = resolveDatasetParent(news.dataset, news.bucket, location, env.project);
       const linkId = yield* toLinkId(id, news.linkId, output?.linkId);
       const name = linkResourceName(
         parent.project,
@@ -371,9 +355,7 @@ export const BucketsDatasetsLinkProvider = () =>
               Effect.succeed<observability.Operation>({ done: true }),
             ),
           );
-        yield* waitForOperation(created).pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+        yield* waitForOperation(created).pipe(Effect.catchTag("NotFound", () => Effect.void));
         current = yield* waitUntilPresent(name);
       }
 
@@ -381,38 +363,27 @@ export const BucketsDatasetsLinkProvider = () =>
         return yield* new BucketsDatasetsLinkNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const updateMask = [
         descriptionChanged ? "description" : undefined,
         displayNameChanged ? "displayName" : undefined,
       ].filter((field): field is string => field !== undefined);
 
       if (updateMask.length > 0) {
-        const patched =
-          yield* observability.patchProjectsLocationsBucketsDatasetsLinks({
-            name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              displayName: news.displayName,
-              description: desiredDescription,
-            },
-          });
-        yield* waitForOperation(patched).pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+        const patched = yield* observability.patchProjectsLocationsBucketsDatasetsLinks({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            displayName: news.displayName,
+            description: desiredDescription,
+          },
+        });
+        yield* waitForOperation(patched).pipe(Effect.catchTag("NotFound", () => Effect.void));
         current = (yield* getByName(current.name ?? name)) ?? current;
       }
 
-      return toAttrs(
-        current,
-        parent.project,
-        parent.location,
-        parent.bucketId,
-        parent.datasetId,
-      );
+      return toAttrs(current, parent.project, parent.location, parent.bucketId, parent.datasetId);
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -422,9 +393,7 @@ export const BucketsDatasetsLinkProvider = () =>
           ? yield* listProjectDatasets().pipe(
               Effect.map((datasets) =>
                 datasets.flatMap((dataset) =>
-                  dataset.name
-                    ? [`${dataset.name}/links/${output.linkId}`]
-                    : [],
+                  dataset.name ? [`${dataset.name}/links/${output.linkId}`] : [],
                 ),
               ),
             )
@@ -432,15 +401,11 @@ export const BucketsDatasetsLinkProvider = () =>
       yield* Effect.forEach(
         names,
         (name) =>
-          observability
-            .deleteProjectsLocationsBucketsDatasetsLinks({ name })
-            .pipe(
-              Effect.flatMap((operation) =>
-                waitForOperation(operation, { notFoundOk: true }),
-              ),
-              Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
-              Effect.flatMap(() => waitUntilDeleted(name)),
-            ),
+          observability.deleteProjectsLocationsBucketsDatasetsLinks({ name }).pipe(
+            Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true })),
+            Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
+            Effect.flatMap(() => waitUntilDeleted(name)),
+          ),
         { concurrency: 1 },
       );
     }),

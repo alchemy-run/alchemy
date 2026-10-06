@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -77,11 +74,9 @@ test.provider.skipIf(!runLifecycle)(
           expect.arrayContaining([expect.objectContaining({ value: "red" })]),
         );
 
-        const fetched = yield* dialogflow.getProjectsLocationsAgentsEntityTypes(
-          {
-            name: created.name,
-          },
-        );
+        const fetched = yield* dialogflow.getProjectsLocationsAgentsEntityTypes({
+          name: created.name,
+        });
         expect(fetched.name).toEqual(created.name);
         expect(fetched.displayName).toEqual("color");
         expect(fetched.excludedPhrases ?? []).toEqual([]);
@@ -93,18 +88,14 @@ test.provider.skipIf(!runLifecycle)(
               entityTypeId: created.entityTypeId,
               displayName: "color",
               kind: "KIND_MAP",
-              entities: [
-                { value: "red", synonyms: ["red", "scarlet", "crimson"] },
-              ],
+              entities: [{ value: "red", synonyms: ["red", "scarlet", "crimson"] }],
             });
           }),
         );
 
         expect(updated.name).toEqual(created.name);
         expect(
-          updated.entities.some((entity) =>
-            (entity.synonyms ?? []).includes("crimson"),
-          ),
+          updated.entities.some((entity) => (entity.synonyms ?? []).includes("crimson")),
         ).toEqual(true);
 
         yield* stack.destroy();

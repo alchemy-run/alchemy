@@ -1,24 +1,20 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // ChannelConnection is created in a third-party provider project using
 // a subscriber Channel activation token. The testing project is not an
 // Eventarc SaaS partner; live create is gated.
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_EVENTARC_PARTNER === "1";
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_EVENTARC_PARTNER === "1";
 const LOCATION = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -74,9 +70,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.connection.name).toContain("/channelConnections/");
-      expect(created.connection.channelConnectionId).toEqual(
-        expect.any(String),
-      );
+      expect(created.connection.channelConnectionId).toEqual(expect.any(String));
       expect(created.connection.location).toEqual(LOCATION);
       expect(created.connection.channel).toEqual(created.channel.name);
       expect(created.connection.labels).toMatchObject({ env: "test" });

@@ -120,10 +120,9 @@ export type AgentsFlowsTransitionRouteGroup = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsFlowsTransitionRouteGroup =
-  Resource<AgentsFlowsTransitionRouteGroup>(
-    "GCP.Dialogflow.AgentsFlowsTransitionRouteGroup",
-  );
+export const AgentsFlowsTransitionRouteGroup = Resource<AgentsFlowsTransitionRouteGroup>(
+  "GCP.Dialogflow.AgentsFlowsTransitionRouteGroup",
+);
 
 export class AgentsFlowsTransitionRouteGroupNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsTransitionRouteGroupNotResolved",
@@ -132,9 +131,7 @@ export class AgentsFlowsTransitionRouteGroupNotResolved extends Data.TaggedError
 }> {}
 
 const routesOf = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3TransitionRoute[]
-    | undefined,
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3TransitionRoute[] | undefined,
 ): TransitionRoute[] =>
   (list ?? []).map((route) => ({
     intent: route.intent,
@@ -148,8 +145,7 @@ const routesOf = (
             text: message.text
               ? {
                   text: [...(message.text.text ?? [])],
-                  allowPlaybackInterruption:
-                    message.text.allowPlaybackInterruption,
+                  allowPlaybackInterruption: message.text.allowPlaybackInterruption,
                 }
               : undefined,
           })),
@@ -192,9 +188,7 @@ const findOwned = (id: string, flow: string, hinted?: string) =>
     for (const group of groups) {
       if (yield* ownedByAlchemy(id, ownershipText(group))) return group;
     }
-    return undefined as
-      | dialogflow.GoogleCloudDialogflowCxV3TransitionRouteGroup
-      | undefined;
+    return undefined as dialogflow.GoogleCloudDialogflowCxV3TransitionRouteGroup | undefined;
   });
 
 const listOwned = (project: string) =>
@@ -207,15 +201,11 @@ const listOwned = (project: string) =>
     )).flat();
     const groups = (yield* Effect.forEach(
       flows,
-      (flow) =>
-        flow.name ? listTransitionRouteGroups(flow.name) : Effect.succeed([]),
+      (flow) => (flow.name ? listTransitionRouteGroups(flow.name) : Effect.succeed([])),
       { concurrency: 4 },
     )).flat();
     return groups
-      .filter(
-        (group) =>
-          parseOwnership(group.displayName).labels["alchemy-id"] !== undefined,
-      )
+      .filter((group) => parseOwnership(group.displayName).labels["alchemy-id"] !== undefined)
       .map((group) => toAttrs(group, project));
   });
 
@@ -226,8 +216,7 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousFlow = olds?.flow ?? output?.flow;
-      const previousId =
-        olds?.transitionRouteGroupId ?? output?.transitionRouteGroupId;
+      const previousId = olds?.transitionRouteGroupId ?? output?.transitionRouteGroupId;
       if (
         (previousFlow !== undefined && news.flow !== previousFlow) ||
         (previousId !== undefined &&
@@ -256,9 +245,7 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -271,10 +258,7 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
       const env = yield* GcpEnvironment.current;
       const flow = news.flow;
       const ownership = yield* ownershipLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? "routes",
-      );
+      const displayName = encodeOwnershipLine(ownership, news.displayName ?? "routes");
       const transitionRoutes = news.transitionRoutes;
       const body: dialogflow.GoogleCloudDialogflowCxV3TransitionRouteGroup = {
         displayName,
@@ -290,11 +274,7 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
             languageCode: news.languageCode,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, flow, output?.name),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, flow, output?.name)));
         current = created ?? undefined;
       }
 
@@ -314,18 +294,15 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
       );
 
       if (displayChanged || routesChanged) {
-        current =
-          yield* dialogflow.patchProjectsLocationsAgentsFlowsTransitionRouteGroups(
-            {
-              name: currentName,
-              languageCode: news.languageCode,
-              updateMask: updateMaskOf(
-                displayChanged ? "display_name" : undefined,
-                routesChanged ? "transition_routes" : undefined,
-              ),
-              body: { ...body, name: currentName },
-            },
-          );
+        current = yield* dialogflow.patchProjectsLocationsAgentsFlowsTransitionRouteGroups({
+          name: currentName,
+          languageCode: news.languageCode,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            routesChanged ? "transition_routes" : undefined,
+          ),
+          body: { ...body, name: currentName },
+        });
       }
 
       return toAttrs(current, env.project);

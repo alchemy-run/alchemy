@@ -3,16 +3,16 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
+import { isTransientGcpError } from "../Errors.ts";
 import {
   alchemyLabelKeys,
   createInternalLabels,
   hasAlchemyLabels,
   stripInternalLabels,
 } from "../Labels.ts";
-import { isTransientGcpError } from "../Errors.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
@@ -21,9 +21,7 @@ export class DataformPending extends Data.TaggedError("GCP.Dataform.Pending")<{
   name: string;
 }> {}
 
-export class DataformStillExists extends Data.TaggedError(
-  "GCP.Dataform.StillExists",
-)<{
+export class DataformStillExists extends Data.TaggedError("GCP.Dataform.StillExists")<{
   name: string;
 }> {}
 
@@ -36,31 +34,19 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const parseResourceName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseResourceName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -78,11 +64,8 @@ export const expandParent = (
   return `${locationParent(project, location)}/${collection}/${value}`;
 };
 
-export const expandRepository = (
-  value: string,
-  project: string,
-  location: string,
-) => expandParent(value, project, location, "repositories");
+export const expandRepository = (value: string, project: string, location: string) =>
+  expandParent(value, project, location, "repositories");
 
 export const rfc1035 = (name: string, maxLength = MAX_ID_LENGTH): string => {
   let next = name
@@ -120,9 +103,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -184,10 +166,7 @@ const shrinkMarker = (
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = build(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -207,9 +186,7 @@ export const encodeOwnershipLine = (
 ): string => {
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   const reserved =
-    trimmed && trimmed.length > 0
-      ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 24))
-      : 0;
+    trimmed && trimmed.length > 0 ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 24)) : 0;
   const budget = Math.max(16, maxLength - reserved);
   const marker =
     budget < 54
@@ -253,14 +230,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -270,18 +243,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -301,14 +265,10 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.Dataform.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.Dataform.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -326,9 +286,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value !== undefined
-        ? Effect.succeed(value)
-        : Effect.fail(new DataformPending({ name })),
+      value !== undefined ? Effect.succeed(value) : Effect.fail(new DataformPending({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataform.Pending",
@@ -363,19 +321,13 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.asVoid,
   );
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -422,9 +374,7 @@ export const listRepositories = (project: string, location: string) =>
 
 export const listOwnedRepositories = (project: string, location: string) =>
   listRepositories(project, location).pipe(
-    Effect.map((repos) =>
-      repos.filter((repo) => hasAlchemyLabelMap(repo.labels)),
-    ),
+    Effect.map((repos) => repos.filter((repo) => hasAlchemyLabelMap(repo.labels))),
   );
 
 export const listTeamFolders = (project: string, location: string) =>
@@ -435,9 +385,7 @@ export const listTeamFolders = (project: string, location: string) =>
         pageSize: 1000,
       }),
       (page) =>
-        (page.results ?? []).flatMap((result) =>
-          result.teamFolder ? [result.teamFolder] : [],
-        ),
+        (page.results ?? []).flatMap((result) => (result.teamFolder ? [result.teamFolder] : [])),
     ),
   );
 
@@ -562,9 +510,7 @@ export const forEachOwnedRepository = <A, E, R>(
 ) =>
   listOwnedRepositories(project, location).pipe(
     Effect.flatMap((repos) =>
-      Effect.forEach(repos, fn, { concurrency: 4 }).pipe(
-        Effect.map((chunks) => chunks.flat()),
-      ),
+      Effect.forEach(repos, fn, { concurrency: 4 }).pipe(Effect.map((chunks) => chunks.flat())),
     ),
   );
 
@@ -576,11 +522,7 @@ export const deleteFolderTree = (name: string) =>
           name,
           body: { force: true },
         })
-        .pipe(
-          Effect.flatMap((operation) =>
-            waitForOperation(operation, { notFoundOk: true }),
-          ),
-        ),
+        .pipe(Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true }))),
     ),
     Effect.catchTag("NotFound", () => Effect.void),
     Effect.asVoid,
@@ -594,11 +536,7 @@ export const deleteTeamFolderTree = (name: string) =>
           name,
           body: { force: true },
         })
-        .pipe(
-          Effect.flatMap((operation) =>
-            waitForOperation(operation, { notFoundOk: true }),
-          ),
-        ),
+        .pipe(Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true }))),
     ),
     Effect.catchTag("NotFound", () => Effect.void),
     Effect.asVoid,

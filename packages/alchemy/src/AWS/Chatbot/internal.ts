@@ -10,7 +10,5 @@ export const toChatbotTags = (tags: Record<string, string>): chatbot.Tag[] =>
 /**
  * Convert an observed Chatbot wire `Tag` list to a plain tag map.
  */
-export const fromChatbotTags = (
-  tags: readonly chatbot.Tag[] | undefined,
-): Record<string, string> =>
+export const fromChatbotTags = (tags: readonly chatbot.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.TagKey, t.TagValue]));

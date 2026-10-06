@@ -31,11 +31,7 @@ export interface TestConnection extends Binding.Service<
   (
     instance: ReplicationInstance,
     endpoint: Endpoint,
-  ) => Effect.Effect<
-    () => Effect.Effect<dms.TestConnectionResponse, dms.TestConnectionError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<dms.TestConnectionResponse, dms.TestConnectionError>>
 > {}
 
-export const TestConnection = Binding.Service<TestConnection>(
-  "AWS.DMS.TestConnection",
-);
+export const TestConnection = Binding.Service<TestConnection>("AWS.DMS.TestConnection");

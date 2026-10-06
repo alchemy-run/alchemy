@@ -14,8 +14,7 @@ import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const OWNERSHIP_PREFIX = "alch-";
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type EncryptionConfig = {
   /** CMEK key resource name. */
@@ -114,9 +113,7 @@ export type InstancesBackup = Resource<
  * @resource
  * @category Looker
  */
-export const InstancesBackup = Resource<InstancesBackup>(
-  "GCP.Looker.InstancesBackup",
-);
+export const InstancesBackup = Resource<InstancesBackup>("GCP.Looker.InstancesBackup");
 
 export class InstancesBackupNotResolved extends Data.TaggedError(
   "GCP.Looker.InstancesBackupNotResolved",
@@ -137,9 +134,7 @@ export class InstancesBackupNotReady extends Data.TaggedError(
   state: string;
 }> {}
 
-export class InstancesBackupFailed extends Data.TaggedError(
-  "GCP.Looker.InstancesBackupFailed",
-)<{
+export class InstancesBackupFailed extends Data.TaggedError("GCP.Looker.InstancesBackupFailed")<{
   name: string;
   state: string;
 }> {}
@@ -173,14 +168,10 @@ const rfc1035 = (name: string): string => {
 const normalizeLocation = (location: string | undefined, fallback: string) =>
   lastSegment(location ?? fallback).toLowerCase();
 
-const instanceNameOf = (
-  project: string,
-  location: string,
-  instanceId: string,
-) => `projects/${project}/locations/${location}/instances/${instanceId}`;
+const instanceNameOf = (project: string, location: string, instanceId: string) =>
+  `projects/${project}/locations/${location}/instances/${instanceId}`;
 
-const resourceName = (instance: string, backupId: string) =>
-  `${instance}/backups/${backupId}`;
+const resourceName = (instance: string, backupId: string) => `${instance}/backups/${backupId}`;
 
 const parseBackupName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -188,26 +179,16 @@ const parseBackupName = (name: string, fallbackLocation: string) => {
   const instancesAt = parts.lastIndexOf("instances");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const instanceId =
-    instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : "";
-  const project =
-    projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "";
+  const instanceId = instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : "";
+  const project = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "";
   const location =
-    locationsAt >= 0 && parts[locationsAt + 1]
-      ? parts[locationsAt + 1]!
-      : fallbackLocation;
+    locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation;
   return {
     project,
     location,
     instanceId,
-    instance:
-      instanceId.length > 0
-        ? instanceNameOf(project, location, instanceId)
-        : "",
-    backupId:
-      backupsAt >= 0 && parts[backupsAt + 1]
-        ? parts[backupsAt + 1]!
-        : lastSegment(name),
+    instance: instanceId.length > 0 ? instanceNameOf(project, location, instanceId) : "",
+    backupId: backupsAt >= 0 && parts[backupsAt + 1] ? parts[backupsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -231,10 +212,7 @@ const parseInstanceRef = (
       trimmed.includes("/backups/") ? trimmed : `${trimmed}/backups/-`,
       "",
     );
-    const location = normalizeLocation(
-      parsed.location || fallbackLocation,
-      region,
-    );
+    const location = normalizeLocation(parsed.location || fallbackLocation, region);
     const project = parsed.project || fallbackProject;
     return {
       project,
@@ -259,8 +237,7 @@ const toEncryptionConfig = (
   if (config === undefined) return undefined;
   if (
     (config.kmsKeyName === undefined || config.kmsKeyName.length === 0) &&
-    (config.kmsKeyNameVersion === undefined ||
-      config.kmsKeyNameVersion.length === 0) &&
+    (config.kmsKeyNameVersion === undefined || config.kmsKeyNameVersion.length === 0) &&
     (config.kmsKeyState === undefined || config.kmsKeyState.length === 0)
   ) {
     return undefined;
@@ -279,24 +256,14 @@ const isOwnedBackupId = (backupId: string) =>
 
 const isPlaceholder = (backup: looker.InstanceBackup) => {
   const name = backup.name ?? "";
-  return (
-    name.length === 0 ||
-    name.endsWith("/backups/-") ||
-    name.endsWith("/backups/")
-  );
+  return name.length === 0 || name.endsWith("/backups/-") || name.endsWith("/backups/");
 };
 
-const isAvailable = (state: string | undefined) =>
-  (state ?? "").toUpperCase() === "ACTIVE";
+const isAvailable = (state: string | undefined) => (state ?? "").toUpperCase() === "ACTIVE";
 
-const isFailed = (state: string | undefined) =>
-  (state ?? "").toUpperCase() === "FAILED";
+const isFailed = (state: string | undefined) => (state ?? "").toUpperCase() === "FAILED";
 
-const toAttrs = (
-  backup: looker.InstanceBackup,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (backup: looker.InstanceBackup, project: string, region: string) => {
   const name = backup.name ?? "";
   const parsed = parseBackupName(name, region);
   return {
@@ -335,9 +302,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup
-        ? Effect.succeed(backup)
-        : Effect.fail(new InstancesBackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new InstancesBackupNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Looker.InstancesBackupNotResolved",
@@ -376,9 +341,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined
-        ? Effect.void
-        : Effect.fail(new InstancesBackupStillExists({ name })),
+      backup === undefined ? Effect.void : Effect.fail(new InstancesBackupStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Looker.InstancesBackupStillExists",
@@ -411,9 +374,7 @@ const listOwned = (project: string, region: string) =>
       Stream.filter((instance) => (instance.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as looker.Instance[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as looker.Instance[])),
       Effect.flatMap((instances) =>
         instances.length > 0
           ? Effect.succeed(instances)
@@ -423,14 +384,10 @@ const listOwned = (project: string, region: string) =>
                 pageSize: 1000,
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.instances ?? []),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.instances ?? [])),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as looker.Instance[]),
-                ),
+                Effect.catchTag("NotFound", () => Effect.succeed([] as looker.Instance[])),
               ),
       ),
       Effect.flatMap((instances) =>
@@ -446,24 +403,14 @@ const listOwned = (project: string, region: string) =>
           .filter(
             (backup) =>
               !isPlaceholder(backup) &&
-              isOwnedBackupId(
-                parseBackupName(backup.name ?? "", region).backupId,
-              ),
+              isOwnedBackupId(parseBackupName(backup.name ?? "", region).backupId),
           ),
       ),
     );
 
 export const InstancesBackupProvider = () =>
   Provider.succeed(InstancesBackup, {
-    stables: [
-      "name",
-      "backupId",
-      "instance",
-      "instanceId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "backupId", "instance", "instanceId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -475,19 +422,11 @@ export const InstancesBackupProvider = () =>
         olds?.instance ?? output?.instance ?? output?.instanceId,
       );
       const nextInstance = lastSegment(news.instance ?? previousInstance);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         (previousInstance.length > 0 &&
           nextInstance.length > 0 &&
           previousInstance !== nextInstance) ||

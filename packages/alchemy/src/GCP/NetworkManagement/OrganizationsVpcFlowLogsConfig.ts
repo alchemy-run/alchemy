@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -38,8 +33,7 @@ import {
 } from "./internal.ts";
 
 const COLLECTION = "vpcFlowLogsConfigs";
-const DEFAULT_STATE =
-  "ENABLED" satisfies networkmanagement.VpcFlowLogsConfigStateEnum;
+const DEFAULT_STATE = "ENABLED" satisfies networkmanagement.VpcFlowLogsConfigStateEnum;
 const DEFAULT_INTERVAL =
   "INTERVAL_5_SEC" satisfies networkmanagement.VpcFlowLogsConfigAggregationIntervalEnum;
 const DEFAULT_METADATA =
@@ -234,31 +228,18 @@ export type OrganizationsVpcFlowLogsConfig = Resource<
  * @resource
  * @category NetworkManagement
  */
-export const OrganizationsVpcFlowLogsConfig =
-  Resource<OrganizationsVpcFlowLogsConfig>(
-    "GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig",
-  );
+export const OrganizationsVpcFlowLogsConfig = Resource<OrganizationsVpcFlowLogsConfig>(
+  "GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig",
+);
 
-const resourceName = (
-  organization: string,
-  location: string,
-  vpcFlowLogsConfigId: string,
-) =>
-  organizationResourceName(
-    organization,
-    location,
-    COLLECTION,
-    vpcFlowLogsConfigId,
-  );
+const resourceName = (organization: string, location: string, vpcFlowLogsConfigId: string) =>
+  organizationResourceName(organization, location, COLLECTION, vpcFlowLogsConfigId);
 
-const stateOf = (value: string | undefined) =>
-  (value ?? DEFAULT_STATE).toUpperCase();
+const stateOf = (value: string | undefined) => (value ?? DEFAULT_STATE).toUpperCase();
 
-const intervalOf = (value: string | undefined) =>
-  (value ?? DEFAULT_INTERVAL).toUpperCase();
+const intervalOf = (value: string | undefined) => (value ?? DEFAULT_INTERVAL).toUpperCase();
 
-const metadataOf = (value: string | undefined) =>
-  (value ?? DEFAULT_METADATA).toUpperCase();
+const metadataOf = (value: string | undefined) => (value ?? DEFAULT_METADATA).toUpperCase();
 
 const crossProjectOf = (value: string | undefined) =>
   (value ?? DEFAULT_CROSS_PROJECT).toUpperCase();
@@ -296,14 +277,9 @@ const toTarget = (
     vpnTunnel?: string;
   },
 ) => ({
-  network:
-    news.network !== undefined
-      ? toNetworkResource(project, news.network)
-      : undefined,
+  network: news.network !== undefined ? toNetworkResource(project, news.network) : undefined,
   subnet:
-    news.subnet !== undefined
-      ? toSubnetworkResource(project, region, news.subnet)
-      : undefined,
+    news.subnet !== undefined ? toSubnetworkResource(project, region, news.subnet) : undefined,
   interconnectAttachment:
     news.interconnectAttachment !== undefined
       ? toRegionalComputeResource(
@@ -359,25 +335,16 @@ const listOwned = (organization: string) =>
     }),
     (page) => page.vpcFlowLogsConfigs,
   ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelKeys(item.labels)).map(toAttrs),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelKeys(item.labels)).map(toAttrs)),
   );
 
 export const OrganizationsVpcFlowLogsConfigProvider = () =>
   Provider.succeed(OrganizationsVpcFlowLogsConfig, {
-    stables: [
-      "name",
-      "vpcFlowLogsConfigId",
-      "organization",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "vpcFlowLogsConfigId", "organization", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.vpcFlowLogsConfigId ?? output?.vpcFlowLogsConfigId;
+      const previousId = olds?.vpcFlowLogsConfigId ?? output?.vpcFlowLogsConfigId;
       const nextId = news.vpcFlowLogsConfigId
         ? rfc1035(news.vpcFlowLogsConfigId, "vpc-flow-logs")
         : previousId;
@@ -394,8 +361,7 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
       const previousTarget = targetKey({
         network: olds?.network ?? output?.network,
         subnet: olds?.subnet ?? output?.subnet,
-        interconnectAttachment:
-          olds?.interconnectAttachment ?? output?.interconnectAttachment,
+        interconnectAttachment: olds?.interconnectAttachment ?? output?.interconnectAttachment,
         vpnTunnel: olds?.vpnTunnel ?? output?.vpnTunnel,
       });
       const nextTarget = targetKey({
@@ -405,12 +371,8 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
         vpnTunnel: news.vpnTunnel,
       });
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousOrg !== undefined &&
-          nextOrg !== undefined &&
-          nextOrg !== previousOrg) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousOrg !== undefined && nextOrg !== undefined && nextOrg !== previousOrg) ||
         previousLocation !== nextLocation ||
         previousTarget !== nextTarget
       ) {
@@ -434,22 +396,15 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
           Effect.succeed(output?.organization ?? ""),
         ),
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
       const name =
         output?.name ??
-        (organization.length > 0
-          ? resourceName(organization, location, vpcFlowLogsConfigId)
-          : "");
+        (organization.length > 0 ? resourceName(organization, location, vpcFlowLogsConfigId) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -475,10 +430,7 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
         news.organization ?? output?.organization,
         output?.organization,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(organization, location, vpcFlowLogsConfigId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -508,8 +460,7 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
               aggregationInterval,
               flowSampling,
               metadata,
-              metadataFields:
-                metadataFields.length > 0 ? metadataFields : undefined,
+              metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
               filterExpr,
               crossProjectMetadata,
               ...target,
@@ -532,24 +483,16 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const stateChanged = (current.state ?? DEFAULT_STATE) !== state;
       const intervalChanged =
-        (current.aggregationInterval ?? DEFAULT_INTERVAL) !==
-        aggregationInterval;
-      const samplingChanged =
-        (current.flowSampling ?? DEFAULT_SAMPLING) !== flowSampling;
-      const metadataChanged =
-        (current.metadata ?? DEFAULT_METADATA) !== metadata;
-      const metadataFieldsChanged = !sameStringList(
-        current.metadataFields,
-        metadataFields,
-      );
+        (current.aggregationInterval ?? DEFAULT_INTERVAL) !== aggregationInterval;
+      const samplingChanged = (current.flowSampling ?? DEFAULT_SAMPLING) !== flowSampling;
+      const metadataChanged = (current.metadata ?? DEFAULT_METADATA) !== metadata;
+      const metadataFieldsChanged = !sameStringList(current.metadataFields, metadataFields);
       const filterChanged = (current.filterExpr ?? "") !== (filterExpr ?? "");
       const crossProjectChanged =
-        (current.crossProjectMetadata ?? DEFAULT_CROSS_PROJECT) !==
-        crossProjectMetadata;
+        (current.crossProjectMetadata ?? DEFAULT_CROSS_PROJECT) !== crossProjectMetadata;
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -564,30 +507,24 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkmanagement.patchOrganizationsLocationsVpcFlowLogsConfigs(
-            {
-              name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                state,
-                aggregationInterval,
-                flowSampling,
-                metadata,
-                metadataFields,
-                filterExpr,
-                crossProjectMetadata,
-              },
-            },
-          );
+        const operation = yield* networkmanagement.patchOrganizationsLocationsVpcFlowLogsConfigs({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            name: current.name ?? name,
+            labels: desiredLabels,
+            description: news.description,
+            state,
+            aggregationInterval,
+            flowSampling,
+            metadata,
+            metadataFields,
+            filterExpr,
+            crossProjectMetadata,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current);

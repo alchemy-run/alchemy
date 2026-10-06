@@ -172,9 +172,7 @@ export const ContactProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toCoreAttrs(existing, parent, env.project);
-      return (yield* ownedByAlchemy(id, existing.email))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.email)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -194,9 +192,7 @@ export const ContactProvider = () =>
       const userEmail = yield* toEmail(id, news.email, output?.email);
       const stampedEmail = encodeEmail(ownership, userEmail);
       const languageTag = desiredLanguage(news.languageTag);
-      const categories = desiredCategories(
-        news.notificationCategorySubscriptions,
-      );
+      const categories = desiredCategories(news.notificationCategorySubscriptions);
       const body = toCreateBody({
         email: stampedEmail,
         languageTag,
@@ -205,12 +201,7 @@ export const ContactProvider = () =>
 
       let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
-        current = yield* findOwnedContact(
-          yield* listAt(parent),
-          id,
-          output?.name,
-          userEmail,
-        );
+        current = yield* findOwnedContact(yield* listAt(parent), id, output?.name, userEmail);
       }
 
       if (current === undefined) {
@@ -219,9 +210,7 @@ export const ContactProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               listAt(parent).pipe(
-                Effect.flatMap((contacts) =>
-                  findOwnedContact(contacts, id, undefined, userEmail),
-                ),
+                Effect.flatMap((contacts) => findOwnedContact(contacts, id, undefined, userEmail)),
               ),
             ),
           );

@@ -18,9 +18,7 @@ export type VerificationMethod =
   | "DNS"
   | (string & {});
 
-export const defaultVerificationMethod = (
-  siteType: string | undefined,
-): VerificationMethod =>
+export const defaultVerificationMethod = (siteType: string | undefined): VerificationMethod =>
   (siteType ?? DEFAULT_SITE_TYPE) === "INET_DOMAIN" ? "DNS_TXT" : "FILE";
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
@@ -51,10 +49,7 @@ export const toPathId = (id: string | undefined) => {
   }
 };
 
-export const normalizeIdentifier = (
-  identifier: string,
-  siteType: string | undefined,
-) => {
+export const normalizeIdentifier = (identifier: string, siteType: string | undefined) => {
   const trimmed = identifier.trim();
   if ((siteType ?? DEFAULT_SITE_TYPE) !== "SITE") return trimmed;
   return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
@@ -82,9 +77,7 @@ export const toGeneratedIdentifier = (
       lowercase: true,
     });
     const host = `${label}.${OWNERSHIP_HOST}`;
-    return (siteType ?? DEFAULT_SITE_TYPE) === "INET_DOMAIN"
-      ? host
-      : `https://${host}/`;
+    return (siteType ?? DEFAULT_SITE_TYPE) === "INET_DOMAIN" ? host : `https://${host}/`;
   });
 
 const emptyWebResources = () =>
@@ -105,10 +98,7 @@ export const listWebResources = () =>
     Effect.catchTag("NotFound", () => emptyWebResources()),
   );
 
-export const findWebResource = (
-  identifier: string | undefined,
-  siteType: string | undefined,
-) =>
+export const findWebResource = (identifier: string | undefined, siteType: string | undefined) =>
   Effect.gen(function* () {
     if (!identifier) return undefined;
     const desiredType = siteType ?? DEFAULT_SITE_TYPE;
@@ -148,8 +138,7 @@ export const getWebResourceToken = (request: {
         identifier: request.identifier,
         type: siteType,
       },
-      verificationMethod:
-        request.verificationMethod ?? defaultVerificationMethod(siteType),
+      verificationMethod: request.verificationMethod ?? defaultVerificationMethod(siteType),
     },
   });
 };

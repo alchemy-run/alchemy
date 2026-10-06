@@ -43,9 +43,7 @@ export interface AxiomTelemetryProps {
  * capability bindings.
  */
 const instance = <T>(resource: ResourceInput<T>): Effect.Effect<T> =>
-  Effect.isEffect(resource)
-    ? (resource as Effect.Effect<T>)
-    : Effect.succeed(resource);
+  Effect.isEffect(resource) ? (resource as Effect.Effect<T>) : Effect.succeed(resource);
 
 const signal = (
   token: ApiToken,
@@ -60,9 +58,7 @@ const signal = (
           Authorization: Output.map(
             token.token,
             (bearer) =>
-              Redacted.make(
-                `Bearer ${Redacted.value(bearer)}`,
-              ) as Redacted.Redacted<string>,
+              Redacted.make(`Bearer ${Redacted.value(bearer)}`) as Redacted.Redacted<string>,
           ),
           "X-Axiom-Dataset": dataset.name,
         },

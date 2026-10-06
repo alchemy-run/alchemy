@@ -9,11 +9,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { WorkerBinding } from "../Workers/WorkerBinding.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  S3Credentials,
-  S3CredentialsAccess,
-  S3CredentialsValue,
-} from "./S3Credentials.ts";
+import type { S3Credentials, S3CredentialsAccess, S3CredentialsValue } from "./S3Credentials.ts";
 
 /**
  * Deploy-time half of `Cloudflare.R2.S3Credentials`, shared by async Worker
@@ -59,17 +55,15 @@ export const bindS3Credentials = Effect.fn(function* (
   // One binding id per bucket + access level: bindings sharing an id
   // collapse to one, which would drop a write grant when a read binding
   // targets the same bucket (and vice versa).
-  yield* token.bind`Cloudflare.R2.S3Credentials(${bucket.LogicalId}, ${access})`(
-    {
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: PERMISSION_GROUPS[access],
-          resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
-        },
-      ],
-    },
-  );
+  yield* token.bind`Cloudflare.R2.S3Credentials(${bucket.LogicalId}, ${access})`({
+    policies: [
+      {
+        effect: "allow",
+        permissionGroups: PERMISSION_GROUPS[access],
+        resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+      },
+    ],
+  });
   const binding = Output.all(
     token.tokenId,
     token.value,
@@ -103,9 +97,7 @@ export type BucketInput = Bucket | Effect.Effect<Bucket, never, any>;
 
 /** Resolve a {@link BucketInput} to the bucket resource. */
 export const resolveBucket = (bucket: BucketInput) =>
-  (Effect.isEffect(bucket)
-    ? bucket
-    : Effect.succeed(bucket)) as Effect.Effect<Bucket>;
+  (Effect.isEffect(bucket) ? bucket : Effect.succeed(bucket)) as Effect.Effect<Bucket>;
 
 const PERMISSION_GROUPS: Record<S3CredentialsAccess, PermissionGroupRef[]> = {
   read: ["Workers R2 Storage Read"],
@@ -113,10 +105,7 @@ const PERMISSION_GROUPS: Record<S3CredentialsAccess, PermissionGroupRef[]> = {
   "read-write": ["Workers R2 Storage Read", "Workers R2 Storage Write"],
 };
 
-const liveEndpoint = (
-  accountId: string,
-  jurisdiction: Bucket.Jurisdiction,
-): string =>
+const liveEndpoint = (accountId: string, jurisdiction: Bucket.Jurisdiction): string =>
   jurisdiction === "default"
     ? `https://${accountId}.r2.cloudflarestorage.com`
     : `https://${accountId}.${jurisdiction}.r2.cloudflarestorage.com`;
@@ -129,10 +118,7 @@ const liveEndpoint = (
 const isLocal = (host: Worker, bucket: Bucket) =>
   Effect.gen(function* () {
     const runDefault = yield* defaultProviderMode;
-    return (
-      (host.Mode ?? runDefault) === "local" &&
-      (bucket.Mode ?? runDefault) === "local"
-    );
+    return (host.Mode ?? runDefault) === "local" && (bucket.Mode ?? runDefault) === "local";
   });
 
 /**

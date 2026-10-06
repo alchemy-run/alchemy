@@ -1,10 +1,6 @@
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
@@ -43,9 +39,7 @@ export const toResourceId = (
       maxLength,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `a${generated}`.slice(0, maxLength);
+    return /^[a-z]/.test(generated) ? generated : `a${generated}`.slice(0, maxLength);
   });
 
 const markerOf = (labels: Record<string, string>) =>
@@ -92,9 +86,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {

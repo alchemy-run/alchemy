@@ -8,8 +8,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import type { Providers } from "../Providers.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
+import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -122,22 +122,16 @@ export type AclPolicy = Resource<
  */
 export const AclPolicy = Resource<AclPolicy>("GCP.Redis.AclPolicy");
 
-export class AclPolicyNotResolved extends Data.TaggedError(
-  "GCP.Redis.AclPolicyNotResolved",
-)<{
+export class AclPolicyNotResolved extends Data.TaggedError("GCP.Redis.AclPolicyNotResolved")<{
   name: string;
 }> {}
 
-export class AclPolicyNotReady extends Data.TaggedError(
-  "GCP.Redis.AclPolicyNotReady",
-)<{
+export class AclPolicyNotReady extends Data.TaggedError("GCP.Redis.AclPolicyNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class AclPolicyStillExists extends Data.TaggedError(
-  "GCP.Redis.AclPolicyStillExists",
-)<{
+export class AclPolicyStillExists extends Data.TaggedError("GCP.Redis.AclPolicyStillExists")<{
   name: string;
 }> {}
 
@@ -172,16 +166,11 @@ const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     aclPolicyId:
-      policiesAt >= 0 && parts[policiesAt + 1]
-        ? parts[policiesAt + 1]!
-        : lastSegment(name),
+      policiesAt >= 0 && parts[policiesAt + 1] ? parts[policiesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -205,9 +194,8 @@ const ruleOf = (rule: redis.AclRule | AclRule): AclRule => ({
   rule: rule.rule,
 });
 
-const userRulesOf = (
-  rules: readonly (redis.AclRule | AclRule)[] | undefined,
-): AclRule[] => (rules ?? []).map(ruleOf);
+const userRulesOf = (rules: readonly (redis.AclRule | AclRule)[] | undefined): AclRule[] =>
+  (rules ?? []).map(ruleOf);
 
 const rulesKey = (rules: readonly AclRule[]) =>
   JSON.stringify(
@@ -218,13 +206,11 @@ const rulesKey = (rules: readonly AclRule[]) =>
       }))
       .sort(
         (left, right) =>
-          left.username.localeCompare(right.username) ||
-          left.rule.localeCompare(right.rule),
+          left.username.localeCompare(right.username) || left.rule.localeCompare(right.rule),
       ),
   );
 
-const desiredRules = (news: AclPolicyProps): redis.AclRule[] =>
-  userRulesOf(news.rules);
+const desiredRules = (news: AclPolicyProps): redis.AclRule[] => userRulesOf(news.rules);
 
 const toAttrs = (policy: redis.AclPolicy, project: string, region: string) => {
   const name = policy.name ?? "";
@@ -252,10 +238,7 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 /** Wait for an operation through the shared GCP waiter. */
-const waitForOperation = (
-  operation: redis.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+const waitForOperation = (operation: redis.Operation, options?: { notFoundOk?: boolean }) =>
   waitForGcpOperation(
     operation,
     (name) =>
@@ -275,8 +258,7 @@ const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
   );
@@ -284,9 +266,7 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy
-        ? Effect.succeed(policy)
-        : Effect.fail(new AclPolicyNotResolved({ name })),
+      policy ? Effect.succeed(policy) : Effect.fail(new AclPolicyNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.AclPolicyNotResolved",
@@ -324,9 +304,7 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy === undefined
-        ? Effect.void
-        : Effect.fail(new AclPolicyStillExists({ name })),
+      policy === undefined ? Effect.void : Effect.fail(new AclPolicyStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.AclPolicyStillExists",
@@ -345,18 +323,10 @@ export const AclPolicyProvider = () =>
 
       const previousId = olds?.aclPolicyId ?? output?.aclPolicyId;
       const nextId = news.aclPolicyId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation;
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
@@ -364,37 +334,20 @@ export const AclPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const aclPolicyId = yield* toId(
-        id,
-        olds?.aclPolicyId,
-        output?.aclPolicyId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, aclPolicyId);
+      const aclPolicyId = yield* toId(id, olds?.aclPolicyId, output?.aclPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, aclPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
       // No labels: state or the generated id proves ownership.
-      return output !== undefined || olds?.aclPolicyId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.aclPolicyId === undefined ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const aclPolicyId = yield* toId(
-        id,
-        news.aclPolicyId,
-        output?.aclPolicyId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const aclPolicyId = yield* toId(id, news.aclPolicyId, output?.aclPolicyId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, aclPolicyId);
       const bodyRules = desiredRules(news);
 
@@ -428,8 +381,7 @@ export const AclPolicyProvider = () =>
       }
 
       const rulesChanged =
-        rulesKey(userRulesOf(current.rules)) !==
-        rulesKey(userRulesOf(news.rules));
+        rulesKey(userRulesOf(current.rules)) !== rulesKey(userRulesOf(news.rules));
 
       if (rulesChanged) {
         const patched = yield* redis

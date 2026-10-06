@@ -1,22 +1,17 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-
-import TimestreamSinkFunctionLive, {
-  TimestreamSinkFunction,
-} from "./sink-handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import TimestreamSinkFunctionLive, { TimestreamSinkFunction } from "./sink-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const postJson = (baseUrl: string, pathname: string, body: unknown) =>
   HttpClient.execute(
-    HttpClientRequest.post(`${baseUrl}${pathname}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${pathname}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(
     Effect.flatMap((response) =>
       response.status === 200
@@ -25,10 +20,7 @@ const postJson = (baseUrl: string, pathname: string, body: unknown) =>
     ),
     // Retry through function-URL cold start / IAM propagation.
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -41,8 +33,8 @@ const countForHost = (baseUrl: string, host: string) =>
     ),
     Effect.map((body) =>
       Number(
-        (body as { rows: Array<{ Data: Array<{ ScalarValue?: string }> }> })
-          .rows[0]?.Data[0]?.ScalarValue ?? "0",
+        (body as { rows: Array<{ Data: Array<{ ScalarValue?: string }> }> }).rows[0]?.Data[0]
+          ?.ScalarValue ?? "0",
       ),
     ),
   );
@@ -55,14 +47,7 @@ const countForHost = (baseUrl: string, host: string) =>
 // account can run it unchanged.
 describe(
   "AWS.Timestream.RecordsSink",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:timestream",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:timestream", "live"] },
   () => {
     test.provider.skipIf(!process.env.AWS_TEST_TIMESTREAM)(
       "Lambda streams records through the sink; rejected records are dropped",
@@ -89,10 +74,7 @@ describe(
                 : Effect.fail(new Error(`only ${count} rows counted yet`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(bulkCount).toBe(150);
@@ -102,20 +84,14 @@ describe(
           // two valid records, and the handler still returns 200.
           yield* postJson(baseUrl, "/sink-rejects", { host: "sink-rejects" });
 
-          const rejectsCount = yield* countForHost(
-            baseUrl,
-            "sink-rejects",
-          ).pipe(
+          const rejectsCount = yield* countForHost(baseUrl, "sink-rejects").pipe(
             Effect.flatMap((count) =>
               count >= 2
                 ? Effect.succeed(count)
                 : Effect.fail(new Error(`only ${count} rows counted yet`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(rejectsCount).toBe(2);

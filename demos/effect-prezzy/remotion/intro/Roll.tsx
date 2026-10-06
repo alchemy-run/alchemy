@@ -39,11 +39,22 @@ const Tokens = ({ tokens }: { tokens: Token[] }) => (
  * value slides up and out, the new one slides up into place, and the slot's
  * width eases between the two so the rest of the line shifts smoothly.
  */
-export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollStep; local: number }) => {
+export const RollView = ({
+  step,
+  prev,
+  local,
+}: {
+  step: RollStep;
+  prev?: RollStep;
+  local: number;
+}) => {
   const same = prev?.group === step.group ? prev : undefined;
   const size = step.fontSize;
   const lh = size * LINE;
-  const t = interpolate(local, [0, 12], [0, 1], { ...clamp, easing: Easing.bezier(0.3, 0, 0.1, 1) });
+  const t = interpolate(local, [0, 12], [0, 1], {
+    ...clamp,
+    easing: Easing.bezier(0.3, 0, 0.1, 1),
+  });
   const enter = same ? 1 : interpolate(local, [0, 8], [0, 1], clamp);
 
   // Same place as every code slide: file label at the top-left of the code area, code
@@ -60,7 +71,11 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
   const spin = step.spin;
   const spinLen = spin ? spin.through.length + 1 : 0;
   const pos = spin
-    ? spinLen * interpolate(local, [0, step.frames - 6], [0, 1], { ...clamp, easing: Easing.bezier(0.15, 0.55, 0.25, 1) })
+    ? spinLen *
+      interpolate(local, [0, step.frames - 6], [0, 1], {
+        ...clamp,
+        easing: Easing.bezier(0.15, 0.55, 0.25, 1),
+      })
     : 0;
 
   const renderLine = (line: Token[], i: number) => {
@@ -70,7 +85,9 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
     for (const { slot, k } of here) {
       parts.push(<Tokens key={`f${k}`} tokens={slice(line, col, slot.start)} />);
       const now = slice(line, slot.start, slot.end);
-      const was = same?.slots[k] ? slice(same.lines[same.slots[k]!.line]!, same.slots[k]!.start, same.slots[k]!.end) : now;
+      const was = same?.slots[k]
+        ? slice(same.lines[same.slots[k]!.line]!, same.slots[k]!.start, same.slots[k]!.end)
+        : now;
       if (spin && spin.slot === k) {
         const color = now[0]?.color ?? brand.fg;
         const strip: Token[][] = [was, ...spin.through.map((text) => [{ text, color }]), now];
@@ -143,22 +160,70 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
     );
   };
 
-  const besideChanged = !!step.beside && step.beside.lines.map(text).join("\n") !== same?.beside?.lines.map(text).join("\n");
+  const besideChanged =
+    !!step.beside &&
+    step.beside.lines.map(text).join("\n") !== same?.beside?.lines.map(text).join("\n");
   const besideIn = besideChanged ? interpolate(local, [6, 16], [0, 1], clamp) : 1;
 
   return (
     <div style={{ position: "absolute", inset: 0, opacity: enter }}>
       {step.file ? (
-        <div style={{ position: "absolute", left: 110, top: labelTop, fontFamily: mono, fontSize: 22, color: brand.fgMuted }}>{step.file}</div>
+        <div
+          style={{
+            position: "absolute",
+            left: 110,
+            top: labelTop,
+            fontFamily: mono,
+            fontSize: 22,
+            color: brand.fgMuted,
+          }}
+        >
+          {step.file}
+        </div>
       ) : null}
-      <div style={{ position: "absolute", left, top, fontFamily: mono, fontSize: size, lineHeight: `${lh}px`, color: brand.fg }}>
+      <div
+        style={{
+          position: "absolute",
+          left,
+          top,
+          fontFamily: mono,
+          fontSize: size,
+          lineHeight: `${lh}px`,
+          color: brand.fg,
+        }}
+      >
         {step.lines.map(renderLine)}
       </div>
 
       {step.beside ? (
-        <div style={{ position: "absolute", left: left + codeW + gap, top, opacity: besideIn, transform: `translateY(${(1 - besideIn) * 10}px)` }}>
-          <div style={{ fontFamily: mono, fontSize: 22, color: brand.fgMuted, position: "absolute", top: labelTop - top }}>{step.beside.file}</div>
-          <div style={{ fontFamily: mono, fontSize: 24, lineHeight: `${24 * LINE}px`, whiteSpace: "pre" }}>
+        <div
+          style={{
+            position: "absolute",
+            left: left + codeW + gap,
+            top,
+            opacity: besideIn,
+            transform: `translateY(${(1 - besideIn) * 10}px)`,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: mono,
+              fontSize: 22,
+              color: brand.fgMuted,
+              position: "absolute",
+              top: labelTop - top,
+            }}
+          >
+            {step.beside.file}
+          </div>
+          <div
+            style={{
+              fontFamily: mono,
+              fontSize: 24,
+              lineHeight: `${24 * LINE}px`,
+              whiteSpace: "pre",
+            }}
+          >
             {step.beside.lines.map((line, i) => (
               <div key={i}>
                 <Tokens tokens={line} />
@@ -189,7 +254,11 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
             const lit = (s: RollStep | undefined) => (s?.reel?.at === i ? 1 : 0);
             const was = same ? lit(same) : lit(step);
             const passing = spin ? Math.round(pos) : 0;
-            const at = spin ? (passing === 0 ? (same?.reel?.at ?? -1) : spin.reelFrom + passing - 1) : -1;
+            const at = spin
+              ? passing === 0
+                ? (same?.reel?.at ?? -1)
+                : spin.reelFrom + passing - 1
+              : -1;
             const on = spin ? (at === i ? 1 : 0) : was + (lit(step) - was) * t;
             return (
               <div

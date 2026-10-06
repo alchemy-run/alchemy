@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -152,10 +147,9 @@ export type InterceptEndpointGroupAssociation = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const InterceptEndpointGroupAssociation =
-  Resource<InterceptEndpointGroupAssociation>(
-    "GCP.NetworkSecurity.InterceptEndpointGroupAssociation",
-  );
+export const InterceptEndpointGroupAssociation = Resource<InterceptEndpointGroupAssociation>(
+  "GCP.NetworkSecurity.InterceptEndpointGroupAssociation",
+);
 
 export class InterceptEndpointGroupAssociationNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupAssociationNotResolved",
@@ -203,9 +197,7 @@ const toAttrs = (
     location: parsed.location || DEFAULT_LOCATION,
     interceptEndpointGroup: association.interceptEndpointGroup,
     network: association.network,
-    networkName: association.network
-      ? lastSegment(association.network)
-      : undefined,
+    networkName: association.network ? lastSegment(association.network) : undefined,
     networkCookie: association.networkCookie,
     labels: userLabels(association.labels),
     state: association.state,
@@ -225,9 +217,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (
-        association,
-      ): association is networksecurity.InterceptEndpointGroupAssociation =>
+      (association): association is networksecurity.InterceptEndpointGroupAssociation =>
         association !== undefined,
       () => new InterceptEndpointGroupAssociationNotResolved({ name }),
     ),
@@ -245,8 +235,7 @@ const waitUntilReady = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.NetworkSecurity.InterceptEndpointGroupAssociationNotResolved",
+        error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupAssociationNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -257,14 +246,11 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((association) =>
       association === undefined
         ? Effect.void
-        : Effect.fail(
-            new InterceptEndpointGroupAssociationStillExists({ name }),
-          ),
+        : Effect.fail(new InterceptEndpointGroupAssociationStillExists({ name })),
     ),
     Effect.retry({
       while: (error) =>
-        error._tag ===
-        "GCP.NetworkSecurity.InterceptEndpointGroupAssociationStillExists",
+        error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupAssociationStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -277,13 +263,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.interceptEndpointGroupAssociations ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.interceptEndpointGroupAssociations ?? [])),
       Stream.filter((association) =>
-        Object.keys(association.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(association.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((association) => toAttrs(association, project)),
       Stream.runCollect,
@@ -307,15 +289,10 @@ export const InterceptEndpointGroupAssociationProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId =
-        olds?.interceptEndpointGroupAssociationId ??
-        output?.interceptEndpointGroupAssociationId;
+        olds?.interceptEndpointGroupAssociationId ?? output?.interceptEndpointGroupAssociationId;
       const nextId = news.interceptEndpointGroupAssociationId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousGroup = lastSegment(
         olds?.interceptEndpointGroup ?? output?.interceptEndpointGroup ?? "",
       );
@@ -325,9 +302,7 @@ export const InterceptEndpointGroupAssociationProvider = () =>
       );
       const nextNetwork = lastSegment(news.network);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousGroup.length > 0 && previousGroup !== nextGroup) ||
         (previousNetwork.length > 0 && previousNetwork !== nextNetwork);
@@ -346,18 +321,11 @@ export const InterceptEndpointGroupAssociationProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
         output?.name ??
-        resourceName(
-          env.project,
-          location,
-          COLLECTION,
-          interceptEndpointGroupAssociationId,
-        );
+        resourceName(env.project, location, COLLECTION, interceptEndpointGroupAssociationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -381,9 +349,7 @@ export const InterceptEndpointGroupAssociationProvider = () =>
         COLLECTION,
         interceptEndpointGroupAssociationId,
       );
-      const interceptEndpointGroup = toResourcePath(
-        news.interceptEndpointGroup,
-      );
+      const interceptEndpointGroup = toResourcePath(news.interceptEndpointGroup);
       const network = toNetworkResource(env.project, news.network);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -429,16 +395,14 @@ export const InterceptEndpointGroupAssociationProvider = () =>
 
       if (labelsChanged) {
         const operation =
-          yield* networksecurity.patchProjectsLocationsInterceptEndpointGroupAssociations(
-            {
+          yield* networksecurity.patchProjectsLocationsInterceptEndpointGroupAssociations({
+            name: current.name ?? name,
+            updateMask: "labels",
+            body: {
               name: current.name ?? name,
-              updateMask: "labels",
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-              },
+              labels: desiredLabels,
             },
-          );
+          });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

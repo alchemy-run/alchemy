@@ -105,10 +105,9 @@ export type DatasetsConversationsFeedbackLabel = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const DatasetsConversationsFeedbackLabel =
-  Resource<DatasetsConversationsFeedbackLabel>(
-    "GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabel",
-  );
+export const DatasetsConversationsFeedbackLabel = Resource<DatasetsConversationsFeedbackLabel>(
+  "GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabel",
+);
 
 export class DatasetsConversationsFeedbackLabelNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabelNotResolved",
@@ -120,10 +119,7 @@ const resourceName = (parent: string, feedbackLabelId: string) =>
   `${parent}/feedbackLabels/${feedbackLabelId}`;
 
 const toQa = (
-  value:
-    | cci.GoogleCloudContactcenterinsightsV1QaAnswerAnswerValue
-    | QaAnswerLabel
-    | undefined,
+  value: cci.GoogleCloudContactcenterinsightsV1QaAnswerAnswerValue | QaAnswerLabel | undefined,
 ): QaAnswerLabel | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -136,10 +132,7 @@ const toQa = (
   };
 };
 
-const toAttrs = (
-  label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel,
-  project: string,
-) => {
+const toAttrs = (label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel, project: string) => {
   const name = label.name ?? "";
   const parsed = parseOwnership(label.label);
   return {
@@ -174,27 +167,18 @@ const listDatasets = (parent: string) =>
   );
 
 const listAtDataset = (dataset: string, project: string) =>
-  cci.listAllFeedbackLabelsProjectsLocationsDatasets
-    .pages({ parent: dataset, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.feedbackLabels ?? [])),
-      Stream.filter((label) => hasOwnershipMarker(label.label)),
-      Stream.map((label) => toAttrs(label, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listAllFeedbackLabelsProjectsLocationsDatasets.pages({ parent: dataset, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.feedbackLabels ?? [])),
+    Stream.filter((label) => hasOwnershipMarker(label.label)),
+    Stream.map((label) => toAttrs(label, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const DatasetsConversationsFeedbackLabelProvider = () =>
   Provider.succeed(DatasetsConversationsFeedbackLabel, {
-    stables: [
-      "name",
-      "feedbackLabelId",
-      "parent",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "feedbackLabelId", "parent", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -222,23 +206,17 @@ export const DatasetsConversationsFeedbackLabelProvider = () =>
       );
       const name =
         output?.name ??
-        (olds?.parent !== undefined
-          ? resourceName(olds.parent, feedbackLabelId)
-          : "");
+        (olds?.parent !== undefined ? resourceName(olds.parent, feedbackLabelId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.label))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.label)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const datasets = yield* listDatasets(
-          locationParent(env.project, env.region),
-        );
+        const datasets = yield* listDatasets(locationParent(env.project, env.region));
         const pages = yield* Effect.forEach(
           datasets,
           (dataset) => listAtDataset(dataset, env.project),
@@ -256,11 +234,7 @@ export const DatasetsConversationsFeedbackLabelProvider = () =>
       );
       const name = resourceName(news.parent, feedbackLabelId);
       const ownership = yield* createInternalLabels(id);
-      const label = encodeOwnershipLine(
-        ownership,
-        news.label,
-        MAX_LABEL_LENGTH,
-      );
+      const label = encodeOwnershipLine(ownership, news.label, MAX_LABEL_LENGTH);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -286,31 +260,26 @@ export const DatasetsConversationsFeedbackLabelProvider = () =>
       }
 
       const labelChanged = (current.label ?? "") !== label;
-      const resourceChanged =
-        (current.labeledResource ?? "") !== (news.labeledResource ?? "");
-      const qaChanged = !sameJson(
-        toQa(current.qaAnswerLabel),
-        news.qaAnswerLabel,
-      );
+      const resourceChanged = (current.labeledResource ?? "") !== (news.labeledResource ?? "");
+      const qaChanged = !sameJson(toQa(current.qaAnswerLabel), news.qaAnswerLabel);
 
       if (labelChanged || resourceChanged || qaChanged) {
-        current =
-          yield* cci.patchProjectsLocationsDatasetsConversationsFeedbackLabels({
+        current = yield* cci.patchProjectsLocationsDatasetsConversationsFeedbackLabels({
+          name: current.name ?? name,
+          updateMask: [
+            labelChanged ? "label" : undefined,
+            resourceChanged ? "labeled_resource" : undefined,
+            qaChanged ? "qa_answer_label" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: [
-              labelChanged ? "label" : undefined,
-              resourceChanged ? "labeled_resource" : undefined,
-              qaChanged ? "qa_answer_label" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: current.name ?? name,
-              label,
-              labeledResource: news.labeledResource,
-              qaAnswerLabel: news.qaAnswerLabel,
-            },
-          });
+            label,
+            labeledResource: news.labeledResource,
+            qaAnswerLabel: news.qaAnswerLabel,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

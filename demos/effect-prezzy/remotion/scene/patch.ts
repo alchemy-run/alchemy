@@ -45,10 +45,20 @@ export const patchView = (
         rows.push({ kind: "del", text, colors: beforeColors.slice(b, b + text.length) });
         b += text.length + 1;
       } else if (change.added) {
-        rows.push({ kind: "add", text, colors: afterColors.slice(a, a + text.length), number: number++ });
+        rows.push({
+          kind: "add",
+          text,
+          colors: afterColors.slice(a, a + text.length),
+          number: number++,
+        });
         a += text.length + 1;
       } else {
-        rows.push({ kind: "same", text, colors: afterColors.slice(a, a + text.length), number: number++ });
+        rows.push({
+          kind: "same",
+          text,
+          colors: afterColors.slice(a, a + text.length),
+          number: number++,
+        });
         a += text.length + 1;
         b += text.length + 1;
       }
@@ -70,4 +80,5 @@ export const patchView = (
 };
 
 /** A file with nothing changing. */
-export const staticView = (text: string, colors: Colors): PatchView => patchView(text, text, colors, colors);
+export const staticView = (text: string, colors: Colors): PatchView =>
+  patchView(text, text, colors, colors);

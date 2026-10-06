@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface PublishRequest extends Omit<
-  pubsub.PublishProjectsTopicsRequest,
-  "topic"
-> {}
+export interface PublishRequest extends Omit<pubsub.PublishProjectsTopicsRequest, "topic"> {}
 
 /**
  * Runtime binding for Pub/Sub `topics.publish`.
@@ -35,11 +32,7 @@ export interface Publish extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PublishRequest,
-    ) => Effect.Effect<
-      pubsub.PublishResponse,
-      pubsub.PublishProjectsTopicsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<pubsub.PublishResponse, pubsub.PublishProjectsTopicsError, RuntimeContext>
   >
 > {}
 

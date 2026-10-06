@@ -21,17 +21,9 @@ import { compactStringMap } from "./ownership.ts";
 const MAX_DISPLAY_NAME_LENGTH = 512;
 const DEFAULT_COMBINER = "OR";
 
-export type AlertPolicyCombiner =
-  | "AND"
-  | "OR"
-  | "AND_WITH_MATCHING_RESOURCE"
-  | (string & {});
+export type AlertPolicyCombiner = "AND" | "OR" | "AND_WITH_MATCHING_RESOURCE" | (string & {});
 
-export type AlertPolicySeverity =
-  | "CRITICAL"
-  | "ERROR"
-  | "WARNING"
-  | (string & {});
+export type AlertPolicySeverity = "CRITICAL" | "ERROR" | "WARNING" | (string & {});
 
 export type Aggregation = {
   /**
@@ -457,19 +449,14 @@ const canonicalize = (value: unknown): unknown => {
   return value;
 };
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].sort();
 
 const withoutName = (condition: AlertCondition | monitoring.Condition) => {
   const { name: _name, ...rest } = condition;
   return rest;
 };
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       displayName ??
@@ -482,9 +469,7 @@ const toDisplayName = (
     );
   });
 
-const toLogMatch = (
-  value: monitoring.LogMatch | undefined,
-): LogMatch | undefined => {
+const toLogMatch = (value: monitoring.LogMatch | undefined): LogMatch | undefined => {
   if (value === undefined) return undefined;
   return {
     filter: value.filter,
@@ -580,11 +565,8 @@ const withConditionNames = (
   const unused = [...(observed ?? [])];
   return desired.map((condition, index) => {
     if (condition.name !== undefined) return toApiCondition(condition);
-    const byDisplay = unused.findIndex(
-      (item) => item.displayName === condition.displayName,
-    );
-    const matchIndex =
-      byDisplay >= 0 ? byDisplay : index < unused.length ? index : -1;
+    const byDisplay = unused.findIndex((item) => item.displayName === condition.displayName);
+    const matchIndex = byDisplay >= 0 ? byDisplay : index < unused.length ? index : -1;
     const match = matchIndex >= 0 ? unused.splice(matchIndex, 1)[0] : undefined;
     return { ...toApiCondition(condition), name: match?.name };
   });
@@ -604,9 +586,7 @@ const listOwned = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.alertPolicies ?? [])),
       Stream.filter((policy) =>
-        Object.keys(policy.userLabels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(policy.userLabels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((policy) => toAttrs(policy, project)),
       Stream.runCollect,
@@ -653,9 +633,7 @@ export const AlertPolicyProvider = () =>
       const existing = yield* observe(env.project, id, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -666,11 +644,7 @@ export const AlertPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -681,10 +655,7 @@ export const AlertPolicyProvider = () =>
 
       let current = yield* observe(env.project, id, output?.name);
 
-      const conditions = withConditionNames(
-        news.conditions,
-        current?.conditions,
-      );
+      const conditions = withConditionNames(news.conditions, current?.conditions);
       const body: monitoring.AlertPolicy = {
         displayName,
         combiner,
@@ -693,9 +664,7 @@ export const AlertPolicyProvider = () =>
         conditions,
         notificationChannels: desiredChannels,
         documentation: news.documentation,
-        alertStrategy: news.alertStrategy as
-          | monitoring.AlertStrategy
-          | undefined,
+        alertStrategy: news.alertStrategy as monitoring.AlertStrategy | undefined,
         severity: news.severity,
       };
 
@@ -725,8 +694,7 @@ export const AlertPolicyProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const combinerChanged =
-        (current.combiner ?? DEFAULT_COMBINER) !== combiner;
+      const combinerChanged = (current.combiner ?? DEFAULT_COMBINER) !== combiner;
       const enabledChanged = (current.enabled !== false) !== desiredEnabled;
       const channelsChanged = !jsonEqual(
         sorted(current.notificationChannels),
@@ -738,19 +706,12 @@ export const AlertPolicyProvider = () =>
       );
       const documentationChanged =
         news.documentation !== undefined &&
-        !jsonEqual(
-          toDocumentation(current.documentation) ?? null,
-          news.documentation,
-        );
+        !jsonEqual(toDocumentation(current.documentation) ?? null, news.documentation);
       const strategyChanged =
         news.alertStrategy !== undefined &&
-        !jsonEqual(
-          toAlertStrategy(current.alertStrategy) ?? null,
-          news.alertStrategy,
-        );
+        !jsonEqual(toAlertStrategy(current.alertStrategy) ?? null, news.alertStrategy);
       const severityChanged =
-        news.severity !== undefined &&
-        (current.severity ?? "") !== news.severity;
+        news.severity !== undefined && (current.severity ?? "") !== news.severity;
 
       const updateMask = [
         displayNameChanged ? "display_name" : undefined,

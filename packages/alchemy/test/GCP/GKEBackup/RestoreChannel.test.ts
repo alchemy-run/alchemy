@@ -1,17 +1,14 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gkebackup from "@distilled.cloud/gcp/gkebackup_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "getProjectsLocationsRestoreChannels on a missing channel fails with a typed tag",
@@ -32,9 +29,7 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(
-        (page.restoreChannels ?? []).map((item) => item.name),
-      ).not.toContain(
+      expect((page.restoreChannels ?? []).map((item) => item.name)).not.toContain(
         `projects/${project}/locations/us-central1/restoreChannels/alchemy-missing-channel`,
       );
 

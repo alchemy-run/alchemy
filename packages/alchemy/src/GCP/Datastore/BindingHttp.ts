@@ -19,8 +19,7 @@ export type DatastoreDatabaseRequest<
 };
 
 /** The Datastore API names the default database `""`, not `(default)`. */
-const apiDatabaseId = (databaseId: string) =>
-  databaseId === "(default)" ? "" : databaseId;
+const apiDatabaseId = (databaseId: string) => (databaseId === "(default)" ? "" : databaseId);
 
 /**
  * Shared HTTP scaffolding for Datastore bindings.
@@ -61,10 +60,7 @@ export const makeDatastoreHttpBinding = <
           ...request,
           projectId,
           // Named databases require the routing header.
-          requestParams:
-            id.length > 0
-              ? `project_id=${projectId}&database_id=${id}`
-              : undefined,
+          requestParams: id.length > 0 ? `project_id=${projectId}&database_id=${id}` : undefined,
           body: { ...request.body, databaseId: id },
         } as I);
       });

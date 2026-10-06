@@ -122,14 +122,7 @@ const getByName = (name: string) =>
 
 export const DataStoresConversationProvider = () =>
   Provider.succeed(DataStoresConversation, {
-    stables: [
-      "name",
-      "conversationId",
-      "dataStore",
-      "project",
-      "location",
-      "startTime",
-    ],
+    stables: ["name", "conversationId", "dataStore", "project", "location", "startTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -151,11 +144,7 @@ export const DataStoresConversationProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = expandDataStore(
-        news.dataStore,
-        env.project,
-        output?.location ?? "global",
-      );
+      const parent = expandDataStore(news.dataStore, env.project, output?.location ?? "global");
       const userPseudoId = news.userPseudoId;
 
       let current = yield* getByName(output?.name ?? "");
@@ -179,27 +168,24 @@ export const DataStoresConversationProvider = () =>
         });
       }
 
-      const userChanged =
-        userPseudoId !== undefined && current.userPseudoId !== userPseudoId;
-      const stateChanged =
-        news.state !== undefined && (current.state ?? "") !== news.state;
+      const userChanged = userPseudoId !== undefined && current.userPseudoId !== userPseudoId;
+      const stateChanged = news.state !== undefined && (current.state ?? "") !== news.state;
 
       if (userChanged || stateChanged) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsDataStoresConversations({
-            name: current.name ?? "",
-            updateMask: [
-              userChanged ? "user_pseudo_id" : undefined,
-              stateChanged ? "state" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: current.name,
-              userPseudoId,
-              state: news.state,
-            },
-          });
+        current = yield* discoveryengine.patchProjectsLocationsDataStoresConversations({
+          name: current.name ?? "",
+          updateMask: [
+            userChanged ? "user_pseudo_id" : undefined,
+            stateChanged ? "state" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name: current.name,
+            userPseudoId,
+            state: news.state,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

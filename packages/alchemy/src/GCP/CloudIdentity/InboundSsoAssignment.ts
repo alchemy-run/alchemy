@@ -19,11 +19,7 @@ import {
   sameText,
   updateMaskOf,
 } from "./internal.ts";
-import {
-  resourceNameFromOperation,
-  waitForOperation,
-  waitUntilPresent,
-} from "./operations.ts";
+import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from "./operations.ts";
 
 export type InboundSsoAssignmentSamlSsoInfo = {
   /** `inboundSamlSsoProfiles/{id}` to use when `ssoMode` is `SAML_SSO`. */
@@ -37,9 +33,7 @@ export type InboundSsoAssignmentOidcSsoInfo = {
 
 export type InboundSsoAssignmentSignInBehavior = {
   /** When to redirect sign-ins to the IdP. */
-  redirectCondition?:
-    | cloudidentity.SignInBehaviorRedirectConditionEnum
-    | (string & {});
+  redirectCondition?: cloudidentity.SignInBehaviorRedirectConditionEnum | (string & {});
 };
 
 export type InboundSsoAssignmentProps = {
@@ -186,21 +180,13 @@ const observeAssignment = (input: {
 
 export const InboundSsoAssignmentProvider = () =>
   Provider.succeed(InboundSsoAssignment, {
-    stables: [
-      "name",
-      "assignmentId",
-      "customer",
-      "targetGroup",
-      "targetOrgUnit",
-    ],
+    stables: ["name", "assignmentId", "customer", "targetGroup", "targetOrgUnit"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousCustomer = olds?.customer ?? output?.customer;
       const nextCustomer =
-        news.customer !== undefined
-          ? normalizeCustomer(news.customer)
-          : previousCustomer;
+        news.customer !== undefined ? normalizeCustomer(news.customer) : previousCustomer;
       const previousGroup = olds?.targetGroup ?? output?.targetGroup;
       const nextGroup = expandTargetGroup(news.targetGroup);
       const previousOu = olds?.targetOrgUnit ?? output?.targetOrgUnit;
@@ -232,16 +218,13 @@ export const InboundSsoAssignmentProvider = () =>
       Effect.gen(function* () {
         const groups = yield* listOwnedGroups();
         const names = new Set(
-          groups
-            .map((group) => group.name)
-            .filter((name): name is string => name !== undefined),
+          groups.map((group) => group.name).filter((name): name is string => name !== undefined),
         );
         const assignments = yield* listSsoAssignments();
         return assignments
           .filter(
             (assignment) =>
-              assignment.targetGroup !== undefined &&
-              names.has(assignment.targetGroup),
+              assignment.targetGroup !== undefined && names.has(assignment.targetGroup),
           )
           .map(toAttrs);
       }),
@@ -277,10 +260,7 @@ export const InboundSsoAssignmentProvider = () =>
           );
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
-            Effect.catchTag(
-              "GCP.CloudIdentity.OperationPending",
-              () => Effect.void,
-            ),
+            Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
           );
           const createdName = resourceNameFromOperation(created);
           if (createdName !== undefined) {
@@ -315,19 +295,14 @@ export const InboundSsoAssignmentProvider = () =>
       }
 
       const name = current.name ?? output?.name ?? "";
-      const modeChanged =
-        news.ssoMode !== undefined && !sameText(current.ssoMode, news.ssoMode);
-      const rankChanged =
-        news.rank !== undefined && (current.rank ?? 0) !== news.rank;
+      const modeChanged = news.ssoMode !== undefined && !sameText(current.ssoMode, news.ssoMode);
+      const rankChanged = news.rank !== undefined && (current.rank ?? 0) !== news.rank;
       const samlChanged =
-        news.samlSsoInfo !== undefined &&
-        !sameJson(current.samlSsoInfo, news.samlSsoInfo);
+        news.samlSsoInfo !== undefined && !sameJson(current.samlSsoInfo, news.samlSsoInfo);
       const oidcChanged =
-        news.oidcSsoInfo !== undefined &&
-        !sameJson(current.oidcSsoInfo, news.oidcSsoInfo);
+        news.oidcSsoInfo !== undefined && !sameJson(current.oidcSsoInfo, news.oidcSsoInfo);
       const signInChanged =
-        news.signInBehavior !== undefined &&
-        !sameJson(current.signInBehavior, news.signInBehavior);
+        news.signInBehavior !== undefined && !sameJson(current.signInBehavior, news.signInBehavior);
       const updateMask = updateMaskOf(
         modeChanged ? "sso_mode" : undefined,
         rankChanged ? "rank" : undefined,
@@ -349,10 +324,7 @@ export const InboundSsoAssignmentProvider = () =>
           },
         });
         yield* waitForOperation(patched).pipe(
-          Effect.catchTag(
-            "GCP.CloudIdentity.OperationPending",
-            () => Effect.void,
-          ),
+          Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
         );
         current = (yield* getSsoAssignment(name)) ?? current;
       }

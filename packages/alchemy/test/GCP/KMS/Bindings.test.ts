@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import KmsBindingsHost, { Cipher } from "./fixtures/bindings-host.ts";
 
@@ -55,15 +55,12 @@ describe.skipIf(!dockerAvailable)(
             expect(out.ciphertext).not.toEqual(out.plaintext);
             expect(out.decrypted).toEqual(out.plaintext);
 
-            const policy =
-              yield* kms.getIamPolicyProjectsLocationsKeyRingsCryptoKeys({
-                resource: keyName,
-              });
+            const policy = yield* kms.getIamPolicyProjectsLocationsKeyRingsCryptoKeys({
+              resource: keyName,
+            });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => binding.role)
               .sort();

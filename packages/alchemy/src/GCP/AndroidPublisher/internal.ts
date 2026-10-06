@@ -25,19 +25,14 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  jsonEqual(
-    [...(left ?? [])].slice().sort(),
-    [...(right ?? [])].slice().sort(),
-  );
+) => jsonEqual([...(left ?? [])].slice().sort(), [...(right ?? [])].slice().sort());
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 const isMissing = <E extends { readonly _tag: string }>(
   error: E,
-): error is Extract<E, { readonly _tag: "NotFound" }> =>
-  error._tag === "NotFound";
+): error is Extract<E, { readonly _tag: "NotFound" }> => error._tag === "NotFound";
 
 export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
@@ -71,13 +66,8 @@ const toGenerated = (
       : `${options.prefixIfNeeded}${generated}`.slice(0, options.maxLength);
     const trimmed = next
       .replace(new RegExp(`${options.delimiter}+`, "g"), options.delimiter)
-      .replace(
-        new RegExp(`^${options.delimiter}|${options.delimiter}$`, "g"),
-        "",
-      );
-    return trimmed.length >= 1
-      ? trimmed
-      : `${options.prefixIfNeeded}1`.slice(0, options.maxLength);
+      .replace(new RegExp(`^${options.delimiter}|${options.delimiter}$`, "g"), "");
+    return trimmed.length >= 1 ? trimmed : `${options.prefixIfNeeded}1`.slice(0, options.maxLength);
   });
 
 export const toProductId = (
@@ -91,11 +81,7 @@ export const toProductId = (
     prefixIfNeeded: "a",
   });
 
-export const toSku = (
-  id: string,
-  requested: string | undefined,
-  existing: string | undefined,
-) =>
+export const toSku = (id: string, requested: string | undefined, existing: string | undefined) =>
   toGenerated(id, requested, existing, {
     maxLength: MAX_SKU_LENGTH,
     delimiter: "_",
@@ -162,9 +148,7 @@ export const defaultInappListings = (
   return next;
 };
 
-export const publicBasePlans = (
-  plans: readonly androidpublisher.BasePlan[] | undefined,
-) =>
+export const publicBasePlans = (plans: readonly androidpublisher.BasePlan[] | undefined) =>
   plans?.map((plan) => ({
     regionalConfigs: plan.regionalConfigs,
     otherRegionsConfig: plan.otherRegionsConfig,
@@ -175,24 +159,22 @@ export const publicBasePlans = (
     prepaidBasePlanType: plan.prepaidBasePlanType,
   }));
 
-export const defaultOfferPhases =
-  (): androidpublisher.SubscriptionOfferPhase[] => [
-    {
-      duration: DEFAULT_OFFER_DURATION,
-      recurrenceCount: 1,
-      regionalConfigs: [{ regionCode: DEFAULT_REGION, free: {} }],
-    },
-  ];
+export const defaultOfferPhases = (): androidpublisher.SubscriptionOfferPhase[] => [
+  {
+    duration: DEFAULT_OFFER_DURATION,
+    recurrenceCount: 1,
+    regionalConfigs: [{ regionCode: DEFAULT_REGION, free: {} }],
+  },
+];
 
 export const defaultOfferRegionalConfigs =
   (): androidpublisher.RegionalSubscriptionOfferConfig[] => [
     { regionCode: DEFAULT_REGION, newSubscriberAvailability: true },
   ];
 
-export const defaultOfferTargeting =
-  (): androidpublisher.SubscriptionOfferTargeting => ({
-    acquisitionRule: { scope: { thisSubscription: {} } },
-  });
+export const defaultOfferTargeting = (): androidpublisher.SubscriptionOfferTargeting => ({
+  acquisitionRule: { scope: { thisSubscription: {} } },
+});
 
 export const defaultInappPrice = (): androidpublisher.Price => ({
   currency: DEFAULT_CURRENCY,

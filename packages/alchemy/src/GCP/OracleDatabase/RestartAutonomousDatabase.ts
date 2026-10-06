@@ -42,7 +42,6 @@ export interface RestartAutonomousDatabase extends Binding.Service<
   >
 > {}
 
-export const RestartAutonomousDatabase =
-  Binding.Service<RestartAutonomousDatabase>(
-    "GCP.OracleDatabase.RestartAutonomousDatabase",
-  );
+export const RestartAutonomousDatabase = Binding.Service<RestartAutonomousDatabase>(
+  "GCP.OracleDatabase.RestartAutonomousDatabase",
+);

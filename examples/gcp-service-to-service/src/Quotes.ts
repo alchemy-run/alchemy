@@ -38,10 +38,7 @@ export default class Quotes extends GCP.Function<Quotes>()(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }),
     };
   }),

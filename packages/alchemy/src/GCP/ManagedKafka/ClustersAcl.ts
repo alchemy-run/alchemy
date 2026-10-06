@@ -141,9 +141,7 @@ export type ClustersAcl = Resource<
  * @resource
  * @category ManagedKafka
  */
-export const ClustersAcl = Resource<ClustersAcl>(
-  "GCP.ManagedKafka.ClustersAcl",
-);
+export const ClustersAcl = Resource<ClustersAcl>("GCP.ManagedKafka.ClustersAcl");
 
 export class ClustersAclNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ClustersAclNotResolved",
@@ -154,12 +152,9 @@ export class ClustersAclNotResolved extends Data.TaggedError(
 const clusterOf = (cluster: string, project: string, location: string) =>
   expandParent(cluster, project, location, "clusters");
 
-const resourceName = (cluster: string, aclId: string) =>
-  `${cluster}/acls/${aclId}`;
+const resourceName = (cluster: string, aclId: string) => `${cluster}/acls/${aclId}`;
 
-const entriesOf = (
-  entries: readonly kafka.AclEntry[] | undefined,
-): AclEntry[] =>
+const entriesOf = (entries: readonly kafka.AclEntry[] | undefined): AclEntry[] =>
   (entries ?? []).map((entry) => ({
     operation: entry.operation,
     host: entry.host ?? "*",
@@ -194,11 +189,7 @@ const toAttrs = (acl: kafka.Acl, project: string) => {
   };
 };
 
-const toAclId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const toAclId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -222,10 +213,7 @@ export const ClustersAclProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       return replaceOnIdentity({
         previousId: olds?.aclId ?? output?.aclId,
         nextId: news.aclId ?? olds?.aclId ?? output?.aclId,
@@ -236,24 +224,17 @@ export const ClustersAclProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const aclId = yield* toAclId(id, olds?.aclId, output?.aclId);
       const cluster =
         olds?.cluster !== undefined
           ? clusterOf(olds.cluster, env.project, location)
           : (output?.cluster ?? "");
-      const name =
-        output?.name ??
-        (cluster.length > 0 ? resourceName(cluster, aclId) : "");
+      const name = output?.name ?? (cluster.length > 0 ? resourceName(cluster, aclId) : "");
       const existing = yield* getAcl(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return output !== undefined || olds !== undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds !== undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -269,11 +250,7 @@ export const ClustersAclProvider = () =>
                 pageSize: 1000,
               }),
               (page) => page.acls,
-            ).pipe(
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as kafka.Acl[]),
-              ),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as kafka.Acl[]))),
           { concurrency: 4 },
         );
         return acls.flat().map((acl) => toAttrs(acl, env.project));
@@ -281,10 +258,7 @@ export const ClustersAclProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const cluster = clusterOf(news.cluster, env.project, location);
       const aclId = yield* toAclId(id, news.aclId, output?.aclId);
       const name = output?.name ?? resourceName(cluster, aclId);
@@ -331,11 +305,6 @@ export const ClustersAclProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* kafka
         .deleteProjectsLocationsClustersAcls({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "AclClusterNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "AclClusterNotFound"], () => Effect.void));
     }),
   });

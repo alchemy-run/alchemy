@@ -9,8 +9,8 @@ import {
 } from "remotion";
 import { CAPTION_BAND, VIDEO, type AppId, type SceneCapture } from "../../shared/types.ts";
 import { sans } from "../fonts.ts";
-import { MenuBar, Wallpaper } from "./Desktop.tsx";
 import { Browser } from "./Browser.tsx";
+import { MenuBar, Wallpaper } from "./Desktop.tsx";
 import { Diagram } from "./Diagram.tsx";
 import { Editor } from "./Editor.tsx";
 import { schedule, segmentAt, TIMING, type SceneSchedule } from "./schedule.ts";
@@ -23,9 +23,7 @@ export interface SceneProps extends Record<string, unknown> {
 }
 
 /** Loads `out/capture/<id>/scene.json` and lays its beats out on frames. */
-export const calculateSceneMetadata: CalculateMetadataFunction<SceneProps> = async ({
-  props,
-}) => {
+export const calculateSceneMetadata: CalculateMetadataFunction<SceneProps> = async ({ props }) => {
   const response = await fetch(staticFile(`${props.id}/scene.json`));
   if (!response.ok) {
     throw new Error(`No capture for scene "${props.id}". Run \`pnpm capture\` first.`);
@@ -52,7 +50,10 @@ const captionAt = (plan: SceneSchedule, frame: number) => {
 };
 
 export const Caption = ({ text, since }: { text: string; since: number }) => {
-  const t = interpolate(since, [0, 5], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const t = interpolate(since, [0, 5], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
   return (
     <div
       style={{
@@ -96,7 +97,10 @@ export const Scene = ({ capture, plan }: SceneProps) => {
   if (!capture || !plan) return null;
 
   const segment = segmentAt(plan.segments, frame);
-  const focused = (segment?.app === "slide" || !segment ? "editor" : segment.app) as Exclude<AppId, "slide">;
+  const focused = (segment?.app === "slide" || !segment ? "editor" : segment.app) as Exclude<
+    AppId,
+    "slide"
+  >;
   const windows: Record<Exclude<AppId, "slide">, ReactNode> = {
     editor: <Editor capture={capture} plan={plan} frame={frame} />,
     terminal: <Terminal capture={capture} plan={plan} frame={frame} fps={fps} />,

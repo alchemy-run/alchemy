@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as androidmanagement from "@distilled.cloud/gcp/androidmanagement_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { enterpriseName, logLevel, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -78,14 +78,11 @@ test.provider.skipIf(!runLifecycle)(
             : yield* GCP.AndroidManagement.Enterprise("TokenHost", {
                 enterpriseDisplayName: "Token Host",
               });
-          const token = yield* GCP.AndroidManagement.EnterprisesEnrollmentToken(
-            "Enroll",
-            {
-              parent: enterprise.name,
-              duration: "86400s",
-              additionalData: "org-unit-a",
-            },
-          );
+          const token = yield* GCP.AndroidManagement.EnterprisesEnrollmentToken("Enroll", {
+            parent: enterprise.name,
+            duration: "86400s",
+            additionalData: "org-unit-a",
+          });
           return { enterprise, token };
         }),
       );
@@ -107,14 +104,11 @@ test.provider.skipIf(!runLifecycle)(
             : yield* GCP.AndroidManagement.Enterprise("TokenHost", {
                 enterpriseDisplayName: "Token Host",
               });
-          return yield* GCP.AndroidManagement.EnterprisesEnrollmentToken(
-            "Enroll",
-            {
-              parent: enterprise.name,
-              duration: "172800s",
-              additionalData: "org-unit-b",
-            },
-          );
+          return yield* GCP.AndroidManagement.EnterprisesEnrollmentToken("Enroll", {
+            parent: enterprise.name,
+            duration: "172800s",
+            additionalData: "org-unit-b",
+          });
         }),
       );
 

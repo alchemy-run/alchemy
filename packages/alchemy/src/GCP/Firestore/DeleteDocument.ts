@@ -46,6 +46,4 @@ export interface DeleteDocument extends Binding.Service<
   >
 > {}
 
-export const DeleteDocument = Binding.Service<DeleteDocument>(
-  "GCP.Firestore.DeleteDocument",
-);
+export const DeleteDocument = Binding.Service<DeleteDocument>("GCP.Firestore.DeleteDocument");

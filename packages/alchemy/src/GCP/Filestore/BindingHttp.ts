@@ -1,19 +1,15 @@
 import * as Effect from "effect/Effect";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Backup } from "./Backup.ts";
 import type { Instance } from "./Instance.ts";
 import type { InstancesSnapshot } from "./InstancesSnapshot.ts";
-import { bindGcpHost } from "../Host.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Filestore instance, backup, and snapshot
  * bindings. NOT exported from index.ts.
  */
-export const makeFilestoreInstanceHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeFilestoreInstanceHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -38,11 +34,7 @@ export const makeFilestoreInstanceHttpBinding = <
     });
   });
 
-export const makeFilestoreBackupHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeFilestoreBackupHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -67,11 +59,7 @@ export const makeFilestoreBackupHttpBinding = <
     });
   });
 
-export const makeFilestoreSnapshotHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeFilestoreSnapshotHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

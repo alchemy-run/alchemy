@@ -34,6 +34,4 @@ export interface DescribeUpdate extends Binding.Service<
     ) => Effect.Effect<eks.DescribeUpdateResponse, eks.DescribeUpdateError>
   >
 > {}
-export const DescribeUpdate = Binding.Service<DescribeUpdate>(
-  "AWS.EKS.DescribeUpdate",
-);
+export const DescribeUpdate = Binding.Service<DescribeUpdate>("AWS.EKS.DescribeUpdate");

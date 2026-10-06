@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   servicedirectory.getProjectsLocationsNamespaces({ name }).pipe(
@@ -87,10 +84,9 @@ test.provider(
       expect(replaced.name).not.toEqual(created.name);
       expect(replaced.name).toContain("/locations/us-east1/");
 
-      const fetchedReplacement =
-        yield* servicedirectory.getProjectsLocationsNamespaces({
-          name: replaced.name,
-        });
+      const fetchedReplacement = yield* servicedirectory.getProjectsLocationsNamespaces({
+        name: replaced.name,
+      });
       expect(fetchedReplacement.name).toEqual(replaced.name);
       expect(fetchedReplacement.labels?.env).toEqual("prod");
 

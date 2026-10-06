@@ -6,6 +6,8 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { isTransientGcpError } from "../Errors.ts";
+import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DatacatalogNotResolved,
@@ -33,11 +35,8 @@ import {
   type TagTemplateField,
   type TagTemplateFieldMap,
 } from "./internal.ts";
-import { createInternalLabels } from "../Labels.ts";
-import { isTransientGcpError } from "../Errors.ts";
 
-export type TagTemplateFieldType =
-  datacatalog.GoogleCloudDatacatalogV1FieldType;
+export type TagTemplateFieldType = datacatalog.GoogleCloudDatacatalogV1FieldType;
 export type { TagTemplateField, TagTemplateFieldMap };
 
 export type TagTemplateProps = {
@@ -154,15 +153,11 @@ export type TagTemplate = Resource<
  */
 export const TagTemplate = Resource<TagTemplate>("GCP.DataCatalog.TagTemplate");
 
-const resourceName = (
-  project: string,
-  location: string,
-  tagTemplateId: string,
-) => `${locationParent(project, location)}/tagTemplates/${tagTemplateId}`;
+const resourceName = (project: string, location: string, tagTemplateId: string) =>
+  `${locationParent(project, location)}/tagTemplates/${tagTemplateId}`;
 
-const ownershipText = (
-  template: datacatalog.GoogleCloudDatacatalogV1TagTemplate,
-) => template.fields?.[OWNERSHIP_FIELD_ID]?.description;
+const ownershipText = (template: datacatalog.GoogleCloudDatacatalogV1TagTemplate) =>
+  template.fields?.[OWNERSHIP_FIELD_ID]?.description;
 
 const toAttrs = (
   template: datacatalog.GoogleCloudDatacatalogV1TagTemplate,
@@ -270,14 +265,9 @@ const syncFields = (
       }
       const displayChanged = !sameText(previous.displayName, next.displayName);
       const requiredChanged = !sameBool(previous.isRequired, next.isRequired);
-      const descriptionChanged = !sameText(
-        previous.description,
-        next.description,
-      );
+      const descriptionChanged = !sameText(previous.description, next.description);
       const orderChanged = (previous.order ?? 0) !== (next.order ?? 0);
-      const enumChanged =
-        fingerprint(previous.type?.enumType) !==
-        fingerprint(next.type?.enumType);
+      const enumChanged = fingerprint(previous.type?.enumType) !== fingerprint(next.type?.enumType);
       if (
         !displayChanged &&
         !requiredChanged &&
@@ -322,12 +312,8 @@ export const TagTemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.tagTemplateId ?? output?.tagTemplateId,
-        nextId:
-          news.tagTemplateId ?? olds?.tagTemplateId ?? output?.tagTemplateId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.tagTemplateId ?? olds?.tagTemplateId ?? output?.tagTemplateId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -337,23 +323,13 @@ export const TagTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const tagTemplateId = yield* toTagTemplateId(
-        id,
-        olds?.tagTemplateId,
-        output?.tagTemplateId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, tagTemplateId);
+      const tagTemplateId = yield* toTagTemplateId(id, olds?.tagTemplateId, output?.tagTemplateId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, tagTemplateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -365,17 +341,9 @@ export const TagTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const tagTemplateId = yield* toTagTemplateId(
-        id,
-        news.tagTemplateId,
-        output?.tagTemplateId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, tagTemplateId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const tagTemplateId = yield* toTagTemplateId(id, news.tagTemplateId, output?.tagTemplateId);
+      const name = output?.name ?? resourceName(env.project, location, tagTemplateId);
       const ownership = yield* createInternalLabels(id);
       const fields = desiredFields(ownership, news.fields);
       const isPubliclyReadable = news.isPubliclyReadable === true;
@@ -403,10 +371,7 @@ export const TagTemplateProvider = () =>
 
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, news.displayName);
-      const publicChanged = !sameBool(
-        current.isPubliclyReadable,
-        isPubliclyReadable,
-      );
+      const publicChanged = !sameBool(current.isPubliclyReadable, isPubliclyReadable);
 
       if (displayChanged || publicChanged) {
         current = yield* retryTransient(
@@ -427,8 +392,7 @@ export const TagTemplateProvider = () =>
 
       if (
         !sameJson(userFields(current.fields), userFields(fields)) ||
-        parseOwnership(ownershipText(current)).labels["alchemy-id"] !==
-          ownership["alchemy-id"]
+        parseOwnership(ownershipText(current)).labels["alchemy-id"] !== ownership["alchemy-id"]
       ) {
         yield* syncFields(currentName, current.fields, fields);
         current = (yield* getByName(currentName)) ?? current;
@@ -446,8 +410,7 @@ export const TagTemplateProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (error) =>
-                error._tag === "Conflict" || isTransientGcpError(error),
+              while: (error) => error._tag === "Conflict" || isTransientGcpError(error),
               times: 8,
               schedule: Schedule.exponential("500 millis"),
             }),

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !!process.env.GCP_TEST_BYOIP && !process.env.FAST;
 
@@ -20,17 +17,15 @@ const parentPrefix = process.env.GCP_TEST_PAP_PARENT ?? "";
 const ipCidrRange = process.env.GCP_TEST_PDP_RANGE ?? "203.0.113.0/24";
 
 const waitUntilGone = (project: string, publicDelegatedPrefix: string) =>
-  compute
-    .getGlobalPublicDelegatedPrefixes({ project, publicDelegatedPrefix })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  compute.getGlobalPublicDelegatedPrefixes({ project, publicDelegatedPrefix }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "insertGlobalPublicDelegatedPrefixes with a malformed parentPrefix fails with BadRequest",

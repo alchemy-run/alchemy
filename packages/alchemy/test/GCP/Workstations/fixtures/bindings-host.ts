@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Cluster → config → workstation, on the project's `default` network. */
@@ -10,25 +10,21 @@ export const Dev = Effect.gen(function* () {
     subnetwork: "default",
     labels: { env: "test" },
   });
-  const config = yield* GCP.Workstations.WorkstationClustersWorkstationConfig(
-    "Code",
-    {
-      workstationCluster: cluster.name,
-      host: {
-        gceInstance: {
-          machineType: "e2-standard-2",
-          poolSize: 0,
-          bootDiskSizeGb: 30,
-        },
+  const config = yield* GCP.Workstations.WorkstationClustersWorkstationConfig("Code", {
+    workstationCluster: cluster.name,
+    host: {
+      gceInstance: {
+        machineType: "e2-standard-2",
+        poolSize: 0,
+        bootDiskSizeGb: 30,
       },
-      labels: { env: "test" },
     },
+    labels: { env: "test" },
+  });
+  const workstation = yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation(
+    "Mine",
+    { workstationConfig: config.name, labels: { env: "test" } },
   );
-  const workstation =
-    yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation(
-      "Mine",
-      { workstationConfig: config.name, labels: { env: "test" } },
-    );
   return { cluster, config, workstation };
 });
 
@@ -45,8 +41,7 @@ export default class WorkstationsBindingsHost extends GCP.Function<WorkstationsB
     const getCluster = yield* GCP.Workstations.GetWorkstationCluster(cluster);
     const getConfig = yield* GCP.Workstations.GetWorkstationConfig(config);
     const getWorkstation = yield* GCP.Workstations.GetWorkstation(workstation);
-    const generateAccessToken =
-      yield* GCP.Workstations.GenerateAccessToken(workstation);
+    const generateAccessToken = yield* GCP.Workstations.GenerateAccessToken(workstation);
     const start = yield* GCP.Workstations.StartWorkstation(workstation);
     const stop = yield* GCP.Workstations.StopWorkstation(workstation);
 
@@ -72,12 +67,8 @@ export default class WorkstationsBindingsHost extends GCP.Function<WorkstationsB
             expireTime: token.expireTime,
           })),
         ),
-        startWorkstation: start().pipe(
-          Effect.map((operation) => ({ name: operation.name })),
-        ),
-        stopWorkstation: stop().pipe(
-          Effect.map((operation) => ({ name: operation.name })),
-        ),
+        startWorkstation: start().pipe(Effect.map((operation) => ({ name: operation.name }))),
+        stopWorkstation: stop().pipe(Effect.map((operation) => ({ name: operation.name }))),
       }),
     };
   }).pipe(

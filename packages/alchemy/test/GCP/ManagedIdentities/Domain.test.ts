@@ -1,26 +1,22 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as managedidentities from "@distilled.cloud/gcp/managedidentities_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour).
 // The API is enabled on the testing project; get-missing returns
 // `NotFound`, and create with an invalid CIDR returns `BadRequest`
 // (`CIDR "not-a-cidr" is invalid`). Set GCP_TEST_MANAGEDIDENTITIES=1
 // to run the full lifecycle.
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_MANAGEDIDENTITIES === "1";
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_MANAGEDIDENTITIES === "1";
 
 const waitUntilGone = (name: string) =>
   managedidentities.getProjectsLocationsGlobalDomains({ name }).pipe(
@@ -104,10 +100,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.location).toEqual("global");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* managedidentities.getProjectsLocationsGlobalDomains({
-          name: created.name,
-        });
+      const fetched = yield* managedidentities.getProjectsLocationsGlobalDomains({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
 
@@ -128,10 +123,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.auditLogsEnabled).toEqual(true);
       expect(updated.labels).toMatchObject({ env: "prod", role: "identity" });
 
-      const refetched =
-        yield* managedidentities.getProjectsLocationsGlobalDomains({
-          name: created.name,
-        });
+      const refetched = yield* managedidentities.getProjectsLocationsGlobalDomains({
+        name: created.name,
+      });
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("identity");
 

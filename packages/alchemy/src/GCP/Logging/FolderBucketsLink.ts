@@ -89,9 +89,7 @@ export type FolderBucketsLink = Resource<
  * @resource
  * @category Logging
  */
-export const FolderBucketsLink = Resource<FolderBucketsLink>(
-  "GCP.Logging.FolderBucketsLink",
-);
+export const FolderBucketsLink = Resource<FolderBucketsLink>("GCP.Logging.FolderBucketsLink");
 
 export class FolderBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderBucketsLinkNotResolved",
@@ -106,14 +104,12 @@ export class FolderBucketsLinkFailed extends Data.TaggedError(
   state: string | undefined;
 }> {}
 
-const resourceName = (bucketName: string, linkId: string) =>
-  `${bucketName}/links/${linkId}`;
+const resourceName = (bucketName: string, linkId: string) => `${bucketName}/links/${linkId}`;
 
 const isDeleted = (link: logging.Link | undefined): link is undefined =>
   link === undefined || link.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
 const toAttrs = (link: logging.Link, bucketName: string) => {
   const parsed = parseLoggingName(link.name ?? "");
@@ -153,8 +149,7 @@ const waitUntilActive = (name: string) =>
     return link;
   }).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.FolderBucketsLinkNotResolved",
+      while: (error) => error._tag === "GCP.Logging.FolderBucketsLinkNotResolved",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -171,12 +166,9 @@ export const FolderBucketsLinkProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.linkId ?? output?.linkId;
       const idChanged =
-        previousId !== undefined &&
-        news.linkId !== undefined &&
-        news.linkId !== previousId;
+        previousId !== undefined && news.linkId !== undefined && news.linkId !== previousId;
       const previousBucket = olds?.bucketName ?? output?.bucketName;
-      const bucketChanged =
-        previousBucket !== undefined && news.bucketName !== previousBucket;
+      const bucketChanged = previousBucket !== undefined && news.bucketName !== previousBucket;
       const previousDescription = olds?.description ?? output?.description;
       const descriptionChanged =
         news.description !== undefined &&
@@ -224,16 +216,11 @@ export const FolderBucketsLinkProvider = () =>
             })
             .pipe(
               Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
-              Stream.filter(
-                (link) =>
-                  !isDeleted(link) && hasOwnershipMarker(link.description),
-              ),
+              Stream.filter((link) => !isDeleted(link) && hasOwnershipMarker(link.description)),
               Stream.map((link) => toAttrs(link, bucket.name ?? "")),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed([] as ReturnType<typeof toAttrs>[])),
             );
           links.push(...listed);
         }
@@ -248,10 +235,7 @@ export const FolderBucketsLinkProvider = () =>
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        current.lifecycleState === "DELETE_REQUESTED"
-      ) {
+      if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
         current = undefined;
       }
 
@@ -263,9 +247,7 @@ export const FolderBucketsLinkProvider = () =>
             body: { description: desiredDescription },
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<logging.Operation>({ done: true }),
-            ),
+            Effect.catchTag("Conflict", () => Effect.succeed<logging.Operation>({ done: true })),
             Effect.asVoid,
           );
         current = yield* waitUntilActive(name);
@@ -284,23 +266,18 @@ export const FolderBucketsLinkProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (output.lifecycleState === "DELETE_REQUESTED") return;
-      yield* logging
-        .deleteFoldersLocationsBucketsLinks({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.asVoid,
-        );
+      yield* logging.deleteFoldersLocationsBucketsLinks({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.asVoid,
+      );
       yield* getByName(output.name).pipe(
         Effect.flatMap((link) =>
           isDeleted(link)
             ? Effect.void
-            : Effect.fail(
-                new FolderBucketsLinkNotResolved({ name: output.name }),
-              ),
+            : Effect.fail(new FolderBucketsLinkNotResolved({ name: output.name })),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.Logging.FolderBucketsLinkNotResolved",
+          while: (error) => error._tag === "GCP.Logging.FolderBucketsLinkNotResolved",
           times: 10,
           schedule: Schedule.spaced("3 seconds"),
         }),

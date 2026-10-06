@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
@@ -233,23 +228,18 @@ export type LakesTask = Resource<
  */
 export const LakesTask = Resource<LakesTask>("GCP.Dataplex.LakesTask");
 
-export class LakesTaskNotResolved extends Data.TaggedError(
-  "GCP.Dataplex.LakesTaskNotResolved",
-)<{
+export class LakesTaskNotResolved extends Data.TaggedError("GCP.Dataplex.LakesTaskNotResolved")<{
   name: string;
 }> {}
 
-export class LakesTaskStillExists extends Data.TaggedError(
-  "GCP.Dataplex.LakesTaskStillExists",
-)<{
+export class LakesTaskStillExists extends Data.TaggedError("GCP.Dataplex.LakesTaskStillExists")<{
   name: string;
 }> {}
 
 const lakeOf = (lake: string, project: string, location: string) =>
   expandParent(lake, project, location, "lakes");
 
-const resourceName = (lake: string, taskId: string) =>
-  `${lake}/tasks/${taskId}`;
+const resourceName = (lake: string, taskId: string) => `${lake}/tasks/${taskId}`;
 
 const triggerBody = (
   spec: TaskTriggerSpec | undefined,
@@ -322,9 +312,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((task) =>
-      task === undefined
-        ? Effect.void
-        : Effect.fail(new LakesTaskStillExists({ name })),
+      task === undefined ? Effect.void : Effect.fail(new LakesTaskStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakesTaskStillExists",
@@ -335,15 +323,7 @@ const waitUntilGone = (name: string) =>
 
 export const LakesTaskProvider = () =>
   Provider.succeed(LakesTask, {
-    stables: [
-      "name",
-      "taskId",
-      "lake",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "taskId", "lake", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -352,10 +332,7 @@ export const LakesTaskProvider = () =>
       const nextId = news.taskId ?? previousId;
       const previousLake = olds?.lake ?? output?.lake;
       const nextLake = news.lake ?? previousLake;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -365,9 +342,7 @@ export const LakesTaskProvider = () =>
         output?.triggerType ??
         DEFAULT_TRIGGER
       ).toUpperCase();
-      const nextTrigger = (
-        news.triggerSpec?.type ?? previousTrigger
-      ).toUpperCase();
+      const nextTrigger = (news.triggerSpec?.type ?? previousTrigger).toUpperCase();
       if (
         replaceIfChanged(previousId, nextId) ||
         replaceIfChanged(previousLake, nextLake) ||
@@ -388,23 +363,14 @@ export const LakesTaskProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const lake = lakeOf(
-        olds?.lake ?? output?.lake ?? "",
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const lake = lakeOf(olds?.lake ?? output?.lake ?? "", env.project, location);
       const taskId = yield* toPhysicalRfc1035(id, olds?.taskId, output?.taskId);
       const name = output?.name ?? resourceName(lake, taskId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -419,10 +385,7 @@ export const LakesTaskProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const lake = lakeOf(news.lake, env.project, location);
       const taskId = yield* toPhysicalRfc1035(id, news.taskId, output?.taskId);
       const name = output?.name ?? resourceName(lake, taskId);
@@ -464,18 +427,12 @@ export const LakesTaskProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const triggerChanged =
-        fingerprint(current.triggerSpec) !== fingerprint(triggerSpec);
-      const executionChanged =
-        fingerprint(current.executionSpec) !== fingerprint(executionSpec);
-      const sparkChanged =
-        fingerprint(current.spark) !== fingerprint(news.spark);
-      const notebookChanged =
-        fingerprint(current.notebook) !== fingerprint(news.notebook);
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const triggerChanged = fingerprint(current.triggerSpec) !== fingerprint(triggerSpec);
+      const executionChanged = fingerprint(current.executionSpec) !== fingerprint(executionSpec);
+      const sparkChanged = fingerprint(current.spark) !== fingerprint(news.spark);
+      const notebookChanged = fingerprint(current.notebook) !== fingerprint(news.notebook);
 
       if (
         labelsChanged ||

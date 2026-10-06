@@ -1,15 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
-import { DATA_DEVICE, MARKER, REGION, webVm, ZONE } from "./fixtures/web-vm.ts";
+import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
+import { DATA_DEVICE, MARKER, REGION, webVm, ZONE } from "./fixtures/web-vm.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -26,16 +26,10 @@ class StillExists extends Data.TaggedError("StillExists")<{
 const fetchPage = (ip: string) =>
   HttpClient.get(`http://${ip}/index.html`).pipe(
     Effect.timeout("5 seconds"),
-    Effect.flatMap(
-      (
-        res,
-      ): Effect.Effect<
-        string,
-        HttpClientError.HttpClientError | PageNotServed
-      > =>
-        res.status === 200
-          ? res.text
-          : Effect.fail(new PageNotServed({ reason: `status ${res.status}` })),
+    Effect.flatMap((res): Effect.Effect<string, HttpClientError.HttpClientError | PageNotServed> =>
+      res.status === 200
+        ? res.text
+        : Effect.fail(new PageNotServed({ reason: `status ${res.status}` })),
     ),
     Effect.flatMap((body) =>
       body.includes(MARKER)
@@ -43,9 +37,7 @@ const fetchPage = (ip: string) =>
         : Effect.fail(new PageNotServed({ reason: `body ${body}` })),
     ),
     Effect.mapError((error) =>
-      error instanceof PageNotServed
-        ? error
-        : new PageNotServed({ reason: String(error) }),
+      error instanceof PageNotServed ? error : new PageNotServed({ reason: String(error) }),
     ),
     Effect.retry({
       while: (error) => error._tag === "PageNotServed",
@@ -55,14 +47,9 @@ const fetchPage = (ip: string) =>
   );
 
 // Bounded wait until an out-of-band probe reports the resource gone.
-const waitUntilGone = <E, R>(
-  what: string,
-  probe: Effect.Effect<boolean, E, R>,
-) =>
+const waitUntilGone = <E, R>(what: string, probe: Effect.Effect<boolean, E, R>) =>
   probe.pipe(
-    Effect.flatMap((gone) =>
-      gone ? Effect.void : Effect.fail(new StillExists({ what })),
-    ),
+    Effect.flatMap((gone) => (gone ? Effect.void : Effect.fail(new StillExists({ what })))),
     Effect.retry({
       while: (error) => error instanceof StillExists,
       schedule: Schedule.spaced("3 seconds"),
@@ -100,12 +87,8 @@ test.provider.skipIf(!!process.env.FAST)(
         instance: created.instanceName,
       });
       expect(vm.status).toEqual("RUNNING");
-      expect(vm.networkInterfaces?.[0]?.accessConfigs?.[0]?.natIP).toEqual(
-        created.address,
-      );
-      expect(vm.networkInterfaces?.[0]?.subnetwork).toContain(
-        `/subnetworks/${DEFAULT_NETWORK}`,
-      );
+      expect(vm.networkInterfaces?.[0]?.accessConfigs?.[0]?.natIP).toEqual(created.address);
+      expect(vm.networkInterfaces?.[0]?.subnetwork).toContain(`/subnetworks/${DEFAULT_NETWORK}`);
       expect(
         vm.disks?.some(
           (d) =>
@@ -153,9 +136,9 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(vm2.id).toEqual(created.instanceId);
       expect(vm2.labels?.phase).toEqual("updated");
-      expect(
-        vm2.metadata?.items?.find((item) => item.key === "smoke-phase")?.value,
-      ).toEqual("updated");
+      expect(vm2.metadata?.items?.find((item) => item.key === "smoke-phase")?.value).toEqual(
+        "updated",
+      );
       expect(vm2.disks?.filter((d) => d.boot !== true)).toHaveLength(1);
       const updatedPage = yield* fetchPage(created.address!);
       expect(updatedPage).toContain(MARKER);

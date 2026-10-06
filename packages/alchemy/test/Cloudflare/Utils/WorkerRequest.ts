@@ -1,9 +1,9 @@
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
 
 class WorkerNotPropagated extends Data.TaggedError("WorkerNotPropagated")<{
   readonly url: string;

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   domainResourceOf,
@@ -121,12 +116,9 @@ export type DomainsBackup = Resource<
  * @resource
  * @category ManagedIdentities
  */
-export const DomainsBackup = Resource<DomainsBackup>(
-  "GCP.ManagedIdentities.DomainsBackup",
-);
+export const DomainsBackup = Resource<DomainsBackup>("GCP.ManagedIdentities.DomainsBackup");
 
-const resourceName = (domain: string, backupId: string) =>
-  `${domain}/backups/${backupId}`;
+const resourceName = (domain: string, backupId: string) => `${domain}/backups/${backupId}`;
 
 const toAttrs = (item: managedidentities.Backup, project: string) => {
   const name = item.name ?? "";
@@ -155,22 +147,12 @@ const getByName = (name: string) =>
 
 export const DomainsBackupProvider = () =>
   Provider.succeed(DomainsBackup, {
-    stables: [
-      "name",
-      "backupId",
-      "domain",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "backupId", "domain", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousDomain = domainResourceOf(
-        olds?.domain ?? output?.domain ?? "",
-        env.project,
-      );
+      const previousDomain = domainResourceOf(olds?.domain ?? output?.domain ?? "", env.project);
       const nextDomain = domainResourceOf(
         news.domain ?? olds?.domain ?? output?.domain ?? "",
         env.project,
@@ -185,23 +167,13 @@ export const DomainsBackupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const domain = domainResourceOf(
-        olds?.domain ?? output?.domain ?? "",
-        env.project,
-      );
-      const backupId = yield* toPhysicalId(
-        id,
-        olds?.backupId,
-        output?.backupId,
-        "backup",
-      );
+      const domain = domainResourceOf(olds?.domain ?? output?.domain ?? "", env.project);
+      const backupId = yield* toPhysicalId(id, olds?.backupId, output?.backupId, "backup");
       const name = output?.name ?? resourceName(domain, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -214,12 +186,7 @@ export const DomainsBackupProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const domain = domainResourceOf(news.domain, env.project);
-      const backupId = yield* toPhysicalId(
-        id,
-        news.backupId,
-        output?.backupId,
-        "backup",
-      );
+      const backupId = yield* toPhysicalId(id, news.backupId, output?.backupId, "backup");
       const name = output?.name ?? resourceName(domain, backupId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -257,20 +224,17 @@ export const DomainsBackupProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const mask = fieldMask([
-        (upsert.length > 0 || removed.length > 0) && "labels",
-      ]);
+      const mask = fieldMask([(upsert.length > 0 || removed.length > 0) && "labels"]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* managedidentities.patchProjectsLocationsGlobalDomainsBackups({
+        const operation = yield* managedidentities.patchProjectsLocationsGlobalDomainsBackups({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-            },
-          });
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

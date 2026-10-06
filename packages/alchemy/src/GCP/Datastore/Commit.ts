@@ -6,8 +6,7 @@ import type { Database } from "../Firestore/Database.ts";
 import type { DatastoreDatabaseRequest } from "./BindingHttp.ts";
 
 /** Request for {@link Commit}; project and database come from the bound database. */
-export type CommitRequest =
-  DatastoreDatabaseRequest<datastore.CommitProjectsRequest>;
+export type CommitRequest = DatastoreDatabaseRequest<datastore.CommitProjectsRequest>;
 
 /**
  * Runtime binding for Datastore `projects.commit`.
@@ -51,11 +50,7 @@ export interface Commit extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CommitRequest,
-    ) => Effect.Effect<
-      datastore.CommitResponse,
-      datastore.CommitProjectsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<datastore.CommitResponse, datastore.CommitProjectsError, RuntimeContext>
   >
 > {}
 

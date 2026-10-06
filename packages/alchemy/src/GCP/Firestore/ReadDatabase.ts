@@ -114,6 +114,4 @@ export interface ReadDatabase extends Binding.Service<
   (database: Database) => Effect.Effect<ReadDatabaseClient>
 > {}
 
-export const ReadDatabase = Binding.Service<ReadDatabase>(
-  "GCP.Firestore.ReadDatabase",
-);
+export const ReadDatabase = Binding.Service<ReadDatabase>("GCP.Firestore.ReadDatabase");

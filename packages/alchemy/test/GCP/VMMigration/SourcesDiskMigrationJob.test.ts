@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vmmigration from "@distilled.cloud/gcp/vmmigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  dummyAws,
-  logLevel,
-  currentProject,
-  runSourceLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { dummyAws, logLevel, currentProject, runSourceLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -66,15 +60,12 @@ test.provider.skipIf(!runSourceLifecycle)(
 
       expect(created.diskMigrationJobId).toEqual(expect.any(String));
       expect(created.name).toContain("/diskMigrationJobs/");
-      expect(created.awsSourceDiskDetails?.volumeId).toEqual(
-        "vol-0123456789abcdef0",
-      );
+      expect(created.awsSourceDiskDetails?.volumeId).toEqual("vol-0123456789abcdef0");
       expect(created.targetDetails?.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* vmmigration.getProjectsLocationsSourcesDiskMigrationJobs({
-          name: created.name,
-        });
+      const fetched = yield* vmmigration.getProjectsLocationsSourcesDiskMigrationJobs({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.targetDetails?.labels?.env).toEqual("test");
 

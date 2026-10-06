@@ -95,14 +95,8 @@ export default function PreviewComment() {
     <div className="pc" aria-hidden>
       <div className="pc-bar">
         <span className="pc-dot" style={{ background: "var(--alc-dot-red)" }} />
-        <span
-          className="pc-dot"
-          style={{ background: "var(--alc-dot-yellow)" }}
-        />
-        <span
-          className="pc-dot"
-          style={{ background: "var(--alc-dot-green)" }}
-        />
+        <span className="pc-dot" style={{ background: "var(--alc-dot-yellow)" }} />
+        <span className="pc-dot" style={{ background: "var(--alc-dot-green)" }} />
         <span className="pc-bar__url">github.com/acme/my-app/pull/147</span>
       </div>
       <div className="pc-body">
@@ -123,8 +117,7 @@ export default function PreviewComment() {
             <li key={p.sha} className="pc-push pc-enter">
               <span className="pc-push__who">you</span>
               <span>
-                pushed <code>{p.sha}</code>{" "}
-                <span className="pc-muted pc-wide">{p.msg}</span>
+                pushed <code>{p.sha}</code> <span className="pc-muted pc-wide">{p.msg}</span>
               </span>
               {status(p)}
             </li>
@@ -135,10 +128,7 @@ export default function PreviewComment() {
               className={`pc-comment pc-enter ${justEdited ? "is-edited" : ""} ${deleting ? "is-deleting" : ""}`}
             >
               <div className="pc-comment__head">
-                <span
-                  className="pc-avatar"
-                  dangerouslySetInnerHTML={{ __html: BOT_LOGO }}
-                />
+                <span className="pc-avatar" dangerouslySetInnerHTML={{ __html: BOT_LOGO }} />
                 <strong>alchemy</strong>
                 <span className="pc-bot">bot</span>
                 <span className="pc-muted pc-wide">commented</span>
@@ -164,24 +154,19 @@ export default function PreviewComment() {
                 </span>
               </div>
               {deleting && (
-                <div className="pc-comment__gone">
-                  pr-147 destroyed · deleting this comment
-                </div>
+                <div className="pc-comment__gone">pr-147 destroyed · deleting this comment</div>
               )}
             </li>
           )}
           {deleted && (
-            <li className="pc-event pc-enter pc-muted">
-              comment deleted with the pr-147 preview
-            </li>
+            <li className="pc-event pc-enter pc-muted">comment deleted with the pr-147 preview</li>
           )}
 
           {pushes.slice(1).map((p) => (
             <li key={p.sha} className="pc-push pc-enter">
               <span className="pc-push__who">you</span>
               <span>
-                pushed <code>{p.sha}</code>{" "}
-                <span className="pc-muted pc-wide">{p.msg}</span>
+                pushed <code>{p.sha}</code> <span className="pc-muted pc-wide">{p.msg}</span>
               </span>
               {status(p)}
             </li>

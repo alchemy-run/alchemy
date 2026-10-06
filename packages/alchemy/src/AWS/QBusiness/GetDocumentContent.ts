@@ -38,10 +38,7 @@ export interface GetDocumentContent extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetDocumentContentRequest,
-    ) => Effect.Effect<
-      qbusiness.GetDocumentContentResponse,
-      qbusiness.GetDocumentContentError
-    >
+    ) => Effect.Effect<qbusiness.GetDocumentContentResponse, qbusiness.GetDocumentContentError>
   >
 > {}
 export const GetDocumentContent = Binding.Service<GetDocumentContent>(

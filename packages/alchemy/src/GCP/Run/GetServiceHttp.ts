@@ -21,12 +21,7 @@ export const GetServiceHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Run.GetService",
         resource: service,
-        iam: [
-          grantFor(
-            { role: "roles/run.viewer", on: "run.service" },
-            service.name,
-          ),
-        ],
+        iam: [grantFor({ role: "roles/run.viewer", on: "run.service" }, service.name)],
       });
       return Effect.fn(`GCP.Run.GetService(${service.LogicalId})`)(function* (
         request?: GetServiceRequest,

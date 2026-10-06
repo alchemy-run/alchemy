@@ -123,16 +123,11 @@ export type OrganizationsLocationsStoredInfoType = Resource<
  * @resource
  * @category DLP
  */
-export const OrganizationsLocationsStoredInfoType =
-  Resource<OrganizationsLocationsStoredInfoType>(
-    "GCP.DLP.OrganizationsLocationsStoredInfoType",
-  );
+export const OrganizationsLocationsStoredInfoType = Resource<OrganizationsLocationsStoredInfoType>(
+  "GCP.DLP.OrganizationsLocationsStoredInfoType",
+);
 
-const resourceName = (
-  organization: string,
-  location: string,
-  storedInfoTypeId: string,
-) =>
+const resourceName = (organization: string, location: string, storedInfoTypeId: string) =>
   `${organizationLocationParent(organization, location)}/storedInfoTypes/${storedInfoTypeId}`;
 
 const versionConfig = (
@@ -161,12 +156,8 @@ const toAttrs = (
     project,
     displayName: config?.displayName,
     description: ownership.text,
-    config:
-      config === undefined
-        ? undefined
-        : { ...config, description: ownership.text },
-    state:
-      infoType.currentVersion?.state ?? infoType.pendingVersions?.[0]?.state,
+    config: config === undefined ? undefined : { ...config, description: ownership.text },
+    state: infoType.currentVersion?.state ?? infoType.pendingVersions?.[0]?.state,
     currentVersion: infoType.currentVersion,
     pendingVersions: infoType.pendingVersions ?? [],
   };
@@ -180,16 +171,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, organization: string, project: string) =>
-  dlp.listOrganizationsLocationsStoredInfoTypes
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.storedInfoTypes ?? [])),
-      Stream.filter((infoType) => hasOwnershipMarker(ownershipText(infoType))),
-      Stream.map((infoType) => toAttrs(infoType, organization, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dlp.listOrganizationsLocationsStoredInfoTypes.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.storedInfoTypes ?? [])),
+    Stream.filter((infoType) => hasOwnershipMarker(ownershipText(infoType))),
+    Stream.map((infoType) => toAttrs(infoType, organization, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const desiredConfig = (
   ownership: Record<string, string>,
@@ -207,32 +196,15 @@ const configForCompare = (config: StoredInfoTypeConfig | undefined) => {
 
 export const OrganizationsLocationsStoredInfoTypeProvider = () =>
   Provider.succeed(OrganizationsLocationsStoredInfoType, {
-    stables: [
-      "name",
-      "storedInfoTypeId",
-      "organization",
-      "organizationId",
-      "location",
-      "project",
-    ],
+    stables: ["name", "storedInfoTypeId", "organization", "organizationId", "location", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       return (
-        replaceOn(
-          olds?.storedInfoTypeId ?? output?.storedInfoTypeId,
-          news.storedInfoTypeId,
-        ) ??
-        replaceOn(
-          olds?.organization ?? output?.organization,
-          news.organization,
-        ) ??
+        replaceOn(olds?.storedInfoTypeId ?? output?.storedInfoTypeId, news.storedInfoTypeId) ??
+        replaceOn(olds?.organization ?? output?.organization, news.organization) ??
         replaceOn(previousLocation, nextLocation)
       );
     }),
@@ -249,14 +221,11 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
         olds?.storedInfoTypeId,
         output?.storedInfoTypeId,
       );
-      const name =
-        output?.name ?? resourceName(organization, location, storedInfoTypeId);
+      const name = output?.name ?? resourceName(organization, location, storedInfoTypeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -274,10 +243,7 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const location = normalizeLocation(news.location ?? output?.location);
       const storedInfoTypeId = yield* toPhysicalId(
         id,
@@ -310,17 +276,10 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
 
       const currentName = current.name ?? name;
       const observed = versionConfig(current);
-      const displayChanged = !sameText(
-        observed?.displayName,
-        config.displayName,
-      );
-      const descriptionChanged = !sameText(
-        observed?.description,
-        config.description,
-      );
+      const displayChanged = !sameText(observed?.displayName, config.displayName);
+      const descriptionChanged = !sameText(observed?.description, config.description);
       const bodyChanged =
-        fingerprint(configForCompare(observed)) !==
-        fingerprint(configForCompare(config));
+        fingerprint(configForCompare(observed)) !== fingerprint(configForCompare(config));
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
         descriptionChanged ? "description" : undefined,
@@ -338,10 +297,7 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
       }
 
       const readyName = current.name ?? name;
-      current = yield* waitForStoredInfoTypeReady(
-        readyName,
-        getByName(readyName),
-      );
+      current = yield* waitForStoredInfoTypeReady(readyName, getByName(readyName));
       return toAttrs(current, organization, env.project);
     }),
 

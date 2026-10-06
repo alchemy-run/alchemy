@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datalabeling from "@distilled.cloud/gcp/datalabeling_v1beta1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  logLevel,
-  probe,
-  currentProject,
-  runLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, probe, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -22,11 +16,9 @@ test.provider(
 
       const error = yield* Effect.flip(
         probe(
-          datalabeling.getProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages(
-            {
-              name: `projects/${project}/datasets/missing/annotatedDatasets/missing/feedbackThreads/missing/feedbackMessages/alchemy-missing`,
-            },
-          ),
+          datalabeling.getProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
+            name: `projects/${project}/datasets/missing/annotatedDatasets/missing/feedbackThreads/missing/feedbackMessages/alchemy-missing`,
+          }),
         ),
       );
       expect(error._tag).toEqual("NotFound");
@@ -64,9 +56,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.body).toEqual("please relabel the occluded boxes");
 
       const fetched =
-        yield* datalabeling.getProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages(
-          { name: created.name },
-        );
+        yield* datalabeling.getProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
+          name: created.name,
+        });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.body).toContain("alchemy-id=");
 
@@ -87,9 +79,9 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(
-        datalabeling.getProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages(
-          { name: updated.name },
-        ),
+        datalabeling.getProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
+          name: updated.name,
+        }),
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),

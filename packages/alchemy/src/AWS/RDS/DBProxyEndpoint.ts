@@ -6,8 +6,8 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DBProxyEndpointProps {
   /**
@@ -109,9 +109,7 @@ export interface DBProxyEndpoint extends Resource<
  *
  * @resource
  */
-export const DBProxyEndpoint = Resource<DBProxyEndpoint>(
-  "AWS.RDS.DBProxyEndpoint",
-);
+export const DBProxyEndpoint = Resource<DBProxyEndpoint>("AWS.RDS.DBProxyEndpoint");
 
 const toAttrs = ({
   endpoint,
@@ -153,11 +151,7 @@ export const DBProxyEndpointProvider = () =>
             DBProxyName: dbProxyName,
             DBProxyEndpointName: dbProxyEndpointName,
           })
-          .pipe(
-            Effect.catchTag("DBProxyEndpointNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBProxyEndpoints?.[0];
       });
 
@@ -165,18 +159,13 @@ export const DBProxyEndpointProvider = () =>
         dbProxyName: string;
         dbProxyEndpointName: string;
       }) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(30),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]);
         return yield* readEndpoint(props).pipe(
           Effect.flatMap((endpoint) =>
             endpoint?.DBProxyEndpointArn
               ? Effect.succeed(endpoint)
               : Effect.fail(
-                  new Error(
-                    `DB proxy endpoint '${props.dbProxyEndpointName}' not ready`,
-                  ),
+                  new Error(`DB proxy endpoint '${props.dbProxyEndpointName}' not ready`),
                 ),
           ),
           Effect.retry({ schedule: readinessPolicy }),
@@ -205,24 +194,20 @@ export const DBProxyEndpointProvider = () =>
             const rows = yield* Effect.forEach(
               proxyNames,
               (dbProxyName) =>
-                rds.describeDBProxyEndpoints
-                  .pages({ DBProxyName: dbProxyName })
-                  .pipe(
-                    Stream.runCollect,
-                    Effect.map((chunk) =>
-                      Array.from(chunk).flatMap((page) =>
-                        (page.DBProxyEndpoints ?? []).map((endpoint) =>
-                          toAttrs({ endpoint, tags: {} }),
-                        ),
+                rds.describeDBProxyEndpoints.pages({ DBProxyName: dbProxyName }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) =>
+                      (page.DBProxyEndpoints ?? []).map((endpoint) =>
+                        toAttrs({ endpoint, tags: {} }),
                       ),
                     ),
-                    // A proxy (or its endpoints) may be deleted mid-enumeration.
-                    Effect.catchTag(
-                      ["DBProxyNotFoundFault", "DBProxyEndpointNotFoundFault"],
-                      () =>
-                        Effect.succeed([] as DBProxyEndpoint["Attributes"][]),
-                    ),
                   ),
+                  // A proxy (or its endpoints) may be deleted mid-enumeration.
+                  Effect.catchTag(["DBProxyNotFoundFault", "DBProxyEndpointNotFoundFault"], () =>
+                    Effect.succeed([] as DBProxyEndpoint["Attributes"][]),
+                  ),
+                ),
               { concurrency: 10 },
             );
             return rows.flat();
@@ -230,8 +215,7 @@ export const DBProxyEndpointProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           if (
-            (yield* toName(id, olds ?? ({} as DBProxyEndpointProps))) !==
-            (yield* toName(id, news))
+            (yield* toName(id, olds ?? ({} as DBProxyEndpointProps))) !== (yield* toName(id, news))
           ) {
             return { action: "replace" } as const;
           }
@@ -260,8 +244,7 @@ export const DBProxyEndpointProvider = () =>
           return toAttrs({ endpoint, tags: output?.tags ?? {} });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const dbProxyEndpointName =
-            output?.dbProxyEndpointName ?? (yield* toName(id, news));
+          const dbProxyEndpointName = output?.dbProxyEndpointName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -288,12 +271,7 @@ export const DBProxyEndpointProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBProxyEndpointAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBProxyEndpointAlreadyExistsFault", () => Effect.void));
 
             observed = yield* waitForEndpoint({
               dbProxyName: news.dbProxyName,
@@ -306,16 +284,14 @@ export const DBProxyEndpointProvider = () =>
               DBProxyEndpointName: dbProxyEndpointName,
               VpcSecurityGroupIds: news.vpcSecurityGroupIds,
               NewDBProxyEndpointName:
-                news.dbProxyEndpointName &&
-                news.dbProxyEndpointName !== dbProxyEndpointName
+                news.dbProxyEndpointName && news.dbProxyEndpointName !== dbProxyEndpointName
                   ? news.dbProxyEndpointName
                   : undefined,
             });
             observed = yield* waitForEndpoint({
               dbProxyName: observed.DBProxyName ?? news.dbProxyName,
               dbProxyEndpointName:
-                news.dbProxyEndpointName &&
-                news.dbProxyEndpointName !== dbProxyEndpointName
+                news.dbProxyEndpointName && news.dbProxyEndpointName !== dbProxyEndpointName
                   ? news.dbProxyEndpointName
                   : dbProxyEndpointName,
             });
@@ -348,12 +324,7 @@ export const DBProxyEndpointProvider = () =>
             .deleteDBProxyEndpoint({
               DBProxyEndpointName: output.dbProxyEndpointName,
             })
-            .pipe(
-              Effect.catchTag(
-                "DBProxyEndpointNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.void));
         }),
       };
     }),

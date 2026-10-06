@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as recaptchaenterprise from "@distilled.cloud/gcp/recaptchaenterprise_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import RecaptchaBindingsHost, { Signup } from "./fixtures/bindings-host.ts";
 
@@ -21,12 +21,7 @@ let keyId: string;
 describe.skipIf(!dockerAvailable)(
   "RecaptchaEnterprise Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:recaptchaenterprise",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:recaptchaenterprise", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -66,9 +61,7 @@ describe.skipIf(!dockerAvailable)(
                 baseUrl,
                 "createAssessment",
               );
-            expect(assessment.name).toEqual(
-              expect.stringContaining("/assessments/"),
-            );
+            expect(assessment.name).toEqual(expect.stringContaining("/assessments/"));
             expect(assessment.event?.siteKey).toEqual(keyId);
             expect(assessment.event?.expectedAction).toEqual("login");
             // The token is not a real reCAPTCHA token.
@@ -87,9 +80,7 @@ describe.skipIf(!dockerAvailable)(
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => ({
                 role: binding.role,

@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -58,14 +58,11 @@ test.provider.skipIf(!runBlueprintLifecycle)(
             unitKind: kind.name,
             blueprint: { package: blueprint },
           });
-          const rolloutKind = yield* GCP.SaasServiceManagement.RolloutKind(
-            "Wave",
-            {
-              location,
-              unitKind: kind.name,
-              rolloutOrchestrationStrategy: "Google.Cloud.Simple.AllAtOnce",
-            },
-          );
+          const rolloutKind = yield* GCP.SaasServiceManagement.RolloutKind("Wave", {
+            location,
+            unitKind: kind.name,
+            rolloutOrchestrationStrategy: "Google.Cloud.Simple.AllAtOnce",
+          });
           const rollout = yield* GCP.SaasServiceManagement.Rollout("Wave1", {
             location,
             rolloutKind: rolloutKind.name,
@@ -84,11 +81,9 @@ test.provider.skipIf(!runBlueprintLifecycle)(
         name: created.rollout.name,
       });
       expect(fetched.name).toEqual(created.rollout.name);
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -108,15 +103,12 @@ test.provider.skipIf(!runBlueprintLifecycle)(
             unitKind: kind.name,
             blueprint: { package: blueprint },
           });
-          const rolloutKind = yield* GCP.SaasServiceManagement.RolloutKind(
-            "Wave",
-            {
-              rolloutKindId: created.rolloutKind.rolloutKindId,
-              location,
-              unitKind: kind.name,
-              rolloutOrchestrationStrategy: "Google.Cloud.Simple.AllAtOnce",
-            },
-          );
+          const rolloutKind = yield* GCP.SaasServiceManagement.RolloutKind("Wave", {
+            rolloutKindId: created.rolloutKind.rolloutKindId,
+            location,
+            unitKind: kind.name,
+            rolloutOrchestrationStrategy: "Google.Cloud.Simple.AllAtOnce",
+          });
           const rollout = yield* GCP.SaasServiceManagement.Rollout("Wave1", {
             rolloutId: created.rollout.rolloutId,
             location,

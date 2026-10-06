@@ -95,11 +95,7 @@ export const RuntimeProjectAttachment = Resource<RuntimeProjectAttachment>(
   "GCP.ApiHub.RuntimeProjectAttachment",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  attachmentId: string,
-) =>
+const resourceName = (project: string, location: string, attachmentId: string) =>
   `${locationParent(project, location)}/runtimeProjectAttachments/${attachmentId}`;
 
 const toAttrs = (
@@ -140,34 +136,24 @@ export const RuntimeProjectAttachmentProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousProject = projectIdOf(
-        olds?.runtimeProject ?? output?.runtimeProject,
-        "",
-      );
+      const previousProject = projectIdOf(olds?.runtimeProject ?? output?.runtimeProject, "");
       const nextProject = projectIdOf(
         news.runtimeProject ?? olds?.runtimeProject ?? output?.runtimeProject,
         previousProject,
       );
       return replaceOnIdentity({
-        previousId:
-          olds?.runtimeProjectAttachmentId ??
-          output?.runtimeProjectAttachmentId,
+        previousId: olds?.runtimeProjectAttachmentId ?? output?.runtimeProjectAttachmentId,
         nextId:
           news.runtimeProjectAttachmentId ??
           olds?.runtimeProjectAttachmentId ??
           output?.runtimeProjectAttachmentId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
-          previousProject.length > 0 &&
-          nextProject.length > 0 &&
-          previousProject !== nextProject,
+          previousProject.length > 0 && nextProject.length > 0 && previousProject !== nextProject,
       });
     }),
 
@@ -178,24 +164,16 @@ export const RuntimeProjectAttachmentProvider = () =>
         env.project,
       );
       const attachmentId =
-        olds?.runtimeProjectAttachmentId ??
-        output?.runtimeProjectAttachmentId ??
-        runtimeProjectId;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, attachmentId);
+        olds?.runtimeProjectAttachmentId ?? output?.runtimeProjectAttachmentId ?? runtimeProjectId;
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, attachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
       // Attachments cannot carry ownership metadata. Adopt only when the
       // observed id matches the deterministic runtime project id we would
       // have created; anything else is foreign.
-      return attrs.runtimeProjectAttachmentId === attachmentId
-        ? attrs
-        : Unowned(attrs);
+      return attrs.runtimeProjectAttachmentId === attachmentId ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -209,17 +187,12 @@ export const RuntimeProjectAttachmentProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.runtimeProjectAttachments ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.runtimeProjectAttachments ?? [])),
             Stream.filter(
               (item) =>
                 projectIdOf(item.runtimeProject, "") === env.project ||
-                parseName(
-                  item.name ?? "",
-                  "runtimeProjectAttachments",
-                  env.region,
-                ).id === env.project,
+                parseName(item.name ?? "", "runtimeProjectAttachments", env.region).id ===
+                  env.project,
             ),
             Stream.map((item) => toAttrs(item, env.project, env.region)),
             Stream.runCollect,
@@ -230,10 +203,7 @@ export const RuntimeProjectAttachmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const runtimeProject = projectNameOf(news.runtimeProject, env.project);
       const attachmentId =
         news.runtimeProjectAttachmentId ??

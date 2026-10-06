@@ -12,11 +12,7 @@ import { unwrapSensitive as unwrap } from "./internal.ts";
  */
 export type AlternateContactType = "BILLING" | "OPERATIONS" | "SECURITY";
 
-const ALL_CONTACT_TYPES: AlternateContactType[] = [
-  "BILLING",
-  "OPERATIONS",
-  "SECURITY",
-];
+const ALL_CONTACT_TYPES: AlternateContactType[] = ["BILLING", "OPERATIONS", "SECURITY"];
 
 export interface AlternateContactProps {
   /**
@@ -87,18 +83,13 @@ export interface AlternateContact extends Resource<
  *
  * @resource
  */
-export const AlternateContact = Resource<AlternateContact>(
-  "AWS.Account.AlternateContact",
-);
+export const AlternateContact = Resource<AlternateContact>("AWS.Account.AlternateContact");
 
 export const AlternateContactProvider = () =>
   Provider.effect(
     AlternateContact,
     Effect.gen(function* () {
-      const observe = (
-        alternateContactType: AlternateContactType,
-        accountId: string | undefined,
-      ) =>
+      const observe = (alternateContactType: AlternateContactType, accountId: string | undefined) =>
         account
           .getAlternateContact({
             AlternateContactType: alternateContactType,
@@ -106,9 +97,7 @@ export const AlternateContactProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.AlternateContact),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
       return {
@@ -121,15 +110,13 @@ export const AlternateContactProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (
-            (olds?.alternateContactType ?? news.alternateContactType) !==
-            news.alternateContactType
+            (olds?.alternateContactType ?? news.alternateContactType) !== news.alternateContactType
           ) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const type =
-            output?.alternateContactType ?? olds?.alternateContactType;
+          const type = output?.alternateContactType ?? olds?.alternateContactType;
           if (!type) return undefined;
           const accountId = olds?.accountId;
           const contact = yield* observe(type, accountId);
@@ -138,10 +125,8 @@ export const AlternateContactProvider = () =>
             alternateContactType: type,
             name: unwrap(contact.Name) ?? output?.name ?? "",
             title: unwrap(contact.Title) ?? output?.title ?? "",
-            emailAddress:
-              unwrap(contact.EmailAddress) ?? output?.emailAddress ?? "",
-            phoneNumber:
-              unwrap(contact.PhoneNumber) ?? output?.phoneNumber ?? "",
+            emailAddress: unwrap(contact.EmailAddress) ?? output?.emailAddress ?? "",
+            phoneNumber: unwrap(contact.PhoneNumber) ?? output?.phoneNumber ?? "",
           };
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
@@ -153,9 +138,7 @@ export const AlternateContactProvider = () =>
             PhoneNumber: news.phoneNumber,
             AccountId: news.accountId,
           });
-          yield* session.note(
-            `${news.alternateContactType}:${news.emailAddress}`,
-          );
+          yield* session.note(`${news.alternateContactType}:${news.emailAddress}`);
           return {
             alternateContactType: news.alternateContactType,
             name: news.name,
@@ -194,9 +177,7 @@ export const AlternateContactProvider = () =>
               AlternateContactType: output.alternateContactType,
               AccountId: olds.accountId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

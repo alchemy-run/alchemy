@@ -44,7 +44,6 @@ export interface StartMetadataGenerationRun extends Binding.Service<
     >
   >
 > {}
-export const StartMetadataGenerationRun =
-  Binding.Service<StartMetadataGenerationRun>(
-    "AWS.DataZone.StartMetadataGenerationRun",
-  );
+export const StartMetadataGenerationRun = Binding.Service<StartMetadataGenerationRun>(
+  "AWS.DataZone.StartMetadataGenerationRun",
+);

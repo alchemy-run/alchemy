@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataform from "@distilled.cloud/gcp/dataform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -38,17 +38,13 @@ test.provider(
             location: "us-central1",
             displayName: "release-repo",
             labels: { env: "test" },
-            serviceAccount:
-              "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
           });
-          const release = yield* GCP.Dataform.RepositoriesReleaseConfig(
-            "Prod",
-            {
-              repository: repo.name,
-              gitCommitish: "main",
-              disabled: true,
-            },
-          );
+          const release = yield* GCP.Dataform.RepositoriesReleaseConfig("Prod", {
+            repository: repo.name,
+            gitCommitish: "main",
+            disabled: true,
+          });
           return { repo, release };
         }),
       );
@@ -58,15 +54,12 @@ test.provider(
       expect(created.release.disabled).toEqual(true);
       expect(created.release.vars).toMatchObject({});
 
-      const fetched =
-        yield* dataform.getProjectsLocationsRepositoriesReleaseConfigs({
-          name: created.release.name,
-        });
+      const fetched = yield* dataform.getProjectsLocationsRepositoriesReleaseConfigs({
+        name: created.release.name,
+      });
       expect(fetched.name).toEqual(created.release.name);
       expect(fetched.gitCommitish).toEqual("main");
-      expect(fetched.codeCompilationConfig?.vars?.["alchemy-id"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetched.codeCompilationConfig?.vars?.["alchemy-id"]).toEqual(expect.any(String));
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -75,19 +68,15 @@ test.provider(
             location: "us-central1",
             displayName: "release-repo",
             labels: { env: "test" },
-            serviceAccount:
-              "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
           });
-          const release = yield* GCP.Dataform.RepositoriesReleaseConfig(
-            "Prod",
-            {
-              repository: repo.name,
-              releaseConfigId: created.release.releaseConfigId,
-              gitCommitish: "main",
-              disabled: true,
-              timeZone: "UTC",
-            },
-          );
+          const release = yield* GCP.Dataform.RepositoriesReleaseConfig("Prod", {
+            repository: repo.name,
+            releaseConfigId: created.release.releaseConfigId,
+            gitCommitish: "main",
+            disabled: true,
+            timeZone: "UTC",
+          });
           return { repo, release };
         }),
       );

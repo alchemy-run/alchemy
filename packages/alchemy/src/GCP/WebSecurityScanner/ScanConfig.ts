@@ -272,9 +272,7 @@ export type ScanConfig = Resource<
  * @resource
  * @category WebSecurityScanner
  */
-export const ScanConfig = Resource<ScanConfig>(
-  "GCP.WebSecurityScanner.ScanConfig",
-);
+export const ScanConfig = Resource<ScanConfig>("GCP.WebSecurityScanner.ScanConfig");
 
 export class ScanConfigNotResolved extends Data.TaggedError(
   "GCP.WebSecurityScanner.ScanConfigNotResolved",
@@ -300,8 +298,7 @@ const toAuthentication = (
   const google = authentication.googleAccount;
   const custom = authentication.customAccount;
   const iapClientId =
-    authentication.iapCredential?.iapTestServiceAccountInfo
-      ?.targetAudienceClientId;
+    authentication.iapCredential?.iapTestServiceAccountInfo?.targetAudienceClientId;
   const next: ScanConfigAuthentication = {};
   if (google?.username !== undefined) {
     next.googleAccount = { username: google.username };
@@ -318,9 +315,7 @@ const toAuthentication = (
   return Object.keys(next).length > 0 ? next : undefined;
 };
 
-const authenticationFingerprint = (
-  authentication: ScanConfigAuthentication | undefined,
-) =>
+const authenticationFingerprint = (authentication: ScanConfigAuthentication | undefined) =>
   JSON.stringify({
     googleUsername: authentication?.googleAccount?.username ?? "",
     customUsername: authentication?.customAccount?.username ?? "",
@@ -361,8 +356,7 @@ const toAttrs = (config: websecurityscanner.ScanConfig, project: string) => {
     targetPlatforms: stringList(config.targetPlatforms).filter(
       (platform) => unspecified(platform).length > 0,
     ),
-    exportToSecurityCommandCenter:
-      unspecified(config.exportToSecurityCommandCenter) || undefined,
+    exportToSecurityCommandCenter: unspecified(config.exportToSecurityCommandCenter) || undefined,
     riskLevel: unspecified(config.riskLevel) || undefined,
     staticIpScan: config.staticIpScan,
     ignoreHttpStatusErrors: config.ignoreHttpStatusErrors,
@@ -392,18 +386,14 @@ const toAuthBody = (
   if (authentication.iapCredential !== undefined) {
     body.iapCredential = {
       iapTestServiceAccountInfo: {
-        targetAudienceClientId:
-          authentication.iapCredential.targetAudienceClientId,
+        targetAudienceClientId: authentication.iapCredential.targetAudienceClientId,
       },
     };
   }
   return Object.keys(body).length > 0 ? body : undefined;
 };
 
-const toBody = (
-  news: ScanConfigProps,
-  displayName: string,
-): websecurityscanner.ScanConfig => {
+const toBody = (news: ScanConfigProps, displayName: string): websecurityscanner.ScanConfig => {
   const body: websecurityscanner.ScanConfig = {
     displayName,
     startingUrls: news.startingUrls,
@@ -466,9 +456,7 @@ export const ScanConfigProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* getScanConfig(
-        lookupNameOf(env.project, olds ?? {}, output),
-      );
+      const existing = yield* getScanConfig(lookupNameOf(env.project, olds ?? {}, output));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state it may not be ours.
@@ -513,25 +501,17 @@ export const ScanConfigProvider = () =>
 
       const name = current.name ?? lookupName;
       const displayChanged = !sameText(current.displayName, displayName);
-      const startingChanged = !jsonEqual(
-        stringList(current.startingUrls),
-        news.startingUrls,
-      );
-      const maxQpsChanged =
-        news.maxQps !== undefined && (current.maxQps ?? 15) !== news.maxQps;
+      const startingChanged = !jsonEqual(stringList(current.startingUrls), news.startingUrls);
+      const maxQpsChanged = news.maxQps !== undefined && (current.maxQps ?? 15) !== news.maxQps;
       const userAgentChanged =
         news.userAgent !== undefined &&
         unspecified(current.userAgent) !== unspecified(news.userAgent);
       const blacklistChanged =
         news.blacklistPatterns !== undefined &&
-        !jsonEqual(
-          stringList(current.blacklistPatterns),
-          news.blacklistPatterns,
-        );
+        !jsonEqual(stringList(current.blacklistPatterns), news.blacklistPatterns);
       const scheduleChanged =
         news.schedule !== undefined &&
-        (current.schedule?.intervalDurationDays ?? 0) !==
-          news.schedule.intervalDurationDays;
+        (current.schedule?.intervalDurationDays ?? 0) !== news.schedule.intervalDurationDays;
       const authenticationChanged =
         news.authentication !== undefined &&
         authenticationFingerprint(toAuthentication(current.authentication)) !==
@@ -554,12 +534,10 @@ export const ScanConfigProvider = () =>
         news.riskLevel !== undefined &&
         unspecified(current.riskLevel) !== unspecified(news.riskLevel);
       const staticIpChanged =
-        news.staticIpScan !== undefined &&
-        (current.staticIpScan === true) !== news.staticIpScan;
+        news.staticIpScan !== undefined && (current.staticIpScan === true) !== news.staticIpScan;
       const ignoreHttpChanged =
         news.ignoreHttpStatusErrors !== undefined &&
-        (current.ignoreHttpStatusErrors === true) !==
-          news.ignoreHttpStatusErrors;
+        (current.ignoreHttpStatusErrors === true) !== news.ignoreHttpStatusErrors;
 
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,

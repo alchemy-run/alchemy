@@ -117,9 +117,7 @@ export type AgentsEnvironment = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsEnvironment = Resource<AgentsEnvironment>(
-  "GCP.Dialogflow.AgentsEnvironment",
-);
+export const AgentsEnvironment = Resource<AgentsEnvironment>("GCP.Dialogflow.AgentsEnvironment");
 
 export class AgentsEnvironmentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentNotResolved",
@@ -128,18 +126,13 @@ export class AgentsEnvironmentNotResolved extends Data.TaggedError(
 }> {}
 
 const configsOf = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3EnvironmentVersionConfig[]
-    | undefined,
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3EnvironmentVersionConfig[] | undefined,
 ): EnvironmentVersionConfig[] =>
   (list ?? [])
     .filter((config) => (config.version ?? "").length > 0)
     .map((config) => ({ version: config.version ?? "" }));
 
-const toAttrs = (
-  environment: dialogflow.GoogleCloudDialogflowCxV3Environment,
-  project: string,
-) => {
+const toAttrs = (environment: dialogflow.GoogleCloudDialogflowCxV3Environment, project: string) => {
   const name = environment.name ?? "";
   const parsed = parseResourceName(name, "environments");
   return {
@@ -174,18 +167,13 @@ const findOwned = (id: string, agent: string, hinted?: string) =>
         return environment;
       }
     }
-    return undefined as
-      | dialogflow.GoogleCloudDialogflowCxV3Environment
-      | undefined;
+    return undefined as dialogflow.GoogleCloudDialogflowCxV3Environment | undefined;
   });
 
-const resolveFromOperation = (
-  operation: dialogflow.GoogleLongrunningOperation,
-) =>
+const resolveFromOperation = (operation: dialogflow.GoogleLongrunningOperation) =>
   Effect.gen(function* () {
     const done = yield* waitForOperation(operation);
-    const name =
-      resourceNameFromOperation(done) ?? resourceNameFromOperation(operation);
+    const name = resourceNameFromOperation(done) ?? resourceNameFromOperation(operation);
     if (name === undefined) return undefined;
     return yield* getByName(name);
   });
@@ -226,9 +214,7 @@ export const AgentsEnvironmentProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -244,12 +230,10 @@ export const AgentsEnvironmentProvider = () =>
                     environments
                       .filter(
                         (environment) =>
-                          parseOwnership(environment.description).labels[
-                            "alchemy-id"
-                          ] !== undefined ||
-                          parseOwnership(environment.displayName).labels[
-                            "alchemy-id"
-                          ] !== undefined,
+                          parseOwnership(environment.description).labels["alchemy-id"] !==
+                            undefined ||
+                          parseOwnership(environment.displayName).labels["alchemy-id"] !==
+                            undefined,
                       )
                       .map((environment) => toAttrs(environment, env.project)),
                   ),
@@ -293,9 +277,7 @@ export const AgentsEnvironmentProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentNotResolved({
-          name:
-            output?.name ??
-            `${agent}/environments/${news.environmentId ?? "unknown"}`,
+          name: output?.name ?? `${agent}/environments/${news.environmentId ?? "unknown"}`,
         });
       }
 
@@ -308,16 +290,15 @@ export const AgentsEnvironmentProvider = () =>
       );
 
       if (displayChanged || descriptionChanged || versionsChanged) {
-        const operation =
-          yield* dialogflow.patchProjectsLocationsAgentsEnvironments({
-            name: currentName,
-            updateMask: updateMaskOf(
-              displayChanged ? "display_name" : undefined,
-              descriptionChanged ? "description" : undefined,
-              versionsChanged ? "version_configs" : undefined,
-            ),
-            body: { ...body, name: currentName },
-          });
+        const operation = yield* dialogflow.patchProjectsLocationsAgentsEnvironments({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+            versionsChanged ? "version_configs" : undefined,
+          ),
+          body: { ...body, name: currentName },
+        });
         const patched = yield* resolveFromOperation(operation);
         current = patched ?? (yield* getByName(currentName)) ?? current;
       }

@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const DOMAIN_A = "a.alchemy-cm.example.com";
 const DOMAIN_B = "b.alchemy-cm.example.com";
@@ -55,21 +52,18 @@ test.provider(
       expect(created.dnsResourceRecordType).toEqual("CNAME");
       expect(created.dnsResourceRecordData).toEqual(expect.any(String));
 
-      const fetched =
-        yield* certificatemanager.getProjectsLocationsDnsAuthorizations({
-          name: created.name,
-        });
+      const fetched = yield* certificatemanager.getProjectsLocationsDnsAuthorizations({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.domain).toEqual(DOMAIN_A);
       expect(fetched.description).toEqual("dns auth a");
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.dnsResourceRecord?.type).toEqual("CNAME");
       expect(fetched.dnsResourceRecord?.data).toEqual(expect.any(String));
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -87,14 +81,11 @@ test.provider(
       expect(updated.domain).toEqual(DOMAIN_A);
       expect(updated.description).toEqual("dns auth b");
       expect(updated.labels).toMatchObject({ env: "prod", role: "auth" });
-      expect(updated.dnsResourceRecordData).toEqual(
-        created.dnsResourceRecordData,
-      );
+      expect(updated.dnsResourceRecordData).toEqual(created.dnsResourceRecordData);
 
-      const refetched =
-        yield* certificatemanager.getProjectsLocationsDnsAuthorizations({
-          name: created.name,
-        });
+      const refetched = yield* certificatemanager.getProjectsLocationsDnsAuthorizations({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("dns auth b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("auth");
@@ -119,10 +110,9 @@ test.provider(
       expect(replaced.dnsResourceRecordName).toEqual(expect.any(String));
       expect(replaced.dnsResourceRecordData).toEqual(expect.any(String));
 
-      const replacedFetched =
-        yield* certificatemanager.getProjectsLocationsDnsAuthorizations({
-          name: created.name,
-        });
+      const replacedFetched = yield* certificatemanager.getProjectsLocationsDnsAuthorizations({
+        name: created.name,
+      });
       expect(replacedFetched.domain).toEqual(DOMAIN_B);
       expect(replacedFetched.description).toEqual("dns auth c");
 

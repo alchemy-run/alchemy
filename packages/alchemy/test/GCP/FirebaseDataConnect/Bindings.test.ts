@@ -1,20 +1,13 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  callProbe,
-  dockerAvailable,
-  type ProbeOutcome,
-} from "../bindingHost.ts";
-import DataConnectBindingsHost, {
-  App,
-  Queries,
-} from "./fixtures/bindings-host.ts";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import { callProbe, dockerAvailable, type ProbeOutcome } from "../bindingHost.ts";
+import DataConnectBindingsHost, { App, Queries } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -36,9 +29,7 @@ const hostProjectRoles = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({
       role: binding.role,
       condition: binding.condition?.expression,
@@ -52,9 +43,7 @@ const expectedRoles = [
 ];
 
 /** Tag of a direct (deployer-credential) call, for comparison. */
-const tagOf = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const tagOf = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.map(() => "ok"),
     Effect.catch((error) => Effect.succeed(error._tag)),
@@ -77,12 +66,7 @@ const expectAuthorized = (outcome: ProbeOutcome<unknown>) => {
 describe.skipIf(!dockerAvailable)(
   "FirebaseDataConnect Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:firebasedataconnect",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -165,12 +149,10 @@ describe.skipIf(!dockerAvailable)(
             const outcome = yield* callProbe(baseUrl, "executeQuery");
             const tag = expectAuthorized(outcome);
             const direct = yield* tagOf(
-              firebasedataconnect.executeQueryProjectsLocationsServicesConnectors(
-                {
-                  name: connectorName,
-                  body: { operationName: "ListAlchemyNotes" },
-                },
-              ),
+              firebasedataconnect.executeQueryProjectsLocationsServicesConnectors({
+                name: connectorName,
+                body: { operationName: "ListAlchemyNotes" },
+              }),
             );
             expect(tag).toEqual(direct);
             expect(yield* hostProjectRoles).toEqual(expectedRoles);
@@ -190,15 +172,13 @@ describe.skipIf(!dockerAvailable)(
             const outcome = yield* callProbe(baseUrl, "executeMutation");
             const tag = expectAuthorized(outcome);
             const direct = yield* tagOf(
-              firebasedataconnect.executeMutationProjectsLocationsServicesConnectors(
-                {
-                  name: connectorName,
-                  body: {
-                    operationName: "CreateAlchemyNote",
-                    variables: { title: "hello" },
-                  },
+              firebasedataconnect.executeMutationProjectsLocationsServicesConnectors({
+                name: connectorName,
+                body: {
+                  operationName: "CreateAlchemyNote",
+                  variables: { title: "hello" },
                 },
-              ),
+              }),
             );
             expect(tag).toEqual(direct);
             expect(yield* hostProjectRoles).toEqual(expectedRoles);

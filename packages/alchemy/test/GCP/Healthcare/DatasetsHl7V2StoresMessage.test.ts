@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as healthcare from "@distilled.cloud/gcp/healthcare_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const HL7 = [
   "MSH|^~\\&|ALCHEMY|TESTFAC|RECEIVER|RECVFAC|20240101120000||ADT^A01|MSG00001|P|2.5",
@@ -64,14 +61,11 @@ test.provider(
           const store = yield* GCP.Healthcare.DatasetsHl7V2Store("AdtStore", {
             dataset: dataset.name,
           });
-          const message = yield* GCP.Healthcare.DatasetsHl7V2StoresMessage(
-            "Adt",
-            {
-              parent: store.name,
-              data: HL7,
-              labels: { env: "test" },
-            },
-          );
+          const message = yield* GCP.Healthcare.DatasetsHl7V2StoresMessage("Adt", {
+            parent: store.name,
+            data: HL7,
+            labels: { env: "test" },
+          });
           return { dataset, store, message };
         }),
       );
@@ -82,11 +76,10 @@ test.provider(
       expect(created.message.data).toContain("ADT^A01");
       expect(created.message.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* healthcare.getProjectsLocationsDatasetsHl7V2StoresMessages({
-          name: created.message.name,
-          view: "FULL",
-        });
+      const fetched = yield* healthcare.getProjectsLocationsDatasetsHl7V2StoresMessages({
+        name: created.message.name,
+        view: "FULL",
+      });
       expect(fetched.name).toEqual(created.message.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
@@ -101,15 +94,12 @@ test.provider(
             dataset: dataset.name,
             hl7V2StoreId: created.store.hl7V2StoreId,
           });
-          const message = yield* GCP.Healthcare.DatasetsHl7V2StoresMessage(
-            "Adt",
-            {
-              parent: store.name,
-              messageId: created.message.messageId,
-              data: HL7,
-              labels: { env: "prod", role: "adt" },
-            },
-          );
+          const message = yield* GCP.Healthcare.DatasetsHl7V2StoresMessage("Adt", {
+            parent: store.name,
+            messageId: created.message.messageId,
+            data: HL7,
+            labels: { env: "prod", role: "adt" },
+          });
           return { dataset, store, message };
         }),
       );

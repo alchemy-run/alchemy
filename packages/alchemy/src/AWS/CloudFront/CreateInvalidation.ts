@@ -35,10 +35,7 @@ export interface CreateInvalidation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateInvalidationRequest,
-    ) => Effect.Effect<
-      cloudfront.CreateInvalidationResult,
-      cloudfront.CreateInvalidationError
-    >
+    ) => Effect.Effect<cloudfront.CreateInvalidationResult, cloudfront.CreateInvalidationError>
   >
 > {}
 

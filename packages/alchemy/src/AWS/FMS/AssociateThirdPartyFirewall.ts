@@ -42,7 +42,6 @@ export interface AssociateThirdPartyFirewall extends Binding.Service<
   >
 > {}
 
-export const AssociateThirdPartyFirewall =
-  Binding.Service<AssociateThirdPartyFirewall>(
-    "AWS.FMS.AssociateThirdPartyFirewall",
-  );
+export const AssociateThirdPartyFirewall = Binding.Service<AssociateThirdPartyFirewall>(
+  "AWS.FMS.AssociateThirdPartyFirewall",
+);

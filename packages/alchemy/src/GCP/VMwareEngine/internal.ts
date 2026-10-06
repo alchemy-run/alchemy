@@ -1,15 +1,11 @@
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as vmwareengine from "@distilled.cloud/gcp/vmwareengine_v1";
 import * as Data from "effect/Data";
-import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
 
 export const DEFAULT_GLOBAL = "global";
@@ -20,21 +16,15 @@ export const MAX_NAME_LENGTH = 63;
 
 export { createInternalLabels, hasAlchemyLabels };
 
-export class VmwareengineNotResolved extends Data.TaggedError(
-  "GCP.VMwareEngine.NotResolved",
-)<{
+export class VmwareengineNotResolved extends Data.TaggedError("GCP.VMwareEngine.NotResolved")<{
   name: string;
 }> {}
 
-export class VmwareengineStillExists extends Data.TaggedError(
-  "GCP.VMwareEngine.StillExists",
-)<{
+export class VmwareengineStillExists extends Data.TaggedError("GCP.VMwareEngine.StillExists")<{
   name: string;
 }> {}
 
-export class VmwareengineFailed extends Data.TaggedError(
-  "GCP.VMwareEngine.Failed",
-)<{
+export class VmwareengineFailed extends Data.TaggedError("GCP.VMwareEngine.Failed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -59,10 +49,8 @@ export const rfc1035 = (name: string, fallback = "resource"): string => {
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -75,26 +63,16 @@ export const canonicalizeLink = (value: string | undefined) => {
     .replace(/\/+$/, "");
 };
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent: collectionAt > 0 ? parts.slice(0, collectionAt).join("/") : "",
   };
 };
@@ -112,10 +90,7 @@ export const expandName = (
   collection: string,
 ) => {
   const canonical = canonicalizeLink(value);
-  if (
-    canonical.includes(`/${collection}/`) ||
-    canonical.includes("/locations/")
-  ) {
+  if (canonical.includes(`/${collection}/`) || canonical.includes("/locations/")) {
     return canonical;
   }
   return `${parentOf(project, location)}/${collection}/${rfc1035(canonical, collection)}`;
@@ -172,16 +147,13 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
-export const changedFields = (
-  pairs: ReadonlyArray<readonly [string, boolean]>,
-) => pairs.filter(([, changed]) => changed).map(([field]) => field);
+export const changedFields = (pairs: ReadonlyArray<readonly [string, boolean]>) =>
+  pairs.filter(([, changed]) => changed).map(([field]) => field);
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -195,8 +167,7 @@ export const replaceOnIdentity = (input: {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
     (input.nextParent ?? "") !== "" &&
-    canonicalizeLink(input.previousParent) !==
-      canonicalizeLink(input.nextParent);
+    canonicalizeLink(input.previousParent) !== canonicalizeLink(input.nextParent);
   const replace =
     (input.extra ?? false) ||
     parentChanged ||
@@ -345,9 +316,7 @@ export const collectPages = <Page, Item, E, R>(
   pick: (page: Page) => readonly Item[] | undefined,
 ): Effect.Effect<Item[], E, R> =>
   stream.pipe(
-    Stream.flatMap((page) =>
-      Stream.fromIterable(pick(page) ?? ([] as readonly Item[])),
-    ),
+    Stream.flatMap((page) => Stream.fromIterable(pick(page) ?? ([] as readonly Item[]))),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );

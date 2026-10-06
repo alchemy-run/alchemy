@@ -12,8 +12,7 @@ import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./internal.ts";
 
 const CRM_PREFIX = "//cloudresourcemanager.googleapis.com/";
-const PROJECT_PARENT =
-  /^\/\/cloudresourcemanager\.googleapis\.com\/projects\/([^/]+)$/;
+const PROJECT_PARENT = /^\/\/cloudresourcemanager\.googleapis\.com\/projects\/([^/]+)$/;
 
 export type TagBindingProps = {
   /**
@@ -88,9 +87,7 @@ export type TagBinding = Resource<
  * @resource
  * @category ResourceManager
  */
-export const TagBinding = Resource<TagBinding>(
-  "GCP.ResourceManager.TagBinding",
-);
+export const TagBinding = Resource<TagBinding>("GCP.ResourceManager.TagBinding");
 
 export class TagBindingNotResolved extends Data.TaggedError(
   "GCP.ResourceManager.TagBindingNotResolved",
@@ -111,15 +108,9 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const unique = (values: string[]) => [
-  ...new Set(values.filter((value) => value.length > 0)),
-];
+const unique = (values: string[]) => [...new Set(values.filter((value) => value.length > 0))];
 
-const expandParent = (
-  parent: string | undefined,
-  project: string,
-  projectNumber: string,
-) => {
+const expandParent = (parent: string | undefined, project: string, projectNumber: string) => {
   if (parent === undefined || parent.length === 0) {
     return `${CRM_PREFIX}projects/${projectNumber || project}`;
   }
@@ -136,11 +127,7 @@ const expandParent = (
 
 const isProjectParent = (parent: string) => PROJECT_PARENT.test(parent);
 
-const projectAliases = (
-  parent: string,
-  project: string,
-  projectNumber: string,
-) => {
+const projectAliases = (parent: string, project: string, projectNumber: string) => {
   const expanded = expandParent(parent, project, projectNumber);
   if (!isProjectParent(expanded)) return [expanded];
   return unique([
@@ -150,21 +137,13 @@ const projectAliases = (
   ]);
 };
 
-const sameParent = (
-  left: string,
-  right: string,
-  project: string,
-  projectNumber: string,
-) => {
+const sameParent = (left: string, right: string, project: string, projectNumber: string) => {
   const aliases = new Set(projectAliases(left, project, projectNumber));
-  return projectAliases(right, project, projectNumber).some((alias) =>
-    aliases.has(alias),
-  );
+  return projectAliases(right, project, projectNumber).some((alias) => aliases.has(alias));
 };
 
 const sameTagValue = (binding: resourcemanager.TagBinding, desired: string) =>
-  desired === (binding.tagValue ?? "") ||
-  desired === (binding.tagValueNamespacedName ?? "");
+  desired === (binding.tagValue ?? "") || desired === (binding.tagValueNamespacedName ?? "");
 
 const toAttrs = (binding: resourcemanager.TagBinding, project: string) => ({
   name: binding.name ?? "",
@@ -176,13 +155,8 @@ const toAttrs = (binding: resourcemanager.TagBinding, project: string) => ({
 
 const isTagValueId = (tagValue: string) => tagValue.startsWith("tagValues/");
 
-const createBody = (
-  parent: string,
-  tagValue: string,
-): resourcemanager.TagBinding =>
-  isTagValueId(tagValue)
-    ? { parent, tagValue }
-    : { parent, tagValueNamespacedName: tagValue };
+const createBody = (parent: string, tagValue: string): resourcemanager.TagBinding =>
+  isTagValueId(tagValue) ? { parent, tagValue } : { parent, tagValueNamespacedName: tagValue };
 
 const parseBindingName = (name: string) => {
   if (!name.startsWith("tagBindings/")) {
@@ -224,9 +198,7 @@ const listBindings = (parent: string) =>
     Stream.flatMap((page) => Stream.fromIterable(page.tagBindings ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as resourcemanager.TagBinding[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as resourcemanager.TagBinding[])),
   );
 
 const listBindingsOn = (parents: string[]) =>
@@ -251,17 +223,11 @@ const findBinding = (
 ) =>
   Effect.gen(function* () {
     const parsed = name ? parseBindingName(name) : undefined;
-    const parents = projectAliases(
-      parent || parsed?.parent || "",
-      project,
-      projectNumber,
-    );
+    const parents = projectAliases(parent || parsed?.parent || "", project, projectNumber);
     const bindings = yield* listBindingsOn(parents);
     const desired = tagValue || parsed?.tagValue;
     if (desired !== undefined && desired.length > 0) {
-      const byValue = bindings.find((binding) =>
-        sameTagValue(binding, desired),
-      );
+      const byValue = bindings.find((binding) => sameTagValue(binding, desired));
       if (byValue) return byValue;
     }
     if (name) {
@@ -284,8 +250,7 @@ const waitUntilExists = (
         : Effect.fail(new TagBindingNotResolved({ parent, tagValue })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ResourceManager.TagBindingNotResolved",
+      while: (error) => error._tag === "GCP.ResourceManager.TagBindingNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -309,8 +274,7 @@ const waitUntilGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ResourceManager.TagBindingStillExists",
+      while: (error) => error._tag === "GCP.ResourceManager.TagBindingStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -325,11 +289,7 @@ export const TagBindingProvider = () =>
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
       const previousParent = olds?.parent ?? output?.parent;
-      const nextParent = expandParent(
-        news.parent ?? previousParent,
-        env.project,
-        projectNumber,
-      );
+      const nextParent = expandParent(news.parent ?? previousParent, env.project, projectNumber);
       const parentChanged =
         previousParent !== undefined &&
         !sameParent(previousParent, nextParent, env.project, projectNumber);
@@ -375,13 +335,7 @@ export const TagBindingProvider = () =>
       const parent = expandParent(news.parent, env.project, projectNumber);
       const tagValue = news.tagValue;
 
-      let current = yield* findBinding(
-        parent,
-        tagValue,
-        undefined,
-        env.project,
-        projectNumber,
-      );
+      let current = yield* findBinding(parent, tagValue, undefined, env.project, projectNumber);
 
       if (current === undefined) {
         const created = yield* resourcemanager
@@ -392,12 +346,7 @@ export const TagBindingProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
-        current = yield* waitUntilExists(
-          parent,
-          tagValue,
-          env.project,
-          projectNumber,
-        );
+        current = yield* waitUntilExists(parent, tagValue, env.project, projectNumber);
       }
 
       if (current === undefined) {
@@ -411,11 +360,7 @@ export const TagBindingProvider = () =>
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
       const parsed = parseBindingName(output.name);
-      const parent = expandParent(
-        output.parent || parsed.parent,
-        env.project,
-        projectNumber,
-      );
+      const parent = expandParent(output.parent || parsed.parent, env.project, projectNumber);
       const tagValue = output.tagValue || parsed.tagValue || "";
       let name = output.name;
       if (!name) {

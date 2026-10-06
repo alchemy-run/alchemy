@@ -4,10 +4,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface GetClipRequest extends Omit<
-  kvam.GetClipInput,
-  "StreamName" | "StreamARN"
-> {}
+export interface GetClipRequest extends Omit<kvam.GetClipInput, "StreamName" | "StreamARN"> {}
 
 /**
  * Runtime binding for `kinesisvideo:GetClip` (archived media data plane).
@@ -41,10 +38,7 @@ export interface GetClip extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetClipRequest,
-    ) => Effect.Effect<
-      kvam.GetClipOutput,
-      kvam.GetClipError | kv.GetDataEndpointError
-    >
+    ) => Effect.Effect<kvam.GetClipOutput, kvam.GetClipError | kv.GetDataEndpointError>
   >
 > {}
 

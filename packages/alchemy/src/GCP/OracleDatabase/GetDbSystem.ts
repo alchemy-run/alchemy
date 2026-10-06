@@ -30,14 +30,8 @@ export interface GetDbSystem extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetDbSystemRequest,
-    ) => Effect.Effect<
-      oracle.DbSystem,
-      oracle.GetProjectsLocationsDbSystemsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<oracle.DbSystem, oracle.GetProjectsLocationsDbSystemsError, RuntimeContext>
   >
 > {}
 
-export const GetDbSystem = Binding.Service<GetDbSystem>(
-  "GCP.OracleDatabase.GetDbSystem",
-);
+export const GetDbSystem = Binding.Service<GetDbSystem>("GCP.OracleDatabase.GetDbSystem");

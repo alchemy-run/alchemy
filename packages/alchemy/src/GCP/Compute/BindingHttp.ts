@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import type { Instance } from "./Instance.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Instance } from "./Instance.ts";
 
 /**
  * Shared HTTP scaffolding for Compute Engine instance bindings.

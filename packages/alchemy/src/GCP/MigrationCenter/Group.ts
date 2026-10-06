@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -178,10 +173,7 @@ export const GroupProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.groupId ?? output?.groupId,
         nextId: news.groupId ?? olds?.groupId ?? output?.groupId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -191,23 +183,13 @@ export const GroupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const groupId = yield* toPhysicalId(
-        id,
-        olds?.groupId,
-        output?.groupId,
-        "group",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const groupId = yield* toPhysicalId(id, olds?.groupId, output?.groupId, "group");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, groupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -219,16 +201,8 @@ export const GroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const groupId = yield* toPhysicalId(
-        id,
-        news.groupId,
-        output?.groupId,
-        "group",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const groupId = yield* toPhysicalId(id, news.groupId, output?.groupId, "group");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, groupId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -264,8 +238,7 @@ export const GroupProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const mask = fieldMask([
         labelsChanged && "labels",
         displayNameChanged && "displayName",
@@ -284,26 +257,21 @@ export const GroupProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* mc
-        .deleteProjectsLocationsGroups({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* mc.deleteProjectsLocationsGroups({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

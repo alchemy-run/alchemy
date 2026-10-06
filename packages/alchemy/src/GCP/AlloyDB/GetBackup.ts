@@ -33,11 +33,7 @@ export interface GetBackup extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetBackupRequest,
-    ) => Effect.Effect<
-      alloydb.Backup,
-      alloydb.GetProjectsLocationsBackupsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<alloydb.Backup, alloydb.GetProjectsLocationsBackupsError, RuntimeContext>
   >
 > {}
 

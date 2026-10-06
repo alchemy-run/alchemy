@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import PrivateCaBindingsHost, { Pool, Root } from "./fixtures/bindings-host.ts";
 
@@ -25,26 +25,16 @@ const expectPoolGrants = Effect.gen(function* () {
     resource: poolName,
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role)
     .sort();
-  expect(roles).toEqual([
-    "roles/privateca.auditor",
-    "roles/privateca.poolReader",
-  ]);
+  expect(roles).toEqual(["roles/privateca.auditor", "roles/privateca.poolReader"]);
 });
 
 describe.skipIf(!dockerAvailable)(
   "PrivateCA Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:privateca",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:privateca", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -80,14 +70,11 @@ describe.skipIf(!dockerAvailable)(
               baseUrl,
               "fetchCaCerts",
             );
-            const pems = (certs.caCerts ?? []).flatMap(
-              (chain) => chain.certificates ?? [],
-            );
+            const pems = (certs.caCerts ?? []).flatMap((chain) => chain.certificates ?? []);
             // The enabled root CA is the pool's only trust anchor.
-            const ca =
-              yield* privateca.getProjectsLocationsCaPoolsCertificateAuthorities(
-                { name: caName },
-              );
+            const ca = yield* privateca.getProjectsLocationsCaPoolsCertificateAuthorities({
+              name: caName,
+            });
             expect(pems.map((pem) => pem.trim())).toEqual(
               (ca.pemCaCertificates ?? []).map((pem) => pem.trim()),
             );

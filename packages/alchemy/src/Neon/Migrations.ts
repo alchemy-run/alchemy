@@ -78,9 +78,7 @@ export const runPgMigrations = (options: {
   runMigrations({
     ...options,
     withExecutor: (apply) =>
-      withPgClient(options.connectionUri, (client) =>
-        apply(makePgMigrationExecutor(client)),
-      ),
+      withPgClient(options.connectionUri, (client) => apply(makePgMigrationExecutor(client))),
   });
 
 /**

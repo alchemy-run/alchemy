@@ -41,10 +41,7 @@ export interface DescribeRecoveryPoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeRecoveryPointRequest,
-    ) => Effect.Effect<
-      backup.DescribeRecoveryPointOutput,
-      backup.DescribeRecoveryPointError
-    >
+    ) => Effect.Effect<backup.DescribeRecoveryPointOutput, backup.DescribeRecoveryPointError>
   >
 > {}
 export const DescribeRecoveryPoint = Binding.Service<DescribeRecoveryPoint>(

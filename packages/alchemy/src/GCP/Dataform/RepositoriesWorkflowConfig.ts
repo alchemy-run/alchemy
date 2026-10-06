@@ -183,19 +183,14 @@ const invocationOf = (
     transitiveDependentsIncluded: config.transitiveDependentsIncluded,
     serviceAccount: config.serviceAccount,
     includedTags: config.includedTags,
-    fullyRefreshIncrementalTablesEnabled:
-      config.fullyRefreshIncrementalTablesEnabled,
+    fullyRefreshIncrementalTablesEnabled: config.fullyRefreshIncrementalTablesEnabled,
     queryPriority: config.queryPriority,
     transitiveDependenciesIncluded: config.transitiveDependenciesIncluded,
     includedTargets: config.includedTargets,
   };
 };
 
-const toAttrs = (
-  config: dataform.WorkflowConfig,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (config: dataform.WorkflowConfig, project: string, region: string) => {
   const name = config.name ?? "";
   const parsed = parseResourceName(name, "workflowConfigs", region);
   return {
@@ -223,14 +218,7 @@ const getByName = (name: string) =>
 
 export const RepositoriesWorkflowConfigProvider = () =>
   Provider.succeed(RepositoriesWorkflowConfig, {
-    stables: [
-      "name",
-      "workflowConfigId",
-      "repository",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "workflowConfigId", "repository", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -241,10 +229,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       );
       return replaceOnIdentity({
         previousId: olds?.workflowConfigId ?? output?.workflowConfigId,
-        nextId:
-          news.workflowConfigId ??
-          olds?.workflowConfigId ??
-          output?.workflowConfigId,
+        nextId: news.workflowConfigId ?? olds?.workflowConfigId ?? output?.workflowConfigId,
         previousLocation: olds?.location ?? output?.location,
         nextLocation: news.location ?? olds?.location ?? output?.location,
         previousParent: olds?.repository ?? output?.repository,
@@ -258,15 +243,11 @@ export const RepositoriesWorkflowConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const repository = expandRepository(
         olds?.repository ??
           output?.repository ??
-          parseResourceName(output?.name ?? "", "workflowConfigs", env.region)
-            .parent,
+          parseResourceName(output?.name ?? "", "workflowConfigs", env.region).parent,
         env.project,
         location,
       );
@@ -289,25 +270,16 @@ export const RepositoriesWorkflowConfigProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const configs = yield* forEachOwnedRepository(
-          env.project,
-          env.region,
-          (repo) => listWorkflowConfigs(repo.name ?? ""),
+        const configs = yield* forEachOwnedRepository(env.project, env.region, (repo) =>
+          listWorkflowConfigs(repo.name ?? ""),
         );
         return configs.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandRepository(news.repository, env.project, location);
       const workflowConfigId = yield* toPhysicalId(
         id,
         news.workflowConfigId,

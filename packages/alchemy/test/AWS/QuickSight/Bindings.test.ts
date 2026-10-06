@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as quicksight from "@distilled.cloud/aws/quicksight";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import QuickSightBindingsFunctionLive, {
-  QuickSightBindingsFunction,
-} from "./bindings-handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import QuickSightBindingsFunctionLive, { QuickSightBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -39,10 +37,7 @@ test.provider(
         "AccessDeniedException",
       ]).toContain(error._tag);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:quicksight", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:quicksight", "live"], timeout: 60_000 },
 );
 
 test.provider(
@@ -55,9 +50,7 @@ test.provider(
           AwsAccountId: accountId,
           UserArn: `arn:aws:quicksight:${region}:${accountId}:user/default/alchemy-nonexistent-user-probe`,
           ExperienceConfiguration: {
-            Dashboard: {
-              InitialDashboardId: "alchemy-nonexistent-dashboard-probe",
-            },
+            Dashboard: { InitialDashboardId: "alchemy-nonexistent-dashboard-probe" },
           },
         }),
       );
@@ -69,10 +62,7 @@ test.provider(
         "UnsupportedUserEditionException",
       ]).toContain(error._tag);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:quicksight", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:quicksight", "live"], timeout: 60_000 },
 );
 
 test.provider(
@@ -94,10 +84,7 @@ test.provider(
         "UnsupportedUserEditionException",
       ]).toContain(error._tag);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:quicksight", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:quicksight", "live"], timeout: 60_000 },
 );
 
 const sharedStack = Core.scratchStack(testOptions, "QuickSightBindings");
@@ -111,14 +98,7 @@ const post = (path: string) =>
 
 describe(
   "QuickSight Bindings (E2E)",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:quicksight",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:quicksight", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
@@ -143,15 +123,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -165,13 +140,11 @@ describe(
       { timeout: 300_000 },
     );
 
-    test.provider.skipIf(!SUBSCRIBED)(
-      "all 9 capabilities initialize in the runtime",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/bindings")) as any;
-          expect(response.bound).toHaveLength(9);
-        }),
+    test.provider.skipIf(!SUBSCRIBED)("all 9 capabilities initialize in the runtime", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/bindings")) as any;
+        expect(response.bound).toHaveLength(9);
+      }),
     );
 
     test.provider.skipIf(!SUBSCRIBED)(
@@ -192,10 +165,9 @@ describe(
           if (response.started) {
             expect(typeof response.id).toBe("string");
           } else {
-            expect([
-              "InvalidParameterValueException",
-              "ResourceNotFoundException",
-            ]).toContain(response.error);
+            expect(["InvalidParameterValueException", "ResourceNotFoundException"]).toContain(
+              response.error,
+            );
           }
         }),
     );
@@ -230,9 +202,7 @@ describe(
           const registered = (yield* get("/embed-url")) as any;
           expect(typeof registered.typed).toBe("string");
           const anonymous = (yield* get("/embed-url-anon")) as any;
-          expect(
-            anonymous.ok === true || typeof anonymous.error === "string",
-          ).toBe(true);
+          expect(anonymous.ok === true || typeof anonymous.error === "string").toBe(true);
         }),
     );
   },

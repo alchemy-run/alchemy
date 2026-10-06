@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type MachineImageProps = {
   /**
@@ -140,16 +140,12 @@ export class MachineImageNotResolved extends Data.TaggedError(
   machineImageName: string;
 }> {}
 
-export class MachineImagePending extends Data.TaggedError(
-  "GCP.Compute.MachineImagePending",
-)<{
+export class MachineImagePending extends Data.TaggedError("GCP.Compute.MachineImagePending")<{
   machineImageName: string;
   status: string;
 }> {}
 
-export class MachineImageFailed extends Data.TaggedError(
-  "GCP.Compute.MachineImageFailed",
-)<{
+export class MachineImageFailed extends Data.TaggedError("GCP.Compute.MachineImageFailed")<{
   machineImageName: string;
   status: string;
 }> {}
@@ -194,9 +190,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `m${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `m${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const toAttrs = (image: compute.MachineImage, project: string) => ({
@@ -221,9 +215,7 @@ const getByName = (project: string, machineImage: string) =>
 const canonicalizeSourceInstance = (source: string | undefined): string => {
   if (source === undefined || source.length === 0) return "";
   const cleaned = source.split("?")[0] ?? source;
-  const full = cleaned.match(
-    /(projects\/[^/]+\/zones\/[^/]+\/instances\/[^/]+)$/,
-  );
+  const full = cleaned.match(/(projects\/[^/]+\/zones\/[^/]+\/instances\/[^/]+)$/);
   if (full?.[1] !== undefined) return full[1];
   const zonal = cleaned.match(/(zones\/[^/]+\/instances\/[^/]+)$/);
   if (zonal?.[1] !== undefined) return zonal[1];
@@ -243,8 +235,7 @@ const waitUntilReady = (project: string, machineImageName: string) =>
         : Effect.succeed(image),
     ),
     Effect.filterOrFail(
-      (image): image is compute.MachineImage =>
-        image !== undefined && image.status === "READY",
+      (image): image is compute.MachineImage => image !== undefined && image.status === "READY",
       (image) =>
         new MachineImagePending({
           machineImageName,
@@ -306,18 +297,14 @@ export const MachineImageProvider = () =>
       const previousName = olds.machineImageName ?? output?.machineImageName;
       const nextName = news.machineImageName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousSource = canonicalizeSourceInstance(
         olds.sourceInstance ?? output?.sourceInstance,
       );
       const nextSource = canonicalizeSourceInstance(news.sourceInstance);
       const sourceChanged =
-        previousSource.length > 0 &&
-        nextSource.length > 0 &&
-        previousSource !== nextSource;
+        previousSource.length > 0 && nextSource.length > 0 && previousSource !== nextSource;
 
       const previousDescription = olds.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
@@ -325,37 +312,25 @@ export const MachineImageProvider = () =>
 
       const storageChanged =
         news.storageLocations !== undefined &&
-        !sameStrings(
-          news.storageLocations,
-          olds.storageLocations ?? output?.storageLocations,
-        );
+        !sameStrings(news.storageLocations, olds.storageLocations ?? output?.storageLocations);
 
-      const replace =
-        nameChanged || sourceChanged || descriptionChanged || storageChanged;
+      const replace = nameChanged || sourceChanged || descriptionChanged || storageChanged;
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          nextName === previousName,
+          previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const machineImageName = yield* toName(
-        id,
-        olds?.machineImageName,
-        output?.machineImageName,
-      );
+      const machineImageName = yield* toName(id, olds?.machineImageName, output?.machineImageName);
       const existing = yield* getByName(env.project, machineImageName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -369,9 +344,7 @@ export const MachineImageProvider = () =>
           })
           .pipe(
             Stream.filter((image) =>
-              Object.keys(image.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(image.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((image) => toAttrs(image, env.project)),
             Stream.runCollect,
@@ -381,11 +354,7 @@ export const MachineImageProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const machineImageName = yield* toName(
-        id,
-        news.machineImageName,
-        output?.machineImageName,
-      );
+      const machineImageName = yield* toName(id, news.machineImageName, output?.machineImageName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -398,10 +367,7 @@ export const MachineImageProvider = () =>
       }
 
       if (current === undefined) {
-        if (
-          news.sourceInstance === undefined ||
-          news.sourceInstance.length === 0
-        ) {
+        if (news.sourceInstance === undefined || news.sourceInstance.length === 0) {
           return yield* new MachineImageSourceRequired({ machineImageName });
         }
         const inserted = yield* compute
@@ -443,11 +409,7 @@ export const MachineImageProvider = () =>
               labelFingerprint: current.labelFingerprint,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, machineImageName)) ?? current;
       }
 

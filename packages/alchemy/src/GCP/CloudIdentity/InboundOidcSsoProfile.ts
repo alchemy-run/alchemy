@@ -24,11 +24,7 @@ import {
   toPhysicalId,
   updateMaskOf,
 } from "./internal.ts";
-import {
-  resourceNameFromOperation,
-  waitForOperation,
-  waitUntilPresent,
-} from "./operations.ts";
+import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from "./operations.ts";
 
 export type InboundOidcSsoProfileIdpConfig = {
   /** IdP issuer URL. Discovery is derived from this URI. */
@@ -161,10 +157,7 @@ export const InboundOidcSsoProfileProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previous = olds?.customer ?? output?.customer;
-      const next =
-        news.customer !== undefined
-          ? normalizeCustomer(news.customer)
-          : previous;
+      const next = news.customer !== undefined ? normalizeCustomer(news.customer) : previous;
       return replaceOnIdentity({
         previousParent: previous,
         nextParent: next,
@@ -175,17 +168,13 @@ export const InboundOidcSsoProfileProvider = () =>
       const existing = yield* observeProfile({ id, name: output?.name });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const profiles = yield* listOidcProfiles();
-        return profiles
-          .filter((profile) => hasOwnershipMarker(profile.displayName))
-          .map(toAttrs);
+        return profiles.filter((profile) => hasOwnershipMarker(profile.displayName)).map(toAttrs);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -193,12 +182,7 @@ export const InboundOidcSsoProfileProvider = () =>
       const customer = normalizeCustomer(news.customer ?? output?.customer);
       const displayName = encodeOwnershipLine(
         ownership,
-        yield* toPhysicalId(
-          id,
-          news.displayName,
-          output?.displayName,
-          MAX_DISPLAY_NAME_LENGTH,
-        ),
+        yield* toPhysicalId(id, news.displayName, output?.displayName, MAX_DISPLAY_NAME_LENGTH),
         MAX_DISPLAY_NAME_LENGTH,
       );
       const desired: cloudidentity.InboundOidcSsoProfile = {
@@ -220,10 +204,7 @@ export const InboundOidcSsoProfileProvider = () =>
           );
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
-            Effect.catchTag(
-              "GCP.CloudIdentity.OperationPending",
-              () => Effect.void,
-            ),
+            Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
           );
           const createdName = resourceNameFromOperation(created);
           if (createdName !== undefined) {
@@ -235,9 +216,7 @@ export const InboundOidcSsoProfileProvider = () =>
             observeProfile({ id, name: output?.name }),
             displayName,
           ).pipe(
-            Effect.catchTag("GCP.CloudIdentity.OperationPending", () =>
-              observeProfile({ id }),
-            ),
+            Effect.catchTag("GCP.CloudIdentity.OperationPending", () => observeProfile({ id })),
           );
         }
       }
@@ -272,10 +251,7 @@ export const InboundOidcSsoProfileProvider = () =>
           },
         });
         yield* waitForOperation(patched).pipe(
-          Effect.catchTag(
-            "GCP.CloudIdentity.OperationPending",
-            () => Effect.void,
-          ),
+          Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
         );
         current = (yield* getOidcProfile(name)) ?? current;
       }

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as migrationcenter from "@distilled.cloud/gcp/migrationcenter_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   migrationcenter.getProjectsLocationsReportConfigs({ name }).pipe(
@@ -67,9 +64,7 @@ test.provider(
             location: "us-central1",
             displayName: "tco",
             description: "quarterly tco",
-            groupPreferencesetAssignments: [
-              { group: group.name, preferenceSet: prefs.name },
-            ],
+            groupPreferencesetAssignments: [{ group: group.name, preferenceSet: prefs.name }],
           });
           return { group, prefs, config };
         }),
@@ -79,12 +74,10 @@ test.provider(
       expect(created.config.displayName).toEqual("tco");
       expect(created.config.description).toEqual("quarterly tco");
       expect(created.config.groupPreferencesetAssignments).toHaveLength(1);
-      expect(created.config.groupPreferencesetAssignments[0]?.group).toEqual(
-        created.group.name,
+      expect(created.config.groupPreferencesetAssignments[0]?.group).toEqual(created.group.name);
+      expect(created.config.groupPreferencesetAssignments[0]?.preferenceSet).toEqual(
+        created.prefs.name,
       );
-      expect(
-        created.config.groupPreferencesetAssignments[0]?.preferenceSet,
-      ).toEqual(created.prefs.name);
 
       const fetched = yield* migrationcenter.getProjectsLocationsReportConfigs({
         name: created.config.name,
@@ -110,17 +103,13 @@ test.provider(
             location: "us-central1",
             displayName: "tco-v2",
             description: "quarterly tco v2",
-            groupPreferencesetAssignments: [
-              { group: group.name, preferenceSet: prefs.name },
-            ],
+            groupPreferencesetAssignments: [{ group: group.name, preferenceSet: prefs.name }],
           });
           return { group, prefs, config };
         }),
       );
 
-      expect(updated.config.reportConfigId).toEqual(
-        created.config.reportConfigId,
-      );
+      expect(updated.config.reportConfigId).toEqual(created.config.reportConfigId);
       expect(updated.config.displayName).toEqual("tco-v2");
       expect(updated.config.description).toEqual("quarterly tco v2");
 

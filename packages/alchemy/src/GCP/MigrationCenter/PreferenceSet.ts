@@ -129,15 +129,10 @@ const DEFAULT_VM: VirtualMachinePreferences = {
  * @resource
  * @category MigrationCenter
  */
-export const PreferenceSet = Resource<PreferenceSet>(
-  "GCP.MigrationCenter.PreferenceSet",
-);
+export const PreferenceSet = Resource<PreferenceSet>("GCP.MigrationCenter.PreferenceSet");
 
-const resourceName = (
-  project: string,
-  location: string,
-  preferenceSetId: string,
-) => `${locationParent(project, location)}/preferenceSets/${preferenceSetId}`;
+const resourceName = (project: string, location: string, preferenceSetId: string) =>
+  `${locationParent(project, location)}/preferenceSets/${preferenceSetId}`;
 
 const toAttrs = (item: mc.PreferenceSet, project: string, region: string) => {
   const name = item.name ?? "";
@@ -181,15 +176,11 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.preferenceSets ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.preferenceSets ?? [])),
             Stream.filter((item) => hasOwnershipMarker(item.description)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as mc.PreferenceSet[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as mc.PreferenceSet[])),
           ),
       ),
     );
@@ -203,14 +194,8 @@ export const PreferenceSetProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.preferenceSetId ?? output?.preferenceSetId,
-        nextId:
-          news.preferenceSetId ??
-          olds?.preferenceSetId ??
-          output?.preferenceSetId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.preferenceSetId ?? olds?.preferenceSetId ?? output?.preferenceSetId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -226,18 +211,12 @@ export const PreferenceSetProvider = () =>
         output?.preferenceSetId,
         "prefset",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, preferenceSetId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, preferenceSetId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -255,16 +234,12 @@ export const PreferenceSetProvider = () =>
         output?.preferenceSetId,
         "prefset",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, preferenceSetId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? preferenceSetId;
-      const virtualMachinePreferences =
-        news.virtualMachinePreferences ?? DEFAULT_VM;
+      const virtualMachinePreferences = news.virtualMachinePreferences ?? DEFAULT_VM;
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -293,8 +268,7 @@ export const PreferenceSetProvider = () =>
       const descriptionChanged = (current.description ?? "") !== description;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
       const prefsChanged =
-        fingerprint(current.virtualMachinePreferences) !==
-        fingerprint(virtualMachinePreferences);
+        fingerprint(current.virtualMachinePreferences) !== fingerprint(virtualMachinePreferences);
       const mask = fieldMask([
         descriptionChanged && "description",
         displayNameChanged && "displayName",
@@ -313,26 +287,21 @@ export const PreferenceSetProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* mc
-        .deleteProjectsLocationsPreferenceSets({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* mc.deleteProjectsLocationsPreferenceSets({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

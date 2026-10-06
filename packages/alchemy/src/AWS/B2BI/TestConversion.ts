@@ -39,6 +39,4 @@ export interface TestConversion extends Binding.Service<
     ) => Effect.Effect<b2bi.TestConversionResponse, b2bi.TestConversionError>
   >
 > {}
-export const TestConversion = Binding.Service<TestConversion>(
-  "AWS.B2BI.TestConversion",
-);
+export const TestConversion = Binding.Service<TestConversion>("AWS.B2BI.TestConversion");

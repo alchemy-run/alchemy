@@ -42,6 +42,4 @@ export interface AccessReadToken extends Binding.Service<
   >
 > {}
 
-export const AccessReadToken = Binding.Service<AccessReadToken>(
-  "GCP.CloudBuild.AccessReadToken",
-);
+export const AccessReadToken = Binding.Service<AccessReadToken>("GCP.CloudBuild.AccessReadToken");

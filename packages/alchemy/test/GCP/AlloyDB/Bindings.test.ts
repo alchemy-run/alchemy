@@ -1,18 +1,13 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import AlloyDbBindingsHost, {
-  AppUser,
-  Db,
-  Primary,
-  Snapshot,
-} from "./fixtures/bindings-host.ts";
+import AlloyDbBindingsHost, { AppUser, Db, Primary, Snapshot } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -34,9 +29,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -95,10 +88,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the cluster as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<{ name?: string; uid?: string }>(
-              baseUrl,
-              "getCluster",
-            );
+            const live = yield* expectProbe<{ name?: string; uid?: string }>(baseUrl, "getCluster");
             const expected = yield* alloydb.getProjectsLocationsClusters({
               name: names.cluster,
             });
@@ -122,10 +112,9 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               baseUrl,
               "getInstance",
             );
-            const expected =
-              yield* alloydb.getProjectsLocationsClustersInstances({
-                name: names.instance,
-              });
+            const expected = yield* alloydb.getProjectsLocationsClustersInstances({
+              name: names.instance,
+            });
             expect(live.name).toEqual(names.instance);
             expect(live.uid).toEqual(expected.uid);
             yield* expectProjectGrants;
@@ -146,14 +135,12 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               instanceUid?: string;
               ipAddress?: string;
             }>(baseUrl, "getConnectionInfo");
-            const expected =
-              yield* alloydb.getConnectionInfoProjectsLocationsClustersInstances(
-                { parent: names.instance },
-              );
-            const instance =
-              yield* alloydb.getProjectsLocationsClustersInstances({
-                name: names.instance,
-              });
+            const expected = yield* alloydb.getConnectionInfoProjectsLocationsClustersInstances({
+              parent: names.instance,
+            });
+            const instance = yield* alloydb.getProjectsLocationsClustersInstances({
+              name: names.instance,
+            });
             expect(live.instanceUid).toEqual(instance.uid);
             expect(live.instanceUid).toEqual(expect.any(String));
             expect(live.ipAddress).toEqual(expected.ipAddress);
@@ -171,10 +158,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the backup as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<{ name?: string; uid?: string }>(
-              baseUrl,
-              "getBackup",
-            );
+            const live = yield* expectProbe<{ name?: string; uid?: string }>(baseUrl, "getBackup");
             const expected = yield* alloydb.getProjectsLocationsBackups({
               name: names.backup,
             });

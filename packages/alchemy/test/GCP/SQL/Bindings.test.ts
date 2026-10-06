@@ -1,16 +1,13 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import SqlBindingsHost, {
-  Db,
-  USER_PASSWORD,
-} from "./fixtures/bindings-host.ts";
+import SqlBindingsHost, { Db, USER_PASSWORD } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -47,9 +44,7 @@ const projectRoles = () =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
           .map((binding) => ({
             role: binding.role,
             condition: binding.condition?.expression,
@@ -131,30 +126,21 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               passwordMatches: boolean;
               rows: { user: string; database: string }[];
             }>(baseUrl, "connect");
-            expect(out.connectionName).toEqual(
-              `${project}:${region}:${instanceName}`,
-            );
-            expect(out.socketPath).toEqual(
-              `/cloudsql/${project}:${region}:${instanceName}`,
-            );
+            expect(out.connectionName).toEqual(`${project}:${region}:${instanceName}`);
+            expect(out.socketPath).toEqual(`/cloudsql/${project}:${region}:${instanceName}`);
             expect(out.username).toEqual(userName);
             expect(out.database).toEqual(databaseName);
             expect(out.passwordMatches).toEqual(true);
-            expect(out.rows).toEqual([
-              { user: userName, database: databaseName },
-            ]);
+            expect(out.rows).toEqual([{ user: userName, database: databaseName }]);
 
             yield* expectRole("roles/cloudsql.client");
-            const secretPolicy =
-              yield* secretmanager.getIamPolicyProjectsLocationsSecrets({
-                resource: secretName,
-              });
+            const secretPolicy = yield* secretmanager.getIamPolicyProjectsLocationsSecrets({
+              resource: secretName,
+            });
             expect(
               (secretPolicy.bindings ?? [])
                 .filter((binding) =>
-                  (binding.members ?? []).includes(
-                    `serviceAccount:${hostAccount}`,
-                  ),
+                  (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
                 )
                 .map((binding) => binding.role),
             ).toEqual(["roles/secretmanager.secretAccessor"]);
@@ -219,10 +205,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the bound user as the host",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ name: string; instance: string }>(
-              baseUrl,
-              "getUser",
-            );
+            const out = yield* expectProbe<{ name: string; instance: string }>(baseUrl, "getUser");
             expect(out.name).toEqual(userName);
             expect(out.instance).toEqual(instanceName);
             // users.get does not match an instance-scoped IAM Condition.

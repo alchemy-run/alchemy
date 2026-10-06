@@ -16,9 +16,8 @@ import * as Semaphore from "effect/Semaphore";
 const slots = Semaphore.makeUnsafe(3);
 
 /** Run a network-creating test body while holding one VPC quota slot. */
-export const withNetworkSlot = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> => slots.withPermits(1)(self);
+export const withNetworkSlot = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  slots.withPermits(1)(self);
 
 /** Like {@link withNetworkSlot}, for a test body that creates `count` networks. */
 export const withNetworkSlots =

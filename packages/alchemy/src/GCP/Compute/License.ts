@@ -1,6 +1,4 @@
-import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,12 +9,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -177,15 +173,11 @@ export type License = Resource<
  */
 export const License = Resource<License>("GCP.Compute.License");
 
-export class LicenseNotResolved extends Data.TaggedError(
-  "GCP.Compute.LicenseNotResolved",
-)<{
+export class LicenseNotResolved extends Data.TaggedError("GCP.Compute.LicenseNotResolved")<{
   licenseName: string;
 }> {}
 
-export class LicenseStillExists extends Data.TaggedError(
-  "GCP.Compute.LicenseStillExists",
-)<{
+export class LicenseStillExists extends Data.TaggedError("GCP.Compute.LicenseStillExists")<{
   licenseName: string;
 }> {}
 
@@ -250,9 +242,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const sorted = (values: ReadonlyArray<string> | undefined) =>
   [...(values ?? [])].map((value) => lastSegment(value)).sort();
@@ -265,15 +255,11 @@ const immutableChanged = (olds: LicenseProps, news: LicenseProps) =>
   (olds.transferable ?? true) !== (news.transferable ?? true) ||
   (olds.multiTenantOnly ?? false) !== (news.multiTenantOnly ?? false) ||
   (olds.soleTenantOnly ?? false) !== (news.soleTenantOnly ?? false) ||
-  sorted(olds.incompatibleLicenses).join(",") !==
-    sorted(news.incompatibleLicenses).join(",") ||
+  sorted(olds.incompatibleLicenses).join(",") !== sorted(news.incompatibleLicenses).join(",") ||
   sorted(olds.requiredCoattachedLicenses).join(",") !==
     sorted(news.requiredCoattachedLicenses).join(",");
 
-const toAttrs = (
-  license: compute.License,
-  project: string,
-): License["Attributes"] => {
+const toAttrs = (license: compute.License, project: string): License["Attributes"] => {
   const parsed = parseDescription(license.description);
   return {
     licenseName: license.name ?? "",
@@ -322,9 +308,7 @@ const awaitResource = (project: string, licenseName: string) =>
 const waitUntilGone = (project: string, licenseName: string) =>
   getByName(project, licenseName).pipe(
     Effect.flatMap((license) =>
-      license === undefined
-        ? Effect.void
-        : Effect.fail(new LicenseStillExists({ licenseName })),
+      license === undefined ? Effect.void : Effect.fail(new LicenseStillExists({ licenseName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.LicenseStillExists",
@@ -391,9 +375,7 @@ export const LicenseProvider = () =>
       const previousName = olds?.licenseName ?? output?.licenseName;
       const nextName = news.licenseName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const previousOs = olds?.osLicense ?? output?.osLicense ?? false;
       const nextOs = news.osLicense ?? previousOs;
       if (nameChanged) {
@@ -416,11 +398,7 @@ export const LicenseProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const licenseName = yield* toName(
-        id,
-        olds?.licenseName,
-        output?.licenseName,
-      );
+      const licenseName = yield* toName(id, olds?.licenseName, output?.licenseName);
       const existing = yield* getByName(env.project, licenseName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -441,19 +419,13 @@ export const LicenseProvider = () =>
             Stream.map((license) => toAttrs(license, env.project)),
             Stream.runCollect,
             Effect.map((items) => Array.from(items)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as License["Attributes"][]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as License["Attributes"][])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const licenseName = yield* toName(
-        id,
-        news.licenseName,
-        output?.licenseName,
-      );
+      const licenseName = yield* toName(id, news.licenseName, output?.licenseName);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -476,15 +448,11 @@ export const LicenseProvider = () =>
         current = yield* awaitResource(env.project, licenseName);
       }
 
-      const appendable =
-        news.appendableToDisk ?? current.appendableToDisk === true;
-      const removable =
-        news.removableFromDisk ?? current.removableFromDisk === true;
+      const appendable = news.appendableToDisk ?? current.appendableToDisk === true;
+      const removable = news.removableFromDisk ?? current.removableFromDisk === true;
       const updateMask = [
-        (current.appendableToDisk === true) !== appendable &&
-          "appendableToDisk",
-        (current.removableFromDisk === true) !== removable &&
-          "removableFromDisk",
+        (current.appendableToDisk === true) !== appendable && "appendableToDisk",
+        (current.removableFromDisk === true) !== removable && "removableFromDisk",
         news.allowedReplacementLicenses !== undefined &&
           sorted(current.allowedReplacementLicenses).join(",") !==
             sorted(news.allowedReplacementLicenses).join(",") &&
@@ -506,10 +474,8 @@ export const LicenseProvider = () =>
               appendableToDisk: appendable,
               removableFromDisk: removable,
               allowedReplacementLicenses:
-                news.allowedReplacementLicenses ??
-                current.allowedReplacementLicenses,
-              minimumRetention:
-                news.minimumRetention ?? current.minimumRetention,
+                news.allowedReplacementLicenses ?? current.allowedReplacementLicenses,
+              minimumRetention: news.minimumRetention ?? current.minimumRetention,
             },
           }),
         );

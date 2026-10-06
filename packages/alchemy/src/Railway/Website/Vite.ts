@@ -9,12 +9,10 @@ import {
 export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
 
 /** The Node container deploy target for the Vite build. */
-export const VITE_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vite/node";
+export const VITE_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vite/node";
 
 const viteOptions = (props: ViteProps) =>
-  props.vite !== undefined &&
-  (props.vite.outDir !== undefined || props.vite.base !== undefined)
+  props.vite !== undefined && (props.vite.outDir !== undefined || props.vite.base !== undefined)
     ? { vite: props.vite }
     : undefined;
 

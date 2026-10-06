@@ -1,5 +1,5 @@
-import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { diffTags } from "../../Tags.ts";
@@ -13,10 +13,7 @@ import { diffTags } from "../../Tags.ts";
  *
  * @internal
  */
-const FLEETWISE_REGIONS: ReadonlySet<string> = new Set([
-  "us-east-1",
-  "eu-central-1",
-]);
+const FLEETWISE_REGIONS: ReadonlySet<string> = new Set(["us-east-1", "eu-central-1"]);
 
 /** @internal */
 export const FLEETWISE_HOME_REGION: RegionName = "us-east-1";
@@ -38,9 +35,7 @@ export const inFleetWiseRegion = <A, E, R>(
     const ambient = yield* yield* Region;
     return FLEETWISE_REGIONS.has(ambient)
       ? yield* effect
-      : yield* effect.pipe(
-          Effect.provideService(Region, Effect.succeed(FLEETWISE_HOME_REGION)),
-        );
+      : yield* effect.pipe(Effect.provideService(Region, Effect.succeed(FLEETWISE_HOME_REGION)));
   });
 
 /**
@@ -51,19 +46,18 @@ export const inFleetWiseRegion = <A, E, R>(
  * @internal
  */
 export const readFleetWiseTags = Effect.fn(function* (arn: string) {
-  const response = yield* iotfleetwise
-    .listTagsForResource({ ResourceARN: arn })
-    .pipe(
-      inFleetWiseRegion,
-      Effect.catch(() =>
-        Effect.succeed({
-          Tags: [],
-        } as iotfleetwise.ListTagsForResourceResponse),
-      ),
-    );
-  return Object.fromEntries(
-    (response.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-  ) as Record<string, string>;
+  const response = yield* iotfleetwise.listTagsForResource({ ResourceARN: arn }).pipe(
+    inFleetWiseRegion,
+    Effect.catch(() =>
+      Effect.succeed({
+        Tags: [],
+      } as iotfleetwise.ListTagsForResourceResponse),
+    ),
+  );
+  return Object.fromEntries((response.Tags ?? []).map((tag) => [tag.Key, tag.Value])) as Record<
+    string,
+    string
+  >;
 });
 
 /**
@@ -71,9 +65,7 @@ export const readFleetWiseTags = Effect.fn(function* (arn: string) {
  *
  * @internal
  */
-export const toFleetWiseTagList = (
-  tags: Record<string, string>,
-): iotfleetwise.Tag[] =>
+export const toFleetWiseTagList = (tags: Record<string, string>): iotfleetwise.Tag[] =>
   Object.entries(tags).map(([Key, Value]) => ({ Key, Value }));
 
 /**
@@ -89,9 +81,7 @@ export const syncFleetWiseTags = Effect.fn(function* (
   const observed = yield* readFleetWiseTags(arn);
   const { upsert, removed } = diffTags(observed, desired);
   if (upsert.length > 0) {
-    yield* iotfleetwise
-      .tagResource({ ResourceARN: arn, Tags: upsert })
-      .pipe(inFleetWiseRegion);
+    yield* iotfleetwise.tagResource({ ResourceARN: arn, Tags: upsert }).pipe(inFleetWiseRegion);
   }
   if (removed.length > 0) {
     yield* iotfleetwise
@@ -125,9 +115,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
  *
  * @internal
  */
-export const retryObservation = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+export const retryObservation = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
   });
@@ -142,8 +130,7 @@ export const retryObservation = <A, E, R>(
 export const stableEquals = (left: unknown, right: unknown): boolean =>
   stableStringify(left) === stableStringify(right);
 
-const stableStringify = (value: unknown): string =>
-  JSON.stringify(normalize(value));
+const stableStringify = (value: unknown): string => JSON.stringify(normalize(value));
 
 const normalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(normalize);

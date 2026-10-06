@@ -1,18 +1,13 @@
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../IsolatedProject.ts";
-import IsolatedProjectCompute, {
-  project,
-} from "./fixtures/isolated-project-compute.ts";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
+import { materializeIsolatedProject, removeIsolatedProject } from "../IsolatedProject.ts";
+import IsolatedProjectCompute, { project } from "./fixtures/isolated-project-compute.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
@@ -24,10 +19,7 @@ const hasLiveCredentials =
   process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
 const runLive = wantsLive && hasLiveCredentials;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Live proof that the Prisma Compute bun bootstrap boots when the app's
 // `main` lives in an isolated project (see test/IsolatedProject.ts) — the
@@ -78,12 +70,7 @@ test.provider.skipIf(!runLive)(
     }).pipe(logLevel),
   // One Prisma Compute deploy alone can take the full 600s.
   {
-    tags: [
-      "provider:prisma",
-      "provider:prisma:compute",
-      "provider:prisma:project",
-      "live",
-    ],
+    tags: ["provider:prisma", "provider:prisma:compute", "provider:prisma:project", "live"],
     timeout: 1_200_000,
   },
 );
