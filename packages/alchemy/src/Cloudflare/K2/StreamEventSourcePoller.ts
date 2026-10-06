@@ -2,17 +2,105 @@ import * as Cause from "effect/Cause";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Binding from "../../Binding.ts";
+import * as Namespace from "../../Namespace.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Batch, ConsumedRecord, K2SchemaError } from "./K2Types.ts";
-import type { ReadSubscriptionClient } from "./ReadSubscription.ts";
+import { ServerHost } from "../../Server/Process.ts";
+import { decodeWithSchema } from "./K2Codec.ts";
+import type { Batch, ConsumedRecord, K2SchemaError, RecordSchema } from "./K2Types.ts";
+import { ReadSubscription, type ReadSubscriptionClient } from "./ReadSubscription.ts";
+import type { Stream as K2Stream } from "./Stream.ts";
+import {
+  StreamEventSource,
+  type ConsumeStreamRecordsProps,
+  type ConsumeStreamRecordsHandler,
+  type StreamEventSourceService,
+} from "./StreamEventSource.ts";
+import { Subscription } from "./Subscription.ts";
 
 /**
- * The pull loop behind `consumeStreamRecords`. Internal — not exported from
- * the K2 barrel (tests import it directly).
+ * Polling implementation of {@link StreamEventSource} for hosts with a
+ * long-lived process (any host providing `ServerHost`: Fly, ECS, EC2,
+ * Railway, Hetzner, Docker). Requires a `ReadSubscription` implementation.
+ *
+ * :::note
+ * TODO: Workers cannot consume K2 yet — K2 has no push consumers (they are
+ * on Cloudflare's roadmap), so no Worker layer ships.
+ * :::
+ * ### Providing the Layer
+ * **Example:** Poll with a scoped token
+ * ```typescript
+ * Effect.gen(function* () {
+ *   yield* Cloudflare.K2.consumeStreamRecords(Orders, handler);
+ * }).pipe(
+ *   Effect.provide(
+ *     Layer.provideMerge(
+ *       Cloudflare.K2.StreamEventSourcePolling,
+ *       Cloudflare.K2.ReadSubscriptionHttp,
+ *     ),
+ *   ),
+ * );
+ * ```
+ *
+ * @layer
+ * @provides Cloudflare.K2.StreamEventSource
+ * @product K2
+ * @category Storage & Databases
  */
+export const StreamEventSourcePolling = Layer.effect(
+  StreamEventSource,
+  Effect.gen(function* () {
+    const { run } = yield* ServerHost;
+    const readSubscription = yield* ReadSubscription;
+
+    return Effect.fn(function* (
+      stream: K2Stream,
+      props: ConsumeStreamRecordsProps & { schema?: RecordSchema<any> },
+      process: ConsumeStreamRecordsHandler<any, any>,
+    ) {
+      const host = yield* Binding.Host;
+      const hostId = host?.LogicalId ?? "Host";
+      // Declared in both phases: at runtime the declaration resolves to the
+      // deployed subscription's outputs, which the client reads.
+      const subscription =
+        props.subscription ??
+        (yield* Namespace.push(
+          hostId,
+          Subscription(`${stream.LogicalId}Subscription`, {
+            streamId: stream.streamId,
+            startAt: props.startAt,
+          }),
+        ));
+      const client = yield* readSubscription(subscription);
+      const decode = props.schema
+        ? decodeWithSchema(props.schema)
+        : (records: ReadonlyArray<ConsumedRecord>) => Effect.succeed(records);
+
+      yield* run(
+        Effect.gen(function* () {
+          const workerId =
+            props.workerId ??
+            `${hostId}-${(yield* Effect.sync(() => crypto.randomUUID())).slice(0, 8)}`;
+          yield* pollSubscription({
+            client,
+            workerId,
+            maxRecords: props.maxRecords,
+            idleBackoff: props.idleBackoff,
+            concurrency: props.concurrency,
+            decode,
+            process,
+          });
+        }),
+      );
+    }) as StreamEventSourceService;
+  }),
+);
+
+// ---- the pull loop -----------------------------------------------------------
 
 /** `consume` errors that mean "try again", not "give up". */
 const RETRYABLE_CONSUME_ERRORS: ReadonlyArray<string> = [
@@ -28,7 +116,7 @@ const consumeRetry = Schedule.max([
   Schedule.recurs(8),
 ]);
 
-export interface PollOptions<A, Req> {
+interface PollOptions<A, Req> {
   client: ReadSubscriptionClient;
   /** Worker id holding the leases. Must be unique per concurrent poller. */
   workerId: string;
@@ -65,7 +153,7 @@ const keepLeaseAlive = (client: ReadSubscriptionClient, batch: Batch, every: Dur
  * One poll: lease a batch, run the handler, then ack it on success or nack
  * it on failure. Returns whether a batch was processed.
  */
-export const pollOnce = <A, Req>(
+const pollOnce = <A, Req>(
   options: PollOptions<A, Req>,
 ): Effect.Effect<boolean, unknown, Req | RuntimeContext> =>
   Effect.gen(function* () {
@@ -108,7 +196,7 @@ export const pollOnce = <A, Req>(
  * Poll forever: an empty batch or a failed iteration sleeps `idleBackoff`;
  * a processed batch polls again immediately. Never fails.
  */
-export const pollForever = <A, Req>(
+const pollForever = <A, Req>(
   options: PollOptions<A, Req>,
 ): Effect.Effect<never, never, Req | RuntimeContext> =>
   pollOnce(options).pipe(
@@ -124,7 +212,7 @@ export const pollForever = <A, Req>(
   );
 
 /** Run `concurrency` pollers, each with its own worker id (`${workerId}-${i}`). */
-export const pollSubscription = <A, Req>(
+const pollSubscription = <A, Req>(
   options: PollOptions<A, Req> & { concurrency?: number },
 ): Effect.Effect<void, never, Req | RuntimeContext> =>
   Effect.forEach(

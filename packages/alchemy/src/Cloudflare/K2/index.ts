@@ -4,6 +4,7 @@ export * from "./ReadSubscriptionHttp.ts";
 export * from "./ReadSubscriptionLocal.ts";
 export * from "./Stream.ts";
 export * from "./StreamEventSource.ts";
+export * from "./StreamEventSourcePoller.ts";
 export * from "./StreamSink.ts";
 export * from "./StreamSinkBinding.ts";
 export * from "./StreamSinkHttp.ts";
