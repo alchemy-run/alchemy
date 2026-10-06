@@ -109,7 +109,7 @@ const documentContent = (message: string) => ({
   ],
 });
 
-const documentDef = (message: string) =>
+const documentDef = (message: string, owner = "alchemy") =>
   Effect.gen(function* () {
     const document = yield* CloudControlResource("CcDocument", {
       typeName: "AWS::SSM::Document",
@@ -119,6 +119,7 @@ const documentDef = (message: string) =>
         DocumentFormat: "JSON",
         UpdateMethod: "NewVersion",
         Content: documentContent(message),
+        Tags: [{ Key: "owner", Value: owner }],
       },
     });
     return { document };
@@ -128,7 +129,7 @@ const readContent = (content: unknown) =>
   typeof content === "string" ? JSON.parse(content) : content;
 
 test.provider(
-  "redeploying an unchanged JSON SSM document computes no patch",
+  "updating a JSON SSM document without changing its content",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -137,14 +138,15 @@ test.provider(
       expect(created.identifier).toBe(documentName);
       expect(readContent(created.properties.Content)).toEqual(documentContent("hello"));
 
-      // Unchanged: a perpetual `Content`/`UpdateMethod` patch would send an
-      // UpdateDocument with identical content, which SSM rejects.
-      const { document: unchanged } = yield* stack.deploy(documentDef("hello"));
+      // Tags-only change: reconcile runs with unchanged content. A perpetual
+      // `Content`/`UpdateMethod` patch would send an UpdateDocument with
+      // identical content, which SSM rejects.
+      const { document: unchanged } = yield* stack.deploy(documentDef("hello", "platform"));
       expect(unchanged.identifier).toBe(documentName);
       expect(readContent(unchanged.properties.Content)).toEqual(documentContent("hello"));
 
       // A real content change still patches, as a new document version.
-      const { document: updated } = yield* stack.deploy(documentDef("world"));
+      const { document: updated } = yield* stack.deploy(documentDef("world", "platform"));
       expect(updated.identifier).toBe(documentName);
       expect(readContent(updated.properties.Content)).toEqual(documentContent("world"));
 
